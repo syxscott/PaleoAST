@@ -1,0 +1,753 @@
+# =============================================================================
+# FILE: views/ui_navigation.py
+# =============================================================================
+"""
+Navigation Tree Widget for PaleoAST
+
+This module implements the left-side navigation tree with hierarchical
+organization of analysis functions, following the Observer pattern to
+synchronize with the application state.
+
+Design Patterns:
+    - Observer Pattern: Navigation tree observes StateManager
+    - Composite Pattern: Tree items form hierarchical structure
+    - Command Pattern: Each navigation item represents a command/action
+
+Author: PaleoAST Development Team
+Version: 1.0.0
+"""
+
+from typing import Optional, List, Dict, Any
+from enum import Enum
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle,
+    QApplication, QMenu, QInputDialog
+)
+from PyQt6.QtCore import (
+    Qt, QSize, pyqtSignal, QObject, QEvent
+)
+from PyQt6.QtGui import (
+    QPainter, QPen, QBrush, QColor, QFont, QIcon, QCursor
+)
+
+
+class NavigationCategory(Enum):
+    """Navigation categories."""
+    DATA = "Data Management"
+    UNIVARIATE = "Univariate"
+    MULTIVARIATE = "Multivariate"
+    MORPHOMETRICS = "Morphometrics"
+    STRATIGRAPHY = "Stratigraphy"
+    ECOLOGY = "Ecology"
+
+
+class NavigationItem:
+    """
+    Navigation item data class.
+    
+    Represents a single item in the navigation tree with associated
+    metadata and configuration.
+    """
+    
+    def __init__(
+        self,
+        name: str,
+        category: NavigationCategory,
+        icon_type: str = "",
+        children: Optional[List['NavigationItem']] = None,
+        action_callback: Optional[callable] = None
+    ) -> None:
+        self.name = name
+        self.category = category
+        self.icon_type = icon_type
+        self.children = children or []
+        self.action_callback = action_callback
+        self.section = category.value
+        
+        # State
+        self.is_expanded = False
+        self.is_selected = False
+    
+    def __repr__(self) -> str:
+        return f"NavigationItem(name={self.name}, category={self.category.value})"
+
+
+class NavigationDelegate(QStyledItemDelegate):
+    """
+    Custom delegate for navigation tree items.
+    
+    Renders navigation items with custom icons and styling.
+    Extends QStyledItemDelegate to provide custom painting.
+    """
+    
+    # Icon definitions
+    ICON_PATTERNS = {
+        'folder': 'M4,4H20V20H4V4M6,8V18H18V8',
+        'file': 'M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20',
+        'matrix': 'M3,3H11V11H3V3M3,13H11V21H3V13M13,3H21V11H13V3M13,13H21V21H13V13M3,5V9H9V5H3M15,5V9H21V5H15M3,15V19H9V15H3M15,15V19H21V15H15',
+        'chart': 'M22,21H2V3H4V19H6V10H10V19H12V6H16V19H18V14H22V21',
+        'diversity': 'M12,5.5A3.5,3.5 0 0,1 15.5,9A3.5,3.5 0 0,1 12,12.5A3.5,3.5 0 0,1 8.5,9A3.5,3.5 0 0,1 12,5.5M5,8C5.56,8 6.08,8.15 6.53,8.42C6.38,9.85 6.8,11.27 7.66,12.38C7.16,13.34 6.16,14 5,14A3,3 0 0,1 2,11A3,3 0 0,1 5,8M19,8A3,3 0 0,1 22,11A3,3 0 0,1 19,14C17.84,14 16.84,13.34 16.34,12.38C17.2,11.27 17.62,9.85 17.47,8.42C17.92,8.15 18.44,8 19,8M5.5,18.25C5.5,16.18 8.41,14.5 12,14.5C15.59,14.5 18.5,16.18 18.5,18.25V20H5.5V18.25M0,20V18.5C0,17.11 1.89,15.94 4.45,15.6C3.86,16.28 3.5,17.22 3.5,18.25V20H0M24,20H20.5V18.25C20.5,17.22 20.14,16.28 19.55,15.6C22.11,15.94 24,17.11 24,18.5V20',
+        'morphometrics': 'M12,5.5L4.5,20H19.5L12,5.5M12,2L1,21H23L12,2Z',
+        'stratigraphy': 'M3,3H5V5H3V3M7,3H9V5H7V3M11,3H13V5H11V3M15,3H17V5H15V3M19,3H21V5H19V3M3,7H5V9H3V7M7,7H9V9H7V7M11,7H13V9H11V7M15,7H17V9H15V7M19,7H21V9H19V7M3,11H5V13H3V11M7,11H9V13H7V11M11,11H13V13H11V11M15,11H17V13H15V11M19,11H21V13H19V11M3,15H5V17H3V15M7,15H9V17H7V15M11,15H13V17H11V15M15,15H17V17H15V15M19,15H21V17H19V15M3,19H5V21H3V19M7,19H9V21H7V19M11,19H13V21H11V19M15,19H17V21H15V19M19,19H21V21H19V19',
+        'pca': 'M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L5,1L8,4M17.5,10.5L20,9L18.6,11.5L20,14L17.5,12.6L20,16L13,10L17.5,10.5M5,16L7.5,14.6L5,18L10,12L5,16M13,11L17.5,10.5L14,9L15.5,7.5L13,9L14.5,6L13,5L11,7L5,14L13,11Z',
+        'settings': 'M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z',
+        'import': 'M9,3V4H4V6H5V4A2,2 0 0,1 7,2H9V3M7,6V8H9V6H7M9,8V10H7V12H9V14H7V16H9V18H7V20H9A2,2 0 0,0 11,18V20A2,2 0 0,0 13,22H15A2,2 0 0,0 17,20V18A2,2 0 0,0 15,16H13V14H15V12H13V10H15V8H13V6H15V4H13V2H15A2,2 0 0,0 17,4V6H19V4H23V6H19V8H21V6H23V10H21V8H23V14H21V12H23V16H21V14H23V18H21V16H23V18A2,2 0 0,0 21,20H19A2,2 0 0,0 17,18V20H19V22H15V20H17V18H15V16H17V14H15V12H17V10H15V8H17V6H15V4H13V6H11V8H13V10H11V12H13V14H11V16H13V18H11V20H13V22H9V20H11V18H9V16H11V14H9V12H11V10H9V8H11V6H9V4H7V6H5V8H7V10H5V12H7V14H5V16H7V18H5V20H7V22H3V2H9',
+        'export': 'M23,12L19,8V11H10V13H19V16M1,18V6A2,2 0 0,1 3,4H15A2,2 0 0,1 17,6V9H15V6H3V18H15V15H17V18A2,2 0 0,1 15,20H3A2,2 0 0,1 1,18',
+    }
+    
+    def __init__(self, parent: Optional[QObject] = None) -> None:
+        super().__init__(parent)
+        self._expanded_items: set = set()
+        self._hovered_index = None
+    
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index
+    ) -> None:
+        """
+        Paint navigation item with custom rendering.
+        
+        This method overrides the default QStyledItemDelegate paint() to provide:
+        - Custom icons for each item type
+        - Hover highlighting
+        - Selection state rendering
+        - Expand/collapse indicator icons
+        """
+        painter.save()
+        
+        # Get item data
+        item = index.model().itemFromIndex(index)
+        if not item:
+            painter.restore()
+            return
+        
+        # Determine item state
+        is_selected = option.state & QStyle.StateFlag.State_Selected
+        is_hovered = option.state & QStyle.StateFlag.State_MouseOver
+        has_children = item.childCount() > 0
+        is_expanded = item.isExpanded()
+        
+        # Background painting
+        if is_selected:
+            # Selected state - blue highlight
+            painter.fillRect(
+                option.rect,
+                QBrush(QColor("#3498DB"))
+            )
+        elif is_hovered:
+            # Hover state - subtle highlight
+            painter.fillRect(
+                option.rect,
+                QBrush(QColor("#2C3E50"))
+            )
+        
+        # Determine icon type from item data
+        icon_type = index.data(Qt.ItemDataRole.UserRole)
+        if not icon_type:
+            icon_type = item.data(0, Qt.ItemDataRole.UserRole)
+        
+        # Icon dimensions
+        icon_size = 16
+        icon_margin = 8
+        icon_x = option.rect.left() + icon_margin
+        icon_y = option.rect.top() + (option.rect.height() - icon_size) // 2
+        
+        # Draw folder/file icon
+        if icon_type == 'folder':
+            self._draw_folder_icon(painter, icon_x, icon_y, icon_size, is_expanded)
+        elif icon_type == 'pca':
+            self._draw_pca_icon(painter, icon_x, icon_y, icon_size)
+        elif icon_type == 'diversity':
+            self._draw_diversity_icon(painter, icon_x, icon_y, icon_size)
+        elif icon_type == 'morphometrics':
+            self._draw_morpho_icon(painter, icon_x, icon_y, icon_size)
+        elif icon_type == 'stratigraphy':
+            self._draw_strat_icon(painter, icon_x, icon_y, icon_size)
+        else:
+            self._draw_default_icon(painter, icon_x, icon_y, icon_size)
+        
+        # Text rendering
+        text_x = icon_x + icon_size + icon_margin + 4
+        text_rect = option.rect.adjusted(text_x, 0, -4, 0)
+        
+        # Get display text
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            text = item.text(0)
+        
+        # Draw text
+        text_color = "#ECF0F1" if is_selected else "#BDC3C7"
+        if is_hovered and not is_selected:
+            text_color = "#FFFFFF"
+        
+        font = QFont("Arial", 10)
+        if item.parent() is None:  # Top-level items are bold
+            font.setBold(True)
+        
+        painter.setFont(font)
+        painter.setPen(QPen(QColor(text_color)))
+        
+        # Text alignment
+        alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        painter.drawText(text_rect, int(alignment), text)
+        
+        # Draw expand/collapse arrow for items with children
+        if has_children:
+            arrow_x = option.rect.right() - 20
+            arrow_y = option.rect.top() + option.rect.height() // 2
+            self._draw_expand_arrow(
+                painter, arrow_x, arrow_y, 
+                8, is_expanded, is_selected
+            )
+        
+        painter.restore()
+    
+    def _draw_folder_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float,
+        is_expanded: bool
+    ) -> None:
+        """Draw folder icon with optional open state."""
+        color = QColor("#3498DB")
+        painter.setPen(QPen(color, 1.5))
+        painter.setBrush(QBrush(color.lighter(130)))
+        
+        if is_expanded:
+            # Open folder
+            path = QPainterPath()
+            path.moveTo(x, y + size * 0.3)
+            path.lineTo(x, y + size * 0.8)
+            path.lineTo(x + size * 0.9, y + size * 0.8)
+            path.lineTo(x + size * 0.9, y + size * 0.3)
+            path.lineTo(x + size * 0.6, y + size * 0.3)
+            path.lineTo(x + size * 0.5, y + size * 0.1)
+            path.lineTo(x + size * 0.1, y + size * 0.3)
+            path.closeSubpath()
+            painter.drawPath(path)
+        else:
+            # Closed folder
+            path = QPainterPath()
+            path.moveTo(x, y + size * 0.3)
+            path.lineTo(x, y + size * 0.9)
+            path.lineTo(x + size * 0.9, y + size * 0.9)
+            path.lineTo(x + size * 0.9, y + size * 0.3)
+            path.lineTo(x + size * 0.6, y + size * 0.3)
+            path.lineTo(x + size * 0.5, y + size * 0.1)
+            path.lineTo(x + size * 0.1, y + size * 0.3)
+            path.closeSubpath()
+            painter.fillPath(path, QBrush(color.lighter(130)))
+            painter.drawPath(path)
+    
+    def _draw_pca_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float
+    ) -> None:
+        """Draw PCA-style icon with coordinate axes."""
+        center_x = x + size // 2
+        center_y = y + size // 2
+        axis_length = size // 2
+        
+        # X-axis (PC1)
+        painter.setPen(QPen(QColor("#E74C3C"), 1.5))
+        painter.drawLine(center_x, center_y, center_x + axis_length, center_y)
+        
+        # Y-axis (PC2)
+        painter.setPen(QPen(QColor("#27AE60"), 1.5))
+        painter.drawLine(center_x, center_y, center_x, center_y - axis_length)
+        
+        # Point at origin
+        painter.setBrush(QBrush(QColor("#F39C12")))
+        painter.drawEllipse(int(center_x - 2), int(center_y - 2), 4, 4)
+    
+    def _draw_diversity_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float
+    ) -> None:
+        """Draw biodiversity tree icon."""
+        painter.setPen(QPen(QColor("#27AE60"), 1.5))
+        
+        # Main trunk
+        trunk_x = x + size // 2
+        painter.drawLine(
+            trunk_x, y + size * 0.9,
+            trunk_x, y + size * 0.4
+        )
+        
+        # Branches
+        painter.drawLine(
+            trunk_x, y + size * 0.6,
+            x + size * 0.2, y + size * 0.2
+        )
+        painter.drawLine(
+            trunk_x, y + size * 0.6,
+            x + size * 0.8, y + size * 0.2
+        )
+        painter.drawLine(
+            trunk_x, y + size * 0.4,
+            trunk_x, y + size * 0.1
+        )
+        
+        # Leaf nodes
+        painter.setBrush(QBrush(QColor("#27AE60")))
+        for px, py in [
+            (x + size * 0.2, y + size * 0.15),
+            (x + size * 0.8, y + size * 0.15),
+            (trunk_x, y + size * 0.05)
+        ]:
+            painter.drawEllipse(int(px), int(py), 4, 4)
+    
+    def _draw_morpho_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float
+    ) -> None:
+        """Draw morphometrics landmark icon."""
+        # Triangle connecting landmarks
+        from PyQt6.QtCore import QPointF
+        points = [
+            QPointF(x + size * 0.2, y + size * 0.7),
+            QPointF(x + size * 0.8, y + size * 0.7),
+            QPointF(x + size * 0.5, y + size * 0.2)
+        ]
+        
+        painter.setPen(QPen(QColor("#9B59B6"), 1.5))
+        painter.drawPolygon(points)
+        
+        # Landmark points
+        painter.setBrush(QBrush(QColor("#9B59B6")))
+        for pt in points:
+            painter.drawEllipse(int(pt.x() - 3), int(pt.y() - 3), 6, 6)
+    
+    def _draw_strat_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float
+    ) -> None:
+        """Draw stratigraphy layers icon."""
+        layer_height = size // 4
+        colors = ["#E74C3C", "#F39C12", "#27AE60", "#3498DB"]
+        
+        for i, color in enumerate(colors):
+            painter.fillRect(
+                int(x), int(y + i * layer_height),
+                int(size), int(layer_height - 1),
+                QBrush(QColor(color))
+            )
+    
+    def _draw_default_icon(
+        self,
+        painter: QPainter,
+        x: float, y: float, size: float
+    ) -> None:
+        """Draw default document icon."""
+        painter.setPen(QPen(QColor("#95A5A6"), 1.5))
+        painter.setBrush(QBrush(QColor("#34495E")))
+        painter.drawRect(int(x), int(y), int(size), int(size))
+    
+    def _draw_expand_arrow(
+        self,
+        painter: QPainter,
+        x: float, y: float,
+        size: float,
+        is_expanded: bool,
+        is_selected: bool
+    ) -> None:
+        """Draw expand/collapse arrow."""
+        color = "#95A5A6" if not is_selected else "#ECF0F1"
+        painter.setPen(QPen(QColor(color), 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        
+        path = QPainterPath()
+        
+        if is_expanded:
+            # Down arrow
+            path.moveTo(x, y - size // 2)
+            path.lineTo(x + size // 2, y + size // 2)
+            path.lineTo(x - size // 2, y + size // 2)
+        else:
+            # Right arrow
+            path.moveTo(x - size // 2, y)
+            path.lineTo(x + size // 2, y + size // 2)
+            path.lineTo(x + size // 2, y - size // 2)
+        
+        path.closeSubpath()
+        painter.drawPath(path)
+    
+    def sizeHint(
+        self,
+        option: QStyleOptionViewItem,
+        index
+    ) -> QSize:
+        """Return size hint for item."""
+        return QSize(250, 28)
+
+
+class NavigationTree(QWidget):
+    """
+    Navigation Tree Widget.
+    
+    Provides hierarchical navigation for all analysis functions.
+    Emits signals when items are clicked.
+    
+    Signals:
+        itemClicked: Emitted when navigation item is clicked (NavigationItem)
+        sectionChanged: Emitted when section changes (str)
+    """
+    
+    itemClicked = pyqtSignal(object)  # NavigationItem
+    sectionChanged = pyqtSignal(str)  # section name
+    
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        
+        self._setup_ui()
+        self._build_navigation_tree()
+        self._setup_connections()
+    
+    def _setup_ui(self) -> None:
+        """Setup UI components."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+        
+        # Tree widget
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setIndentation(16)
+        self._tree.setAnimated(True)
+        self._tree.setAlternatingRowColors(False)
+        self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
+        self._tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        
+        # Set custom delegate
+        self._delegate = NavigationDelegate()
+        self._tree.setItemDelegate(self._delegate)
+        
+        # Style
+        self._tree.setStyleSheet("""
+            QTreeWidget {
+                background-color: #1A1A2E;
+                border: none;
+                outline: none;
+                color: #BDC3C7;
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+            }
+            QTreeWidget::item {
+                padding: 6px 8px;
+                min-height: 28px;
+            }
+            QTreeWidget::item:hover {
+                background-color: #2C3E50;
+            }
+            QTreeWidget::item:selected {
+                background-color: #3498DB;
+                color: #ECF0F1;
+            }
+            QTreeWidget::item:selected:active {
+                background-color: #2980B9;
+            }
+            QTreeWidget::branch {
+                background-color: #1A1A2E;
+            }
+            QScrollBar:vertical {
+                background-color: #1A1A2E;
+                width: 10px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #34495E;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #3D566E;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background-color: transparent;
+            }
+        """)
+        
+        layout.addWidget(self._tree)
+        
+        # Search/filter box
+        self._filter_label = QLabel("Filter:")
+        self._filter_label.setStyleSheet("""
+            QLabel {
+                color: #7F8C8D;
+                padding: 4px;
+                font-size: 10px;
+            }
+        """)
+        layout.addWidget(self._filter_label)
+    
+    def _build_navigation_tree(self) -> None:
+        """
+        Build the navigation tree structure.
+        
+        Tree structure:
+        - Data Management
+            - Import Data
+            - Export Data
+            - Matrix Operations
+        - Univariate
+            - Descriptive Statistics
+            - Histogram
+            - Box Plot
+        - Multivariate
+            - PCA
+            - PCoA
+            - NMDS
+            - Cluster Analysis
+            - Group Tests
+                - ANOSIM
+                - PERMANOVA
+        - Morphometrics
+            - GPA Alignment
+            - TPS Deformation
+            - Relative Warps
+        - Stratigraphy
+            - Unitary Associations
+            - Spectral Analysis
+            - Confidence Intervals
+        - Ecology
+            - Alpha Diversity
+            - Beta Diversity
+            - Rarefaction
+        """
+        # Root items for each category
+        categories = {
+            NavigationCategory.DATA: self._create_category_item(
+                "Data Management", 'folder'
+            ),
+            NavigationCategory.UNIVARIATE: self._create_category_item(
+                "Univariate", 'folder'
+            ),
+            NavigationCategory.MULTIVARIATE: self._create_category_item(
+                "Multivariate", 'folder'
+            ),
+            NavigationCategory.MORPHOMETRICS: self._create_category_item(
+                "Morphometrics", 'folder'
+            ),
+            NavigationCategory.STRATIGRAPHY: self._create_category_item(
+                "Stratigraphy", 'folder'
+            ),
+            NavigationCategory.ECOLOGY: self._create_category_item(
+                "Ecology", 'folder'
+            ),
+        }
+        
+        # Data Management children
+        data_children = [
+            NavigationItem("Import Data", NavigationCategory.DATA, 'import'),
+            NavigationItem("Export Data", NavigationCategory.DATA, 'export'),
+            NavigationItem("Matrix Operations", NavigationCategory.DATA, 'matrix'),
+        ]
+        for child in data_children:
+            categories[NavigationCategory.DATA].children.append(child)
+        
+        # Univariate children
+        univariate_children = [
+            NavigationItem("Descriptive Statistics", NavigationCategory.UNIVARIATE, 'chart'),
+            NavigationItem("Histogram", NavigationCategory.UNIVARIATE, 'chart'),
+            NavigationItem("Box Plot", NavigationCategory.UNIVARIATE, 'chart'),
+        ]
+        for child in univariate_children:
+            categories[NavigationCategory.UNIVARIATE].children.append(child)
+        
+        # Multivariate children
+        multivar_children = [
+            NavigationItem("PCA", NavigationCategory.MULTIVARIATE, 'pca'),
+            NavigationItem("PCoA", NavigationCategory.MULTIVARIATE, 'pca'),
+            NavigationItem("NMDS", NavigationCategory.MULTIVARIATE, 'pca'),
+            NavigationItem("Cluster Analysis", NavigationCategory.MULTIVARIATE, 'chart'),
+            NavigationItem("Group Tests", NavigationCategory.MULTIVARIATE, 'folder'),
+        ]
+        for child in multivar_children:
+            categories[NavigationCategory.MULTIVARIATE].children.append(child)
+        
+        # Group Tests children (under Multivariate)
+        group_tests_children = [
+            NavigationItem("ANOSIM", NavigationCategory.MULTIVARIATE, 'chart'),
+            NavigationItem("PERMANOVA", NavigationCategory.MULTIVARIATE, 'chart'),
+        ]
+        categories[NavigationCategory.MULTIVARIATE].children[-1].children.extend(
+            group_tests_children
+        )
+        
+        # Morphometrics children
+        morpho_children = [
+            NavigationItem("GPA Alignment", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+            NavigationItem("TPS Deformation", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+            NavigationItem("Relative Warps", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+        ]
+        for child in morpho_children:
+            categories[NavigationCategory.MORPHOMETRICS].children.append(child)
+        
+        # Stratigraphy children
+        strat_children = [
+            NavigationItem("Unitary Associations", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+            NavigationItem("Spectral Analysis", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+            NavigationItem("Confidence Intervals", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+        ]
+        for child in strat_children:
+            categories[NavigationCategory.STRATIGRAPHY].children.append(child)
+        
+        # Ecology children
+        ecology_children = [
+            NavigationItem("Alpha Diversity", NavigationCategory.ECOLOGY, 'diversity'),
+            NavigationItem("Beta Diversity", NavigationCategory.ECOLOGY, 'diversity'),
+            NavigationItem("Rarefaction", NavigationCategory.ECOLOGY, 'diversity'),
+        ]
+        for child in ecology_children:
+            categories[NavigationCategory.ECOLOGY].children.append(child)
+        
+        # Add all categories to tree
+        for category in categories.values():
+            self._add_item_to_tree(None, category)
+    
+    def _create_category_item(
+        self,
+        name: str,
+        icon_type: str = 'folder'
+    ) -> NavigationItem:
+        """Create a navigation item for a category."""
+        # Determine category from name
+        category_map = {
+            "Data Management": NavigationCategory.DATA,
+            "Univariate": NavigationCategory.UNIVARIATE,
+            "Multivariate": NavigationCategory.MULTIVARIATE,
+            "Morphometrics": NavigationCategory.MORPHOMETRICS,
+            "Stratigraphy": NavigationCategory.STRATIGRAPHY,
+            "Ecology": NavigationCategory.ECOLOGY,
+        }
+        return NavigationItem(
+            name=name,
+            category=category_map.get(name, NavigationCategory.DATA),
+            icon_type=icon_type
+        )
+    
+    def _add_item_to_tree(
+        self,
+        parent: Optional[QTreeWidgetItem],
+        item: NavigationItem
+    ) -> QTreeWidgetItem:
+        """Add navigation item to tree widget recursively."""
+        tree_item = QTreeWidgetItem(parent)
+        tree_item.setText(0, item.name)
+        tree_item.setData(0, Qt.ItemDataRole.UserRole, item.icon_type)
+        tree_item.setFlags(tree_item.flags() | Qt.ItemFlag.ItemIsSelectable)
+        
+        # Store NavigationItem reference
+        tree_item._nav_item = item
+        
+        # Add children recursively
+        for child in item.children:
+            self._add_item_to_tree(tree_item, child)
+        
+        # Add to tree widget
+        if parent is None:
+            self._tree.addTopLevelItem(tree_item)
+        else:
+            parent.addChild(tree_item)
+        
+        return tree_item
+    
+    def _setup_connections(self) -> None:
+        """Setup signal connections."""
+        self._tree.itemClicked.connect(self._on_item_clicked)
+        self._tree.itemDoubleClicked.connect(self._on_item_double_clicked)
+    
+    def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        """
+        Handle item click.
+        
+        When a navigation item is clicked:
+        1. Get the NavigationItem data
+        2. Emit itemClicked signal with NavigationItem
+        3. Update current section
+        """
+        # Get navigation item
+        nav_item = getattr(item, '_nav_item', None)
+        if not nav_item:
+            return
+        
+        # Update selection
+        self._tree.setCurrentItem(item)
+        
+        # Emit signals
+        self.itemClicked.emit(nav_item)
+        self.sectionChanged.emit(nav_item.section)
+    
+    def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        """
+        Handle item double-click.
+        
+        Double-click on item with children toggles expansion.
+        Double-click on leaf item triggers action.
+        """
+        nav_item = getattr(item, '_nav_item', None)
+        if not nav_item:
+            return
+        
+        # Toggle expansion for items with children
+        if item.childCount() > 0:
+            item.setExpanded(not item.isExpanded())
+        else:
+            # Trigger action callback if exists
+            if nav_item.action_callback:
+                nav_item.action_callback()
+    
+    def get_current_item(self) -> Optional[NavigationItem]:
+        """Get currently selected navigation item."""
+        current = self._tree.currentItem()
+        if current:
+            return getattr(current, '_nav_item', None)
+        return None
+    
+    def expand_category(self, category: NavigationCategory) -> None:
+        """Expand a category in the tree."""
+        for i in range(self._tree.topLevelItemCount()):
+            item = self._tree.topLevelItem(i)
+            nav_item = getattr(item, '_nav_item', None)
+            if nav_item and nav_item.category == category:
+                item.setExpanded(True)
+                break
+    
+    def select_item(self, name: str, category: NavigationCategory) -> bool:
+        """
+        Select a specific item by name and category.
+        
+        Returns True if item found and selected, False otherwise.
+        """
+        # Find category item
+        category_item = None
+        for i in range(self._tree.topLevelItemCount()):
+            item = self._tree.topLevelItem(i)
+            nav_item = getattr(item, '_nav_item', None)
+            if nav_item and nav_item.category == category:
+                category_item = item
+                category_item.setExpanded(True)
+                break
+        
+        if not category_item:
+            return False
+        
+        # Find child item
+        for i in range(category_item.childCount()):
+            child = category_item.child(i)
+            if child.text(0) == name:
+                self._tree.setCurrentItem(child)
+                return True
+        
+        return False
