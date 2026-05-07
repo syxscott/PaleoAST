@@ -946,9 +946,12 @@ class PaleoASTApplication:
         self._app.setOrganizationName("PaleoAST")
         self._app.setQuitOnLastWindowClosed(True)
         
-        # 高DPI支持
-        self._app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-        self._app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+        # 高DPI支持 (兼容旧版本PyQt6)
+        try:
+            self._app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+            self._app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+        except AttributeError:
+            self._logger.warning("High DPI attributes not available in this PyQt6 version")
     
     def _warmup_scientific(self) -> None:
         """预热科学计算库"""
