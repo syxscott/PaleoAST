@@ -1,222 +1,1135 @@
-# =============================================================================
-# FILE: main.py
-# =============================================================================
 """
+================================================================================
 PaleoAST - Paleontological Advanced Statistical Toolkit
+================================================================================
 
-A comprehensive desktop application for paleontological data analysis including:
-    - Multivariate statistics (PCA, PCoA, NMDS)
-    - Group comparison tests (ANOSIM, PERMANOVA)
-    - Diversity analysis (Shannon, Simpson, rarefaction)
-    - Geometric morphometrics (GPA, TPS, Relative Warps)
-    - Time series analysis (Lomb-Scargle periodogram)
+专业古生物学高级统计分析平台
 
-Author: PaleoAST Development Team
-Version: 1.0.0
+主入口文件 - 商业级启动流程
+- 全局异常拦截
+- 闪屏动画
+- 主题样式注入
+- 模块懒加载
+
+版本: 5.0.0
+作者: PaleoAST Development Team
+许可证: MIT
 """
 
 import sys
-import numpy as np
+import os
+import logging
+import time
+import traceback
+from pathlib import Path
+from typing import Optional, Any
+from dataclasses import dataclass
+from enum import Enum
+
+# 防止在导入前就崩溃
+try:
+    import numpy as np
+    import scipy as sp
+except ImportError:
+    print("ERROR: Required scientific computing packages not found!")
+    print("Please install: numpy scipy")
+    sys.exit(1)
 
 
-def print_banner() -> None:
-    """Print application banner."""
-    banner = """
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║   ██████╗ ██╗███████╗███████╗     ██████╗ ██████╗ ███╗   ██╗   ║
-    ║  ██╔════╝ ██║██╔════╝██╔════╝    ██╔════╝██╔═══██╗████╗  ██║   ║
-    ║  ██║      ██║███████╗█████╗      ██║     ██║   ██║██╔██╗ ██║   ║
-    ║  ██║      ██║╚════██║██╔══╝      ██║     ██║   ██║██║╚██╗██║   ║
-    ║  ╚██████╗ ██║███████║███████╗    ╚██████╗╚██████╔╝██║ ╚████║   ║
-    ║   ╚═════╝ ╚═╝╚══════╝╚══════╝     ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ║
-    ║                                                               ║
-    ║   Paleontological Advanced Statistical Toolkit                 ║
-    ║   Version 1.0.0                                               ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
+# =============================================================================
+# 配置日志系统
+# =============================================================================
+
+def setup_logging() -> logging.Logger:
     """
-    print(banner)
-
-
-def print_info() -> None:
-    """Print system information."""
-    print("System Information:")
-    print(f"  Python: {sys.version.split()[0]}")
-    print(f"  NumPy: {np.__version__}")
-    print()
-
-
-def run_demo() -> None:
+    设置日志系统
+    
+    返回:
+        配置好的根日志记录器
     """
-    Run a demonstration of PaleoAST capabilities.
+    # 创建日志目录
+    log_dir = Path.home() / ".paleoast" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
     
-    This demonstrates the core statistical functionality without GUI.
+    # 日志文件
+    log_file = log_dir / f"paleoast_{time.strftime('%Y%m%d')}.log"
+    
+    # 格式化
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # 文件处理器
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    
+    # 控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    
+    # 根日志记录器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    return root_logger
+
+
+# =============================================================================
+# 全局异常处理
+# =============================================================================
+
+class ExceptionHandler:
     """
-    print("\n" + "=" * 60)
-    print("PaleoAST Demonstration")
-    print("=" * 60 + "\n")
+    全局异常处理器
     
-    # Import analysis modules
-    from statistics.pca import PCAAnalyzer
-    from statistics.distance_metrics import compute_distance_matrix
-    from ecology.diversity import compute_diversity_indices
-    from morphometrics.gpa import GPAAnalyzer
-    from stratigraphy.spectral_analysis import SpectralAnalyzer
+    捕获所有未处理异常，防止程序闪退。
+    """
     
-    print("1. Principal Component Analysis (PCA)")
-    print("-" * 40)
+    def __init__(self):
+        """初始化"""
+        self._original_hook = None
+        self._logger = logging.getLogger("PaleoAST.ExceptionHandler")
     
-    # Generate sample paleontological data
-    np.random.seed(42)
-    n_samples = 30
-    n_variables = 8
+    def install(self) -> None:
+        """安装异常处理器"""
+        self._original_hook = sys.excepthook
+        sys.excepthook = self._handle_exception
+        self._logger.info("Global exception handler installed")
     
-    # Simulate fossil measurements
-    data = np.random.randn(n_samples, n_variables) * 10 + 50
-    
-    # Run PCA
-    pca = PCAAnalyzer()
-    result = pca.analyze(data, n_components=3, method='correlation')
-    
-    print(f"   Samples: {result.scores.shape[0]}")
-    print(f"   Variables: {n_variables}")
-    print(f"   Components extracted: {result.n_components}")
-    print(f"   Variance explained (PC1): {result.explained_variance[0]:.1f}%")
-    print(f"   Variance explained (PC2): {result.explained_variance[1]:.1f}%")
-    print(f"   Variance explained (PC3): {result.explained_variance[2]:.1f}%")
-    print()
-    
-    print("2. Distance Metrics")
-    print("-" * 40)
-    
-    # Compute various distance matrices
-    for metric in ['euclidean', 'bray_curtis', 'jaccard']:
-        dm = compute_distance_matrix(data, metric=metric)
-        print(f"   {metric.capitalize()} distance matrix computed: {dm.matrix.shape}")
-    
-    print()
-    
-    print("3. Diversity Analysis")
-    print("-" * 40)
-    
-    # Simulate species abundance data
-    abundances = np.array([45, 23, 15, 12, 8, 5, 3, 2, 1, 1])
-    
-    div_result = compute_diversity_indices(abundances, "Fossil_Site_A")
-    
-    print(f"   Sample: {div_result.sample_name}")
-    print(f"   Taxa Richness (S): {div_result.taxa_count}")
-    print(f"   Total Individuals (N): {div_result.individuals}")
-    
-    if 'shannon' in div_result.indices:
-        print(f"   Shannon Index (H'): {div_result.indices['shannon'].value:.4f}")
-    
-    if 'simpson' in div_result.indices:
-        print(f"   Simpson Index (1-D): {div_result.indices['simpson'].value:.4f}")
-    
-    if 'fisher_alpha' in div_result.indices:
-        print(f"   Fisher's Alpha: {div_result.indices['fisher_alpha'].value:.4f}")
-    
-    print()
-    
-    print("4. Generalized Procrustes Analysis (GPA)")
-    print("-" * 40)
-    
-    # Simulate landmark data
-    n_specimens = 15
-    n_landmarks = 8
-    configurations = np.zeros((n_specimens, n_landmarks, 2))
-    
-    for i in range(n_specimens):
-        # Base configuration
-        base = np.random.randn(n_landmarks, 2) * 5
-        # Add variation (rotation, translation, scaling)
-        angle = np.random.uniform(0, 2 * np.pi)
-        scale = np.random.uniform(0.8, 1.2)
-        translation = np.random.randn(2) * 3
+    def _handle_exception(
+        self,
+        exc_type: type,
+        exc_value: BaseException,
+        exc_tb: Any
+    ) -> None:
+        """处理异常"""
+        if issubclass(exc_type, KeyboardInterrupt):
+            # 允许Ctrl+C
+            self._original_hook(exc_type, exc_value, exc_tb)
+            return
         
-        # Apply transformation
-        R = np.array([[np.cos(angle), -np.sin(angle)],
-                      [np.sin(angle), np.cos(angle)]])
-        configurations[i] = scale * (base @ R.T) + translation
+        # 记录错误
+        self._logger.critical(
+            f"Unhandled exception: {exc_type.__name__}: {exc_value}",
+            exc_info=(exc_type, exc_value, exc_tb)
+        )
+        
+        # 尝试显示错误对话框
+        self._show_error_dialog(exc_type, exc_value, exc_tb)
     
-    # Run GPA
-    gpa = GPAAnalyzer()
-    gpa_result = gpa.analyze(configurations)
-    
-    print(f"   Specimens analyzed: {gpa_result.aligned_configurations.shape[0]}")
-    print(f"   Landmarks: {gpa_result.aligned_configurations.shape[1]}")
-    print(f"   Iterations to convergence: {gpa_result.n_iterations}")
-    print(f"   Converged: {gpa_result.converged}")
-    
-    print()
-    
-    print("5. Spectral Analysis (Lomb-Scargle)")
-    print("-" * 40)
-    
-    # Simulate cyclostratigraphy data
-    n_points = 200
-    time = np.sort(np.random.uniform(0, 100, n_points))
-    
-    # Signal with 405 ka and 100 ka cycles (Milankovitch)
-    signal = (3 * np.sin(2 * np.pi * time / 40) + 
-              2 * np.sin(2 * np.pi * time / 100) +
-              1.5 * np.sin(2 * np.pi * time / 20))
-    noise = np.random.randn(n_points) * 0.5
-    values = signal + noise
-    
-    # Run spectral analysis
-    spectral = SpectralAnalyzer()
-    spec_result = spectral.analyze(time, values, n_frequencies=500)
-    
-    print(f"   Data points: {len(time)}")
-    print(f"   Frequencies analyzed: {len(spec_result.frequencies)}")
-    
-    if spec_result.peak_period:
-        print(f"   Dominant period: {spec_result.peak_period:.2f}")
-    
-    print()
-    
-    print("=" * 60)
-    print("Demo completed successfully!")
-    print("=" * 60)
-
-
-def main() -> None:
-    """
-    Main entry point for PaleoAST.
-    
-    Usage:
-        python main.py           - Run demo
-        python main.py --gui     - Launch GUI (future)
-        python main.py --help    - Show help
-    """
-    print_banner()
-    print_info()
-    
-    if len(sys.argv) > 1:
-        if sys.argv[1] == '--gui':
-            print("GUI mode not yet implemented.")
-            print("Running in demo mode instead...\n")
-            run_demo()
-        elif sys.argv[1] == '--help':
-            print("""
-PaleoAST - Paleontological Advanced Statistical Toolkit
-
-Usage:
-    python main.py           Run demonstration
-    python main.py --gui     Launch GUI (future)
-    python main.py --help    Show this help
-
-For more information, visit: https://github.com/paleoast/PaleoAST
+    def _show_error_dialog(
+        self,
+        exc_type: type,
+        exc_value: BaseException,
+        exc_tb: Any
+    ) -> None:
+        """显示错误对话框"""
+        try:
+            # 导入Qt
+            from PyQt6.QtWidgets import (
+                QApplication, QDialog, QVBoxLayout, QHBoxLayout,
+                QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox
+            )
+            from PyQt6.QtCore import Qt
+            from PyQt6.QtGui import QFont
+            
+            app = QApplication.instance()
+            if not app:
+                return
+            
+            # 创建对话框
+            dialog = QDialog()
+            dialog.setWindowTitle("PaleoAST - Error Detected")
+            dialog.setMinimumSize(700, 500)
+            dialog.setModal(True)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # 标题
+            title = QLabel("⚠️  Application Error")
+            title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+            title.setStyleSheet("color: #E74C3C; padding: 10px;")
+            
+            # 信息
+            info = QLabel(
+                "PaleoAST encountered an error. The error has been logged.\n"
+                "You can continue, but unexpected behavior may occur."
+            )
+            info.setWordWrap(True)
+            
+            # 错误详情
+            tb_text = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+            
+            group = QGroupBox("Technical Details")
+            group_layout = QVBoxLayout(group)
+            
+            error_text = QTextEdit()
+            error_text.setReadOnly(True)
+            error_text.setFont(QFont("Consolas", 8))
+            error_text.setText(
+                f"Type: {exc_type.__name__}\n"
+                f"Message: {exc_value}\n\n"
+                f"Traceback:\n{tb_text}"
+            )
+            error_text.setStyleSheet("""
+                QTextEdit {
+                    background-color: #2C3E50;
+                    color: #ECF0F1;
+                    border: 1px solid #34495E;
+                    border-radius: 4px;
+                    padding: 8px;
+                }
             """)
-        else:
-            print(f"Unknown argument: {sys.argv[1]}")
-            print("Run 'python main.py --help' for usage information.")
-    else:
-        run_demo()
+            group_layout.addWidget(error_text)
+            
+            # 按钮
+            btn_layout = QHBoxLayout()
+            btn_layout.addStretch()
+            
+            export_btn = QPushButton("Export Log")
+            export_btn.clicked.connect(lambda: self._export_log(tb_text))
+            
+            continue_btn = QPushButton("Continue")
+            continue_btn.setDefault(True)
+            continue_btn.clicked.connect(dialog.accept)
+            
+            quit_btn = QPushButton("Quit")
+            quit_btn.setStyleSheet("background-color: #E74C3C; color: white;")
+            quit_btn.clicked.connect(lambda: sys.exit(1))
+            
+            btn_layout.addWidget(export_btn)
+            btn_layout.addWidget(continue_btn)
+            btn_layout.addWidget(quit_btn)
+            
+            # 组装
+            layout.addWidget(title)
+            layout.addWidget(info)
+            layout.addWidget(group, stretch=1)
+            layout.addLayout(btn_layout)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            # 降级到控制台
+            print("=" * 80)
+            print("CRITICAL ERROR:")
+            print(f"Type: {exc_type.__name__}")
+            print(f"Message: {exc_value}")
+            print("Traceback:")
+            print(''.join(traceback.format_exception(exc_type, exc_value, exc_tb)))
+            print("=" * 80)
+    
+    def _export_log(self, tb_text: str) -> None:
+        """导出日志"""
+        try:
+            from PyQt6.QtWidgets import QFileDialog, QMessageBox
+            
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"paleoast_error_{timestamp}.log"
+            
+            path, _ = QFileDialog.getSaveFileName(
+                None,
+                "Export Error Log",
+                str(Path.home() / "Desktop" / filename),
+                "Log Files (*.log);;Text Files (*.txt)"
+            )
+            
+            if path:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(tb_text)
+                QMessageBox.information(None, "Exported", f"Log saved to:\n{path}")
+        except:
+            pass
 
 
-if __name__ == '__main__':
-    main()
+# =============================================================================
+# 主题样式
+# =============================================================================
+
+def get_dark_theme_stylesheet() -> str:
+    """
+    获取深色主题样式表
+    
+    返回:
+        QSS样式字符串
+    """
+    return """
+    /* ====================================================================
+       PaleoAST Professional Dark Theme
+       ==================================================================== */
+    
+    /* 全局字体 */
+    * {
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        font-size: 10pt;
+    }
+    
+    /* 主窗口 */
+    QMainWindow {
+        background-color: #1A1A2E;
+        color: #ECF0F1;
+    }
+    
+    /* 中央部件 */
+    QWidget {
+        background-color: #1A1A2E;
+        color: #ECF0F1;
+    }
+    
+    /* 按钮 */
+    QPushButton {
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 #34495E,
+            stop: 1 #2C3E50
+        );
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        border-radius: 6px;
+        padding: 8px 20px;
+        min-height: 28px;
+    }
+    
+    QPushButton:hover {
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 #3D566E,
+            stop: 1 #34495E
+        );
+        border: 1px solid #3498DB;
+    }
+    
+    QPushButton:pressed {
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 #2C3E50,
+            stop: 1 #1A1A2E
+        );
+        border: 1px solid #2980B9;
+    }
+    
+    QPushButton:disabled {
+        background-color: #2C3E50;
+        color: #7F8C8D;
+    }
+    
+    /* 主按钮 */
+    QPushButton[class="primary"] {
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 #3498DB,
+            stop: 1 #2980B9
+        );
+        border: 1px solid #3498DB;
+    }
+    
+    QPushButton[class="primary"]:hover {
+        background-color: qlineargradient(
+            x1: 0, y1: 0, x2: 0, y2: 1,
+            stop: 0 #5DADE2,
+            stop: 1 #3498DB
+        );
+    }
+    
+    /* 输入框 */
+    QLineEdit, QTextEdit, QPlainTextEdit {
+        background-color: #2C3E50;
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        border-radius: 4px;
+        padding: 8px 12px;
+        selection-background-color: #3498DB;
+    }
+    
+    QLineEdit:hover, QTextEdit:hover {
+        border: 1px solid #3498DB;
+    }
+    
+    QLineEdit:focus, QTextEdit:focus {
+        border: 2px solid #3498DB;
+    }
+    
+    /* 组合框 */
+    QComboBox {
+        background-color: #2C3E50;
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        border-radius: 4px;
+        padding: 8px 12px;
+    }
+    
+    QComboBox:hover {
+        border: 1px solid #3498DB;
+    }
+    
+    QComboBox QAbstractItemView {
+        background-color: #2C3E50;
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        selection-background-color: #3498DB;
+    }
+    
+    /* 滚动条 */
+    QScrollBar:vertical {
+        background-color: transparent;
+        width: 10px;
+        margin: 0;
+    }
+    
+    QScrollBar::handle:vertical {
+        background-color: #34495E;
+        min-height: 30px;
+        border-radius: 5px;
+        margin: 2px;
+    }
+    
+    QScrollBar::handle:vertical:hover {
+        background-color: #3D566E;
+        width: 14px;
+    }
+    
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0;
+    }
+    
+    QScrollBar:horizontal {
+        background-color: transparent;
+        height: 10px;
+        margin: 0;
+    }
+    
+    QScrollBar::handle:horizontal {
+        background-color: #34495E;
+        min-width: 30px;
+        border-radius: 5px;
+        margin: 2px;
+    }
+    
+    QScrollBar::handle:horizontal:hover {
+        background-color: #3D566E;
+        height: 14px;
+    }
+    
+    /* 表格 */
+    QTableWidget, QTreeWidget, QListWidget {
+        background-color: #2C3E50;
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        border-radius: 4px;
+        gridline-color: #34495E;
+        alternate-background-color: #34495E;
+    }
+    
+    QHeaderView::section {
+        background-color: #34495E;
+        color: #ECF0F1;
+        padding: 8px;
+        border: none;
+        border-bottom: 2px solid #3498DB;
+        font-weight: 600;
+    }
+    
+    /* 菜单 */
+    QMenuBar {
+        background-color: #1A1A2E;
+        color: #ECF0F1;
+        border-bottom: 1px solid #34495E;
+    }
+    
+    QMenuBar::item:selected {
+        background-color: #34495E;
+    }
+    
+    QMenu {
+        background-color: #2C3E50;
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        border-radius: 6px;
+        padding: 4px;
+    }
+    
+    QMenu::item:selected {
+        background-color: #3498DB;
+    }
+    
+    QMenu::separator {
+        height: 1px;
+        background-color: #34495E;
+    }
+    
+    /* 标签页 */
+    QTabWidget::pane {
+        background-color: #2C3E50;
+        border: 1px solid #34495E;
+        border-radius: 4px;
+    }
+    
+    QTabBar::tab {
+        background-color: #34495E;
+        color: #95A5A6;
+        border: 1px solid #34495E;
+        border-bottom: none;
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+        padding: 10px 20px;
+    }
+    
+    QTabBar::tab:hover {
+        background-color: #3D566E;
+    }
+    
+    QTabBar::tab:selected {
+        background-color: #2C3E50;
+        color: #3498DB;
+        border: 1px solid #3498DB;
+    }
+    
+    /* 工具栏 */
+    QToolBar {
+        background-color: #1A1A2E;
+        border: none;
+        spacing: 4px;
+    }
+    
+    QToolButton {
+        background-color: transparent;
+        color: #ECF0F1;
+        border: none;
+        border-radius: 4px;
+        padding: 6px;
+    }
+    
+    QToolButton:hover {
+        background-color: rgba(52, 152, 219, 0.2);
+    }
+    
+    /* 分组框 */
+    QGroupBox {
+        background-color: transparent;
+        color: #3498DB;
+        border: 1px solid #34495E;
+        border-radius: 6px;
+        margin-top: 12px;
+        padding-top: 16px;
+        font-weight: 600;
+    }
+    
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        left: 12px;
+        padding: 0 8px;
+        background-color: #1A1A2E;
+    }
+    
+    /* 进度条 */
+    QProgressBar {
+        background-color: #34495E;
+        border: none;
+        border-radius: 6px;
+        height: 12px;
+        text-align: center;
+        color: #ECF0F1;
+    }
+    
+    QProgressBar::chunk {
+        background: qlineargradient(
+            x1: 0, y1: 0, x2: 1, y2: 0,
+            stop: 0 #3498DB,
+            stop: 0.5 #2ECC71,
+            stop: 1 #27AE60
+        );
+        border-radius: 6px;
+    }
+    
+    /* 标签 */
+    QLabel {
+        color: #ECF0F1;
+        background-color: transparent;
+    }
+    
+    /* 停靠窗口 */
+    QDockWidget {
+        color: #ECF0F1;
+        border: 1px solid #34495E;
+        titlebar-close-icon: url(none);
+        titlebar-normal-icon: url(none);
+    }
+    
+    QDockWidget::title {
+        background-color: #2C3E50;
+        padding: 8px;
+    }
+    
+    /* 分裂器 */
+    QSplitter::handle {
+        background-color: #34495E;
+    }
+    
+    QSplitter::handle:horizontal {
+        width: 2px;
+    }
+    
+    QSplitter::handle:vertical {
+        height: 2px;
+    }
+    
+    QSplitter::handle:hover {
+        background-color: #3498DB;
+    }
+    
+    /* 复选框 */
+    QCheckBox {
+        color: #ECF0F1;
+        spacing: 8px;
+    }
+    
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #95A5A6;
+        border-radius: 3px;
+        background-color: transparent;
+    }
+    
+    QCheckBox::indicator:checked {
+        background-color: #3498DB;
+        border-color: #3498DB;
+    }
+    
+    /* 单选框 */
+    QRadioButton {
+        color: #ECF0F1;
+        spacing: 8px;
+    }
+    
+    QRadioButton::indicator {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #95A5A6;
+        border-radius: 9px;
+        background-color: transparent;
+    }
+    
+    QRadioButton::indicator:checked {
+        border-color: #3498DB;
+        background-color: radial-gradient(circle, #3498DB 6px, transparent 8px);
+    }
+    
+    /* 滑块 */
+    QSlider::groove:horizontal {
+        height: 6px;
+        background-color: #34495E;
+        border-radius: 3px;
+    }
+    
+    QSlider::handle:horizontal {
+        background-color: #3498DB;
+        width: 16px;
+        height: 16px;
+        margin: -5px 0;
+        border-radius: 8px;
+    }
+    
+    QSlider::sub-page:horizontal {
+        background-color: #3498DB;
+        border-radius: 3px;
+    }
+    
+    /* 状态栏 */
+    QStatusBar {
+        background-color: #1A1A2E;
+        color: #95A5A6;
+        border-top: 1px solid #34495E;
+    }
+    
+    QStatusBar::item {
+        border: none;
+    }
+    
+    /* 对话框 */
+    QDialog {
+        background-color: #1A1A2E;
+    }
+    
+    /* 消息框 */
+    QMessageBox {
+        background-color: #1A1A2E;
+    }
+    
+    QMessageBox QLabel {
+        color: #ECF0F1;
+    }
+    """
+
+
+# =============================================================================
+# 闪屏窗口
+# =============================================================================
+
+class SplashScreen:
+    """
+    启动闪屏窗口
+    
+    显示加载进度和状态信息。
+    """
+    
+    def __init__(self):
+        """初始化"""
+        self._logger = logging.getLogger("PaleoAST.Splash")
+        self._widget: Optional[Any] = None
+        self._label: Optional[Any] = None
+        self._progress: Optional[Any] = None
+        self._status: Optional[Any] = None
+    
+    def show(self) -> None:
+        """显示闪屏"""
+        try:
+            from PyQt6.QtWidgets import (
+                QApplication, QWidget, QVBoxLayout, QLabel,
+                QProgressBar, QGraphicsOpacityEffect
+            )
+            from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+            from PyQt6.QtGui import QFont, QPainter, QLinearGradient, QColor
+            
+            app = QApplication.instance()
+            if not app:
+                return
+            
+            # 创建窗口
+            self._widget = QWidget(
+                None,
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            )
+            self._widget.setFixedSize(500, 350)
+            self._widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            
+            # 居中
+            screen = app.primaryScreen()
+            if screen:
+                geo = screen.geometry()
+                self._widget.move(
+                    (geo.width() - 500) // 2,
+                    (geo.height() - 350) // 2
+                )
+            
+            # 布局
+            layout = QVBoxLayout(self._widget)
+            layout.setContentsMargins(40, 60, 40, 40)
+            layout.setSpacing(15)
+            
+            # 标题
+            title = QLabel("PaleoAST")
+            title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet("color: #FFFFFF; background: transparent;")
+            
+            # 副标题
+            subtitle = QLabel("Paleontological Advanced Statistical Toolkit")
+            subtitle.setFont(QFont("Segoe UI", 10))
+            subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            subtitle.setStyleSheet("color: #3498DB; background: transparent;")
+            
+            # 进度条
+            self._progress = QProgressBar()
+            self._progress.setFixedHeight(8)
+            self._progress.setTextVisible(False)
+            self._progress.setRange(0, 100)
+            self._progress.setValue(0)
+            self._progress.setStyleSheet("""
+                QProgressBar {
+                    background-color: rgba(52, 152, 219, 0.2);
+                    border: none;
+                    border-radius: 4px;
+                }
+                QProgressBar::chunk {
+                    background: qlineargradient(
+                        x1: 0, y1: 0, x2: 1, y2: 0,
+                        stop: 0 #3498DB,
+                        stop: 1 #2ECC71
+                    );
+                    border-radius: 4px;
+                }
+            """)
+            
+            # 状态
+            self._status = QLabel("Initializing...")
+            self._status.setFont(QFont("Consolas", 9))
+            self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._status.setStyleSheet("color: #95A5A6; background: transparent;")
+            self._status.setWordWrap(True)
+            
+            # 版本
+            version = QLabel("Version 5.0.0")
+            version.setFont(QFont("Segoe UI", 8))
+            version.setAlignment(Qt.AlignmentFlag.AlignRight)
+            version.setStyleSheet("color: #7F8C8D; background: transparent;")
+            
+            # 添加到布局
+            layout.addStretch(1)
+            layout.addWidget(title)
+            layout.addWidget(subtitle)
+            layout.addSpacing(30)
+            layout.addWidget(self._progress)
+            layout.addSpacing(10)
+            layout.addWidget(self._status, stretch=1)
+            layout.addWidget(version)
+            
+            # 淡入动画
+            effect = QGraphicsOpacityEffect(self._widget)
+            self._widget.setGraphicsEffect(effect)
+            
+            anim = QPropertyAnimation(effect, b"opacity")
+            anim.setDuration(800)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            
+            self._widget.show()
+            anim.start()
+            
+            app.processEvents()
+            
+        except Exception as e:
+            self._logger.error(f"Failed to show splash: {e}")
+    
+    def update(self, value: int, status: str = "") -> None:
+        """
+        更新进度
+        
+        参数:
+            value: 进度值 0-100
+            status: 状态消息
+        """
+        try:
+            from PyQt6.QtWidgets import QApplication
+            
+            if self._progress:
+                self._progress.setValue(value)
+            
+            if self._status and status:
+                self._status.setText(status)
+            
+            app = QApplication.instance()
+            if app:
+                app.processEvents()
+                
+        except Exception as e:
+            self._logger.error(f"Failed to update splash: {e}")
+    
+    def close(self) -> None:
+        """关闭闪屏"""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtCore import QPropertyAnimation, QGraphicsOpacityEffect
+            from PyQt6.QtCore import Qt as QtCore
+            
+            if not self._widget:
+                return
+            
+            # 淡出动画
+            effect = QGraphicsOpacityEffect(self._widget)
+            self._widget.setGraphicsEffect(effect)
+            
+            anim = QPropertyAnimation(effect, b"opacity")
+            anim.setDuration(500)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+            anim.setEasingCurve(QPropertyAnimation.Duration(500))
+            anim.finished.connect(self._widget.close)
+            anim.start()
+            
+            app = QApplication.instance()
+            if app:
+                app.processEvents()
+                
+        except Exception as e:
+            self._logger.error(f"Failed to close splash: {e}")
+            if self._widget:
+                self._widget.close()
+
+
+# =============================================================================
+# 主应用类
+# =============================================================================
+
+class PaleoASTApplication:
+    """
+    PaleoAST应用程序主类
+    
+    管理应用程序的完整生命周期。
+    """
+    
+    VERSION = "5.0.0"
+    APP_NAME = "PaleoAST"
+    
+    def __init__(self):
+        """初始化"""
+        self._logger = logging.getLogger("PaleoAST")
+        self._app: Optional[Any] = None
+        self._splash: Optional[SplashScreen] = None
+        self._main_window: Optional[Any] = None
+        self._exception_handler: Optional[ExceptionHandler] = None
+    
+    def run(self) -> int:
+        """
+        运行应用程序
+        
+        返回:
+            退出代码
+        """
+        try:
+            # 1. 初始化Qt
+            self._init_qt()
+            
+            # 2. 显示闪屏
+            self._splash = SplashScreen()
+            self._splash.show()
+            
+            # 3. 安装异常处理器
+            self._exception_handler = ExceptionHandler()
+            self._exception_handler.install()
+            
+            # 4. 预热NumPy/SciPy
+            self._splash.update(20, "Warming up NumPy/SciPy...")
+            self._warmup_scientific()
+            
+            # 5. 加载配置
+            self._splash.update(40, "Loading configuration...")
+            self._load_config()
+            
+            # 6. 加载模块
+            self._splash.update(60, "Loading modules...")
+            self._load_modules()
+            
+            # 7. 创建主窗口
+            self._splash.update(80, "Creating main window...")
+            self._create_main_window()
+            
+            # 8. 应用主题
+            self._splash.update(90, "Applying theme...")
+            self._apply_theme()
+            
+            # 9. 完成
+            self._splash.update(100, "Ready!")
+            time.sleep(0.5)
+            
+            # 10. 关闭闪屏并显示主窗口
+            self._splash.close()
+            self._show_main_window()
+            
+            self._logger.info(f"{self.APP_NAME} v{self.VERSION} started successfully")
+            
+            # 进入事件循环
+            return self._app.exec()
+            
+        except Exception as e:
+            self._logger.critical(f"Failed to start application: {e}")
+            traceback.print_exc()
+            return 1
+    
+    def _init_qt(self) -> None:
+        """初始化Qt"""
+        self._logger.info("Initializing Qt...")
+        
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import Qt
+        
+        self._app = QApplication(sys.argv)
+        self._app.setApplicationName(self.APP_NAME)
+        self._app.setApplicationVersion(self.VERSION)
+        self._app.setOrganizationName("PaleoAST")
+        self._app.setQuitOnLastWindowClosed(True)
+        
+        # 高DPI支持
+        self._app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+        self._app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    
+    def _warmup_scientific(self) -> None:
+        """预热科学计算库"""
+        self._logger.info("Warming up scientific libraries...")
+        
+        import numpy as np
+        import scipy as sp
+        
+        # 执行简单计算确保库已加载
+        _ = np.dot(np.random.rand(100, 100), np.random.rand(100, 100))
+        _ = sp.linalg.svd(np.random.rand(50, 50))
+        
+        self._logger.info("Scientific libraries warmed up")
+    
+    def _load_config(self) -> None:
+        """加载配置"""
+        self._logger.info("Loading configuration...")
+        
+        try:
+            import config
+            self._logger.info("Configuration loaded")
+        except ImportError:
+            self._logger.warning("Config module not found, using defaults")
+    
+    def _load_modules(self) -> None:
+        """加载模块"""
+        self._logger.info("Loading modules...")
+        
+        modules = [
+            ("models", "Data models"),
+            ("statistics", "Statistics engine"),
+            ("morphometrics", "Morphometrics"),
+            ("ecology", "Ecology engine"),
+            ("stratigraphy", "Stratigraphy"),
+            ("visualization", "Visualization"),
+            ("controllers", "Controllers"),
+            ("views", "Views"),
+        ]
+        
+        loaded = []
+        for module_name, description in modules:
+            try:
+                __import__(module_name)
+                loaded.append(module_name)
+                self._splash.update(
+                    60 + len(loaded) * 2,
+                    f"Loaded {description}..."
+                )
+                self._logger.info(f"Module loaded: {module_name}")
+            except ImportError as e:
+                self._logger.warning(f"Module not loaded: {module_name} - {e}")
+    
+    def _create_main_window(self) -> None:
+        """创建主窗口"""
+        self._logger.info("Creating main window...")
+        
+        try:
+            from PyQt6.QtWidgets import (
+                QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                QLabel, QMenuBar, QMenu, QStatusBar, QToolBar,
+                QDockWidget, QTextEdit, QTabWidget, QSplitter
+            )
+            from PyQt6.QtCore import Qt
+            
+            # 尝试导入自定义主窗口
+            try:
+                from views.main_window import MainWindow
+                self._main_window = MainWindow()
+            except ImportError:
+                # 使用默认主窗口
+                self._main_window = QMainWindow()
+                self._main_window.setWindowTitle(f"{self.APP_NAME} v{self.VERSION}")
+                self._main_window.resize(1200, 800)
+                
+                # 中心部件
+                central = QWidget()
+                layout = QVBoxLayout(central)
+                
+                # 欢迎标签
+                welcome = QLabel(
+                    f"<h1>Welcome to {self.APP_NAME}</h1>"
+                    f"<p>Version {self.VERSION}</p>"
+                    f"<p>Professional Paleontology Analysis Platform</p>"
+                )
+                welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                welcome.setStyleSheet("""
+                    QLabel {
+                        color: #3498DB;
+                        padding: 50px;
+                    }
+                """)
+                layout.addWidget(welcome)
+                
+                self._main_window.setCentralWidget(central)
+                
+                # 菜单栏
+                self._create_menu_bar()
+                
+                # 状态栏
+                status = QStatusBar()
+                status.showMessage("Ready")
+                self._main_window.setStatusBar(status)
+            
+            self._logger.info("Main window created")
+            
+        except Exception as e:
+            self._logger.error(f"Failed to create main window: {e}")
+            raise
+    
+    def _create_menu_bar(self) -> None:
+        """创建菜单栏"""
+        try:
+            from PyQt6.QtWidgets import QMenuBar, QMenu
+            
+            menubar = self._main_window.menuBar()
+            
+            # 文件菜单
+            file_menu = menubar.addMenu("&File")
+            
+            # 编辑菜单
+            edit_menu = menubar.addMenu("&Edit")
+            
+            # 数据菜单
+            data_menu = menubar.addMenu("&Data")
+            
+            # 统计菜单
+            stats_menu = menubar.addMenu("&Statistics")
+            
+            # 形态测量菜单
+            morph_menu = menubar.addMenu("&Morphometrics")
+            
+            # 可视化菜单
+            view_menu = menubar.addMenu("&Visualization")
+            
+            # 帮助菜单
+            help_menu = menubar.addMenu("&Help")
+            
+        except Exception as e:
+            self._logger.warning(f"Failed to create menu bar: {e}")
+    
+    def _apply_theme(self) -> None:
+        """应用主题"""
+        self._logger.info("Applying theme...")
+        
+        stylesheet = get_dark_theme_stylesheet()
+        self._app.setStyleSheet(stylesheet)
+        
+        self._logger.info("Theme applied")
+    
+    def _show_main_window(self) -> None:
+        """显示主窗口"""
+        if self._main_window:
+            self._main_window.show()
+            self._main_window.activateWindow()
+            self._main_window.raise_()
+
+
+# =============================================================================
+# 程序入口
+# =============================================================================
+
+def main() -> int:
+    """
+    主入口函数
+    
+    返回:
+        退出代码
+    """
+    # 设置日志
+    logger = setup_logging()
+    logger.info("=" * 60)
+    logger.info(f"PaleoAST v{PaleoASTApplication.VERSION} Starting...")
+    logger.info("=" * 60)
+    
+    # 创建并运行应用
+    app = PaleoASTApplication()
+    exit_code = app.run()
+    
+    logger.info(f"PaleoAST exiting with code {exit_code}")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
