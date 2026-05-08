@@ -25,6 +25,10 @@ from .data_matrix import DataMatrix
 from .column_metadata import ColumnMetadataManager
 from .row_metadata import RowMetadataManager
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class StateManager:
     """
@@ -79,11 +83,13 @@ class StateManager:
         """
         if self._initialized:
             return
-        
+
+        self._logger = logging.getLogger(f"{__name__}.StateManager")
+
         # Initialize locks
         self._read_write_lock = threading.RLock()
         self._state_lock = threading.Lock()
-        
+
         # Initialize state variables
         self._data_matrix: Optional[DataMatrix] = None
         self._column_metadata: Optional[ColumnMetadataManager] = None
@@ -94,8 +100,10 @@ class StateManager:
         self._redo_stack: List[Dict[str, Any]] = []
         self._modified: bool = False
         self._current_file: Optional[str] = None
-        
+
         self._initialized = True
+
+        self._logger.info("StateManager initialized")
     
     # =========================================================================
     # Singleton Access
@@ -184,9 +192,11 @@ class StateManager:
         with self._read_write_lock:
             # Save current state for undo
             self._push_undo()
-            
+
             # Update data matrix
             self._data_matrix = matrix
+
+            self._logger.info(f"set_data_matrix: shape=({matrix.n_samples} x {matrix.n_variables})")
             
             # Initialize metadata managers
             self._column_metadata = ColumnMetadataManager(
@@ -206,6 +216,7 @@ class StateManager:
     def clear_data(self) -> None:
         """Clear the current data matrix."""
         with self._read_write_lock:
+            self._logger.info("clear_data: clearing current data matrix and analysis cache")
             self._push_undo()
             self._data_matrix = None
             self._column_metadata = None
@@ -236,25 +247,27 @@ class StateManager:
     def cache_result(self, key: str, result: Any) -> None:
         """
         Cache an analysis result.
-        
+
         Parameters:
             key: Unique identifier for the result
             result: The result to cache
         """
         with self._read_write_lock:
+            self._logger.debug(f"cache_result: storing result with key='{key}'")
             self._analysis_cache[key] = result
     
     def get_cached_result(self, key: str) -> Optional[Any]:
         """
         Retrieve a cached analysis result.
-        
+
         Parameters:
             key: Unique identifier for the result
-        
+
         Returns:
             The cached result or None if not found
         """
         with self._read_write_lock:
+            self._logger.debug(f"get_cached_result: retrieving result with key='{key}'")
             return self._analysis_cache.get(key)
     
     def clear_cache(self) -> None:
@@ -339,8 +352,9 @@ class StateManager:
         """Undo the last state change."""
         if not self.can_undo():
             return
-        
+
         with self._read_write_lock:
+            self._logger.debug(f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
             # Save current state for redo
             if self._data_matrix is not None:
                 current_state = {
@@ -378,8 +392,9 @@ class StateManager:
         """Redo the last undone change."""
         if not self.can_redo():
             return
-        
+
         with self._read_write_lock:
+            self._logger.debug(f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
             # Save current state for undo
             if self._data_matrix is not None:
                 current_state = {
@@ -432,13 +447,14 @@ class StateManager:
     def mark_saved(self, filepath: Optional[str] = None) -> None:
         """
         Mark the data as saved.
-        
+
         Parameters:
             filepath: The file path it was saved to
         """
         with self._read_write_lock:
             if filepath is not None:
                 self._current_file = filepath
+                self._logger.info(f"mark_saved: data saved to '{filepath}'")
             self._modified = False
     
     # =========================================================================

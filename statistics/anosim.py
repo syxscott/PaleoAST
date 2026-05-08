@@ -23,6 +23,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -32,6 +33,9 @@ import threading
 from utils.exceptions import ComputationError, MatrixDimensionError
 from utils.validators import validate_data_array
 from config.constants import PERMUTATION_TESTS
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -60,13 +64,13 @@ class ANOSIMResult:
         """Generate summary text."""
         sig_marker = "**" if self.p_value < 0.01 else ("*" if self.p_value < 0.05 else "")
         return (
-            f"Analysis of Similarities (ANOSIM)\n"
+            f"{_('Analysis of Similarities (ANOSIM)')}\n"
             f"{'=' * 45}\n"
-            f"Test statistic (R): {self.statistic:.4f}\n"
-            f"P-value: {self.p_value:.4f} {sig_marker}\n"
-            f"Permutations: {self.n_permutations}\n"
-            f"Groups: {self.n_groups}\n"
-            f"Distance metric: {self.metric}"
+            f"{_('Test statistic (R): {0}').format(f'{self.statistic:.4f}')}\n"
+            f"{_('P-value: {0}').format(f'{self.p_value:.4f} {sig_marker}')}\n"
+            f"{_('Permutations: {0}').format(self.n_permutations)}\n"
+            f"{_('Groups: {0}').format(self.n_groups)}\n"
+            f"{_('Distance metric: {0}').format(self.metric)}"
         )
 
 
@@ -80,9 +84,11 @@ class ANOSIMAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the ANOSIM analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.ANOSIMAnalyzer")
         self._lock = threading.RLock()
         self._last_result: Optional[ANOSIMResult] = None
         self._n_permutations = PERMUTATION_TESTS
+        self._logger.info("ANOSIM initialized")
     
     def analyze(
         self,
@@ -106,8 +112,13 @@ class ANOSIMAnalyzer:
         with self._lock:
             # Validate input
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
-            
+
             n = D.shape[0]
+            unique_groups = sorted(set(groups), key=lambda x: str(x))
+            self._logger.info(
+                f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
+                f"n_permutations={n_permutations}"
+            )
             
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError("Distance matrix must be square")
@@ -138,7 +149,7 @@ class ANOSIMAnalyzer:
             
             # Get unique groups
             unique_groups = sorted(set(groups), key=lambda x: str(x))
-            
+
             result = ANOSIMResult(
                 statistic=R_obs,
                 p_value=p_value,
@@ -148,8 +159,11 @@ class ANOSIMAnalyzer:
                 n_samples=n,
                 metric=metric
             )
-            
+
             self._last_result = result
+            self._logger.info(
+                f"ANOSIM completed: R={R_obs:.4f}, p-value={p_value:.4f}"
+            )
             return result
     
     def _compute_R_statistic(

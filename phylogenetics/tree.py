@@ -95,10 +95,18 @@ class PhyloNode:
             raise ValueError(
                 f"Branch length must be non-negative, got {self.branch_length}"
             )
-        
+
         # 自动设置节点类型
         if not self.children and self.node_type == NodeType.INTERNAL:
             self.node_type = NodeType.LEAF
+
+    def __hash__(self):
+        return hash(self.node_id)
+
+    def __eq__(self, other):
+        if isinstance(other, PhyloNode):
+            return self.node_id == other.node_id
+        return NotImplemented
     
     # =========================================================================
     # 节点属性
@@ -261,82 +269,95 @@ class PhyloNode:
     def add_child(self, child: 'PhyloNode') -> 'PhyloNode':
         """
         添加子节点
-        
+
         Parameters:
             child: 要添加的子节点
-        
+
         Returns:
             添加的子节点
         """
         if child.parent is not None:
+            logger.debug(f"Removing child '{child.name}' from previous parent '{child.parent.name}'")
             # 从原父节点移除
             child.parent.children.remove(child)
-        
+
         child.parent = self
         self.children.append(child)
-        
+
         # 更新节点类型
         if self.node_type == NodeType.LEAF:
             self.node_type = NodeType.INTERNAL
-        
+
+        logger.debug(f"Added child '{child.name}' to node '{self.name}', now has {len(self.children)} children")
         return child
     
     def remove_child(self, child: 'PhyloNode') -> bool:
         """
         移除子节点
-        
+
         Parameters:
             child: 要移除的子节点
-        
+
         Returns:
             如果成功移除返回True
         """
         if child not in self.children:
+            logger.debug(f"Child '{child.name}' not found in node '{self.name}'")
             return False
-        
+
         self.children.remove(child)
         child.parent = None
-        
+
         # 更新节点类型
         if not self.children and not self.is_root:
             self.node_type = NodeType.LEAF
-        
+
+        logger.debug(f"Removed child '{child.name}' from node '{self.name}', {len(self.children)} children remaining")
         return True
     
     def prune(self) -> Optional['PhyloNode']:
         """
         剪除本节点，将其子树接到父节点
-        
+
         Returns:
             被剪除的节点
         """
         if self.is_root:
+            logger.debug(f"Cannot prune root node '{self.name}'")
             return None
-        
+
         parent = self.parent
         siblings = self.get_siblings()
-        
+
+        # Copy children before modifying
+        children_copy = list(self.children)
+
+        logger.info(f"Pruning node '{self.name}' (children={len(children_copy)}) from parent '{parent.name}'")
+
         # 从父节点移除
         parent.remove_child(self)
-        
+
         # 将本节点的子节点添加到父节点
-        for child in self.children:
+        for child in children_copy:
             parent.add_child(child)
-        
+
         return self
     
     def detach(self) -> 'PhyloNode':
         """
         从树中分离本节点
-        
+
         Returns:
             分离后的节点 (作为新的根)
         """
         if self.is_root:
+            logger.debug(f"Node '{self.name}' is already root, returning self")
             return self
-        
+
+        logger.info(f"Detaching node '{self.name}' from tree as new root")
         # 递归复制子树
         new_root = self._copy_subtree()
+        logger.debug(f"Detached subtree has {len(new_root.get_all_nodes())} nodes")
         return new_root
     
     def _copy_subtree(self, parent: Optional['PhyloNode'] = None) -> 'PhyloNode':
@@ -372,93 +393,103 @@ class PhyloNode:
     def compute_depths(self) -> Dict['PhyloNode', int]:
         """
         计算所有节点的深度
-        
+
         Returns:
             {节点: 深度} 字典
         """
+        logger.debug(f"Computing depths for subtree rooted at '{self.name}'")
         depths = {}
-        
+
         def dfs(node: PhyloNode, depth: int) -> None:
             depths[node] = depth
             for child in node.children:
                 dfs(child, depth + 1)
-        
+
         dfs(self, 0)
+        logger.debug(f"Computed depths for {len(depths)} nodes, max depth = {max(depths.values()) if depths else 0}")
         return depths
     
     def compute_heights(self) -> Dict['PhyloNode', int]:
         """
         计算所有节点的高度
-        
+
         节点高度 = 到最远叶节点的距离
-        
+
         Returns:
             {节点: 高度} 字典
         """
+        logger.debug(f"Computing heights for subtree rooted at '{self.name}'")
         heights = {}
-        
+
         def dfs(node: PhyloNode) -> int:
             if node.is_leaf:
                 heights[node] = 0
                 return 0
-            
+
             max_child_height = 0
             for child in node.children:
                 h = dfs(child)
                 max_child_height = max(max_child_height, h)
-            
+
             heights[node] = max_child_height + 1
             return heights[node]
-        
+
         dfs(self)
+        logger.debug(f"Computed heights for {len(heights)} nodes, root height = {heights.get(self, 0)}")
         return heights
     
     def compute_total_length(self) -> float:
         """
         计算树的根到所有叶的总枝长
-        
+
         Returns:
             总枝长
         """
-        total = 0.0
-        
+        logger.debug(f"Computing total branch length for subtree rooted at '{self.name}'")
+
         def dfs(node: PhyloNode) -> float:
             length = node.branch_length or 0.0
             if node.is_leaf:
                 return length
-            
+
             subtree_length = 0.0
             for child in node.children:
                 subtree_length += dfs(child)
-            
+
             return length + subtree_length
-        
-        return dfs(self)
+
+        total = dfs(self)
+        logger.debug(f"Total branch length = {total:.4f}")
+        return total
     
     def compute_lca(self, node1: 'PhyloNode', node2: 'PhyloNode') -> Optional['PhyloNode']:
         """
         计算两个节点的最近公共祖先 (LCA)
-        
+
         数学公式:
             LCA(v1, v2) = arg max_{v ∈ Path(v1, root) ∩ Path(v2, root)} depth(v)
-        
+
         Parameters:
             node1: 第一个节点
             node2: 第二个节点
-        
+
         Returns:
             LCA节点或None
         """
+        logger.debug(f"Computing LCA between '{node1.name}' and '{node2.name}'")
         # 获取路径
         path1 = set(node1.get_path_to_root())
         path2 = node2.get_path_to_root()
-        
+
         # 找交集中深度最大的
         common = path1 & set(path2)
         if not common:
+            logger.debug(f"No common ancestor found between '{node1.name}' and '{node2.name}'")
             return None
-        
-        return max(common, key=lambda n: len(n.get_path_to_root()))
+
+        lca = max(common, key=lambda n: len(n.get_path_to_root()))
+        logger.debug(f"LCA of '{node1.name}' and '{node2.name}' is '{lca.name}'")
+        return lca
     
     def get_distance(self, other: 'PhyloNode') -> float:
         """
@@ -507,18 +538,20 @@ class PhyloNode:
     def to_newick(self, include_lengths: bool = True, include_support: bool = False) -> str:
         """
         转换为Newick格式字符串
-        
+
         递归文法:
             Subtree → Name:Length
                     | (Subtree{,Subtree})Name:Length
-        
+
         Parameters:
             include_lengths: 是否包含枝长
             include_support: 是否包含支持率
-        
+
         Returns:
             Newick格式字符串
         """
+        if self.is_root:
+            logger.debug(f"Converting tree rooted at '{self.name}' to Newick format (lengths={include_lengths}, support={include_support})")
         if self.is_leaf:
             name = self.name if self.name else ""
             if include_lengths and self.branch_length is not None:
@@ -548,15 +581,20 @@ class PhyloNode:
     def from_newick(cls, newick: str) -> 'PhyloNode':
         """
         从Newick字符串构建树
-        
+
         Parameters:
             newick: Newick格式字符串
-        
+
         Returns:
             根节点
         """
+        logger.info(f"Parsing Newick string ({len(newick)} chars)")
         parser = _NewickParser()
-        return parser.parse(newick)
+        root = parser.parse(newick)
+        n_nodes = len(root.get_all_nodes())
+        n_leaves = len(root.get_leaves())
+        logger.info(f"Parsed Newick tree: {n_nodes} nodes, {n_leaves} leaves")
+        return root
     
     def __repr__(self) -> str:
         return f"PhyloNode('{self.name}', type={self.node_type.name})"
@@ -578,17 +616,18 @@ class _NewickParser:
     def parse(self, newick: str) -> PhyloNode:
         """
         解析Newick字符串
-        
+
         Parameters:
             newick: Newick格式字符串
-        
+
         Returns:
             根节点
         """
+        logger.debug(f"Starting Newick parse, input length = {len(newick)}")
         self._input = newick.strip().rstrip(';')
         self._pos = 0
         self._length = len(self._input)
-        
+
         return self._parse_subtree()
     
     def _parse_subtree(self) -> PhyloNode:
@@ -762,33 +801,39 @@ class PhyloTree:
     def from_newick(cls, newick: str, name: str = "") -> 'PhyloTree':
         """
         从Newick字符串创建树
-        
+
         Parameters:
             newick: Newick格式字符串
             name: 树名称
-        
+
         Returns:
             PhyloTree对象
         """
+        logger.info(f"Creating PhyloTree from Newick string (name='{name}')")
         root = PhyloNode.from_newick(newick)
-        return cls(root=root, name=name)
+        tree = cls(root=root, name=name)
+        logger.info(f"PhyloTree created: {tree.leaf_count} leaves, {tree.node_count} nodes")
+        return tree
     
     def get_distance_matrix(self) -> Dict[Tuple[str, str], float]:
         """
         计算所有叶节点对之间的距离矩阵
-        
+
         Returns:
             {(名称1, 名称2): 距离} 字典
         """
         leaves = self.root.get_leaves()
+        n_pairs = len(leaves) * (len(leaves) - 1) // 2
+        logger.info(f"Computing distance matrix for {len(leaves)} leaves ({n_pairs} pairs)")
         distances = {}
-        
+
         for i, leaf1 in enumerate(leaves):
             for leaf2 in leaves[i+1:]:
                 dist = leaf1.get_distance(leaf2)
                 distances[(leaf1.name, leaf2.name)] = dist
                 distances[(leaf2.name, leaf1.name)] = dist
-        
+
+        logger.info(f"Distance matrix computed: {len(distances)} entries")
         return distances
     
     def __repr__(self) -> str:

@@ -25,6 +25,10 @@ from models.data_matrix import DataMatrix
 from models.state_manager import get_state_manager
 from utils.exceptions import ValidationError, FileOperationError
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class DataController:
     """
@@ -35,12 +39,15 @@ class DataController:
     
     def __init__(self) -> None:
         """Initialize the data controller."""
+        self._logger = logging.getLogger(f"{__name__}.DataController")
         self._lock = threading.RLock()
         self._state = get_state_manager()
-        
+
         # Supported formats
         self._supported_import = ['.csv', '.txt', '.dat']
         self._supported_export = ['.csv', '.txt']
+
+        self._logger.info("DataController initialized")
     
     # =========================================================================
     # Data Loading
@@ -71,9 +78,10 @@ class DataController:
             FileOperationError: If file cannot be read
         """
         with self._lock:
+            self._logger.info(f"load_csv called with filepath={filepath}, delimiter='{delimiter}', has_header={has_header}, has_row_labels={has_row_labels}")
             try:
                 path = Path(filepath)
-                
+
                 if not path.exists():
                     raise FileOperationError(f"File not found: {filepath}")
                 
@@ -129,10 +137,12 @@ class DataController:
                 # Set in state
                 self._state.set_data_matrix(matrix)
                 self._state.mark_saved(filepath)
-                
+
+                self._logger.info(f"CSV loaded successfully: shape={data.shape} ({data.shape[0]} samples x {data.shape[1]} variables)")
                 return matrix
-                
+
             except Exception as e:
+                self._logger.error(f"Failed to load CSV from '{filepath}': {str(e)}")
                 raise FileOperationError(f"Failed to load CSV: {str(e)}")
     
     def load_numpy(self, data: npt.NDArray) -> DataMatrix:
@@ -177,7 +187,8 @@ class DataController:
                 raise ValidationError("No data to export")
             
             matrix = self._state.data_matrix
-            
+            self._logger.info(f"export_csv called with filepath={filepath}, data dimensions={matrix.n_samples}x{matrix.n_variables}")
+
             try:
                 with open(filepath, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f, delimiter=delimiter)
@@ -203,8 +214,10 @@ class DataController:
                         writer.writerow(row)
                 
                 self._state.mark_saved(filepath)
-                
+                self._logger.info(f"CSV exported successfully to '{filepath}'")
+
             except Exception as e:
+                self._logger.error(f"Failed to export CSV to '{filepath}': {str(e)}")
                 raise FileOperationError(f"Failed to export CSV: {str(e)}")
     
     def export_numpy(self) -> npt.NDArray:

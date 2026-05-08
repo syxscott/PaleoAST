@@ -204,7 +204,19 @@ class TPS3D:
         self._weights: Optional[np.ndarray] = None
         self._affine: Optional[np.ndarray] = None
         self._logger = logging.getLogger(f"{__name__}.TPS3D")
-    
+
+    def analyze(self, source: np.ndarray, target: np.ndarray) -> 'TPS3DResult':
+        """Alias for fit() that returns a TPS3DResult for API consistency."""
+        self.fit(source, target)
+        K = self._compute_kernel_matrix(source, source)
+        return TPS3DResult(
+            source_points=source,
+            target_points=target,
+            weights=self._weights,
+            affine_params=self._affine,
+            bending_energy=self._compute_bending_energy(K)
+        )
+
     def fit(
         self,
         source: np.ndarray,
@@ -348,18 +360,20 @@ class TPS3D:
     def _compute_bending_energy(self, K: np.ndarray) -> float:
         """
         计算弯曲能量
-        
+
         参数:
             K: 核矩阵 (n, n)
-        
+
         返回:
-            E = w^T K w
+            E = Σ_d w_d^T K w_d
         """
         if self._weights is None:
             return 0.0
-        
-        E = self._weights @ K @ self._weights
-        return float(E)
+
+        # weights shape: (n, 3), K shape: (n, n)
+        # E = trace(w^T K w) = Σ elementwise(w * (K @ w))
+        E = float(np.sum(self._weights * (K @ self._weights)))
+        return E
     
     def transform(self, points: np.ndarray) -> np.ndarray:
         """

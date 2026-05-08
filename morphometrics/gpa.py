@@ -36,6 +36,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -45,6 +46,9 @@ import threading
 from utils.exceptions import ComputationError, MorphometricsError
 from utils.validators import validate_data_array
 from config.constants import GPA_CONVERGENCE_TOLERANCE, GPA_MAX_ITERATIONS
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,14 +69,14 @@ class GPAResult:
     def summary(self) -> str:
         """Generate summary text."""
         return (
-            f"Generalized Procrustes Analysis Results\n"
+            f"{_('Generalized Procrustes Analysis Results')}\n"
             f"{'=' * 50}\n"
-            f"Number of specimens: {self.aligned_configurations.shape[0]}\n"
-            f"Number of landmarks: {self.aligned_configurations.shape[1]}\n"
-            f"Dimensions: {self.aligned_configurations.shape[2]}\n"
-            f"Iterations: {self.n_iterations}\n"
-            f"Converged: {self.converged}\n"
-            f"Final SSE: {self.final_sse:.6f}"
+            f"{_('Number of specimens: {0}').format(self.aligned_configurations.shape[0])}\n"
+            f"{_('Number of landmarks: {0}').format(self.aligned_configurations.shape[1])}\n"
+            f"{_('Dimensions: {0}').format(self.aligned_configurations.shape[2])}\n"
+            f"{_('Iterations: {0}').format(self.n_iterations)}\n"
+            f"{_('Converged: {0}').format(self.converged)}\n"
+            f"{_('Final SSE: {0}').format(f'{self.final_sse:.6f}')}"
         )
 
 
@@ -86,6 +90,8 @@ class GPAAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the GPA analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.GPAAnalyzer")
+        self._logger.info("GPAAnalyzer initialized")
         self._lock = threading.RLock()
         self._last_result: Optional[GPAResult] = None
         self._tolerance = GPA_CONVERGENCE_TOLERANCE
@@ -115,8 +121,12 @@ class GPAAnalyzer:
         with self._lock:
             # Validate and prepare configurations
             X = self._prepare_configurations(configurations)
-            
+
             n_specimens, n_landmarks, n_dims = X.shape
+            self._logger.info(
+                f"GPA alignment started: n_specimens={n_specimens}, "
+                f"n_landmarks={n_landmarks}, n_dimensions={n_dims}"
+            )
             
             if n_iterations is None:
                 n_iterations = self._max_iterations
@@ -168,8 +178,17 @@ class GPAAnalyzer:
                     diff = aligned[i] - consensus
                     sse += np.sum(diff ** 2)
                 
+                self._logger.debug(
+                    f"GPA iteration {iteration + 1}: SSE={sse:.6f}, "
+                    f"delta={abs(prev_sse - sse):.6e}"
+                )
+
                 # Check convergence
                 if abs(prev_sse - sse) < tolerance:
+                    self._logger.info(
+                        f"GPA converged after {iteration + 1} iterations "
+                        f"with final SSE={sse:.6f}"
+                    )
                     result = GPAResult(
                         aligned_configurations=aligned,
                         consensus=consensus,
@@ -183,10 +202,14 @@ class GPAAnalyzer:
                     )
                     self._last_result = result
                     return result
-                
+
                 prev_sse = sse
             
             # Did not converge within max iterations
+            self._logger.warning(
+                f"GPA did not converge after {n_iterations} iterations, "
+                f"final SSE={prev_sse:.6f}"
+            )
             result = GPAResult(
                 aligned_configurations=aligned,
                 consensus=consensus,

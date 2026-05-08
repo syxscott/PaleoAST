@@ -32,6 +32,10 @@ from utils.exceptions import (
 from utils.validators import validate_data_array, check_missing_values
 from utils.matrix_ops import ensure_matrix
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class DataMatrix:
     """
@@ -126,9 +130,12 @@ class DataMatrix:
         
         # Set name
         self._name = name
-        
+
         # Thread lock for concurrent access
         self._lock = threading.RLock()
+
+        self._logger = logging.getLogger(f"{__name__}.DataMatrix")
+        self._logger.info(f"DataMatrix initialized: shape=({n_samples} x {n_variables}), name='{name}'")
     
     # =========================================================================
     # Properties
@@ -495,10 +502,12 @@ class DataMatrix:
         with self._lock:
             if isinstance(indices, list):
                 indices = np.array(indices)
-            
+
+            self._logger.debug(f"subset_rows: selecting {len(indices)} rows from {self._data.shape[0]}")
+
             new_data = self._data[indices].copy()
             new_row_labels = [self._row_labels[i] for i in indices]
-            
+
             return DataMatrix(
                 data=new_data,
                 row_labels=new_row_labels,
@@ -522,10 +531,12 @@ class DataMatrix:
         with self._lock:
             if isinstance(indices, list):
                 indices = np.array(indices)
-            
+
+            self._logger.debug(f"subset_columns: selecting {len(indices)} columns from {self._data.shape[1]}")
+
             new_data = self._data[:, indices].copy()
             new_col_labels = [self._col_labels[i] for i in indices]
-            
+
             return DataMatrix(
                 data=new_data,
                 row_labels=self._row_labels.copy(),
@@ -649,12 +660,15 @@ class DataMatrix:
         with self._lock:
             result = self._data.copy()
             col_means = np.nanmean(result, axis=0)
-            
+
             # Find NaN positions and fill with column means
             nan_mask = np.isnan(result)
+            missing_count = int(np.sum(nan_mask))
+            self._logger.info(f"impute_mean: imputing {missing_count} missing values with column means")
+
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_means[j]
-            
+
             return DataMatrix(
                 data=result,
                 row_labels=self._row_labels.copy(),
@@ -675,11 +689,14 @@ class DataMatrix:
         with self._lock:
             result = self._data.copy()
             col_medians = np.nanmedian(result, axis=0)
-            
+
             nan_mask = np.isnan(result)
+            missing_count = int(np.sum(nan_mask))
+            self._logger.info(f"impute_median: imputing {missing_count} missing values with column medians")
+
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_medians[j]
-            
+
             return DataMatrix(
                 data=result,
                 row_labels=self._row_labels.copy(),
@@ -707,12 +724,15 @@ class DataMatrix:
         """
         with self._lock:
             from scipy.spatial.distance import cdist
-            
+
             result = self._data.copy()
             nan_mask = np.isnan(result)
-            
+            missing_count = int(np.sum(nan_mask))
+
             if not np.any(nan_mask):
                 return self.copy()
+
+            self._logger.info(f"impute_knn: imputing {missing_count} missing values with k={k} nearest neighbors")
             
             # Identify rows with and without missing values
             has_nan = np.any(nan_mask, axis=1)

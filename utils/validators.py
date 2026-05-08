@@ -22,9 +22,12 @@ Version: 1.0.0
 
 import numpy as np
 import numpy.typing as npt
+import logging
 from typing import Optional, Union, Sequence, Tuple, List, Dict, Any
 
 from .exceptions import DataValidationError, InvalidDataTypeError
+
+logger = logging.getLogger(__name__)
 
 
 def validate_data_array(
@@ -62,6 +65,7 @@ def validate_data_array(
         >>> validate_data_array([1, 2, np.nan], allow_nan=True, min_values=2)
         array([ 1.,  2., nan])
     """
+    logger.debug(f"Validating data array '{name}': allow_nan={allow_nan}, allow_inf={allow_inf}, min_values={min_values}")
     # Convert to numpy array
     if isinstance(data, np.ndarray):
         arr = data
@@ -69,11 +73,13 @@ def validate_data_array(
         try:
             arr = np.array(data)
         except (ValueError, TypeError) as e:
+            logger.warning(f"Cannot convert '{name}' to numpy array: {e}")
             raise DataValidationError(
                 f"Cannot convert {name} to numpy array",
                 details={"error": str(e), "input_type": str(type(data))}
             )
     else:
+        logger.warning(f"'{name}' must be array-like, got {type(data)}")
         raise DataValidationError(
             f"{name} must be array-like (list, tuple, or numpy array)",
             details={"input_type": str(type(data))}
@@ -81,6 +87,7 @@ def validate_data_array(
     
     # Check dimensionality
     if arr.ndim == 0:
+        logger.warning(f"'{name}' must be at least 1-dimensional, got shape {arr.shape}")
         raise DataValidationError(
             f"{name} must be at least 1-dimensional",
             details={"shape": arr.shape}
@@ -108,6 +115,7 @@ def validate_data_array(
     
     if not allow_nan and nan_count > 0:
         nan_positions = np.where(nan_mask)
+        logger.warning(f"'{name}' contains {nan_count} NaN value(s) but allow_nan=False")
         raise DataValidationError(
             f"{name} contains {nan_count} NaN value(s)",
             details={
@@ -122,6 +130,7 @@ def validate_data_array(
     
     if not allow_inf and inf_count > 0:
         inf_positions = np.where(inf_mask)
+        logger.warning(f"'{name}' contains {inf_count} infinite value(s) but allow_inf=False")
         raise DataValidationError(
             f"{name} contains {inf_count} infinite value(s)",
             details={
@@ -134,6 +143,7 @@ def validate_data_array(
     if min_values is not None:
         valid_count = np.sum(~np.isnan(arr)) if allow_nan else arr.size
         if valid_count < min_values:
+            logger.warning(f"'{name}' has {valid_count} valid values, need at least {min_values}")
             raise DataValidationError(
                 f"{name} must have at least {min_values} valid values",
                 details={
@@ -184,17 +194,19 @@ def validate_column_metadata(
         >>> validate_column_metadata(metadata, n_cols=2)
         True
     """
+    logger.debug(f"Validating column metadata: {len(metadata)} entries for {n_cols} columns")
     if valid_types is None:
         from config.constants import DataType
         valid_types = [DataType.NOMINAL, DataType.ORDINAL, DataType.CONTINUOUS,
                        DataType.BINARY, DataType.COUNT]
-    
+
     if valid_markers is None:
         from config.colors import CHART_MARKERS
         valid_markers = CHART_MARKERS
-    
+
     # Check metadata is a dictionary
     if not isinstance(metadata, dict):
+        logger.warning(f"Column metadata must be a dictionary, got {type(metadata)}")
         raise DataValidationError(
             "Column metadata must be a dictionary",
             details={"type": str(type(metadata))}
@@ -285,15 +297,18 @@ def validate_row_labels(
         >>> validate_row_labels(["Sample_A", "Sample_B", "Sample_C"], n_rows=3)
         ['Sample_A', 'Sample_B', 'Sample_C']
     """
+    logger.debug(f"Validating row labels: n_rows={n_rows}, allow_duplicates={allow_duplicates}, allow_none={allow_none}")
     if labels is None:
         if not allow_none:
+            logger.warning("Row labels cannot be None")
             raise DataValidationError("Row labels cannot be None")
         return None
-    
+
     # Convert to list if needed
     if isinstance(labels, (list, tuple, np.ndarray)):
         label_list = list(labels)
     else:
+        logger.warning(f"Row labels must be list-like, got {type(labels)}")
         raise DataValidationError(
             "Row labels must be list-like (list, tuple, or numpy array)",
             details={"type": str(type(labels))}
@@ -316,6 +331,7 @@ def validate_row_labels(
             seen.add(label)
         
         if duplicates:
+            logger.warning(f"Row labels contain {len(duplicates)} duplicate(s): {duplicates[:5]}")
             raise DataValidationError(
                 f"Row labels contain {len(duplicates)} duplicate(s)",
                 details={"duplicates": duplicates[:5]}  # Show first 5
@@ -366,9 +382,11 @@ def validate_distance_metric(
             DistanceMetric.CHEBYCHEV,
         ]
     
+    logger.debug(f"Validating distance metric: '{metric}'")
     metric_lower = metric.lower().strip()
-    
+
     if metric_lower not in valid_metrics:
+        logger.warning(f"Invalid distance metric: '{metric}', valid metrics: {valid_metrics}")
         raise InvalidDataTypeError(
             f"Invalid distance metric: '{metric}'",
             details={
@@ -376,7 +394,7 @@ def validate_distance_metric(
                 "valid_metrics": valid_metrics
             }
         )
-    
+
     return metric_lower
 
 
@@ -412,10 +430,11 @@ def check_missing_values(
         >>> check_missing_values(X)
         {'total_nan': 2, 'nan_proportion': 0.222..., 'rows_with_nan': 2, 'cols_with_nan': 2}
     """
+    logger.debug(f"Checking for missing values in matrix of shape {matrix.shape}")
     nan_mask = np.isnan(matrix)
     total_nan = int(np.sum(nan_mask))
     total_elements = matrix.size
-    
+
     # Rows and columns with NaN
     rows_with_nan = int(np.any(nan_mask, axis=1).sum())
     cols_with_nan = int(np.any(nan_mask, axis=0).sum())
@@ -468,6 +487,7 @@ def check_infinite_values(matrix: npt.NDArray) -> Dict[str, Any]:
         >>> check_infinite_values(X)
         {'has_pos_inf': True, 'has_neg_inf': True, 'total_inf': 2, ...}
     """
+    logger.debug(f"Checking for infinite values in matrix of shape {matrix.shape}")
     pos_inf_mask = np.isposinf(matrix)
     neg_inf_mask = np.isneginf(matrix)
     inf_mask = pos_inf_mask | neg_inf_mask
@@ -524,10 +544,11 @@ def check_constant_columns(
         >>> check_constant_columns(X)
         {'constant_cols': [0], 'near_constant_cols': [], ...}
     """
+    logger.debug(f"Checking for constant columns in matrix of shape {matrix.shape}, tolerance={tolerance}")
     # Compute variance for each column
     variance_by_col = np.var(matrix, axis=0, ddof=1)
     std_by_col = np.sqrt(variance_by_col)
-    
+
     # Identify constant columns (exactly zero variance)
     constant_mask = variance_by_col < tolerance
     constant_cols = np.where(constant_mask)[0].tolist()

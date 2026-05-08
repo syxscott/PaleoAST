@@ -25,14 +25,17 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import sys
 import traceback
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
+logger = logging.getLogger(__name__)
+
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QDockWidget, QTreeView, QLabel, QStatusBar, QMessageBox,
+    QLabel, QStatusBar, QMessageBox,
     QMenuBar, QMenu, QToolBar, QPushButton, QStackedWidget,
     QFrame, QScrollArea, QGroupBox, QCheckBox, QSpinBox,
     QComboBox, QProgressBar, QApplication, QFileDialog,
@@ -41,15 +44,17 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import (
     Qt, QSize, QTimer, QPoint, QRect, pyqtSignal, pyqtSlot,
     QThread, QSettings, QObject, QAbstractItemModel,
-    QAbstractItemView, QItemSelectionModel
+    QItemSelectionModel
 )
+from PyQt6.QtWidgets import QAbstractItemView
 from PyQt6.QtGui import (
     QAction, QIcon, QPainter, QPen, QBrush, QColor, QFont,
     QPixmap, QImage, QCursor, QKeySequence, QPalette,
-    QLinearGradient, QRadialGradient, QConicalGradient
+    QLinearGradient, QRadialGradient, QConicalGradient, QPainterPath
 )
 
 from models.state_manager import get_state_manager
+from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from views.ui_spreadsheet import ScientificSpreadsheet
@@ -418,11 +423,11 @@ class RibbonButton(QPushButton):
                     color: #7F8C8D;
                     border: 1px solid #34495E;
                 }
-                QPushButton:flat {
+                QPushButton[flat="true"] {
                     background-color: transparent;
                     border: none;
                 }
-                QPushButton:flat:hover {
+                QPushButton[flat="true"]:hover {
                     background-color: rgba(52, 152, 219, 0.2);
                 }
             """)
@@ -471,6 +476,14 @@ class RibbonGroup(QWidget):
         self._layout.setContentsMargins(4, 4, 4, 4)
         self._layout.setSpacing(4)
         
+        # Button container
+        self._button_container = QWidget()
+        self._button_layout = QHBoxLayout(self._button_container)
+        self._button_layout.setContentsMargins(0, 0, 0, 0)
+        self._button_layout.setSpacing(4)
+        self._button_layout.addStretch()
+        self._layout.addWidget(self._button_container)
+
         # Title label
         self._title_label = QLabel(title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -483,14 +496,6 @@ class RibbonGroup(QWidget):
             }
         """)
         self._layout.addWidget(self._title_label)
-        
-        # Button container
-        self._button_container = QWidget()
-        self._button_layout = QHBoxLayout(self._button_container)
-        self._button_layout.setContentsMargins(0, 0, 0, 0)
-        self._button_layout.setSpacing(4)
-        self._button_layout.addStretch()
-        self._layout.addWidget(self._button_container)
     
     def addButton(
         self,
@@ -563,7 +568,7 @@ class RibbonBar(QWidget):
         
         self._tabs: List[RibbonTab] = []
         self._current_tab_index = 0
-        self._is_dark_theme = True
+        self._is_dark_theme = False
         
         # Main layout
         self._main_layout = QVBoxLayout(self)
@@ -696,40 +701,36 @@ class RibbonBar(QWidget):
             self._separator.setStyleSheet("background-color: #BDC3C7; max-height: 1px;")
 
 
-class StatusBarWidget(QWidget):
+class StatusBarWidget(QStatusBar):
     """
     Custom status bar widget with data info and progress.
     """
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        
-        self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(8, 2, 8, 2)
-        
-        # Data info label
-        self._info_label = QLabel("No data loaded")
+        self.setContentsMargins(8, 2, 8, 2)
+
+        # Data info label (left side)
+        self._info_label = QLabel(_("No data loaded"))
         self._info_label.setStyleSheet("""
             QLabel {
                 color: #95A5A6;
                 font-size: 11px;
             }
         """)
-        self._layout.addWidget(self._info_label)
-        
-        self._layout.addStretch()
-        
-        # Memory indicator
-        self._memory_label = QLabel("Memory: 0 MB")
+        self.addWidget(self._info_label)
+
+        # Memory indicator (right side)
+        self._memory_label = QLabel(_("Memory: 0 MB"))
         self._memory_label.setStyleSheet("""
             QLabel {
                 color: #7F8C8D;
                 font-size: 10px;
             }
         """)
-        self._layout.addWidget(self._memory_label)
-        
-        # Progress bar
+        self.addPermanentWidget(self._memory_label)
+
+        # Progress bar (right side)
         self._progress_bar = QProgressBar()
         self._progress_bar.setMaximumWidth(150)
         self._progress_bar.setMaximumHeight(12)
@@ -746,7 +747,7 @@ class StatusBarWidget(QWidget):
                 border-radius: 3px;
             }
         """)
-        self._layout.addWidget(self._progress_bar)
+        self.addPermanentWidget(self._progress_bar)
     
     def setInfo(self, text: str) -> None:
         """Set info text."""
@@ -779,7 +780,7 @@ class WorkspaceArea(QWidget):
         self._layout.addWidget(self._stack)
         
         # Placeholder widget
-        self._placeholder = QLabel("Load data to begin analysis")
+        self._placeholder = QLabel(_("Load data to begin analysis"))
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet("""
             QLabel {
@@ -842,11 +843,16 @@ class MainWindow(QMainWindow):
     
     def __init__(self) -> None:
         super().__init__()
-        
+        self._logger = logging.getLogger(f"{__name__}.MainWindow")
+        self._logger.info("MainWindow created")
+
         # Initialize controllers
         self._data_controller = DataController()
         self._statistics_controller = StatisticsController()
-        
+
+        # Is dark theme
+        self._is_dark_theme = False
+
         # Initialize state manager
         self._state = get_state_manager()
         
@@ -867,53 +873,10 @@ class MainWindow(QMainWindow):
     def _create_ui(self) -> None:
         """Create all UI components."""
         # Set window properties
-        self.setWindowTitle("PaleoAST - Paleontological Advanced Statistical Toolkit")
+        self.setWindowTitle(_("PaleoAST - Paleontological Advanced Statistical Toolkit"))
         self.setMinimumSize(1200, 800)
         self.resize(1400, 900)
-        
-        # Apply dark theme
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1A1A2E;
-            }
-            QWidget {
-                font-family: Arial, sans-serif;
-            }
-            QMenuBar {
-                background-color: #2C3E50;
-                color: #ECF0F1;
-                border-bottom: 1px solid #34495E;
-            }
-            QMenuBar::item {
-                padding: 6px 12px;
-            }
-            QMenuBar::item:selected {
-                background-color: #34495E;
-            }
-            QMenu {
-                background-color: #2C3E50;
-                color: #ECF0F1;
-                border: 1px solid #34495E;
-            }
-            QMenu::item:selected {
-                background-color: #3498DB;
-            }
-            QStatusBar {
-                background-color: #1A1A2E;
-                color: #95A5A6;
-                border-top: 1px solid #2C3E50;
-            }
-           QDockWidget {
-                color: #ECF0F1;
-                titlebar-close-icon: url(close.png);
-                titlebar-normal-icon: url(undock.png);
-            }
-            QDockWidget::title {
-                background-color: #2C3E50;
-                padding: 4px;
-            }
-        """)
-        
+
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -928,17 +891,12 @@ class MainWindow(QMainWindow):
         
         # Main content splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Left navigation dock
-        self._nav_dock = QDockWidget("Navigation", self)
-        self._nav_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | 
-                                        Qt.DockWidgetArea.RightDockWidgetArea)
-        self._nav_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+
+        # Left navigation
         self._navigation = NavigationTree()
-        self._nav_dock.setWidget(self._navigation)
-        self._nav_dock.setMaximumWidth(280)
-        splitter.addWidget(self._nav_dock)
-        
+        self._navigation.setMaximumWidth(280)
+        splitter.addWidget(self._navigation)
+
         # Workspace area
         self._workspace = WorkspaceArea()
         splitter.addWidget(self._workspace)
@@ -959,58 +917,58 @@ class MainWindow(QMainWindow):
         # Create spreadsheet (initially hidden)
         self._spreadsheet = ScientificSpreadsheet()
         self._spreadsheet_index = self._workspace.addWidget(
-            self._spreadsheet, "Spreadsheet"
+            self._spreadsheet, _("Spreadsheet")
         )
     
     def _setup_ribbon(self) -> None:
         """Setup ribbon tabs and groups."""
         # Home tab
-        home_tab = self._ribbon.addTab("Home")
-        
+        home_tab = self._ribbon.addTab(_("Home"))
+
         # File operations group
-        file_group = home_tab.addGroup("File")
-        file_group.addButton("new_file", "New", "Create new data matrix (Ctrl+N)")
-        file_group.addButton("open_file", "Open", "Open CSV file (Ctrl+O)")
-        file_group.addButton("save_file", "Save", "Save to file (Ctrl+S)")
-        
+        file_group = home_tab.addGroup(_("File"))
+        file_group.addButton("new_file", _("New"), _("Create new data matrix (Ctrl+N)"))
+        file_group.addButton("open_file", _("Open"), _("Open CSV file (Ctrl+O)"))
+        file_group.addButton("save_file", _("Save"), _("Save to file (Ctrl+S)"))
+
         # Edit operations group
-        edit_group = home_tab.addGroup("Edit")
-        edit_group.addButton("undo", "Undo", "Undo last action (Ctrl+Z)")
-        edit_group.addButton("redo", "Redo", "Redo action (Ctrl+Y)")
-        edit_group.addButton("transpose", "Transpose", "Transpose data matrix")
-        
+        edit_group = home_tab.addGroup(_("Edit"))
+        edit_group.addButton("undo", _("Undo"), _("Undo last action (Ctrl+Z)"))
+        edit_group.addButton("redo", _("Redo"), _("Redo action (Ctrl+Y)"))
+        edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
+
         # View group
-        view_group = home_tab.addGroup("View")
-        view_group.addButton("settings", "Preferences", "Application settings")
-        
+        view_group = home_tab.addGroup(_("View"))
+        view_group.addButton("settings", _("Preferences"), _("Application settings"))
+
         # Analysis tab
-        analysis_tab = self._ribbon.addTab("Analysis")
-        
+        analysis_tab = self._ribbon.addTab(_("Analysis"))
+
         # Multivariate group
-        multivar_group = analysis_tab.addGroup("Multivariate")
-        multivar_group.addButton("pca", "PCA", "Principal Component Analysis")
-        multivar_group.addButton("pcoa", "PCoA", "Principal Coordinate Analysis")
-        multivar_group.addButton("nmds", "NMDS", "Non-metric MDS")
-        
+        multivar_group = analysis_tab.addGroup(_("Multivariate"))
+        multivar_group.addButton("pca", "PCA", _("Principal Component Analysis"))
+        multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
+        multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
+
         # Diversity group
-        diversity_group = analysis_tab.addGroup("Diversity")
-        diversity_group.addButton("diversity", "Diversity", "Biodiversity indices")
-        
+        diversity_group = analysis_tab.addGroup(_("Diversity"))
+        diversity_group.addButton("diversity", _("Diversity"), _("Biodiversity indices"))
+
         # Group tests group
-        tests_group = analysis_tab.addGroup("Tests")
-        tests_group.addButton("anosim", "ANOSIM", "Analysis of Similarities")
-        
+        tests_group = analysis_tab.addGroup(_("Tests"))
+        tests_group.addButton("anosim", "ANOSIM", _("Analysis of Similarities"))
+
         # Morphometrics tab
-        morpho_tab = self._ribbon.addTab("Morphometrics")
-        
-        morpho_group = morpho_tab.addGroup("Landmarks")
-        morpho_group.addButton("morphometrics", "GPA", "Generalized Procrustes Analysis")
-        
+        morpho_tab = self._ribbon.addTab(_("Morphometrics"))
+
+        morpho_group = morpho_tab.addGroup(_("Landmarks"))
+        morpho_group.addButton("morphometrics", "GPA", _("Generalized Procrustes Analysis"))
+
         # Stratigraphy tab
-        strat_tab = self._ribbon.addTab("Stratigraphy")
-        
-        strat_group = strat_tab.addGroup("Time Series")
-        strat_group.addButton("stratigraphy", "Spectral", "Spectral Analysis")
+        strat_tab = self._ribbon.addTab(_("Stratigraphy"))
+
+        strat_group = strat_tab.addGroup(_("Time Series"))
+        strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
     
     def _setup_connections(self) -> None:
         """Setup signal-slot connections."""
@@ -1038,7 +996,7 @@ class MainWindow(QMainWindow):
     def _find_ribbon_buttons(self) -> List[RibbonButton]:
         """Find all ribbon buttons."""
         buttons = []
-        for tab in [self._ribbon._tabs] if hasattr(self._ribbon, '_tabs') else []:
+        for tab in (self._ribbon._tabs if hasattr(self._ribbon, '_tabs') else []):
             for group in tab._groups:
                 buttons.extend(group._buttons)
         return buttons
@@ -1048,89 +1006,113 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         
         # File menu
-        file_menu = menubar.addMenu("&File")
-        
-        new_action = QAction("&New Matrix", self)
+        file_menu = menubar.addMenu(_("&File"))
+
+        new_action = QAction(_("&New Matrix"), self)
         new_action.setShortcut(QKeySequence.StandardKey.New)
         new_action.triggered.connect(self._on_new_file)
         file_menu.addAction(new_action)
-        
-        open_action = QAction("&Open...", self)
+
+        open_action = QAction(_("&Open..."), self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._on_open_file)
         file_menu.addAction(open_action)
-        
-        save_action = QAction("&Save", self)
+
+        save_action = QAction(_("&Save"), self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self._on_save_file)
         file_menu.addAction(save_action)
-        
-        save_as_action = QAction("Save &As...", self)
+
+        save_as_action = QAction(_("Save &As..."), self)
         save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_as_action.triggered.connect(self._on_save_file_as)
         file_menu.addAction(save_as_action)
-        
+
         file_menu.addSeparator()
-        
-        import_action = QAction("&Import Data...", self)
+
+        import_action = QAction(_("&Import Data..."), self)
         import_action.setShortcut(QKeySequence("Ctrl+I"))
         import_action.triggered.connect(self._on_import_data)
         file_menu.addAction(import_action)
-        
-        export_action = QAction("&Export...", self)
+
+        export_action = QAction(_("&Export..."), self)
         export_action.setShortcut(QKeySequence("Ctrl+E"))
         export_action.triggered.connect(self._on_export)
         file_menu.addAction(export_action)
-        
+
         file_menu.addSeparator()
-        
-        exit_action = QAction("E&xit", self)
+
+        exit_action = QAction(_("E&xit"), self)
         exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-        
+
         # Analysis menu
-        analysis_menu = menubar.addMenu("&Analysis")
-        
-        pca_action = QAction("&PCA...", self)
+        analysis_menu = menubar.addMenu(_("&Analysis"))
+
+        pca_action = QAction(_("&PCA..."), self)
         pca_action.setShortcut(QKeySequence("Ctrl+1"))
         pca_action.triggered.connect(self._on_run_pca)
         analysis_menu.addAction(pca_action)
-        
-        pcoa_action = QAction("P&CoA...", self)
+
+        pcoa_action = QAction(_("P&CoA..."), self)
         pcoa_action.setShortcut(QKeySequence("Ctrl+2"))
         pcoa_action.triggered.connect(self._on_run_pcoa)
         analysis_menu.addAction(pcoa_action)
-        
-        nmds_action = QAction("&NMDS...", self)
+
+        nmds_action = QAction(_("&NMDS..."), self)
         nmds_action.setShortcut(QKeySequence("Ctrl+3"))
         nmds_action.triggered.connect(self._on_run_nmds)
         analysis_menu.addAction(nmds_action)
-        
+
         analysis_menu.addSeparator()
-        
-        diversity_action = QAction("&Diversity...", self)
+
+        diversity_action = QAction(_("&Diversity..."), self)
         diversity_action.setShortcut(QKeySequence("Ctrl+D"))
         diversity_action.triggered.connect(self._on_run_diversity)
         analysis_menu.addAction(diversity_action)
-        
-        rarefaction_action = QAction("&Rarefaction...", self)
+
+        rarefaction_action = QAction(_("&Rarefaction..."), self)
         rarefaction_action.setShortcut(QKeySequence("Ctrl+R"))
         rarefaction_action.triggered.connect(self._on_run_rarefaction)
         analysis_menu.addAction(rarefaction_action)
-        
+
+        # Language menu
+        language_menu = menubar.addMenu(_("&Language"))
+
+        self._lang_action_en = QAction("English", self)
+        self._lang_action_en.setCheckable(True)
+        self._lang_action_en.setChecked(get_translator().get_language() == "en")
+        self._lang_action_en.triggered.connect(lambda: self._switch_language("en"))
+        language_menu.addAction(self._lang_action_en)
+
+        self._lang_action_zh = QAction("中文", self)
+        self._lang_action_zh.setCheckable(True)
+        self._lang_action_zh.setChecked(get_translator().get_language() == "zh")
+        self._lang_action_zh.triggered.connect(lambda: self._switch_language("zh"))
+        language_menu.addAction(self._lang_action_zh)
+
         # Help menu
-        help_menu = menubar.addMenu("&Help")
-        
-        about_action = QAction("&About PaleoAST", self)
+        help_menu = menubar.addMenu(_("&Help"))
+
+        about_action = QAction(_("&About PaleoAST"), self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
-        
-        doc_action = QAction("&Documentation", self)
+
+        doc_action = QAction(_("&Documentation"), self)
         doc_action.setShortcut(QKeySequence("F1"))
         doc_action.triggered.connect(self._show_documentation)
         help_menu.addAction(doc_action)
-    
+
+    def _switch_language(self, lang: str) -> None:
+        """Switch application language."""
+        from PyQt6.QtCore import QSettings
+        get_translator().set_language(lang)
+        self._lang_action_en.setChecked(lang == "en")
+        self._lang_action_zh.setChecked(lang == "zh")
+        settings = QSettings("PaleoAST", "PaleoAST")
+        settings.setValue("language", lang)
+
     def _on_navigation_clicked(self, item: NavigationItem) -> None:
         """
         Handle navigation item click.
@@ -1148,8 +1130,9 @@ class MainWindow(QMainWindow):
                 where $S = \\frac{1}{n-1} X^T X$ is the covariance matrix
         """
         section = item.section
+        self._logger.info(f"Navigation event: section='{section}'")
         self.navigationChanged.emit(section)
-        
+
         # Switch workspace view based on section
         if section in ["Data Management", "Univariate", "Multivariate", 
                        "Morphometrics", "Stratigraphy", "Ecology"]:
@@ -1159,14 +1142,14 @@ class MainWindow(QMainWindow):
         """Create new empty data matrix."""
         # Show dialog to specify dimensions
         dialog = QDialog(self)
-        dialog.setWindowTitle("New Data Matrix")
+        dialog.setWindowTitle(_("New Data Matrix"))
         dialog.setModal(True)
         
         layout = QVBoxLayout(dialog)
         
         # Sample count
         samples_layout = QHBoxLayout()
-        samples_label = QLabel("Number of Samples:")
+        samples_label = QLabel(_("Number of Samples:"))
         samples_spin = QSpinBox()
         samples_spin.setRange(2, 10000)
         samples_spin.setValue(30)
@@ -1177,7 +1160,7 @@ class MainWindow(QMainWindow):
         
         # Variable count
         vars_layout = QHBoxLayout()
-        vars_label = QLabel("Number of Variables:")
+        vars_label = QLabel(_("Number of Variables:"))
         vars_spin = QSpinBox()
         vars_spin.setRange(2, 1000)
         vars_spin.setValue(8)
@@ -1188,8 +1171,8 @@ class MainWindow(QMainWindow):
         
         # Buttons
         button_layout = QHBoxLayout()
-        ok_button = QPushButton("Create")
-        cancel_button = QPushButton("Cancel")
+        ok_button = QPushButton(_("Create"))
+        cancel_button = QPushButton(_("Cancel"))
         ok_button.clicked.connect(dialog.accept)
         cancel_button.clicked.connect(dialog.reject)
         button_layout.addStretch()
@@ -1210,26 +1193,27 @@ class MainWindow(QMainWindow):
             self._workspace.setCurrentIndex(self._spreadsheet_index)
             
             self._status_bar.setInfo(
-                f"New matrix: {n_samples} samples × {n_vars} variables"
+                _("New matrix: {0} samples x {1} variables").format(n_samples, n_vars)
             )
     
     def _on_open_file(self) -> None:
         """Open CSV file."""
         filepath, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Data File",
+            _("Open Data File"),
             "",
-            "CSV Files (*.csv);;Text Files (*.txt);;All Files (*)"
+            _("CSV Files (*.csv);;Text Files (*.txt);;All Files (*)")
         )
         
         if filepath:
             try:
+                self._logger.info(f"Opening file: '{filepath}'")
                 matrix = self._data_controller.load_csv(
                     filepath,
                     has_header=True,
                     has_row_labels=True
                 )
-                
+
                 self._spreadsheet.load_data(
                     matrix.data,
                     row_labels=matrix.row_labels,
@@ -1238,35 +1222,36 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(self._spreadsheet_index)
                 
                 self._status_bar.setInfo(
-                    f"Loaded: {filepath.split('/')[-1]}"
+                    _("Loaded: {0}").format(filepath.split('/')[-1])
                 )
                 
             except Exception as e:
+                self._logger.error(f"Failed to load file '{filepath}': {e}")
                 QMessageBox.critical(
                     self,
-                    "Import Error",
-                    f"Failed to load file:\n{str(e)}"
+                    _("Import Error"),
+                    _("Failed to load file:\n{0}").format(str(e))
                 )
     
     def _on_save_file(self) -> None:
         """Save current data."""
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "No data to save.")
+            QMessageBox.warning(self, _("No Data"), _("No data to save."))
             return
         
         filepath, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Data",
+            _("Save Data"),
             "",
-            "CSV Files (*.csv);;All Files (*)"
+            _("CSV Files (*.csv);;All Files (*)")
         )
         
         if filepath:
             try:
                 self._data_controller.export_csv(filepath)
-                self._status_bar.setInfo(f"Saved: {filepath.split('/')[-1]}")
+                self._status_bar.setInfo(_("Saved: {0}").format(filepath.split('/')[-1]))
             except Exception as e:
-                QMessageBox.critical(self, "Save Error", str(e))
+                QMessageBox.critical(self, _("Save Error"), str(e))
     
     def _on_save_file_as(self) -> None:
         """Save data with new name."""
@@ -1285,7 +1270,7 @@ class MainWindow(QMainWindow):
     
     def _on_export(self) -> None:
         """Export analysis results."""
-        QMessageBox.information(self, "Export", "Export functionality")
+        QMessageBox.information(self, _("Export"), _("Export functionality"))
     
     def _on_run_pca(self) -> None:
         """
@@ -1314,9 +1299,9 @@ class MainWindow(QMainWindow):
                r²_j = λ_j / Σλ_i × 100%
         """
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "Please load data first.")
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         dialog = PCADialog(self)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1336,23 +1321,25 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_pca_scores(result)
                 
-                plot_index = self._workspace.addWidget(plot, "PCA Plot")
+                plot_index = self._workspace.addWidget(plot, _("PCA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
                 
                 self._status_bar.setInfo(
-                    f"PCA: {result.n_components} components, "
-                    f"PC1+PC2 = {result.explained_variance[0] + result.explained_variance[1]:.1f}%"
+                    _("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(
+                        result.n_components,
+                        result.explained_variance[0] + result.explained_variance[1]
+                    )
                 )
                 
             except Exception as e:
-                QMessageBox.critical(self, "PCA Error", str(e))
+                QMessageBox.critical(self, _("PCA Error"), str(e))
     
     def _on_run_pcoa(self) -> None:
         """Run Principal Coordinate Analysis."""
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "Please load data first.")
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         dialog = PCoADialog(self)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1367,18 +1354,18 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_pcoa_scores(result)
                 
-                plot_index = self._workspace.addWidget(plot, "PCoA Plot")
+                plot_index = self._workspace.addWidget(plot, _("PCoA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
                 
             except Exception as e:
-                QMessageBox.critical(self, "PCoA Error", str(e))
+                QMessageBox.critical(self, _("PCoA Error"), str(e))
     
     def _on_run_nmds(self) -> None:
         """Run Non-metric MDS."""
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "Please load data first.")
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         dialog = NMDSOptionsDialog(self)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1394,22 +1381,22 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_nmds(result)
                 
-                plot_index = self._workspace.addWidget(plot, "NMDS Plot")
+                plot_index = self._workspace.addWidget(plot, _("NMDS Plot"))
                 self._workspace.setCurrentIndex(plot_index)
                 
                 self._status_bar.setInfo(
-                    f"NMDS: stress = {result.stress:.4f}"
+                    _("NMDS: stress = {0:.4f}").format(result.stress)
                 )
                 
             except Exception as e:
-                QMessageBox.critical(self, "NMDS Error", str(e))
+                QMessageBox.critical(self, _("NMDS Error"), str(e))
     
     def _on_run_diversity(self) -> None:
         """Run diversity analysis."""
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "Please load data first.")
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         dialog = DiversityDialog(self)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1423,18 +1410,18 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_diversity_summary(result)
                 
-                plot_index = self._workspace.addWidget(plot, "Diversity Plot")
+                plot_index = self._workspace.addWidget(plot, _("Diversity Plot"))
                 self._workspace.setCurrentIndex(plot_index)
                 
             except Exception as e:
-                QMessageBox.critical(self, "Diversity Error", str(e))
+                QMessageBox.critical(self, _("Diversity Error"), str(e))
     
     def _on_run_rarefaction(self) -> None:
         """Run rarefaction analysis."""
         if not self._state.has_data:
-            QMessageBox.warning(self, "No Data", "Please load data first.")
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         dialog = RarefactionDialog(self)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1448,59 +1435,68 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_rarefaction(result)
                 
-                plot_index = self._workspace.addWidget(plot, "Rarefaction Plot")
+                plot_index = self._workspace.addWidget(plot, _("Rarefaction Plot"))
                 self._workspace.setCurrentIndex(plot_index)
                 
             except Exception as e:
-                QMessageBox.critical(self, "Rarefaction Error", str(e))
+                QMessageBox.critical(self, _("Rarefaction Error"), str(e))
     
     def _on_run_spectral(self) -> None:
         """Run spectral analysis."""
-        QMessageBox.information(self, "Spectral Analysis", 
-                               "Spectral analysis: select time and value columns first.")
+        QMessageBox.information(self, _("Spectral Analysis"),
+                               _("Spectral analysis: select time and value columns first."))
     
     def _show_about(self) -> None:
         """Show about dialog."""
         QMessageBox.about(
             self,
-            "About PaleoAST",
+            _("About PaleoAST"),
             """
             <h2>PaleoAST</h2>
-            <p>Paleontological Advanced Statistical Toolkit</p>
-            <p>Version 1.0.0</p>
+            <p>{}</p>
+            <p>{}</p>
             <p>Copyright © 2024 PaleoAST Development Team</p>
             <hr>
-            <p>A comprehensive tool for paleontological data analysis including:</p>
+            <p>{}</p>
             <ul>
-                <li>Multivariate Statistics (PCA, PCoA, NMDS)</li>
-                <li>Group Comparison Tests (ANOSIM, PERMANOVA)</li>
-                <li>Geometric Morphometrics (GPA, TPS)</li>
-                <li>Biodiversity Analysis</li>
-                <li>Spectral Analysis</li>
+                <li>{}</li>
+                <li>{}</li>
+                <li>{}</li>
+                <li>{}</li>
+                <li>{}</li>
             </ul>
-            """
+            """.format(
+                _("Paleontological Advanced Statistical Toolkit"),
+                _("Version 1.0.0"),
+                _("A comprehensive tool for paleontological data analysis including:"),
+                _("Multivariate Statistics (PCA, PCoA, NMDS)"),
+                _("Group Comparison Tests (ANOSIM, PERMANOVA)"),
+                _("Geometric Morphometrics (GPA, TPS)"),
+                _("Biodiversity Analysis"),
+                _("Spectral Analysis"),
+            )
         )
     
     def _show_documentation(self) -> None:
         """Show documentation."""
         QMessageBox.information(
             self,
-            "Documentation",
-            "See ARCHITECTURE_BLUEPRINT.md for detailed documentation."
+            _("Documentation"),
+            _("See ARCHITECTURE_BLUEPRINT.md for detailed documentation.")
         )
     
     def _update_status(self) -> None:
         """Update status bar information."""
         if self._state.has_data:
             matrix = self._state.data_matrix
-            info = f"Data: {matrix.n_samples} samples × {matrix.n_variables} variables"
-            
+            info = _("Data: {0} samples x {1} variables").format(matrix.n_samples, matrix.n_variables)
+
             if self._state.is_modified:
-                info += " (modified)"
-            
+                info += _(", modified")
+
             self._status_bar.setInfo(info)
         else:
-            self._status_bar.setInfo("No data loaded")
+            self._status_bar.setInfo(_("No data loaded"))
     
     def _load_settings(self) -> None:
         """Load application settings."""
@@ -1529,8 +1525,8 @@ class MainWindow(QMainWindow):
         if self._state.is_modified:
             reply = QMessageBox.question(
                 self,
-                "Unsaved Changes",
-                "You have unsaved changes. Do you want to save before closing?",
+                _("Unsaved Changes"),
+                _("You have unsaved changes. Do you want to save before closing?"),
                 QMessageBox.StandardButton.Save |
                 QMessageBox.StandardButton.Discard |
                 QMessageBox.StandardButton.Cancel

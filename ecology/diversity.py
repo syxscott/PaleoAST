@@ -19,6 +19,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any, List
@@ -28,6 +29,8 @@ import threading
 from models.diversity_result import DiversityIndexResult, DiversityResult
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
+
+logger = logging.getLogger(__name__)
 
 
 def compute_diversity_indices(
@@ -46,7 +49,7 @@ def compute_diversity_indices(
     """
     # Validate input
     abundances = validate_data_array(abundances, allow_nan=False, name="abundances")
-    
+
     # Remove zeros and negative values
     abundances = abundances[abundances > 0]
     
@@ -55,7 +58,11 @@ def compute_diversity_indices(
     
     N = int(np.sum(abundances))  # Total individuals
     S = len(abundances)  # Number of taxa
-    
+    logger.info(
+        f"compute_diversity_indices started: n_taxa={S}, "
+        f"total_abundance={N}, sample_name='{sample_name}'"
+    )
+
     # Compute proportions
     p = abundances / N
     
@@ -131,6 +138,10 @@ def compute_diversity_indices(
             interpretation=f"Chao-1 estimate of {chao1:.1f} (S_obs={S})"
         )
     
+    logger.info(
+        f"compute_diversity_indices completed: Shannon={shannon:.4f}, "
+        f"Simpson={simpson:.4f}, n_taxa={S}, total_abundance={N}"
+    )
     return DiversityResult(
         sample_name=sample_name,
         taxa_count=S,

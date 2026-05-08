@@ -23,7 +23,7 @@ from enum import Enum
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
     QStyledItemDelegate, QStyleOptionViewItem, QStyle,
-    QApplication, QMenu, QInputDialog
+    QApplication, QMenu, QInputDialog, QLineEdit
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QObject, QEvent
@@ -31,6 +31,9 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QColor, QFont, QIcon, QCursor
 )
+from PyQt6.QtGui import QPainterPath
+
+from config.i18n import _, get_translator
 
 
 class NavigationCategory(Enum):
@@ -119,17 +122,36 @@ class NavigationDelegate(QStyledItemDelegate):
         """
         painter.save()
         
-        # Get item data
-        item = index.model().itemFromIndex(index)
-        if not item:
-            painter.restore()
-            return
-        
+        # Get item data: try to obtain QTreeWidgetItem via the view if available,
+        # otherwise fall back to using the index and model directly.
+        widget = getattr(option, 'widget', None)
+        item = None
+        try:
+            if widget is not None and hasattr(widget, 'itemFromIndex'):
+                # QTreeWidget has itemFromIndex
+                item = widget.itemFromIndex(index)
+        except Exception:
+            item = None
+
         # Determine item state
-        is_selected = option.state & QStyle.StateFlag.State_Selected
-        is_hovered = option.state & QStyle.StateFlag.State_MouseOver
-        has_children = item.childCount() > 0
-        is_expanded = item.isExpanded()
+        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        is_hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+        # Determine children/expanded state in a model-agnostic way
+        try:
+            # Prefer model rowCount for child count
+            has_children = index.model().rowCount(index) > 0
+        except Exception:
+            has_children = False
+
+        # is_expanded is a property of the view, not the model
+        if widget is not None and hasattr(widget, 'isExpanded'):
+            try:
+                is_expanded = widget.isExpanded(index)
+            except Exception:
+                is_expanded = False
+        else:
+            is_expanded = False
         
         # Background painting
         if is_selected:
@@ -145,10 +167,13 @@ class NavigationDelegate(QStyledItemDelegate):
                 QBrush(QColor("#2C3E50"))
             )
         
-        # Determine icon type from item data
+        # Determine icon type from item data (UserRole)
         icon_type = index.data(Qt.ItemDataRole.UserRole)
-        if not icon_type:
-            icon_type = item.data(0, Qt.ItemDataRole.UserRole)
+        if not icon_type and item is not None:
+            try:
+                icon_type = item.data(0, Qt.ItemDataRole.UserRole)
+            except Exception:
+                icon_type = None
         
         # Icon dimensions
         icon_size = 16
@@ -171,13 +196,16 @@ class NavigationDelegate(QStyledItemDelegate):
             self._draw_default_icon(painter, icon_x, icon_y, icon_size)
         
         # Text rendering
-        text_x = icon_x + icon_size + icon_margin + 4
-        text_rect = option.rect.adjusted(text_x, 0, -4, 0)
+        text_left_margin = icon_margin + icon_size + icon_margin + 4
+        text_rect = option.rect.adjusted(text_left_margin, 0, -4, 0)
         
-        # Get display text
+        # Get display text (fall back to item text if present)
         text = index.data(Qt.ItemDataRole.DisplayRole)
-        if not text:
-            text = item.text(0)
+        if (text is None or text == '') and item is not None:
+            try:
+                text = item.text(0)
+            except Exception:
+                text = ''
         
         # Draw text
         text_color = "#ECF0F1" if is_selected else "#BDC3C7"
@@ -185,7 +213,8 @@ class NavigationDelegate(QStyledItemDelegate):
             text_color = "#FFFFFF"
         
         font = QFont("Arial", 10)
-        if item.parent() is None:  # Top-level items are bold
+        # Top-level if no valid parent index
+        if not index.parent().isValid():
             font.setBold(True)
         
         painter.setFont(font)
@@ -479,18 +508,46 @@ class NavigationTree(QWidget):
         """)
         
         layout.addWidget(self._tree)
-        
-        # Search/filter box
-        self._filter_label = QLabel("Filter:")
-        self._filter_label.setStyleSheet("""
-            QLabel {
-                color: #7F8C8D;
-                padding: 4px;
-                font-size: 10px;
+
+        # Search/filter input
+        self._filter_input = QLineEdit()
+        self._filter_input.setPlaceholderText(_("Filter:") + "...")
+        self._filter_input.setClearButtonEnabled(True)
+        self._filter_input.setStyleSheet("""
+            QLineEdit {
+                color: #BDC3C7;
+                background-color: #2C3E50;
+                border: 1px solid #34495E;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QLineEdit:focus {
+                border-color: #3498DB;
             }
         """)
-        layout.addWidget(self._filter_label)
+        self._filter_input.textChanged.connect(self._filter_tree)
+        layout.addWidget(self._filter_input)
     
+    def _filter_tree(self, text: str) -> None:
+        """Filter tree items by text (case-insensitive)."""
+        text = text.lower().strip()
+        for i in range(self._tree.topLevelItemCount()):
+            category = self._tree.topLevelItem(i)
+            if not text:
+                category.setHidden(False)
+                for j in range(category.childCount()):
+                    category.child(j).setHidden(False)
+                continue
+            any_visible = False
+            for j in range(category.childCount()):
+                child = category.child(j)
+                match = text in child.text(0).lower()
+                child.setHidden(not match)
+                if match:
+                    any_visible = True
+            category.setHidden(not any_visible and text not in category.text(0).lower())
+
     def _build_navigation_tree(self) -> None:
         """
         Build the navigation tree structure.
@@ -528,39 +585,39 @@ class NavigationTree(QWidget):
         # Root items for each category
         categories = {
             NavigationCategory.DATA: self._create_category_item(
-                "Data Management", 'folder'
+                _("Data Management"), 'folder', NavigationCategory.DATA
             ),
             NavigationCategory.UNIVARIATE: self._create_category_item(
-                "Univariate", 'folder'
+                _("Univariate"), 'folder', NavigationCategory.UNIVARIATE
             ),
             NavigationCategory.MULTIVARIATE: self._create_category_item(
-                "Multivariate", 'folder'
+                _("Multivariate"), 'folder', NavigationCategory.MULTIVARIATE
             ),
             NavigationCategory.MORPHOMETRICS: self._create_category_item(
-                "Morphometrics", 'folder'
+                _("Morphometrics"), 'folder', NavigationCategory.MORPHOMETRICS
             ),
             NavigationCategory.STRATIGRAPHY: self._create_category_item(
-                "Stratigraphy", 'folder'
+                _("Stratigraphy"), 'folder', NavigationCategory.STRATIGRAPHY
             ),
             NavigationCategory.ECOLOGY: self._create_category_item(
-                "Ecology", 'folder'
+                _("Ecology"), 'folder', NavigationCategory.ECOLOGY
             ),
         }
         
         # Data Management children
         data_children = [
-            NavigationItem("Import Data", NavigationCategory.DATA, 'import'),
-            NavigationItem("Export Data", NavigationCategory.DATA, 'export'),
-            NavigationItem("Matrix Operations", NavigationCategory.DATA, 'matrix'),
+            NavigationItem(_("Import Data"), NavigationCategory.DATA, 'import'),
+            NavigationItem(_("Export Data"), NavigationCategory.DATA, 'export'),
+            NavigationItem(_("Matrix Operations"), NavigationCategory.DATA, 'matrix'),
         ]
         for child in data_children:
             categories[NavigationCategory.DATA].children.append(child)
         
         # Univariate children
         univariate_children = [
-            NavigationItem("Descriptive Statistics", NavigationCategory.UNIVARIATE, 'chart'),
-            NavigationItem("Histogram", NavigationCategory.UNIVARIATE, 'chart'),
-            NavigationItem("Box Plot", NavigationCategory.UNIVARIATE, 'chart'),
+            NavigationItem(_("Descriptive Statistics"), NavigationCategory.UNIVARIATE, 'chart'),
+            NavigationItem(_("Histogram"), NavigationCategory.UNIVARIATE, 'chart'),
+            NavigationItem(_("Box Plot"), NavigationCategory.UNIVARIATE, 'chart'),
         ]
         for child in univariate_children:
             categories[NavigationCategory.UNIVARIATE].children.append(child)
@@ -570,8 +627,8 @@ class NavigationTree(QWidget):
             NavigationItem("PCA", NavigationCategory.MULTIVARIATE, 'pca'),
             NavigationItem("PCoA", NavigationCategory.MULTIVARIATE, 'pca'),
             NavigationItem("NMDS", NavigationCategory.MULTIVARIATE, 'pca'),
-            NavigationItem("Cluster Analysis", NavigationCategory.MULTIVARIATE, 'chart'),
-            NavigationItem("Group Tests", NavigationCategory.MULTIVARIATE, 'folder'),
+            NavigationItem(_("Cluster Analysis"), NavigationCategory.MULTIVARIATE, 'chart'),
+            NavigationItem(_("Group Tests"), NavigationCategory.MULTIVARIATE, 'folder'),
         ]
         for child in multivar_children:
             categories[NavigationCategory.MULTIVARIATE].children.append(child)
@@ -587,27 +644,27 @@ class NavigationTree(QWidget):
         
         # Morphometrics children
         morpho_children = [
-            NavigationItem("GPA Alignment", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
-            NavigationItem("TPS Deformation", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
-            NavigationItem("Relative Warps", NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+            NavigationItem(_("GPA Alignment"), NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+            NavigationItem(_("TPS Deformation"), NavigationCategory.MORPHOMETRICS, 'morphometrics'),
+            NavigationItem(_("Relative Warps"), NavigationCategory.MORPHOMETRICS, 'morphometrics'),
         ]
         for child in morpho_children:
             categories[NavigationCategory.MORPHOMETRICS].children.append(child)
         
         # Stratigraphy children
         strat_children = [
-            NavigationItem("Unitary Associations", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
-            NavigationItem("Spectral Analysis", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
-            NavigationItem("Confidence Intervals", NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+            NavigationItem(_("Unitary Associations"), NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+            NavigationItem(_("Spectral Analysis"), NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
+            NavigationItem(_("Confidence Intervals"), NavigationCategory.STRATIGRAPHY, 'stratigraphy'),
         ]
         for child in strat_children:
             categories[NavigationCategory.STRATIGRAPHY].children.append(child)
         
         # Ecology children
         ecology_children = [
-            NavigationItem("Alpha Diversity", NavigationCategory.ECOLOGY, 'diversity'),
-            NavigationItem("Beta Diversity", NavigationCategory.ECOLOGY, 'diversity'),
-            NavigationItem("Rarefaction", NavigationCategory.ECOLOGY, 'diversity'),
+            NavigationItem(_("Alpha Diversity"), NavigationCategory.ECOLOGY, 'diversity'),
+            NavigationItem(_("Beta Diversity"), NavigationCategory.ECOLOGY, 'diversity'),
+            NavigationItem(_("Rarefaction"), NavigationCategory.ECOLOGY, 'diversity'),
         ]
         for child in ecology_children:
             categories[NavigationCategory.ECOLOGY].children.append(child)
@@ -619,21 +676,24 @@ class NavigationTree(QWidget):
     def _create_category_item(
         self,
         name: str,
-        icon_type: str = 'folder'
+        icon_type: str = 'folder',
+        category: Optional[NavigationCategory] = None
     ) -> NavigationItem:
         """Create a navigation item for a category."""
-        # Determine category from name
-        category_map = {
-            "Data Management": NavigationCategory.DATA,
-            "Univariate": NavigationCategory.UNIVARIATE,
-            "Multivariate": NavigationCategory.MULTIVARIATE,
-            "Morphometrics": NavigationCategory.MORPHOMETRICS,
-            "Stratigraphy": NavigationCategory.STRATIGRAPHY,
-            "Ecology": NavigationCategory.ECOLOGY,
-        }
+        if category is None:
+            # Fallback: determine category from name (for backward compatibility)
+            category_map = {
+                "Data Management": NavigationCategory.DATA,
+                "Univariate": NavigationCategory.UNIVARIATE,
+                "Multivariate": NavigationCategory.MULTIVARIATE,
+                "Morphometrics": NavigationCategory.MORPHOMETRICS,
+                "Stratigraphy": NavigationCategory.STRATIGRAPHY,
+                "Ecology": NavigationCategory.ECOLOGY,
+            }
+            category = category_map.get(name, NavigationCategory.DATA)
         return NavigationItem(
             name=name,
-            category=category_map.get(name, NavigationCategory.DATA),
+            category=category,
             icon_type=icon_type
         )
     

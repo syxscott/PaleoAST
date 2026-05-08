@@ -27,6 +27,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any
@@ -36,6 +37,9 @@ import threading
 from utils.exceptions import ComputationError, MatrixDimensionError
 from utils.validators import validate_data_array
 from config.constants import PERMUTATION_TESTS
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -61,23 +65,23 @@ class PERMANOVAResult:
         """Generate summary text."""
         sig = "**" if self.p_value < 0.01 else ("*" if self.p_value < 0.05 else "")
         return (
-            f"PERMANOVA Results\n"
+            f"{_('PERMANOVA Results')}\n"
             f"{'=' * 50}\n"
-            f"F statistic: {self.f_statistic:.4f}\n"
-            f"P-value: {self.p_value:.4f} {sig}\n"
-            f"Permutations: {self.n_permutations}\n"
+            f"{_('F statistic: {0}').format(f'{self.f_statistic:.4f}')}\n"
+            f"{_('P-value: {0}').format(f'{self.p_value:.4f} {sig}')}\n"
+            f"{_('Permutations: {0}').format(self.n_permutations)}\n"
             f"\n"
-            f"Degrees of freedom:\n"
-            f"  Between groups: {self.df_between}\n"
-            f"  Within groups: {self.df_within}\n"
+            f"{_('Degrees of freedom:')}\n"
+            f"{_('Between groups: {0}').format(self.df_between)}\n"
+            f"{_('Within groups: {0}').format(self.df_within)}\n"
             f"\n"
-            f"Sum of squares:\n"
-            f"  Between (SS_B): {self.ss_between:.4f}\n"
-            f"  Within (SS_W): {self.ss_within:.4f}\n"
+            f"{_('Sum of squares:')}\n"
+            f"{_('Between (SS_B): {0}').format(f'{self.ss_between:.4f}')}\n"
+            f"{_('Within (SS_W): {0}').format(f'{self.ss_within:.4f}')}\n"
             f"\n"
-            f"Mean squares:\n"
-            f"  Between (MS_B): {self.ms_between:.4f}\n"
-            f"  Within (MS_W): {self.ms_within:.4f}"
+            f"{_('Mean squares:')}\n"
+            f"{_('Between (MS_B): {0}').format(f'{self.ms_between:.4f}')}\n"
+            f"{_('Within (MS_W): {0}').format(f'{self.ms_within:.4f}')}"
         )
 
 
@@ -91,9 +95,11 @@ class PERMANOVAAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the PERMANOVA analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.PERMANOVAAnalyzer")
         self._lock = threading.RLock()
         self._last_result: Optional[PERMANOVAResult] = None
         self._n_permutations = PERMUTATION_TESTS
+        self._logger.info("PERMANOVA initialized")
     
     def analyze(
         self,
@@ -117,8 +123,13 @@ class PERMANOVAAnalyzer:
         with self._lock:
             # Validate input
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
-            
+
             n = D.shape[0]
+            unique_groups = sorted(set(groups), key=lambda x: str(x))
+            self._logger.info(
+                f"PERMANOVA analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
+                f"n_permutations={n_permutations}"
+            )
             
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError("Distance matrix must be square")
@@ -171,8 +182,11 @@ class PERMANOVAAnalyzer:
                 n_samples=n,
                 metric=metric
             )
-            
+
             self._last_result = result
+            self._logger.info(
+                f"PERMANOVA completed: F={F_obs:.4f}, p-value={p_value:.4f}"
+            )
             return result
     
     def _compute_F_statistic(
@@ -184,64 +198,50 @@ class PERMANOVAAnalyzer:
     ) -> tuple:
         """
         Compute PERMANOVA F statistic from distance matrix.
-        
+
+        Uses Anderson (2001) formula:
+            SS_T = (1/n) * Σ_i Σ_j d²_ij
+            SS_W = Σ_g (1/n_g) * Σ_{i<j in g} d²_ij
+            SS_B = SS_T - SS_W
+            F = (SS_B / (g-1)) / (SS_W / (n-g))
+
         Returns:
             tuple: (F, SS_B, SS_W, df_g, df_res)
         """
         # Square distances
         D_sq = D ** 2
-        
-        # Total sum of squares (relative to grand centroid)
-        # SS_T = Σᵢ Σⱼ d²_ij / n
+
+        # Total sum of squares
         SS_T = np.sum(D_sq) / n
-        
-        # Group sizes
-        group_sizes = {unique: np.sum(groups == unique) for unique in np.unique(groups)}
-        
-        # Between-group sum of squares
-        # SS_B = Σ_g n_g * d̄²_g. - SS_T/n * Σ_g n_g
-        ss_between = 0.0
-        for grp, size in group_sizes.items():
-            # Get indices for this group
+
+        # Within-group sum of squares
+        ss_within = 0.0
+        for grp in np.unique(groups):
             grp_indices = np.where(groups == grp)[0]
-            
-            # Sum of distances within group
-            group_dist_sum = 0.0
+            n_g = len(grp_indices)
+            if n_g < 2:
+                continue
+            grp_sum = 0.0
             for i in range(len(grp_indices)):
                 for j in range(i + 1, len(grp_indices)):
-                    group_dist_sum += D_sq[grp_indices[i], grp_indices[j]]
-            
-            # Add diagonal (self-distances, typically 0)
-            group_dist_sum += np.sum(D_sq[grp_indices, grp_indices])
-            
-            # Mean within group
-            n_g = size
-            if n_g > 1:
-                mean_dist_sq = group_dist_sum / (n_g * n_g)
-            else:
-                mean_dist_sq = 0
-            
-            ss_between += n_g * mean_dist_sq
-        
-        # Total mean
-        grand_mean_sq = SS_T / n
-        ss_between = ss_between - n * grand_mean_sq
-        
-        # Within-group sum of squares
-        ss_within = SS_T - ss_between
-        
+                    grp_sum += D_sq[grp_indices[i], grp_indices[j]]
+            ss_within += (2.0 / n_g) * grp_sum
+
+        # Between-group sum of squares
+        ss_between = SS_T - ss_within
+
         # Degrees of freedom
         df_g = g - 1
         df_res = n - g
-        
+
         # F statistic
-        if df_res > 0 and df_g > 0:
+        if df_res > 0 and df_g > 0 and ss_within > 0:
             MS_between = ss_between / df_g
             MS_within = ss_within / df_res
-            F = MS_between / MS_within if MS_within > 0 else 0
+            F = MS_between / MS_within
         else:
-            F = 0
-        
+            F = 0.0
+
         return F, ss_between, ss_within, df_g, df_res
     
     @property

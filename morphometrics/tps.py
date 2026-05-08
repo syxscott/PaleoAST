@@ -28,6 +28,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -35,6 +36,9 @@ from dataclasses import dataclass
 import threading
 
 from utils.exceptions import ComputationError, MorphometricsError
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,12 +56,12 @@ class TPSResult:
     def summary(self) -> str:
         """Generate summary text."""
         return (
-            f"Thin-Plate Spline Analysis Results\n"
+            f"{_('Thin-Plate Spline Analysis Results')}\n"
             f"{'=' * 50}\n"
-            f"Source landmarks: {self.source.shape[0]}\n"
-            f"Target landmarks: {self.target.shape[0]}\n"
-            f"Bending energy: {self.bending_energy:.6f}\n"
-            f"Grid shape: {self.grid_shape}"
+            f"{_('Source landmarks: {0}').format(self.source.shape[0])}\n"
+            f"{_('Target landmarks: {0}').format(self.target.shape[0])}\n"
+            f"{_('Bending energy: {0}').format(f'{self.bending_energy:.6f}')}\n"
+            f"{_('Grid shape: {0}').format(self.grid_shape)}"
         )
 
 
@@ -71,6 +75,8 @@ class TPSAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the TPS analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.TPSAnalyzer")
+        self._logger.info("TPSAnalyzer initialized")
         self._lock = threading.RLock()
         self._last_result: Optional[TPSResult] = None
     
@@ -104,48 +110,68 @@ class TPSAnalyzer:
                 )
             
             n_landmarks, n_dims = source.shape
-            
+            self._logger.info(
+                f"TPS fit started: n_landmarks={n_landmarks}, "
+                f"n_dimensions={n_dims}"
+            )
+
             if n_dims not in [2, 3]:
                 raise MorphometricsError(
                     f"TPS requires 2D or 3D configurations, got {n_dims}D"
                 )
             
-            # Build TPS system
-            # For 2D: we solve for affine (a0, ax, ay) and non-affine (w) coefficients
-            # P @ [affine; non_affine] = target
-            
-            # Build P matrix: [1 | x y | U(r_ij)]
-            P = self._build_p_matrix(source)
-            
-            # Solve TPS system
-            try:
-                coeffs = np.linalg.lstsq(P, target, rcond=None)[0]
-            except np.linalg.LinAlgError as e:
-                raise ComputationError(
-                    "Failed to solve TPS system",
-                    original_exception=e
-                )
-            
-            # Extract affine and non-affine parts
+            # Build TPS system using Bookstein's constrained formulation
+            # [K  P] [w]   [q]
+            # [P^T 0] [a] = [0]
+            #
+            # where K is kernel matrix, P = [1, x, y] (or [1, x, y, z])
+            # w = non-affine weights, a = affine coefficients
+
+            K = self._build_kernel_matrix(source)
+
+            # Build P matrix: [1, x, y] for 2D or [1, x, y, z] for 3D
             if n_dims == 2:
-                affine = coeffs[:3, :]
-                non_affine = coeffs[3:, :]
-            else:  # 3D
-                affine = coeffs[:4, :]
-                non_affine = coeffs[4:, :]
+                P = np.column_stack([np.ones(n_landmarks), source])
+            else:
+                P = np.column_stack([np.ones(n_landmarks), source])
+
+            n_affine = P.shape[1]  # 3 for 2D, 4 for 3D
+
+            # Build block system
+            # Top:    [K, P]     (n_landmarks x (n_landmarks + n_affine))
+            # Bottom: [P^T, 0]  (n_affine x (n_landmarks + n_affine))
+            top = np.hstack([K, P])
+            bottom = np.hstack([P.T, np.zeros((n_affine, n_affine))])
+            L = np.vstack([top, bottom])
+
+            # Right-hand side: [target; 0]
+            rhs = np.vstack([target, np.zeros((n_affine, n_dims))])
+
+            # Solve the block system
+            try:
+                solution = np.linalg.solve(L, rhs)
+            except np.linalg.LinAlgError:
+                solution, _, _, _ = np.linalg.lstsq(L, rhs, rcond=None)
+
+            # Extract weights and affine coefficients
+            non_affine = solution[:n_landmarks]  # w: (n_landmarks, n_dims)
+            affine = solution[n_landmarks:]       # a: (n_affine, n_dims)
             
             # Compute bending energy
             # E = w' * K * w where K_ij = U(||landmark_i - landmark_j||)
             K = self._build_kernel_matrix(source)
             bending_energy = float(np.sum(non_affine * (K @ non_affine)))
-            
+            self._logger.info(
+                f"TPS fit completed: bending_energy={bending_energy:.6f}"
+            )
+
             result = TPSResult(
                 source=source,
                 target=target,
                 warp_coefficients={
                     'affine': affine,
                     'non_affine': non_affine,
-                    'full_coefficients': coeffs
+                    'full_coefficients': solution
                 },
                 bending_energy=bending_energy,
                 deformation_grid=None,

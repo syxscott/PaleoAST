@@ -416,9 +416,9 @@ class DFA(FiniteAutomaton):
     def minimize_hopcroft(self) -> DFA:
         """
         使用Hopcroft算法最小化DFA
-        
+
         数学原理:
-            1. 划分初始集合 Π = {F, Q \ F}
+            1. 划分初始集合 Π = {F, Q \\ F}
             2. 对于每个等价类W和符号a，计算R = ∪_{q∈W} δ(q, a)
             3. 如果R被划分，将W分割
             4. 重复直到没有新划分

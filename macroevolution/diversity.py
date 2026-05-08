@@ -60,19 +60,20 @@ class DiversityDynamics:
     ) -> DiversityCurve:
         """
         从化石记录估计多样性曲线
-        
+
         参数:
             fossil_records: 化石记录 [(起源时间, 灭绝时间), ...]
             intervals: 时间区间
-        
+
         返回:
             DiversityCurve
         """
+        self._logger.info(f"Estimating diversity from {len(fossil_records)} fossil records across {len(intervals)} intervals")
         times = []
         richness = []
         origination_rates = []
         extinction_rates = []
-        
+
         records = fossil_records
         
         for i, (t_start, t_end) in enumerate(intervals):
@@ -103,6 +104,7 @@ class DiversityDynamics:
             np.array(origination_rates) + np.array(extinction_rates) + 1e-10
         )
         
+        self._logger.info(f"Diversity estimation complete: {len(times)} intervals, max richness = {max(richness) if richness else 0}")
         return DiversityCurve(
             times=np.array(times),
             richness=np.array(richness),
@@ -110,7 +112,7 @@ class DiversityDynamics:
             extinction_rates=np.array(extinction_rates),
             turnover_rate=turnover
         )
-    
+
     def fit_exponential_model(
         self,
         times: np.ndarray,
@@ -118,19 +120,21 @@ class DiversityDynamics:
     ) -> Tuple[float, float]:
         """
         拟合指数增长模型
-        
+
         dN/dt = rN
-        
+
         返回:
             (r, N0) 增长率和初始多样性
         """
+        self._logger.info(f"Fitting exponential model to {len(times)} data points")
         log_N = np.log(richness + 1e-10)
-        
+
         coeffs = np.polyfit(times, log_N, deg=1)
-        
+
         r = coeffs[0]  # 增长率
         N0 = np.exp(coeffs[1])  # 初始值
-        
+
+        self._logger.info(f"Exponential model fit: r={r:.4f}, N0={N0:.4f}")
         return r, N0
     
     def fit_logistic_model(
@@ -140,17 +144,19 @@ class DiversityDynamics:
     ) -> Tuple[float, float, float]:
         """
         拟合逻辑斯蒂模型
-        
+
         dN/dt = rN(1 - N/K)
-        
+
         返回:
             (r, K, N0) 增长率、承载力和初始多样性
         """
         from scipy.optimize import curve_fit
-        
+
+        self._logger.info(f"Fitting logistic model to {len(times)} data points")
+
         def logistic(t, r, K, N0):
             return K / (1 + ((K - N0) / N0) * np.exp(-r * t))
-        
+
         try:
             params, _ = curve_fit(
                 logistic,
@@ -159,8 +165,10 @@ class DiversityDynamics:
                 p0=[0.1, max(richness) * 2, richness[0]],
                 bounds=([0, 0, 0], [10, 1e6, 1e6])
             )
+            self._logger.info(f"Logistic model fit: r={params[0]:.4f}, K={params[1]:.4f}, N0={params[2]:.4f}")
             return tuple(params)
-        except:
+        except Exception as e:
+            self._logger.error(f"Logistic model fitting failed: {e}, using fallback values")
             return 0.0, max(richness), richness[0]
     
     def simulate_neutral(
@@ -173,10 +181,11 @@ class DiversityDynamics:
     ) -> DiversityCurve:
         """
         模拟中性随机过程
-        
+
         返回:
             模拟的多样性曲线
         """
+        self._logger.info(f"Simulating neutral process: {n_taxa} taxa, duration={duration}, speciation={speciation_rate}, extinction={extinction_rate}")
         n_steps = int(duration / dt)
         
         times = np.zeros(n_steps)
@@ -202,7 +211,8 @@ class DiversityDynamics:
             ext_rates[i] = deaths / (N * dt + 1e-10)
         
         turnover = ext_rates / (orig_rates + ext_rates + 1e-10)
-        
+
+        self._logger.info(f"Neutral simulation complete: {n_steps} steps, final richness = {int(richness[-1])}")
         return DiversityCurve(
             times=times,
             richness=richness,

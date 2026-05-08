@@ -62,6 +62,7 @@ from typing import (
 from dataclasses import dataclass, field
 import logging
 import math
+import numpy as np
 
 from .tree import PhyloTree, PhyloNode, NodeType
 
@@ -128,6 +129,22 @@ class DistanceMatrix:
         
         return matrix
     
+    @classmethod
+    def from_array(
+        cls,
+        matrix: 'np.ndarray',
+        labels: List[str]
+    ) -> 'DistanceMatrix':
+        """Create from a numpy distance matrix and label list."""
+        matrix = np.asarray(matrix, dtype=float)
+        n = len(labels)
+        distances = {}
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    distances[(labels[i], labels[j])] = float(matrix[i, j])
+        return cls(taxa=list(labels), distances=distances)
+
     @classmethod
     def from_dict(
         cls,
@@ -287,9 +304,11 @@ class UPGMA:
             new_name = f"cluster_{len(new_members)}"
             new_node = PhyloNode(name=new_name, node_type=NodeType.INTERNAL)
             
-            # 设置枝长
-            cluster1['node'].branch_length = height
-            cluster2['node'].branch_length = height
+            # 设置枝长 = 合并高度 - 子节点已有高度
+            h1 = cluster1.get('height', 0.0)
+            h2 = cluster2.get('height', 0.0)
+            cluster1['node'].branch_length = height - h1
+            cluster2['node'].branch_length = height - h2
             
             # 连接子节点
             new_node.add_child(cluster1['node'])
@@ -299,7 +318,8 @@ class UPGMA:
             clusters[new_name] = {
                 'members': new_members,
                 'node': new_node,
-                'size': new_size
+                'size': new_size,
+                'height': height
             }
             
             # 从活跃集合移除旧簇
@@ -475,14 +495,14 @@ class NeighborJoining:
             for node_name in final_nodes:
                 root.add_child(nodes[node_name])
             
-            # 调整枝长
+            # 调整枝长 (NJ final 3-node formula)
             d_01 = dist.get((final_nodes[0], final_nodes[1]), 0.0)
             d_02 = dist.get((final_nodes[0], final_nodes[2]), 0.0)
             d_12 = dist.get((final_nodes[1], final_nodes[2]), 0.0)
-            
-            # 简化处理
-            for child in root.children:
-                child.branch_length = d_01 / 3  # 近似
+
+            root.children[0].branch_length = (d_01 + d_02 - d_12) / 2.0
+            root.children[1].branch_length = (d_01 + d_12 - d_02) / 2.0
+            root.children[2].branch_length = (d_02 + d_12 - d_01) / 2.0
         
         elif len(final_nodes) == 2:
             root = PhyloNode(name="root", node_type=NodeType.INTERNAL)

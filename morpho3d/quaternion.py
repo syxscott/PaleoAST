@@ -92,11 +92,13 @@ class Quaternion:
         """四元数归一化"""
         norm = np.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
         if norm < 1e-10:
+            logger.error("Quaternion magnitude too small for normalization")
             raise ValueError("Quaternion magnitude too small")
         self.w /= norm
         self.x /= norm
         self.y /= norm
         self.z /= norm
+        logger.debug(f"Quaternion normalized: w={self.w:.4f}, x={self.x:.4f}, y={self.y:.4f}, z={self.z:.4f}")
     
     @property
     def components(self) -> np.ndarray:
@@ -166,19 +168,21 @@ class Quaternion:
         """
         axis = np.asarray(axis, dtype=np.float64)
         norm = np.linalg.norm(axis)
-        
+
         if norm < 1e-10:
+            logger.error("Axis vector too small for quaternion creation")
             raise ValueError("Axis vector too small")
-        
+
         axis = axis / norm
         half_angle = angle / 2.0
-        
+
         w = np.cos(half_angle)
         sin_half = np.sin(half_angle)
         x = axis[0] * sin_half
         y = axis[1] * sin_half
         z = axis[2] * sin_half
-        
+
+        logger.debug(f"Created quaternion from axis={axis}, angle={angle:.4f} rad ({np.degrees(angle):.2f} deg)")
         return cls(w, x, y, z)
     
     @classmethod
@@ -201,17 +205,21 @@ class Quaternion:
                 选择最大对角元分支
         """
         R = np.asarray(R, dtype=np.float64)
-        
+
         if R.shape != (3, 3):
+            logger.error(f"Rotation matrix must be 3x3, got {R.shape}")
             raise ValueError("Rotation matrix must be 3x3")
-        
+
         # 验证正交性
         if not np.allclose(R @ R.T, np.eye(3), atol=1e-8):
+            logger.error("Matrix is not orthogonal")
             raise ValueError("Matrix is not orthogonal")
-        
+
         if not np.isclose(np.linalg.det(R), 1.0, atol=1e-8):
+            logger.error(f"Matrix determinant is not +1, got {np.linalg.det(R)}")
             raise ValueError("Matrix determinant is not +1")
-        
+
+        logger.debug("Converting 3x3 rotation matrix to quaternion (Shepperd method)")
         tr = np.trace(R)
         
         if tr > 0:
@@ -259,15 +267,16 @@ class Quaternion:
         """
         if not isinstance(other, Quaternion):
             return NotImplemented
-        
+
         w1, x1, y1, z1 = self.w, self.x, self.y, self.z
         w2, x2, y2, z2 = other.w, other.x, other.y, other.z
-        
+
         w = w1*w2 - x1*x2 - y1*y2 - z1*z2
         x = w1*x2 + x1*w2 + y1*z2 - z1*y2
         y = w1*y2 - x1*z2 + y1*w2 + z1*x2
         z = w1*z2 + x1*y2 - y1*x2 + z1*w2
-        
+
+        logger.debug(f"Quaternion multiplication: ({self}) * ({other})")
         return Quaternion(w, x, y, z)
     
     def __rmul__(self, scalar: float) -> 'Quaternion':
@@ -297,29 +306,33 @@ class Quaternion:
     def rotate_vector(self, v: np.ndarray) -> np.ndarray:
         """
         使用四元数旋转3D向量
-        
+
         参数:
             v: 待旋转向量 (3,)
-        
+
         返回:
             旋转后向量 (3,)
-        
+
         数学公式:
             v' = q * [0, v] * q⁻¹
-        
+
         其中 [0, v] 是将向量表示为纯四元数。
         """
         v = np.asarray(v, dtype=np.float64)
         if v.shape != (3,):
+            logger.error(f"Vector must be shape (3,), got {v.shape}")
             raise ValueError("Vector must be shape (3,)")
-        
+
+        logger.debug(f"Rotating vector {v} by quaternion {self}")
         # 纯四元数 [0, v]
         q_v = Quaternion(0.0, v[0], v[1], v[2])
-        
+
         # q * q_v * q⁻¹
         result = self * q_v * self.inverse
-        
-        return np.array([result.x, result.y, result.z])
+
+        rotated = np.array([result.x, result.y, result.z])
+        logger.debug(f"Rotated vector: {rotated}")
+        return rotated
     
     def to_rotation_matrix(self) -> np.ndarray:
         """
@@ -380,23 +393,24 @@ class Quaternion:
     def slerp(self, other: 'Quaternion', t: float) -> 'Quaternion':
         """
         四元数球面线性插值 (SLERP)
-        
+
         参数:
             other: 目标四元数
             t: 插值参数 [0, 1]
-        
+
         返回:
             插值四元数
-        
+
         数学公式:
             q(t) = (sin((1-t)θ) * q₁ + sin(tθ) * q₂) / sin(θ)
         """
         if not isinstance(other, Quaternion):
             return NotImplemented
-        
+
+        logger.debug(f"SLERP interpolation at t={t:.4f}")
         # 计算夹角
         dot = self.w*other.w + self.x*other.x + self.y*other.y + self.z*other.z
-        
+
         # 确保走短弧
         if dot < 0:
             other = -other
@@ -404,7 +418,7 @@ class Quaternion:
         
         if dot > 0.9995:
             # 线性近似
-            q = self + t * (other - self)
+            q = self + t * (other + (-self))
             return Quaternion(q.w, q.x, q.y, q.z)
         
         theta_0 = np.arccos(np.clip(dot, -1, 1))
@@ -461,13 +475,16 @@ class RotationMatrix:
         """
         X = np.asarray(X, dtype=np.float64)
         Y = np.asarray(Y, dtype=np.float64)
-        
+
         if X.shape != Y.shape:
+            logger.error(f"Shape mismatch: {X.shape} vs {Y.shape}")
             raise ValueError(f"Shape mismatch: {X.shape} vs {Y.shape}")
-        
+
         if X.ndim != 2 or X.shape[1] != 3:
+            logger.error(f"Points must be shape (N, 3), got {X.shape}")
             raise ValueError("Points must be shape (N, 3)")
-        
+
+        logger.info(f"Computing optimal rotation via SVD for {X.shape[0]} point pairs")
         # 计算协方差矩阵
         H = Y.T @ X
         
@@ -488,8 +505,10 @@ class RotationMatrix:
         
         # 验证行列式
         if not np.isclose(np.linalg.det(R), 1.0, atol=1e-8):
+            logger.error("SVD result determinant is not +1")
             raise ValueError("Result determinant is not +1")
-        
+
+        logger.info("SVD rotation computation complete, matrix verified orthogonal with det=+1")
         return R
     
     @staticmethod
@@ -512,12 +531,14 @@ class RotationMatrix:
         """
         axis = np.asarray(axis, dtype=np.float64)
         norm = np.linalg.norm(axis)
-        
+
         if norm < 1e-10:
+            logger.debug("Zero-length axis, returning identity matrix")
             return np.eye(3)
-        
+
         axis = axis / norm
-        
+        logger.debug(f"Creating rotation matrix from axis={axis}, angle={angle:.4f} rad")
+
         # 反对称矩阵
         K = np.array([
             [0, -axis[2], axis[1]],

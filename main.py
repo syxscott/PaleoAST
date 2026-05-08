@@ -144,28 +144,29 @@ class ExceptionHandler:
             
             # 创建对话框
             dialog = QDialog()
-            dialog.setWindowTitle("PaleoAST - Error Detected")
+            from config.i18n import _
+            dialog.setWindowTitle(_("PaleoAST - Error Detected"))
             dialog.setMinimumSize(700, 500)
             dialog.setModal(True)
             
             layout = QVBoxLayout(dialog)
             
             # 标题
-            title = QLabel("⚠️  Application Error")
+            title = QLabel("⚠️  " + _("Application Error"))
             title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
             title.setStyleSheet("color: #E74C3C; padding: 10px;")
             
             # 信息
             info = QLabel(
-                "PaleoAST encountered an error. The error has been logged.\n"
-                "You can continue, but unexpected behavior may occur."
+                _("PaleoAST encountered an error. The error has been logged.\n"
+                  "You can continue, but unexpected behavior may occur.")
             )
             info.setWordWrap(True)
             
             # 错误详情
             tb_text = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
             
-            group = QGroupBox("Technical Details")
+            group = QGroupBox(_("Technical Details"))
             group_layout = QVBoxLayout(group)
             
             error_text = QTextEdit()
@@ -191,14 +192,14 @@ class ExceptionHandler:
             btn_layout = QHBoxLayout()
             btn_layout.addStretch()
             
-            export_btn = QPushButton("Export Log")
+            export_btn = QPushButton(_("Export Log"))
             export_btn.clicked.connect(lambda: self._export_log(tb_text))
             
-            continue_btn = QPushButton("Continue")
+            continue_btn = QPushButton(_("Continue"))
             continue_btn.setDefault(True)
             continue_btn.clicked.connect(dialog.accept)
             
-            quit_btn = QPushButton("Quit")
+            quit_btn = QPushButton(_("Quit"))
             quit_btn.setStyleSheet("background-color: #E74C3C; color: white;")
             quit_btn.clicked.connect(lambda: sys.exit(1))
             
@@ -232,17 +233,18 @@ class ExceptionHandler:
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"paleoast_error_{timestamp}.log"
             
+            from config.i18n import _
             path, _ = QFileDialog.getSaveFileName(
                 None,
-                "Export Error Log",
+                _("Export Error Log"),
                 str(Path.home() / "Desktop" / filename),
-                "Log Files (*.log);;Text Files (*.txt)"
+                _("Log Files (*.log);;Text Files (*.txt)")
             )
-            
+
             if path:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(tb_text)
-                QMessageBox.information(None, "Exported", f"Log saved to:\n{path}")
+                QMessageBox.information(None, _("Exported"), _("Log saved to:\n{0}").format(path))
         except:
             pass
 
@@ -250,6 +252,94 @@ class ExceptionHandler:
 # =============================================================================
 # 主题样式
 # =============================================================================
+
+def get_light_theme_stylesheet() -> str:
+    """获取现代清爽亮色主题样式表 (Modern Flat Light Theme)"""
+    return """
+        QMainWindow {
+            background-color: #F5F7FA;
+            color: #2C3E50;
+        }
+        QWidget {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            font-size: 12px;
+        }
+        QMenuBar {
+            background-color: #FFFFFF;
+            color: #2C3E50;
+            border-bottom: 1px solid #E4E7EB;
+        }
+        QMenuBar::item {
+            padding: 8px 16px;
+            background: transparent;
+            border-radius: 4px;
+        }
+        QMenuBar::item:selected {
+            background-color: #EBF5FB;
+            color: #2980B9;
+        }
+        QMenu {
+            background-color: #FFFFFF;
+            border: 1px solid #DCDFE6;
+            border-radius: 6px;
+            padding: 4px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        QMenu::item {
+            padding: 8px 28px 8px 20px;
+            border-radius: 4px;
+        }
+        QMenu::item:selected {
+            background-color: #F2F6FC;
+            color: #3498DB;
+            font-weight: bold;
+        }
+        QStatusBar {
+            background-color: #FFFFFF;
+            color: #606266;
+            border-top: 1px solid #E4E7EB;
+            padding: 2px 8px;
+        }
+        QSplitter::handle {
+            background-color: #E4E7EB;
+            width: 1px;
+        }
+        QTreeView {
+            background-color: #FFFFFF;
+            border: 1px solid #E4E7EB;
+            border-radius: 6px;
+            outline: 0;
+            padding: 4px;
+        }
+        QTreeView::item {
+            padding: 4px 0px;
+            border-radius: 4px;
+        }
+        QTreeView::item:hover {
+            background-color: #F5F7FA;
+        }
+        QTreeView::item:selected {
+            background-color: #EBF5FB;
+            color: #2980B9;
+        }
+        QScrollBar:vertical {
+            background: #F5F7FA;
+            width: 10px;
+            margin: 0px;
+            border-radius: 5px;
+        }
+        QScrollBar::handle:vertical {
+            background: #C0C4CC;
+            min-height: 20px;
+            border-radius: 5px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #909399;
+        }
+        QDialog {
+            background-color: #FFFFFF;
+        }
+    """
 
 def get_dark_theme_stylesheet() -> str:
     """
@@ -618,7 +708,7 @@ def get_dark_theme_stylesheet() -> str:
     
     QRadioButton::indicator:checked {
         border-color: #3498DB;
-        background-color: radial-gradient(circle, #3498DB 6px, transparent 8px);
+        background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3498DB, stop:0.75 #3498DB, stop:0.76 transparent);
     }
     
     /* 滑块 */
@@ -730,7 +820,8 @@ class SplashScreen:
             title.setStyleSheet("color: #FFFFFF; background: transparent;")
             
             # 副标题
-            subtitle = QLabel("Paleontological Advanced Statistical Toolkit")
+            from config.i18n import _
+            subtitle = QLabel(_("Paleontological Advanced Statistical Toolkit"))
             subtitle.setFont(QFont("Segoe UI", 10))
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
             subtitle.setStyleSheet("color: #3498DB; background: transparent;")
@@ -758,14 +849,14 @@ class SplashScreen:
             """)
             
             # 状态
-            self._status = QLabel("Initializing...")
+            self._status = QLabel(_("Initializing..."))
             self._status.setFont(QFont("Consolas", 9))
             self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._status.setStyleSheet("color: #95A5A6; background: transparent;")
             self._status.setWordWrap(True)
             
             # 版本
-            version = QLabel("Version 5.0.0")
+            version = QLabel(_("Version 5.0.0"))
             version.setFont(QFont("Segoe UI", 8))
             version.setAlignment(Qt.AlignmentFlag.AlignRight)
             version.setStyleSheet("color: #7F8C8D; background: transparent;")
@@ -825,9 +916,8 @@ class SplashScreen:
     def close(self) -> None:
         """关闭闪屏"""
         try:
-            from PyQt6.QtWidgets import QApplication
-            from PyQt6.QtCore import QPropertyAnimation, QGraphicsOpacityEffect
-            from PyQt6.QtCore import Qt as QtCore
+            from PyQt6.QtWidgets import QApplication, QGraphicsOpacityEffect
+            from PyQt6.QtCore import QPropertyAnimation, Qt as QtCore
             
             if not self._widget:
                 return
@@ -836,11 +926,12 @@ class SplashScreen:
             effect = QGraphicsOpacityEffect(self._widget)
             self._widget.setGraphicsEffect(effect)
             
-            anim = QPropertyAnimation(effect, b"opacity")
+            anim = QPropertyAnimation(effect, b"opacity", self._widget)
             anim.setDuration(500)
             anim.setStartValue(1.0)
             anim.setEndValue(0.0)
-            anim.setEasingCurve(QPropertyAnimation.Duration(500))
+            from PyQt6.QtCore import QEasingCurve
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.finished.connect(self._widget.close)
             anim.start()
             
@@ -886,7 +977,10 @@ class PaleoASTApplication:
         try:
             # 1. 初始化Qt
             self._init_qt()
-            
+
+            # 1.5 初始化国际化
+            self._init_i18n()
+
             # 2. 显示闪屏
             self._splash = SplashScreen()
             self._splash.show()
@@ -896,27 +990,28 @@ class PaleoASTApplication:
             self._exception_handler.install()
             
             # 4. 预热NumPy/SciPy
-            self._splash.update(20, "Warming up NumPy/SciPy...")
+            from config.i18n import _
+            self._splash.update(20, _("Warming up NumPy/SciPy..."))
             self._warmup_scientific()
-            
+
             # 5. 加载配置
-            self._splash.update(40, "Loading configuration...")
+            self._splash.update(40, _("Loading configuration..."))
             self._load_config()
-            
+
             # 6. 加载模块
-            self._splash.update(60, "Loading modules...")
+            self._splash.update(60, _("Loading modules..."))
             self._load_modules()
-            
+
             # 7. 创建主窗口
-            self._splash.update(80, "Creating main window...")
+            self._splash.update(80, _("Creating main window..."))
             self._create_main_window()
-            
+
             # 8. 应用主题
-            self._splash.update(90, "Applying theme...")
+            self._splash.update(90, _("Applying theme..."))
             self._apply_theme()
-            
+
             # 9. 完成
-            self._splash.update(100, "Ready!")
+            self._splash.update(100, _("Ready!"))
             time.sleep(0.5)
             
             # 10. 关闭闪屏并显示主窗口
@@ -945,14 +1040,25 @@ class PaleoASTApplication:
         self._app.setApplicationVersion(self.VERSION)
         self._app.setOrganizationName("PaleoAST")
         self._app.setQuitOnLastWindowClosed(True)
-        
-        # 高DPI支持 (兼容旧版本PyQt6)
-        try:
-            self._app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-            self._app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
-        except AttributeError:
-            self._logger.warning("High DPI attributes not available in this PyQt6 version")
-    
+
+    def _init_i18n(self) -> None:
+        """初始化国际化系统"""
+        from config.i18n import register_translations, get_translator, _reset_translator
+        # Reset singleton so it picks up QObject support now that QApplication exists
+        _reset_translator()
+        register_translations()
+
+        translator = get_translator()
+
+        # 加载保存的语言偏好
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("PaleoAST", "PaleoAST")
+        saved_lang = settings.value("language", "en")
+        if saved_lang in ("en", "zh"):
+            translator.set_language(saved_lang)
+
+        self._logger.info(f"i18n initialized, language: {translator.get_language()}")
+
     def _warmup_scientific(self) -> None:
         """预热科学计算库"""
         self._logger.info("Warming up scientific libraries...")
@@ -980,15 +1086,16 @@ class PaleoASTApplication:
         """加载模块"""
         self._logger.info("Loading modules...")
         
+        from config.i18n import _
         modules = [
-            ("models", "Data models"),
-            ("statistics", "Statistics engine"),
-            ("morphometrics", "Morphometrics"),
-            ("ecology", "Ecology engine"),
-            ("stratigraphy", "Stratigraphy"),
-            ("visualization", "Visualization"),
-            ("controllers", "Controllers"),
-            ("views", "Views"),
+            ("models", _("Data models")),
+            ("statistics", _("Statistics engine")),
+            ("morphometrics", _("Morphometrics")),
+            ("ecology", _("Ecology engine")),
+            ("stratigraphy", _("Stratigraphy")),
+            ("visualization", _("Visualization")),
+            ("controllers", _("Controllers")),
+            ("views", _("Views")),
         ]
         
         loaded = []
@@ -998,7 +1105,7 @@ class PaleoASTApplication:
                 loaded.append(module_name)
                 self._splash.update(
                     60 + len(loaded) * 2,
-                    f"Loaded {description}..."
+                    _("Loaded {0}...").format(description)
                 )
                 self._logger.info(f"Module loaded: {module_name}")
             except ImportError as e:
@@ -1018,7 +1125,7 @@ class PaleoASTApplication:
             
             # 尝试导入自定义主窗口
             try:
-                from views.main_window import MainWindow
+                from views.ui_main_window import MainWindow
                 self._main_window = MainWindow()
             except ImportError:
                 # 使用默认主窗口
@@ -1096,7 +1203,7 @@ class PaleoASTApplication:
         """应用主题"""
         self._logger.info("Applying theme...")
         
-        stylesheet = get_dark_theme_stylesheet()
+        stylesheet = get_light_theme_stylesheet()
         self._app.setStyleSheet(stylesheet)
         
         self._logger.info("Theme applied")

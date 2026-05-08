@@ -331,3 +331,30 @@ class PlottingError(PaleoASTError):
         ... )
     """
     pass
+
+
+# =============================================================================
+# COMPATIBILITY ALIASES (for backward compatibility)
+# =============================================================================
+
+# Alias for ValidationError -> DataValidationError
+ValidationError = DataValidationError
+"""
+Alias for DataValidationError for backward compatibility.
+"""
+
+# File Operation Error
+class FileOperationError(PaleoASTError):
+    """
+    Exception raised when file operations fail.
+    
+    This exception is raised when file reading, writing, or parsing
+    operations fail.
+    
+    Example:
+        >>> raise FileOperationError(
+        ...     "Failed to read CSV file",
+        ...     details={"file": "data.csv", "reason": "Permission denied"}
+        ... )
+    """
+    pass

@@ -22,6 +22,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -30,6 +31,9 @@ import threading
 
 from utils.exceptions import ComputationError, MatrixDimensionError
 from utils.validators import validate_data_array
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,12 +58,12 @@ class PCoAResult:
     def summary(self) -> str:
         """Generate summary text."""
         lines = [
-            "Principal Coordinate Analysis Results",
+            _("Principal Coordinate Analysis Results"),
             "=" * 50,
-            f"Distance metric: {self.metric}",
-            f"Number of coordinates: {self.n_components}",
+            _("Distance metric: {0}").format(self.metric),
+            _("Number of coordinates: {0}").format(self.n_components),
             "",
-            "Coord | Eigenvalue | Proportion | Cumulative",
+            _("Coord | Eigenvalue | Proportion | Cumulative"),
             "-" * 50,
         ]
         for i in range(min(10, self.n_components)):
@@ -82,8 +86,10 @@ class PCoAAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the PCoA analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.PCoAAnalyzer")
         self._lock = threading.RLock()
         self._last_result: Optional[PCoAResult] = None
+        self._logger.info("PCoAAnalyzer initialized")
     
     def analyze(
         self,
@@ -105,8 +111,12 @@ class PCoAAnalyzer:
         with self._lock:
             # Validate distance matrix
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
-            
+
             n = D.shape[0]
+            self._logger.info(
+                f"PCoA analyze started: distance matrix {D.shape[0]}x{D.shape[1]}, "
+                f"n_components={n_components}, metric={metric}"
+            )
             
             # Check square matrix
             if D.shape[0] != D.shape[1]:
@@ -179,8 +189,12 @@ class PCoAAnalyzer:
                 n_components=n_components,
                 metric=metric
             )
-            
+
             self._last_result = result
+            self._logger.info(
+                f"PCoA completed: top eigenvalues={eigenvalues[:3].tolist()}, "
+                f"cumulative proportion={cumulative[-1]:.2f}%"
+            )
             return result
     
     @property

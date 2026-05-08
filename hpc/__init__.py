@@ -10,17 +10,10 @@ PaleoAST Phase 3 - HPC Module
 """
 
 from .process_pool import ProcessPool, Task
-from .task_scheduler import TaskScheduler, TaskStatus
-from .shared_memory import SharedMemoryManager
-from .memory_map import MemoryMappedMatrix
-from .progress_queue import ProgressQueue
+from .task_scheduler import TaskScheduler
 
 __all__ = [
     'ProcessPool',
     'Task',
     'TaskScheduler',
-    'TaskStatus',
-    'SharedMemoryManager',
-    'MemoryMappedMatrix',
-    'ProgressQueue',
 ]

@@ -29,6 +29,10 @@ from models.diversity_result import DiversityResult, RarefactionResult
 from models.state_manager import get_state_manager
 from utils.exceptions import ComputationError, ValidationError
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class StatisticsController:
     """
@@ -40,8 +44,9 @@ class StatisticsController:
     
     def __init__(self) -> None:
         """Initialize the statistics controller."""
+        self._logger = logging.getLogger(f"{__name__}.StatisticsController")
         self._lock = threading.RLock()
-        
+
         # Initialize analyzers
         self._pca_analyzer = PCAAnalyzer()
         self._pcoa_analyzer = PCoAAnalyzer()
@@ -50,9 +55,11 @@ class StatisticsController:
         self._permanova_analyzer = PERMANOVAAnalyzer()
         self._diversity_analyzer = DiversityAnalyzer()
         self._rarefaction_analyzer = RarefactionAnalyzer()
-        
+
         # State manager
         self._state = get_state_manager()
+
+        self._logger.info("StatisticsController initialized")
     
     # =========================================================================
     # PCA Operations
@@ -78,14 +85,17 @@ class StatisticsController:
         with self._lock:
             if data is None:
                 if not self._state.has_data:
+                    self._logger.error("run_pca called with no data available")
                     raise ValidationError("No data available. Please load data first.")
                 data = self._state.data_matrix.data
-            
+
+            self._logger.info(f"run_pca called with data shape={data.shape}, n_components={n_components}, method='{method}'")
             result = self._pca_analyzer.analyze(data, n_components, method)
-            
+
             # Cache result
             self._state.cache_result('pca_result', result)
-            
+
+            self._logger.info(f"PCA completed: variance explained={result.explained_variance_ratio}")
             return result
     
     # =========================================================================
@@ -112,17 +122,20 @@ class StatisticsController:
         with self._lock:
             if distance_matrix is None:
                 if not self._state.has_data:
+                    self._logger.error("run_pcoa called with no data available")
                     raise ValidationError("No data available.")
-                
+
                 data = self._state.data_matrix.data
                 dm = compute_distance_matrix(data, metric=metric)
                 distance_matrix = dm.matrix
-            
+
+            self._logger.info(f"run_pcoa called with distance matrix shape={distance_matrix.shape}, metric='{metric}'")
             result = self._pcoa_analyzer.analyze(distance_matrix, n_components)
-            
+
             self._state.cache_result('pcoa_result', result)
             self._state.cache_result('pcoa_metric', metric)
-            
+
+            self._logger.info(f"PCoA completed: {n_components} coordinates extracted")
             return result
     
     # =========================================================================
@@ -153,12 +166,14 @@ class StatisticsController:
         with self._lock:
             if distance_matrix is None:
                 if not self._state.has_data:
+                    self._logger.error("run_nmds called with no data available")
                     raise ValidationError("No data available.")
-                
+
                 data = self._state.data_matrix.data
                 dm = compute_distance_matrix(data, metric=metric)
                 distance_matrix = dm.matrix
-            
+
+            self._logger.info(f"run_nmds called with distance matrix shape={distance_matrix.shape}, n_dimensions={n_dimensions}, n_restarts={n_restarts}")
             result = self._nmds_analyzer.analyze(
                 distance_matrix,
                 n_dimensions=n_dimensions,
@@ -166,10 +181,11 @@ class StatisticsController:
                 n_restarts=n_restarts,
                 random_seed=random_seed
             )
-            
+
             self._state.cache_result('nmds_result', result)
             self._state.cache_result('nmds_metric', metric)
-            
+
+            self._logger.info(f"NMDS completed with stress={result.stress:.6f}")
             return result
     
     # =========================================================================
@@ -276,16 +292,19 @@ class StatisticsController:
         with self._lock:
             if abundances is None:
                 if not self._state.has_data:
+                    self._logger.error("analyze_diversity called with no data available")
                     raise ValidationError("No data available.")
-                
+
                 abundances = self._state.data_matrix.data[0]
-            
+
+            self._logger.info(f"analyze_diversity called for sample '{sample_name}' with {len(abundances)} abundance values")
             result = compute_diversity_indices(abundances, sample_name)
-            
+
             self._state.cache_result(f'diversity_{sample_name}', result)
-            
+
+            self._logger.info(f"Diversity analysis completed for sample '{sample_name}'")
             return result
-    
+
     def analyze_rarefaction(
         self,
         abundances: Optional[npt.NDArray] = None,

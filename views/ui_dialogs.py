@@ -16,8 +16,11 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 from typing import Optional, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -33,6 +36,8 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QFont, QColor, QPalette
 )
+
+from config.i18n import _
 
 
 class BaseAnalysisDialog(QDialog):
@@ -54,17 +59,19 @@ class BaseAnalysisDialog(QDialog):
         parent: Optional[QWidget] = None
     ) -> None:
         super().__init__(parent)
-        
+        self._logger = logging.getLogger(f"{__name__}.BaseAnalysisDialog")
+        self._logger.info(f"Dialog opened: '{title}'")
+
         self.setWindowTitle(title)
         self.setMinimumSize(600, 500)
         self.setModal(True)
-        
+
         # Parameter storage
         self._parameters: Dict[str, Any] = {}
-        
+
         # Setup UI
         self._setup_ui()
-        
+
         # Apply styling
         self._apply_stylesheet()
     
@@ -81,24 +88,31 @@ class BaseAnalysisDialog(QDialog):
         layout.addWidget(self._title_label)
         
         # Main content area
+        self._scroll_area = QScrollArea()
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
         content_widget = QWidget()
         self._content_layout = QVBoxLayout(content_widget)
+        self._content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._content_layout.setContentsMargins(0, 8, 0, 8)
-        layout.addWidget(content_widget)
+        
+        self._scroll_area.setWidget(content_widget)
+        layout.addWidget(self._scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        self._help_button = QPushButton("Help")
+        self._help_button = QPushButton(_("Help"))
         self._help_button.clicked.connect(self._show_help)
         button_layout.addWidget(self._help_button)
-        
-        self._cancel_button = QPushButton("Cancel")
+
+        self._cancel_button = QPushButton(_("Cancel"))
         self._cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self._cancel_button)
-        
-        self._run_button = QPushButton("Run")
+
+        self._run_button = QPushButton(_("Run"))
         self._run_button.clicked.connect(self._on_run)
         self._run_button.setDefault(True)
         button_layout.addWidget(self._run_button)
@@ -264,6 +278,8 @@ class BaseAnalysisDialog(QDialog):
     def _on_run(self) -> None:
         """Validate parameters and accept dialog."""
         if self._validate_parameters():
+            params = self.get_parameters()
+            self._logger.info(f"Dialog accepted with parameters: {params}")
             self.accept()
     
     def _validate_parameters(self) -> bool:
@@ -275,14 +291,14 @@ class BaseAnalysisDialog(QDialog):
         help_text = self._get_help_text()
         
         help_dialog = QMessageBox(self)
-        help_dialog.setWindowTitle(f"{self.windowTitle()} - Help")
+        help_dialog.setWindowTitle(_("{0} - Help").format(self.windowTitle()))
         help_dialog.setText(help_text)
         help_dialog.setIcon(QMessageBox.Icon.Information)
         help_dialog.exec()
     
     def _get_help_text(self) -> str:
         """Get help text for the analysis. Override in subclasses."""
-        return "No help available for this analysis."
+        return _("No help available for this analysis.")
     
     def get_parameters(self) -> Dict[str, Any]:
         """Get current parameters."""
@@ -343,65 +359,65 @@ class PCADialog(BaseAnalysisDialog):
     """
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Principal Component Analysis", parent)
+        super().__init__(_("Principal Component Analysis"), parent)
         self._setup_parameters()
     
     def _setup_parameters(self) -> None:
         """Setup PCA-specific parameters."""
         # Method selection
-        method_group = self.add_parameter_group("Analysis Method")
+        method_group = self.add_parameter_group(_("Analysis Method"))
         method_layout = QVBoxLayout(method_group)
         
         self._method_combo = QComboBox()
         self._method_combo.addItems([
-            "Correlation Matrix (Standardize)",
-            "Covariance Matrix (Center only)",
-            "SPCS (Specialized)"
+            _("Correlation Matrix (Standardize)"),
+            _("Covariance Matrix (Center only)"),
+            _("SPCS (Specialized)")
         ])
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
-        method_layout.addWidget(QLabel("Similarity Matrix:"))
+        method_layout.addWidget(QLabel(_("Similarity Matrix:")))
         method_layout.addWidget(self._method_combo)
         
         # Number of components
-        components_group = self.add_parameter_group("Components")
+        components_group = self.add_parameter_group(_("Components"))
         components_layout = QVBoxLayout(components_group)
         
         self._n_components_spin = QSpinBox()
         self._n_components_spin.setRange(2, 100)
         self._n_components_spin.setValue(3)
-        self._n_components_spin.setPrefix("Number of components: ")
+        self._n_components_spin.setPrefix(_("Number of components: "))
         
         self._min_variance_spin = QDoubleSpinBox()
         self._min_variance_spin.setRange(0, 100)
         self._min_variance_spin.setValue(5.0)
         self._min_variance_spin.setSuffix(" %")
-        self._min_variance_spin.setPrefix("Minimum variance: ")
+        self._min_variance_spin.setPrefix(_("Minimum variance: "))
         
         components_layout.addWidget(self._n_components_spin)
         components_layout.addWidget(self._min_variance_spin)
         
         # Display options
-        display_group = self.add_parameter_group("Display Options")
+        display_group = self.add_parameter_group(_("Display Options"))
         display_layout = QVBoxLayout(display_group)
         
-        self._show_loadings_check = QCheckBox("Show loadings table")
+        self._show_loadings_check = QCheckBox(_("Show loadings table"))
         self._show_loadings_check.setChecked(True)
         display_layout.addWidget(self._show_loadings_check)
         
-        self._show_scores_check = QCheckBox("Show scores table")
+        self._show_scores_check = QCheckBox(_("Show scores table"))
         self._show_scores_check.setChecked(True)
         display_layout.addWidget(self._show_scores_check)
         
-        self._show_scree_check = QCheckBox("Show scree plot")
+        self._show_scree_check = QCheckBox(_("Show scree plot"))
         self._show_scree_check.setChecked(True)
         display_layout.addWidget(self._show_scree_check)
         
-        self._show_biplot_check = QCheckBox("Show biplot")
+        self._show_biplot_check = QCheckBox(_("Show biplot"))
         display_layout.addWidget(self._show_biplot_check)
         
         # Biplot options (enabled when biplot is checked)
         biplot_layout = QHBoxLayout()
-        biplot_layout.addWidget(QLabel("Scaling factor:"))
+        biplot_layout.addWidget(QLabel(_("Scaling factor:")))
         self._biplot_scale_spin = QDoubleSpinBox()
         self._biplot_scale_spin.setRange(0.1, 10.0)
         self._biplot_scale_spin.setValue(1.0)
@@ -411,17 +427,17 @@ class PCADialog(BaseAnalysisDialog):
         display_layout.addLayout(biplot_layout)
         
         # Advanced options
-        advanced_group = self.add_parameter_group("Advanced Options")
+        advanced_group = self.add_parameter_group(_("Advanced Options"))
         advanced_layout = QVBoxLayout(advanced_group)
         
-        self._use_correlation_check = QCheckBox("Use correlation matrix (Z-score standardization)")
+        self._use_correlation_check = QCheckBox(_("Use correlation matrix (Z-score standardization)"))
         self._use_correlation_check.setChecked(True)
         advanced_layout.addWidget(self._use_correlation_check)
         
-        self._impute_missing_check = QCheckBox("Impute missing values (pairwise deletion)")
+        self._impute_missing_check = QCheckBox(_("Impute missing values (pairwise deletion)"))
         advanced_layout.addWidget(self._impute_missing_check)
         
-        self._parallel_check = QCheckBox("Use parallel computation")
+        self._parallel_check = QCheckBox(_("Use parallel computation"))
         self._parallel_check.setChecked(True)
         advanced_layout.addWidget(self._parallel_check)
     
@@ -449,34 +465,31 @@ class PCADialog(BaseAnalysisDialog):
         return self._parameters
     
     def _get_help_text(self) -> str:
-        return """
-<h2>Principal Component Analysis (PCA)</h2>
+        return f"""
+<h2>{_("Principal Component Analysis (PCA)")}</h2>
 
-<p>PCA is a dimension reduction technique that finds orthogonal axes 
-(maximum variance directions) in multidimensional data.</p>
+<p>{_("PCA is a dimension reduction technique that finds orthogonal axes (maximum variance directions) in multidimensional data.")}</p>
 
-<h3>Mathematical Formulation:</h3>
+<h3>{_("Mathematical Formulation:")}</h3>
 
-<p>Given data matrix X ∈ ℝ<sup>n×p</sup>:</p>
+<p>{_("Given data matrix")} X ∈ ℝ<sup>n×p</sup>:</p>
 
 <ol>
-<li><b>Centering:</b> Z = X - μ, where μ<sub>j</sub> = (1/n) Σ<sub>i</sub> x<sub>ij</sub></li>
-<li><b>Covariance:</b> C = (1/(n-1)) Z<sup>T</sup> Z</li>
-<li><b>Eigendecomposition:</b> C v<sub>j</sub> = λ<sub>j</sub> v<sub>j</sub></li>
-<li><b>Project:</b> PC_scores = Z @ [v<sub>1</sub>, v<sub>2</sub>, ...]</li>
+<li><b>{_("Centering")}:</b> Z = X - μ, {_("where")} μ<sub>j</sub> = (1/n) Σ<sub>i</sub> x<sub>ij</sub></li>
+<li><b>{_("Covariance")}:</b> C = (1/(n-1)) Z<sup>T</sup> Z</li>
+<li><b>{_("Eigendecomposition")}:</b> C v<sub>j</sub> = λ<sub>j</sub> v<sub>j</sub></li>
+<li><b>{_("Project")}:</b> PC_scores = Z @ [v<sub>1</sub>, v<sub>2</sub>, ...]</li>
 </ol>
 
-<h3>Parameters:</h3>
+<h3>{_("Parameters:")}</h3>
 <ul>
-<li><b>Correlation vs. Covariance:</b> Use correlation for standardized data</li>
-<li><b>Components:</b> Number of PCs to retain</li>
-<li><b>Minimum variance:</b> Eigenvalue threshold</li>
+<li><b>{_("Correlation vs. Covariance: Use correlation for standardized data")}</b></li>
+<li><b>{_("Components: Number of PCs to retain")}</b></li>
+<li><b>{_("Minimum variance: Eigenvalue threshold")}</b></li>
 </ul>
 
-<h3>Interpretation:</h3>
-<p>PC1 captures the direction of maximum variance, 
-PC2 the second most, etc. The eigenvalue λ<sub>j</sub> 
-represents the variance explained by PC<sub>j</sub>.</p>
+<h3>{_("Interpretation:")}</h3>
+<p>{_("PC1 captures the direction of maximum variance, PC2 the second most, etc.")}</p>
         """
 
 
@@ -520,19 +533,19 @@ class PCoADialog(BaseAnalysisDialog):
     ]
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Principal Coordinate Analysis", parent)
+        super().__init__(_("Principal Coordinate Analysis"), parent)
         self._setup_parameters()
     
     def _setup_parameters(self) -> None:
         """Setup PCoA-specific parameters."""
         # Distance metric
-        metric_group = self.add_parameter_group("Distance Metric")
+        metric_group = self.add_parameter_group(_("Distance Metric"))
         metric_layout = QVBoxLayout(metric_group)
         
         self._metric_combo = QComboBox()
         self._metric_combo.addItems(self.DISTANCE_METRICS)
         self._metric_combo.setCurrentText("Bray-Curtis")
-        metric_layout.addWidget(QLabel("Distance measure:"))
+        metric_layout.addWidget(QLabel(_("Distance measure:")))
         metric_layout.addWidget(self._metric_combo)
         
         metric_help = QLabel(
@@ -544,47 +557,47 @@ class PCoADialog(BaseAnalysisDialog):
         metric_layout.addWidget(metric_help)
         
         # Number of components
-        components_group = self.add_parameter_group("Coordinates")
+        components_group = self.add_parameter_group(_("Coordinates"))
         components_layout = QVBoxLayout(components_group)
         
         self._n_components_spin = QSpinBox()
         self._n_components_spin.setRange(2, 50)
         self._n_components_spin.setValue(3)
-        self._n_components_spin.setPrefix("Number of coordinates: ")
+        self._n_components_spin.setPrefix(_("Number of coordinates: "))
         components_layout.addWidget(self._n_components_spin)
         
         # Eigenvalue correction
-        correction_group = self.add_parameter_group("Negative Eigenvalue Handling")
+        correction_group = self.add_parameter_group(_("Negative Eigenvalue Handling"))
         correction_layout = QVBoxLayout(correction_group)
         
         self._correction_group = QButtonGroup()
         
-        self._correction_none = QRadioButton("Keep all eigenvalues (may produce complex coordinates)")
+        self._correction_none = QRadioButton(_("Keep all eigenvalues (may produce complex coordinates)"))
         self._correction_none.setChecked(True)
         self._correction_group.addButton(self._correction_none, 0)
         correction_layout.addWidget(self._correction_none)
         
-        self._correction_wc = QRadioButton("Wickoff correction (add constant to squared distances)")
+        self._correction_wc = QRadioButton(_("Wickoff correction (add constant to squared distances)"))
         self._correction_group.addButton(self._correction_wc, 1)
         correction_layout.addWidget(self._correction_wc)
         
-        self._correction_torg = QRadioButton("Torgerson correction (approximate Euclidean)")
+        self._correction_torg = QRadioButton(_("Torgerson correction (approximate Euclidean)"))
         self._correction_group.addButton(self._correction_torg, 2)
         correction_layout.addWidget(self._correction_torg)
         
-        self._correction_majorization = QRadioButton("Classical MDS with majorization")
+        self._correction_majorization = QRadioButton(_("Classical MDS with majorization"))
         self._correction_group.addButton(self._correction_majorization, 3)
         correction_layout.addWidget(self._correction_majorization)
         
         # Display options
-        display_group = self.add_parameter_group("Display")
+        display_group = self.add_parameter_group(_("Display"))
         display_layout = QVBoxLayout(display_group)
-        
-        self._show_eigenvalues_check = QCheckBox("Show eigenvalues")
+
+        self._show_eigenvalues_check = QCheckBox(_("Show eigenvalues"))
         self._show_eigenvalues_check.setChecked(True)
         display_layout.addWidget(self._show_eigenvalues_check)
         
-        self._show_vectors_check = QCheckBox("Show distance vectors")
+        self._show_vectors_check = QCheckBox(_("Show distance vectors"))
         display_layout.addWidget(self._show_vectors_check)
     
     def get_parameters(self) -> Dict[str, Any]:
@@ -601,27 +614,24 @@ class PCoADialog(BaseAnalysisDialog):
         return self._parameters
     
     def _get_help_text(self) -> str:
-        return """
-<h2>Principal Coordinate Analysis (PCoA)</h2>
+        return f"""
+<h2>{_("Principal Coordinate Analysis (PCoA)")}</h2>
 
-<p>PCoA (also called Classical MDS) finds coordinates that represent
-a given distance matrix as accurately as possible in lower dimensions.</p>
+<p>{_("PCoA (also called Classical MDS) finds coordinates that represent a given distance matrix as accurately as possible in lower dimensions.")}</p>
 
-<h3>Mathematical Formulation:</h3>
+<h3>{_("Mathematical Formulation:")}</h3>
 
-<p>Given distance matrix D ∈ ℝ<sup>n×n</sup>:</p>
+<p>{_("Given distance matrix")} D ∈ ℝ<sup>n×n</sup>:</p>
 
 <ol>
-<li><b>Square:</b> D² (element-wise)</li>
-<li><b>Gower centering:</b> B = -½ J D² J<br/>
-    where J = I - (1/n)11<sup>T</sup></li>
-<li><b>Eigen-decomposition:</b> B = U Λ U<sup>T</sup></li>
-<li><b>Coordinates:</b> X = U Λ<sup>1/2</sup></li>
+<li><b>{_("Square")}:</b> D² ({_("element-wise")})</li>
+<li><b>{_("Gower centering")}:</b> B = -½ J D² J, {_("where")} J = I - (1/n)11<sup>T</sup></li>
+<li><b>{_("Eigen-decomposition")}:</b> B = U Λ U<sup>T</sup></li>
+<li><b>{_("Coordinates")}:</b> X = U Λ<sup>1/2</sup></li>
 </ol>
 
-<h3>Negative Eigenvalues:</h3>
-<p>Non-Euclidean distances may produce negative eigenvalues.
-These represent components that cannot be represented in Euclidean space.</p>
+<h3>{_("Negative Eigenvalues:")}</h3>
+<p>{_("Non-Euclidean distances may produce negative eigenvalues.")}</p>
         """
 
 
@@ -661,74 +671,74 @@ class NMDSOptionsDialog(BaseAnalysisDialog):
     ]
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Non-metric MDS (NMDS)", parent)
+        super().__init__(_("Non-metric MDS (NMDS)"), parent)
         self._setup_parameters()
     
     def _setup_parameters(self) -> None:
         """Setup NMDS-specific parameters."""
         # Distance metric
-        metric_group = self.add_parameter_group("Dissimilarity Index")
+        metric_group = self.add_parameter_group(_("Dissimilarity Index"))
         metric_layout = QVBoxLayout(metric_group)
         
         self._metric_combo = QComboBox()
         self._metric_combo.addItems(self.DISTANCE_METRICS)
         self._metric_combo.setCurrentText("Bray-Curtis")
-        metric_layout.addWidget(QLabel("Distance measure:"))
+        metric_layout.addWidget(QLabel(_("Distance measure:")))
         metric_layout.addWidget(self._metric_combo)
         
         # Dimensions
-        dims_group = self.add_parameter_group("Ordination Dimensions")
+        dims_group = self.add_parameter_group(_("Ordination Dimensions"))
         dims_layout = QVBoxLayout(dims_group)
         
         self._n_dims_spin = QSpinBox()
         self._n_dims_spin.setRange(2, 4)
         self._n_dims_spin.setValue(2)
-        self._n_dims_spin.setPrefix("Dimensions: ")
+        self._n_dims_spin.setPrefix(_("Dimensions: "))
         dims_layout.addWidget(self._n_dims_spin)
         
         dims_layout.addWidget(QLabel(
-            "2D: Best for visualization\n"
-            "3D: May reveal additional structure"
+            _("2D: Best for visualization\n"
+              "3D: May reveal additional structure")
         ))
         
         # Optimization
-        opt_group = self.add_parameter_group("Optimization")
+        opt_group = self.add_parameter_group(_("Optimization"))
         opt_layout = QVBoxLayout(opt_group)
         
         self._n_restarts_spin = QSpinBox()
         self._n_restarts_spin.setRange(1, 100)
         self._n_restarts_spin.setValue(20)
-        self._n_restarts_spin.setPrefix("Random restarts: ")
+        self._n_restarts_spin.setPrefix(_("Random restarts: "))
         opt_layout.addWidget(self._n_restarts_spin)
         
         self._max_iter_spin = QSpinBox()
         self._max_iter_spin.setRange(100, 10000)
         self._max_iter_spin.setValue(500)
-        self._max_iter_spin.setPrefix("Max iterations: ")
+        self._max_iter_spin.setPrefix(_("Max iterations: "))
         opt_layout.addWidget(self._max_iter_spin)
         
         self._tolerance_spin = QDoubleSpinBox()
         self._tolerance_spin.setRange(0.0001, 0.1)
         self._tolerance_spin.setValue(0.001)
         self._tolerance_spin.setDecimals(4)
-        self._tolerance_spin.setPrefix("Convergence tolerance: ")
+        self._tolerance_spin.setPrefix(_("Convergence tolerance: "))
         opt_layout.addWidget(self._tolerance_spin)
         
         # Display
-        display_group = self.add_parameter_group("Display")
+        display_group = self.add_parameter_group(_("Display"))
         display_layout = QVBoxLayout(display_group)
-        
-        self._show_stress_check = QCheckBox("Show stress plot")
+
+        self._show_stress_check = QCheckBox(_("Show stress plot"))
         self._show_stress_check.setChecked(True)
         display_layout.addWidget(self._show_stress_check)
         
-        self._show_shepard_check = QCheckBox("Show Shepard diagram")
+        self._show_shepard_check = QCheckBox(_("Show Shepard diagram"))
         display_layout.addWidget(self._show_shepard_check)
         
-        self._show_points_check = QCheckBox("Show points with labels")
+        self._show_points_check = QCheckBox(_("Show points with labels"))
         display_layout.addWidget(self._show_points_check)
         
-        self._show_confidence_check = QCheckBox("Show 95% confidence ellipses")
+        self._show_confidence_check = QCheckBox(_("Show 95% confidence ellipses"))
         display_layout.addWidget(self._show_confidence_check)
     
     def get_parameters(self) -> Dict[str, Any]:
@@ -747,38 +757,31 @@ class NMDSOptionsDialog(BaseAnalysisDialog):
         return self._parameters
     
     def _get_help_text(self) -> str:
-        return """
-<h2>Non-metric Multidimensional Scaling (NMDS)</h2>
+        return f"""
+<h2>{_("Non-metric Multidimensional Scaling (NMDS)")}</h2>
 
-<p>NMDS is an ordination technique that finds coordinates preserving
-the rank order of distances, without assuming linear relationships.</p>
+<p>{_("NMDS is an ordination technique that finds coordinates preserving the rank order of distances.")}</p>
 
-<h3>Mathematical Formulation:</h3>
+<h3>{_("Mathematical Formulation:")}</h3>
 
-<p>The stress function measures rank distortion:</p>
+<p>{_("The stress function measures rank distortion:")}</p>
+<p>Stress = √(Σ(d̂<sub>ij</sub> - d<sub>ij</sub>)² / Σd<sub>ij</sub>²)</p>
 
-<p>Stress = √(Σ<sub>i<j</sub>(d<sub>ij</sub> - d̂<sub>ij</sub>)² / Σ<sub>i<j</sub>d<sub>ij</sub>²)</p>
-
-<ul>
-<li>d<sub>ij</sub> = original distance</li>
-<li>d̂<sub>ij</sub> = ordination distance</li>
-</ul>
-
-<h3>Algorithm (SMACOF):</h3>
+<h3>{_("Algorithm (SMACOF):")}</h3>
 <ol>
-<li>Initialize random configuration</li>
-<li>Compute distances in current configuration</li>
-<li>Apply monotone regression to get disparities</li>
-<li>Find optimal configuration for disparities</li>
-<li>Repeat until convergence</li>
+<li>{_("Initialize random configuration")}</li>
+<li>{_("Compute distances in current configuration")}</li>
+<li>{_("Apply monotone regression to get disparities")}</li>
+<li>{_("Find optimal configuration for disparities")}</li>
+<li>{_("Repeat until convergence")}</li>
 </ol>
 
-<h3>Interpretation:</h3>
+<h3>{_("Interpretation:")}</h3>
 <ul>
-<li>Stress < 0.05: Excellent</li>
-<li>Stress < 0.10: Good</li>
-<li>Stress < 0.15: Acceptable</li>
-<li>Stress > 0.20: Poor</li>
+<li>{_("Stress < 0.05: Excellent")}</li>
+<li>{_("Stress < 0.10: Good")}</li>
+<li>{_("Stress < 0.15: Acceptable")}</li>
+<li>{_("Stress > 0.20: Poor")}</li>
 </ul>
         """
 
@@ -807,80 +810,80 @@ class DiversityDialog(BaseAnalysisDialog):
     """
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Biodiversity Analysis", parent)
+        super().__init__(_("Biodiversity Analysis"), parent)
         self._setup_parameters()
     
     def _setup_parameters(self) -> None:
         """Setup diversity analysis parameters."""
         # Sample selection
-        sample_group = self.add_parameter_group("Sample")
+        sample_group = self.add_parameter_group(_("Sample"))
         sample_layout = QVBoxLayout(sample_group)
         
         self._sample_name_edit = QLineEdit()
-        self._sample_name_edit.setPlaceholderText("Enter sample name...")
-        sample_layout.addWidget(QLabel("Sample name:"))
+        self._sample_name_edit.setPlaceholderText(_("Enter sample name..."))
+        sample_layout.addWidget(QLabel(_("Sample name:")))
         sample_layout.addWidget(self._sample_name_edit)
         
         # Diversity indices
-        indices_group = self.add_parameter_group("Diversity Indices")
+        indices_group = self.add_parameter_group(_("Diversity Indices"))
         indices_layout = QVBoxLayout(indices_group)
         
-        self._richness_check = QCheckBox("Species Richness (S)")
+        self._richness_check = QCheckBox(_("Species Richness (S)"))
         self._richness_check.setChecked(True)
         indices_layout.addWidget(self._richness_check)
         
-        self._shannon_check = QCheckBox("Shannon Index (H')")
+        self._shannon_check = QCheckBox(_("Shannon Index (H')"))
         self._shannon_check.setChecked(True)
         indices_layout.addWidget(self._shannon_check)
         
-        self._simpson_check = QCheckBox("Simpson Index (1-D)")
+        self._simpson_check = QCheckBox(_("Simpson Index (1-D)"))
         self._simpson_check.setChecked(True)
         indices_layout.addWidget(self._simpson_check)
         
-        self._fisher_check = QCheckBox("Fisher's Alpha")
+        self._fisher_check = QCheckBox(_("Fisher's Alpha"))
         self._fisher_check.setChecked(True)
         indices_layout.addWidget(self._fisher_check)
         
-        self._chao_check = QCheckBox("Chao1 Richness Estimator")
+        self._chao_check = QCheckBox(_("Chao1 Richness Estimator"))
         indices_layout.addWidget(self._chao_check)
         
-        self._evenness_check = QCheckBox("Pielou's Evenness (J')")
+        self._evenness_check = QCheckBox(_("Pielou's Evenness (J')"))
         indices_layout.addWidget(self._evenness_check)
         
         # Options
-        options_group = self.add_parameter_group("Options")
+        options_group = self.add_parameter_group(_("Options"))
         options_layout = QVBoxLayout(options_group)
         
         self._log_base_combo = QComboBox()
-        self._log_base_combo.addItems(["Natural log (e)", "Log base 2", "Log base 10"])
-        options_layout.addWidget(QLabel("Shannon log base:"))
+        self._log_base_combo.addItems([_("Natural log (e)"), _("Log base 2"), _("Log base 10")])
+        options_layout.addWidget(QLabel(_("Shannon log base:")))
         options_layout.addWidget(self._log_base_combo)
         
-        self._ci_check = QCheckBox("Calculate confidence intervals (bootstrap)")
+        self._ci_check = QCheckBox(_("Calculate confidence intervals (bootstrap)"))
         self._ci_check.setChecked(False)
         options_layout.addWidget(self._ci_check)
         
         self._ci_iterations_spin = QSpinBox()
         self._ci_iterations_spin.setRange(100, 9999)
         self._ci_iterations_spin.setValue(1000)
-        self._ci_iterations_spin.setPrefix("Bootstrap iterations: ")
+        self._ci_iterations_spin.setPrefix(_("Bootstrap iterations: "))
         options_layout.addWidget(self._ci_iterations_spin)
         
         self._ci_level_spin = QDoubleSpinBox()
         self._ci_level_spin.setRange(90, 99)
         self._ci_level_spin.setValue(95)
         self._ci_level_spin.setSuffix(" %")
-        self._ci_level_spin.setPrefix("Confidence level: ")
+        self._ci_level_spin.setPrefix(_("Confidence level: "))
         options_layout.addWidget(self._ci_level_spin)
         
         # Display
-        display_group = self.add_parameter_group("Display")
+        display_group = self.add_parameter_group(_("Display"))
         display_layout = QVBoxLayout(display_group)
-        
-        self._bar_chart_check = QCheckBox("Bar chart comparison")
+
+        self._bar_chart_check = QCheckBox(_("Bar chart comparison"))
         display_layout.addWidget(self._bar_chart_check)
         
-        self._radar_chart_check = QCheckBox("Radar chart")
+        self._radar_chart_check = QCheckBox(_("Radar chart"))
         display_layout.addWidget(self._radar_chart_check)
     
     def get_parameters(self) -> Dict[str, Any]:
@@ -905,36 +908,22 @@ class DiversityDialog(BaseAnalysisDialog):
         return self._parameters
     
     def _get_help_text(self) -> str:
-        return """
-<h2>Biodiversity Analysis</h2>
+        return f"""
+<h2>{_("Biodiversity Analysis")}</h2>
 
-<p>Biodiversity indices quantify species richness and evenness
-in ecological communities.</p>
+<p>{_("Biodiversity indices quantify species richness and evenness in ecological communities.")}</p>
 
-<h3>Common Indices:</h3>
+<h3>{_("Common Indices:")}</h3>
+<ul>
+<li><b>{_("Species Richness (S):")}</b> S = {_("number of observed species")}</li>
+<li><b>{_("Shannon Index (H'):")}</b> H' = -Σ p<sub>i</sub> ln(p<sub>i</sub>), {_("where")} p<sub>i</sub> = n<sub>i</sub> / N</li>
+<li><b>{_("Simpson Index (1-D):")}</b> D = 1 - Σ p<sub>i</sub>²</li>
+<li><b>{_("Fisher's Alpha:")}</b> S = α ln(1 + N/α)</li>
+<li><b>{_("Chao1 Estimator:")}</b> S<sub>Chao1</sub> = S<sub>obs</sub> + f₁² / (2f₂)</li>
+</ul>
 
-<p><b>Species Richness (S):</b><br/>
-S = number of observed species</p>
-
-<p><b>Shannon Index (H'):</b><br/>
-H' = -Σ p_i ln(p_i)<br/>
-where p_i = n_i / N is proportion of species i</p>
-
-<p><b>Simpson Index (1-D):</b><br/>
-D = 1 - Σ p_i²<br/>
-Range: 0-1, higher = more diverse</p>
-
-<p><b>Fisher's Alpha:</b><br/>
-Solves: N = α ln(1 + N/α)<br/>
-Based on log-series distribution</p>
-
-<p><b>Chao1 Estimator:</b><br/>
-Ŝ<sub>Chao1</sub> = S<sub>obs</sub> + f₁²/(2f₂)<br/>
-where f₁, f₂ = singletons, doubletons</p>
-
-<h3>Interpretation:</h3>
-<p>Higher values generally indicate greater diversity.
-Compare across samples to assess patterns.</p>
+<h3>{_("Interpretation:")}</h3>
+<p>{_("Higher values generally indicate greater diversity. Compare across samples to assess patterns.")}</p>
         """
 
 
@@ -958,50 +947,50 @@ class RarefactionDialog(BaseAnalysisDialog):
     """
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__("Rarefaction Analysis", parent)
+        super().__init__(_("Rarefaction Analysis"), parent)
         self._setup_parameters()
     
     def _setup_parameters(self) -> None:
         """Setup rarefaction parameters."""
         # Sample selection
-        sample_group = self.add_parameter_group("Select Samples")
+        sample_group = self.add_parameter_group(_("Select Samples"))
         sample_layout = QVBoxLayout(sample_group)
         
         self._sample_list = QListWidget()
         self._sample_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self._sample_list.addItems([
-            "Sample 1", "Sample 2", "Sample 3", "Sample 4", "Sample 5"
+            _("Sample 1"), _("Sample 2"), _("Sample 3"), _("Sample 4"), _("Sample 5")
         ])
         sample_layout.addWidget(self._sample_list)
         
         # Settings
-        settings_group = self.add_parameter_group("Settings")
+        settings_group = self.add_parameter_group(_("Settings"))
         settings_layout = QVBoxLayout(settings_group)
         
         self._max_n_spin = QSpinBox()
         self._max_n_spin.setRange(10, 10000)
         self._max_n_spin.setValue(100)
-        self._max_n_spin.setPrefix("Maximum individuals: ")
+        self._max_n_spin.setPrefix(_("Maximum individuals: "))
         settings_layout.addWidget(self._max_n_spin)
         
         self._step_spin = QSpinBox()
         self._step_spin.setRange(1, 100)
         self._step_spin.setValue(5)
-        self._step_spin.setPrefix("Step size: ")
+        self._step_spin.setPrefix(_("Step size: "))
         settings_layout.addWidget(self._step_spin)
         
-        self._ci_check = QCheckBox("Show 95% confidence intervals")
+        self._ci_check = QCheckBox(_("Show 95% confidence intervals"))
         self._ci_check.setChecked(True)
         settings_layout.addWidget(self._ci_check)
         
         # Display
-        display_group = self.add_parameter_group("Display")
+        display_group = self.add_parameter_group(_("Display"))
         display_layout = QVBoxLayout(display_group)
-        
-        self._separate_plots_check = QCheckBox("Separate plots per sample")
+
+        self._separate_plots_check = QCheckBox(_("Separate plots per sample"))
         display_layout.addWidget(self._separate_plots_check)
         
-        self._grid_check = QCheckBox("Show grid")
+        self._grid_check = QCheckBox(_("Show grid"))
         display_layout.addWidget(self._grid_check)
         self._grid_check.setChecked(True)
     
@@ -1020,27 +1009,25 @@ class RarefactionDialog(BaseAnalysisDialog):
         return self._parameters
     
     def _get_help_text(self) -> str:
-        return """
-<h2>Rarefaction Analysis</h2>
+        return f"""
+<h2>{_("Rarefaction Analysis")}</h2>
 
-<p>Rarefaction standardizes species counts to a common
-sampling effort, allowing fair comparison between samples.</p>
+<p>{_("Rarefaction standardizes species counts to a common sampling effort.")}</p>
 
-<h3>Mathematical Formulation:</h3>
+<h3>{_("Mathematical Formulation:")}</h3>
 
-<p>Expected species at n individuals:</p>
+<p>{_("Expected species at n individuals:")}</p>
+<p>E(S<sub>n</sub>) = Σ<sub>i=1</sub><sup>S</sup> [1 - C(N-n<sub>i</sub>, n) / C(N, n)]</p>
 
-<p>E(S_n) = Σ[1 - C(N-n_i, n) / C(N, n)]</p>
-
+<p>{_("where")}:</p>
 <ul>
-<li>N = total individuals in sample</li>
-<li>n_i = individuals of species i</li>
-<li>C(a, b) = binomial coefficient (a choose b)</li>
+<li>N = {_("total individuals in sample")}</li>
+<li>n<sub>i</sub> = {_("individuals of species")} i</li>
+<li>C(a, b) = {_("binomial coefficient")}</li>
 </ul>
 
-<h3>Interpretation:</h3>
-<p>Rarefaction curves that plateau indicate adequate sampling.
-Samples reaching higher curves at plateau have greater diversity.</p>
+<h3>{_("Interpretation:")}</h3>
+<p>{_("Rarefaction curves that plateau indicate adequate sampling.")}</p>
         """
 
 
@@ -1060,7 +1047,7 @@ class ImportDialog(QDialog):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         
-        self.setWindowTitle("Import Data")
+        self.setWindowTitle(_("Import Data"))
         self.setMinimumSize(600, 500)
         self.setModal(True)
         
@@ -1072,58 +1059,58 @@ class ImportDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         
         # File selection
-        file_group = QGroupBox("File Selection")
+        file_group = QGroupBox(_("File Selection"))
         file_layout = QVBoxLayout(file_group)
         
         file_select_layout = QHBoxLayout()
         self._file_path_edit = QLineEdit()
-        self._file_path_edit.setPlaceholderText("Select file...")
+        self._file_path_edit.setPlaceholderText(_("Select file..."))
         file_select_layout.addWidget(self._file_path_edit)
         
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton(_("Browse..."))
         browse_btn.clicked.connect(self._browse_file)
         file_select_layout.addWidget(browse_btn)
         file_layout.addLayout(file_select_layout)
         
         self._format_combo = QComboBox()
         self._format_combo.addItems([
-            "CSV (Comma Separated)",
-            "CSV (Tab Separated)",
-            "Text (Space Separated)",
-            "Excel (.xlsx)"
+            _("CSV (Comma Separated)"),
+            _("CSV (Tab Separated)"),
+            _("Text (Space Separated)"),
+            _("Excel (.xlsx)")
         ])
-        file_layout.addWidget(QLabel("File format:"))
+        file_layout.addWidget(QLabel(_("File format:")))
         file_layout.addWidget(self._format_combo)
         
         layout.addWidget(file_group)
         
         # Options
-        options_group = QGroupBox("Import Options")
+        options_group = QGroupBox(_("Import Options"))
         options_layout = QGridLayout(options_group)
         
-        self._header_check = QCheckBox("First row contains headers")
+        self._header_check = QCheckBox(_("First row contains headers"))
         self._header_check.setChecked(True)
         options_layout.addWidget(self._header_check, 0, 0)
         
-        self._row_labels_check = QCheckBox("First column contains row labels")
+        self._row_labels_check = QCheckBox(_("First column contains row labels"))
         self._row_labels_check.setChecked(True)
         options_layout.addWidget(self._row_labels_check, 0, 1)
         
         self._skip_rows_spin = QSpinBox()
         self._skip_rows_spin.setRange(0, 100)
         self._skip_rows_spin.setValue(0)
-        options_layout.addWidget(QLabel("Rows to skip:"), 1, 0)
+        options_layout.addWidget(QLabel(_("Rows to skip:")), 1, 0)
         options_layout.addWidget(self._skip_rows_spin, 1, 1)
         
         self._na_values_edit = QLineEdit()
-        self._na_values_edit.setPlaceholderText("NA, NaN, -, empty")
-        options_layout.addWidget(QLabel("NA values:"), 2, 0)
+        self._na_values_edit.setPlaceholderText(_("NA, NaN, -, empty"))
+        options_layout.addWidget(QLabel(_("NA values:")), 2, 0)
         options_layout.addWidget(self._na_values_edit, 2, 1)
         
         layout.addWidget(options_group)
         
         # Preview
-        preview_group = QGroupBox("Data Preview")
+        preview_group = QGroupBox(_("Data Preview"))
         preview_layout = QVBoxLayout(preview_group)
         
         self._preview_text = QTextEdit()
@@ -1137,11 +1124,11 @@ class ImportDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(_("Cancel"))
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(cancel_btn)
-        
-        import_btn = QPushButton("Import")
+
+        import_btn = QPushButton(_("Import"))
         import_btn.clicked.connect(self._import_data)
         button_layout.addWidget(import_btn)
         
@@ -1153,9 +1140,9 @@ class ImportDialog(QDialog):
         
         filepath, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Data File",
+            _("Select Data File"),
             "",
-            "Data Files (*.csv *.txt *.xlsx);;All Files (*)"
+            _("Data Files (*.csv *.txt *.xlsx);;All Files (*)")
         )
         
         if filepath:
@@ -1172,23 +1159,36 @@ class ImportDialog(QDialog):
             delimiter = ','
             if self._format_combo.currentIndex() == 1:
                 delimiter = '\t'
-            
-            import pandas as pd
+
+            try:
+                import pandas as pd
+            except ImportError:
+                self._preview_text.setText(
+                    _("pandas is required for data preview. Install with: pip install pandas")
+                )
+                return
             df = pd.read_csv(filepath, delimiter=delimiter, nrows=5)
             self._preview_text.setText(df.head().to_string())
         except Exception as e:
-            self._preview_text.setText(f"Error loading preview:\n{str(e)}")
+            self._preview_text.setText(_("Error loading preview:\n{0}").format(str(e)))
     
     def _import_data(self) -> None:
         """Import data from file."""
         filepath = self._file_path_edit.text()
         if not filepath:
-            QMessageBox.warning(self, "No File", "Please select a file to import.")
+            QMessageBox.warning(self, _("No File"), _("Please select a file to import."))
             return
         
         try:
-            import pandas as pd
-            
+            try:
+                import pandas as pd
+            except ImportError:
+                QMessageBox.critical(
+                    self, _("Import Error"),
+                    _("pandas is required for data import. Install with: pip install pandas")
+                )
+                return
+
             delimiter = ','
             if self._format_combo.currentIndex() == 1:
                 delimiter = '\t'
@@ -1219,4 +1219,4 @@ class ImportDialog(QDialog):
             self.accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import data:\n{str(e)}")
+            QMessageBox.critical(self, _("Import Error"), _("Failed to import data:\n{0}").format(str(e)))

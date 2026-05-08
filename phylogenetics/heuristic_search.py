@@ -127,13 +127,13 @@ class TreeOperation:
 
 @dataclass
 class NNIOperation(TreeOperation):
-    """
+    r"""
     NNI (最近邻居互换) 变换
-    
+
     变换示意图:
-    
+
         边 (X, Y) 两侧的子树互换:
-        
+
         原始:      NNI结果1:     NNI结果2:
           X           X             X
          / \         / \           / \
@@ -166,57 +166,50 @@ class NNIOperation(TreeOperation):
     def apply(self, tree: PhyloTree) -> PhyloTree:
         """
         应用NNI变换
-        
+
         步骤:
-            1. 找到两个节点的公共父节点
-            2. 确定要交换的子树
-            3. 重新连接
+            1. 深拷贝树
+            2. 找到对应节点
+            3. 交换子树
+            4. 返回新PhyloTree
         """
         if tree.root is None:
             raise ValueError("Tree has no root")
-        
+
         # 深拷贝树
-        new_tree = self._deep_copy_tree(tree.root)
-        
+        new_root = self._deep_copy_tree(tree.root)
+
         # 找到新树中对应的节点
-        node_map = self._build_node_map(tree.root, new_tree)
-        
+        node_map = self._build_node_map(tree.root, new_root)
+
         node1 = node_map.get(self.edge_node1)
         node2 = node_map.get(self.edge_node2)
-        
+
         if node1 is None or node2 is None:
             raise ValueError("Node mapping failed")
-        
+
         # 获取公共父节点
         parent = self._find_common_parent(node1, node2)
         if parent is None or len(parent.children) != 2:
-            # 需要正好两个子节点的父节点
             raise ValueError("NNI requires parent with two children")
-        
-        # 获取四个可能的子树
+
         children = parent.children
         node1_siblings = [c for c in children if c is not node1]
         node2_siblings = [c for c in children if c is not node2]
-        
+
         if len(node1_siblings) == 0 or len(node2_siblings) == 0:
             raise ValueError("Invalid NNI configuration")
-        
+
         subtree_a = node1_siblings[0]
         subtree_b = node2_siblings[0]
-        
-        # 确定交换方式
+
+        # Perform the NNI swap
         if self.swap_option == 1:
-            # 交换: (A,B)-(C,D) -> (A,C)-(B,D)
-            new_children = [subtree_a, node2, node1, subtree_b]
+            parent.children = [subtree_a, node2]
         else:
-            # 交换: (A,B)-(C,D) -> (A,D)-(B,C)
-            new_children = [subtree_a, subtree_b, node1, node2]
-        
-        # 重新连接
-        parent.children = [subtree_a, node2] if self.swap_option == 1 else [subtree_a, subtree_b]
-        
-        # 简化处理：直接修改树结构
-        return self._perform_nni_swap(new_tree, parent, self.swap_option)
+            parent.children = [node2, subtree_a]
+
+        return PhyloTree(new_root)
     
     def _deep_copy_tree(self, root: PhyloNode) -> PhyloNode:
         """深度拷贝树"""

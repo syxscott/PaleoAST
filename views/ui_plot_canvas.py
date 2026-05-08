@@ -53,8 +53,16 @@ from matplotlib.widgets import LassoSelector, RectangleSelector
 from matplotlib.collections import PathCollection
 import matplotlib.patches as mpatches
 
+from config.i18n import _
+
 # Publication quality style settings
-plt.style.use('seaborn-v0_8-whitegrid')
+try:
+    plt.style.use('seaborn-v0_8-whitegrid')
+except OSError:
+    try:
+        plt.style.use('seaborn-whitegrid')
+    except OSError:
+        pass
 plt.rcParams.update({
     'font.family': 'sans-serif',
     'font.sans-serif': ['Arial', 'Helvetica'],
@@ -127,6 +135,8 @@ class InteractivePlotCanvas(QWidget):
         self._eigenvalues: Optional[np.ndarray] = None
         self._labels: List[str] = []
         self._group_labels: Optional[List[int]] = None
+        self._hover_annotation = None
+        self._current_plot_type: Optional[str] = None
         
         # UI
         self._setup_ui()
@@ -167,11 +177,11 @@ class InteractivePlotCanvas(QWidget):
     def _setup_toolbar(self) -> None:
         """Setup toolbar buttons."""
         # Selection mode
-        self._selection_label = QLabel("Selection:")
+        self._selection_label = QLabel(_("Selection:"))
         self._toolbar.addWidget(self._selection_label)
-        
+
         self._selection_combo = QComboBox()
-        self._selection_combo.addItems(["None", "Rectangle", "Lasso"])
+        self._selection_combo.addItems([_("None"), _("Rectangle"), _("Lasso")])
         self._toolbar.addWidget(self._selection_combo)
         
         self._toolbar.addSeparator()
@@ -187,26 +197,26 @@ class InteractivePlotCanvas(QWidget):
         zoom_out_btn.clicked.connect(self._zoom_out)
         self._toolbar.addWidget(zoom_out_btn)
         
-        reset_btn = QPushButton("Reset")
+        reset_btn = QPushButton(_("Reset"))
         reset_btn.clicked.connect(self._reset_view)
         self._toolbar.addWidget(reset_btn)
         
         self._toolbar.addSeparator()
         
         # Export
-        export_btn = QPushButton("Export")
+        export_btn = QPushButton(_("Export"))
         export_btn.clicked.connect(self._export_plot)
         self._toolbar.addWidget(export_btn)
         
         # Show labels toggle
         self._toolbar.addSeparator()
-        self._show_labels_check = QCheckBox("Show Labels")
+        self._show_labels_check = QCheckBox(_("Show Labels"))
         self._show_labels_check.setChecked(True)
         self._show_labels_check.toggled.connect(self._toggle_labels)
         self._toolbar.addWidget(self._show_labels_check)
         
         # Show ellipses toggle
-        self._show_ellipses_check = QCheckBox("Show 95% Ellipses")
+        self._show_ellipses_check = QCheckBox(_("Show 95% Ellipses"))
         self._show_ellipses_check.setChecked(False)
         self._show_ellipses_check.toggled.connect(self._toggle_ellipses)
         self._toolbar.addWidget(self._show_ellipses_check)
@@ -271,7 +281,7 @@ class InteractivePlotCanvas(QWidget):
     ) -> None:
         """
         Plot PCA scores.
-        
+
         Mathematical Context:
             PC scores: PC_j = X_centered @ v_j
             
@@ -286,7 +296,8 @@ class InteractivePlotCanvas(QWidget):
             - Eigenvalue percentages on axes
         """
         self._ax.clear()
-        
+        self._current_plot_type = 'pca'
+
         # Extract data from result
         if hasattr(result, 'scores'):
             scores = result.scores
@@ -357,9 +368,9 @@ class InteractivePlotCanvas(QWidget):
             self._add_confidence_ellipses(scores, groups, pc1, pc2)
         
         # Labels and title
-        self._ax.set_xlabel(f"PC{pc1 + 1} ({var_pc1:.1f}% variance)")
-        self._ax.set_ylabel(f"PC{pc2 + 1} ({var_pc2:.1f}% variance)")
-        self._ax.set_title("PCA Scores Plot")
+        self._ax.set_xlabel(_("PC{0} ({1:.1f}% variance)").format(pc1 + 1, var_pc1))
+        self._ax.set_ylabel(_("PC{0} ({1:.1f}% variance)").format(pc2 + 1, var_pc2))
+        self._ax.set_title(_("PCA Scores Plot"))
         
         # Style
         self._ax.set_facecolor('#232342')
@@ -410,7 +421,8 @@ class InteractivePlotCanvas(QWidget):
                 Λ = diagonal eigenvalue matrix
         """
         self._ax.clear()
-        
+        self._current_plot_type = 'pcoa'
+
         # Extract data
         if hasattr(result, 'coordinates'):
             coords = result.coordinates
@@ -479,9 +491,9 @@ class InteractivePlotCanvas(QWidget):
             self._add_confidence_ellipses(coords, groups, coord1, coord2)
         
         # Axis labels
-        self._ax.set_xlabel(f"PCo{coord1 + 1} ({var_1:.1f}% variance)")
-        self._ax.set_ylabel(f"PCo{coord2 + 1} ({var_2:.1f}% variance)")
-        self._ax.set_title("PCoA Scores Plot")
+        self._ax.set_xlabel(_("PCo{0} ({1:.1f}% variance)").format(coord1 + 1, var_1))
+        self._ax.set_ylabel(_("PCo{0} ({1:.1f}% variance)").format(coord2 + 1, var_2))
+        self._ax.set_title(_("PCoA Scores Plot"))
         
         # Style
         self._apply_axis_style()
@@ -509,7 +521,8 @@ class InteractivePlotCanvas(QWidget):
                 d̂_ij = ordination distance
         """
         self._ax.clear()
-        
+        self._current_plot_type = 'nmds'
+
         # Extract data
         if hasattr(result, 'coordinates'):
             coords = result.coordinates
@@ -569,9 +582,9 @@ class InteractivePlotCanvas(QWidget):
             self._add_confidence_ellipses(coords, groups, 0, 1)
         
         # Axis labels and title
-        self._ax.set_xlabel("NMDS1")
-        self._ax.set_ylabel("NMDS2")
-        self._ax.set_title(f"NMDS Ordination (Stress = {stress:.4f})")
+        self._ax.set_xlabel(_("NMDS1"))
+        self._ax.set_ylabel(_("NMDS2"))
+        self._ax.set_title(_("NMDS Ordination (Stress = {0:.4f})").format(stress))
         
         # Style
         self._apply_axis_style()
@@ -593,7 +606,8 @@ class InteractivePlotCanvas(QWidget):
                 - Fisher's α: N = α ln(1 + N/α)
         """
         self._ax.clear()
-        
+        self._current_plot_type = 'diversity'
+
         # Extract data
         if hasattr(result, 'indices'):
             indices = result.indices
@@ -638,8 +652,8 @@ class InteractivePlotCanvas(QWidget):
         # Labels
         self._ax.set_xticks(x_pos)
         self._ax.set_xticklabels(labels, color='#ECF0F1')
-        self._ax.set_ylabel("Index Value", color='#ECF0F1')
-        self._ax.set_title("Biodiversity Indices", color='#ECF0F1')
+        self._ax.set_ylabel(_("Index Value"), color='#ECF0F1')
+        self._ax.set_title(_("Biodiversity Indices"), color='#ECF0F1')
         
         # Style
         self._apply_axis_style()
@@ -654,7 +668,8 @@ class InteractivePlotCanvas(QWidget):
             E(S_n) = Σ[1 - C(N-n_i, n) / C(N, n)]
         """
         self._ax.clear()
-        
+        self._current_plot_type = 'rarefaction'
+
         # Extract data
         if hasattr(result, 'curve_data'):
             curve_data = result.curve_data
@@ -681,9 +696,9 @@ class InteractivePlotCanvas(QWidget):
             )
         
         # Labels
-        self._ax.set_xlabel("Number of Individuals", color='#ECF0F1')
-        self._ax.set_ylabel("Expected Species Richness", color='#ECF0F1')
-        self._ax.set_title("Rarefaction Curves", color='#ECF0F1')
+        self._ax.set_xlabel(_("Number of Individuals"), color='#ECF0F1')
+        self._ax.set_ylabel(_("Expected Species Richness"), color='#ECF0F1')
+        self._ax.set_title(_("Rarefaction Curves"), color='#ECF0F1')
         
         # Legend
         self._ax.legend(
@@ -793,8 +808,12 @@ class InteractivePlotCanvas(QWidget):
         """
         if event.inaxes != self._ax:
             self._canvas.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            if self._hover_annotation is not None:
+                self._hover_annotation.remove()
+                self._hover_annotation = None
+                self._canvas.draw_idle()
             return
-        
+
         if self._scores is None:
             return
         
@@ -813,30 +832,42 @@ class InteractivePlotCanvas(QWidget):
         # Check threshold
         if min_dist < 0.05:
             self._canvas.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-            
+
+            # Remove previous annotation
+            if self._hover_annotation is not None:
+                self._hover_annotation.remove()
+                self._hover_annotation = None
+
             # Show tooltip
             label = self._labels[nearest_idx] if nearest_idx < len(self._labels) else f"Point {nearest_idx}"
             group = self._group_labels[nearest_idx] if self._group_labels is not None else 0
-            
+
             tooltip = f"{label}\n"
             tooltip += f"X: {self._scores[nearest_idx, 0]:.4f}\n"
             tooltip += f"Y: {self._scores[nearest_idx, 1]:.4f}\n"
             if self._group_labels is not None:
                 tooltip += f"Group: {group + 1}"
-            
+
             # Draw annotation
-            self._ax.annotate(
-                '',
+            self._hover_annotation = self._ax.annotate(
+                tooltip,
                 xy=(self._scores[nearest_idx, 0], self._scores[nearest_idx, 1]),
-                xytext=(event.x, event.y),
-                textcoords='figure pixels',
+                xytext=(20, 20),
+                textcoords='offset points',
                 arrowprops=dict(arrowstyle='->', color='white', lw=1),
                 bbox=dict(boxstyle='round', facecolor='#2C3E50', alpha=0.9),
                 color='#ECF0F1',
                 fontsize=9
             )
-            
+
             self._canvas.draw_idle()
+        else:
+            # Not near any point — remove annotation if present
+            if self._hover_annotation is not None:
+                self._hover_annotation.remove()
+                self._hover_annotation = None
+                self._canvas.draw_idle()
+            self._canvas.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
     
     def _on_press(self, event) -> None:
         """Handle mouse press for selection."""
@@ -931,30 +962,39 @@ class InteractivePlotCanvas(QWidget):
         # Redraw with highlighting
         self._canvas.draw()
     
+    def _replot_current(self) -> None:
+        """Replot using the current plot type and stored data."""
+        if self._current_plot_type == 'pca' and self._scores is not None:
+            self.plot_pca_scores(type('Result', (), {
+                'scores': self._scores,
+                'explained_variance': self._eigenvalues,
+                'labels': self._labels,
+                'groups': self._group_labels
+            })())
+        elif self._current_plot_type == 'pcoa' and self._scores is not None:
+            self.plot_pcoa_scores(type('Result', (), {
+                'coordinates': self._scores,
+                'explained_variance': self._eigenvalues,
+                'labels': self._labels,
+                'groups': self._group_labels
+            })())
+        elif self._current_plot_type == 'nmds' and self._scores is not None:
+            self.plot_nmds(type('Result', (), {
+                'coordinates': self._scores,
+                'stress': 0.0,
+                'labels': self._labels,
+                'groups': self._group_labels
+            })())
+
     def _toggle_labels(self, checked: bool) -> None:
         """Toggle label visibility."""
         self._ax.cla()
-        
-        # Redraw current plot
-        if self._scores is not None:
-            self.plot_pca_scores(type('Result', (), {
-                'scores': self._scores,
-                'explained_variance': self._eigenvalues,
-                'labels': self._labels,
-                'groups': self._group_labels
-            })())
-    
+        self._replot_current()
+
     def _toggle_ellipses(self, checked: bool) -> None:
         """Toggle confidence ellipse visibility."""
         self._ax.cla()
-        
-        if self._scores is not None:
-            self.plot_pca_scores(type('Result', (), {
-                'scores': self._scores,
-                'explained_variance': self._eigenvalues,
-                'labels': self._labels,
-                'groups': self._group_labels
-            })())
+        self._replot_current()
     
     def _zoom_in(self) -> None:
         """Zoom in."""
@@ -1007,7 +1047,7 @@ class InteractivePlotCanvas(QWidget):
         # Show save dialog
         filepath, selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Export Plot",
+            _("Export Plot"),
             "",
             "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)"
         )
@@ -1029,8 +1069,8 @@ class InteractivePlotCanvas(QWidget):
         
         # Get size
         size_dialog = QMessageBox(self)
-        size_dialog.setWindowTitle("Export Size")
-        size_dialog.setText("Select export size:")
+        size_dialog.setWindowTitle(_("Export Size"))
+        size_dialog.setText(_("Select export size:"))
         size_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
         
         # Calculate size based on DPI
@@ -1051,16 +1091,16 @@ class InteractivePlotCanvas(QWidget):
             
             QMessageBox.information(
                 self,
-                "Export Successful",
-                f"Plot saved to:\n{filepath}\n\n"
-                f"Resolution: {dpi} DPI\n"
-                f"Size: {width_cm:.1f} x {height_cm:.1f} cm"
+                _("Export Successful"),
+                _("Plot saved to:\n{0}\n\n"
+                "Resolution: {1} DPI\n"
+                "Size: {2:.1f} x {3:.1f} cm").format(filepath, dpi, width_cm, height_cm)
             )
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Export Error",
-                f"Failed to export plot:\n{str(e)}"
+                _("Export Error"),
+                _("Failed to export plot:\n{0}").format(str(e))
             )
     
     # =========================================================================

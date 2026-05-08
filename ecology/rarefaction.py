@@ -25,6 +25,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any, List
@@ -34,6 +35,8 @@ import threading
 from models.diversity_result import RarefactionResult
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
+
+logger = logging.getLogger(__name__)
 
 
 def compute_rarefaction(
@@ -60,7 +63,11 @@ def compute_rarefaction(
     
     N = int(np.sum(abundances))  # Total individuals
     S = len(abundances)  # Observed richness
-    
+    logger.info(
+        f"compute_rarefaction started: n_taxa={S}, total_individuals={N}, "
+        f"max_n={max_n}, n_points={n_points}"
+    )
+
     if N == 0:
         raise ComputationError("No individuals in sample")
     
@@ -108,14 +115,14 @@ def _rarefaction_formula(abundances: npt.NDArray, N: int, n: int) -> float:
     expected_S = 0.0
     
     for ni in abundances:
-        if ni >= n:
-            # C(N-n_i, n) / C(N, n) = exp(log(C(N-n_i, n)) - log(C(N, n)))
-            log_term = (_log_factorial(N - ni) - _log_factorial(n) - _log_factorial(N - ni - n))
-            prob = np.exp(log_term - log_N_choose_n)
-            expected_S += (1 - prob)
-        else:
-            # If n_i < n, that species will definitely be included
+        if N - ni < n:
+            # Species is definitely present (can't avoid it in the sample)
             expected_S += 1.0
+        else:
+            # P(species excluded) = C(N-ni, n) / C(N, n)
+            log_term = (_log_factorial(N - ni) - _log_factorial(n) - _log_factorial(N - ni - n))
+            prob_excluded = np.exp(log_term - log_N_choose_n)
+            expected_S += (1.0 - prob_excluded)
     
     return expected_S
 
@@ -166,7 +173,7 @@ def compute_sample_based_rarefaction(
             max_k = n_occurrences
             sample_k = np.arange(1, max_k + 1)
         else:
-            sample_k = sample_sizes[sample_k <= n_occurrences]
+            sample_k = sample_sizes[sample_sizes <= n_occurrences]
         
         expected_species = np.zeros(len(sample_k))
         

@@ -179,7 +179,7 @@ class ReportBuilder:
             keywords: 关键词列表
         """
         if keywords:
-            abstract += f"\\par\\textbf{Keywords:} {', '.join(keywords)}"
+            abstract += f"\\par\\textbf{{Keywords:}} {', '.join(keywords)}"
         self._abstract = abstract
         return self
     
@@ -325,11 +325,8 @@ class ReportBuilder:
         lines.append("\\usepackage[T1]{fontenc}")
         lines.append("")
         
-        for pkg in self._preamble.packages:
-            if pkg.options:
-                lines.append(f"\\usepackage[{pkg.options}]{{{pkg.name}}}")
-            else:
-                lines.append(f"\\usepackage{{{pkg.name}}}")
+        for pkg_str in self._preamble.packages:
+            lines.append(pkg_str)
         
         lines.append("")
         lines.append("\\begin{document}")

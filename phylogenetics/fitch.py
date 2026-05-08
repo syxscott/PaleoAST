@@ -82,6 +82,11 @@ class FitchResult:
     changes: List[Tuple[PhyloNode, PhyloNode, int, Any, Any]]
     
     @property
+    def parsimony_score(self) -> int:
+        """Alias for tree_length (API compatibility)."""
+        return self.tree_length
+
+    @property
     def average_length(self) -> float:
         """平均树长"""
         if not self.site_scores:
@@ -92,32 +97,33 @@ class FitchResult:
     def consistency_index(self) -> float:
         """
         一致性指数 (Consistency Index)
-        
+
         CI = m / L
-        
-        其中 m 为最小可能变化数，L 为实际树长。
+
+        其中 m 为简约信息位点数（至少有2个不同状态的位点数），L 为实际树长。
         """
-        m = len(self.site_scores)  # 每个位点最少变化1次
+        # Count parsimony-informative sites (sites with >= 2 distinct states)
+        m = sum(1 for s in self.site_scores if s > 0)
         if self.tree_length == 0:
-            return float('inf')
+            return 1.0
         return m / self.tree_length
-    
+
     @property
     def retention_index(self) -> float:
         """
         留存指数 (Retention Index)
-        
+
         RI = (g - s) / (g - m)
-        
-        其中 g 为最大可能同源，s 为实际简约变化，m 为最小可能变化。
+
+        Simplified: g = total sites, m = informative sites, s = tree length.
         """
-        g = len(self.site_scores)  # 简化计算
-        m = len(self.site_scores)
+        g = len(self.site_scores)
+        m = sum(1 for s in self.site_scores if s > 0)
         s = self.tree_length
-        
+
         if g - m == 0:
             return 1.0
-        return (g - s) / (g - m)
+        return max(0.0, (g - s) / (g - m))
 
 
 class FitchAlgorithm:
@@ -142,7 +148,11 @@ class FitchAlgorithm:
     
     def __init__(self):
         self._logger = logging.getLogger(f"{__name__}.Fitch")
-    
+
+    def run(self, tree, sequences, **kwargs):
+        """Alias for compute() for API consistency."""
+        return self.compute(tree, sequences, **kwargs)
+
     def compute(
         self,
         tree: PhyloTree,
@@ -343,50 +353,33 @@ class FitchAlgorithm:
             [(父节点, 子节点, 位点索引, 父状态, 子状态)] 变化列表
         """
         changes: List[Tuple[PhyloNode, PhyloNode, int, Any, Any]] = []
-        
+        site_idx = -1  # sentinel; real index passed from caller context
+
         def _up_from(node: PhyloNode, parent_state: Optional[Any]) -> Optional[Any]:
-            """
-            递归上推
-            
-            Parameters:
-                node: 当前节点
-                parent_state: 父节点确定的状态
-            
-            Returns:
-                当前节点的确定状态
-            """
+            nonlocal changes
             current_states = node_states.get(node, set())
-            
+
             if not current_states:
-                # 无状态信息
                 return parent_state
-            
-            # 确定当前节点状态
+
             if parent_state is not None and parent_state in current_states:
                 current_state = parent_state
             else:
-                # 选择任意状态
                 current_state = next(iter(current_states))
-                
-                # 记录变化
                 if parent_state is not None and current_state != parent_state:
-                    # 需要知道位点索引，这里简化处理
-                    pass
-            
-            # 递归处理子节点
+                    changes.append((node.parent if node.parent else node, node, site_idx, parent_state, current_state))
+
             for child in node.children:
                 _up_from(child, current_state)
-            
+
             return current_state
-        
-        # 从根开始
+
         root_states = node_states.get(node, set())
         root_state = next(iter(root_states)) if root_states else None
-        
-        # 递归处理
+
         for child in node.children:
             _up_from(child, root_state)
-        
+
         return changes
     
     def _estimate_ancestral_states(

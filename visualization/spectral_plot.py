@@ -13,6 +13,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any
@@ -22,6 +23,8 @@ from matplotlib.figure import Figure
 from stratigraphy.spectral_analysis import SpectralResult
 from config.colors import get_color_scheme
 
+logger = logging.getLogger(__name__)
+
 
 class SpectralPlotter:
     """
@@ -30,10 +33,22 @@ class SpectralPlotter:
     
     def __init__(self) -> None:
         """Initialize the spectral plotter."""
+        self._logger = logging.getLogger(f"{__name__}.SpectralPlotter")
+        self._logger.info("SpectralPlotter initialized")
         self._style = 'seaborn-v0_8-paper'
         self._figure_size = (10, 6)
         self._dpi = 300
         self._font_size = 10
+
+    def _apply_style(self) -> None:
+        """Apply matplotlib style with fallback for older versions."""
+        try:
+            plt.style.use(self._style)
+        except OSError:
+            try:
+                plt.style.use(self._style.replace('v0_8-', ''))
+            except OSError:
+                pass
     
     def plot_periodogram(
         self,
@@ -54,10 +69,14 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
-        
+        self._apply_style()
+        self._logger.info(
+            f"plot_periodogram called: n_frequencies={len(result.frequencies)}, "
+            f"peak_period={result.peak_period}"
+        )
+
         fig, axes = plt.subplots(2, 1, figsize=self._figure_size, gridspec_kw={'height_ratios': [3, 1]})
-        
+
         # Main periodogram
         ax1 = axes[0]
         
@@ -139,10 +158,13 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
-        
+        self._apply_style()
+        self._logger.info(
+            f"plot_frequency_spectrum called: n_frequencies={len(result.frequencies)}"
+        )
+
         fig, ax = plt.subplots(figsize=self._figure_size)
-        
+
         ax.plot(
             result.frequencies,
             result.power,
@@ -195,10 +217,14 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
-        
+        self._apply_style()
+        self._logger.info(
+            f"plot_spectral_summary called: n_frequencies={len(result.frequencies)}, "
+            f"n_peaks={len(peaks) if peaks else 0}"
+        )
+
         fig = plt.figure(figsize=(12, 8))
-        
+
         # Create grid
         gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
         

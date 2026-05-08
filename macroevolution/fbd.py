@@ -81,6 +81,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import logging
 from enum import Enum, auto
+from scipy import stats
 
 logger = logging.getLogger(__name__)
 
@@ -390,17 +391,29 @@ class GillespieSimulator:
         """计算多样性随时间变化"""
         if not self._events:
             return np.array([])
-        
+
         times = sorted(set([self._current_time] + [e.time for e in self._events]))
-        
-        # 计算每个时间点的多样性
+
+        # Build event lookup: time -> (births, deaths)
+        from collections import Counter
+        births = Counter()
+        deaths = Counter()
+        for e in self._events:
+            if hasattr(e, 'event_type'):
+                if e.event_type == FBDEventType.BIRTH:
+                    births[e.time] += 1
+                elif e.event_type == FBDEventType.DEATH:
+                    deaths[e.time] += 1
+
         diversity = []
-        current_n = self._lineages[0].birth_time  # 初始数量
-        
-        # 简化计算
+        # Count initial lineages (those created at initialize time, with parent_id=None)
+        initial_lineages = sum(1 for l in self._lineages
+                               if l.parent_id is None and l.birth_time == self._lineages[0].birth_time)
+        current_n = initial_lineages
         for t in times:
-            diversity.append(current_n)
-        
+            current_n += births.get(t, 0) - deaths.get(t, 0)
+            diversity.append(max(0, current_n))
+
         return np.array(diversity)
 
 
@@ -590,7 +603,7 @@ def simulate_fbd_process(
             speciation_rate=lambda_,
             extinction_rate=mu,
             fossilization_rate=psi,
-            random_seed=random_seed + i if random_seed else None
+            random_seed=random_seed + i if random_seed is not None else None
         )
         sim.initialize(n_lineages=1)
         sim.run(duration=duration)

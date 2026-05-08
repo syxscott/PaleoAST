@@ -252,6 +252,7 @@ class SemiLandmarkSlider:
         history = []
         
         prev_mean = None
+        semi_mean_diff = 0.0
         n_iterations = 0
         
         for iteration in range(self._max_iterations):

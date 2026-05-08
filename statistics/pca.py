@@ -28,6 +28,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -45,6 +46,9 @@ from utils.matrix_ops import (
     standardize_matrix,
     ensure_matrix,
 )
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,12 +109,12 @@ class PCAResult:
             Formatted summary string
         """
         lines = [
-            "Principal Component Analysis Results",
+            _("Principal Component Analysis Results"),
             "=" * 50,
-            f"Method: {self.method.upper()}",
-            f"Number of components: {self.n_components}",
+            _("Method: {0}").format(self.method.upper()),
+            _("Number of components: {0}").format(self.n_components),
             "",
-            "Component | Eigenvalue | Variance % | Cumulative %",
+            _("Component | Eigenvalue | Variance % | Cumulative %"),
             "-" * 50,
         ]
         
@@ -172,8 +176,10 @@ class PCAAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the PCA analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.PCAAnalyzer")
         self._lock = threading.RLock()
         self._last_result: Optional[PCAResult] = None
+        self._logger.info("PCAAnalyzer initialized")
     
     def analyze(
         self,
@@ -202,8 +208,12 @@ class PCAAnalyzer:
         with self._lock:
             # Validate and prepare data
             X = validate_data_array(data, allow_nan=True, name="PCA_input")
-            
+
             n_samples, n_variables = X.shape
+            self._logger.info(
+                f"PCA analyze started: {n_samples} samples x {n_variables} variables, "
+                f"n_components={n_components}, method={method}"
+            )
             
             # Handle missing values
             if impute_missing and np.any(np.isnan(X)):
@@ -234,8 +244,12 @@ class PCAAnalyzer:
                 raise ValueError(
                     f"Unknown PCA method: '{method}'. Use 'covariance' or 'correlation'."
                 )
-            
+
             self._last_result = result
+            self._logger.info(
+                f"PCA completed: top eigenvalues={result.eigenvalues[:3].tolist()}, "
+                f"cumulative variance={result.cumulative_variance[-1]:.2f}%"
+            )
             return result
     
     def _pca_covariance(
@@ -258,7 +272,8 @@ class PCAAnalyzer:
         # Step 1: Center the data
         mean_vector = np.mean(X, axis=0)
         Z = X - mean_vector
-        
+        logger.debug(f"Covariance PCA: data centered, mean range=[{mean_vector.min():.4f}, {mean_vector.max():.4f}]")
+
         # Step 2: Compute covariance matrix using SVD for numerical stability
         # For centered data: S = (1/(n-1)) * Z^T * Z
         # SVD of Z: Z = U * Σ * V^T
@@ -342,7 +357,8 @@ class PCAAnalyzer:
         
         # Standardize: Z = (X - μ) / σ
         Z = (X - mean_vector) / std_vector
-        
+        logger.debug(f"Correlation PCA: data standardized, std range=[{std_vector.min():.4f}, {std_vector.max():.4f}]")
+
         # Step 2: SVD of standardized data
         try:
             U, singular_values, Vt = np.linalg.svd(Z, full_matrices=False)

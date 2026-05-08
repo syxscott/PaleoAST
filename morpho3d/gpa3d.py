@@ -107,6 +107,11 @@ class GPA3DResult:
     procrustes_distances: Optional[np.ndarray] = None
     
     @property
+    def aligned_configurations(self) -> np.ndarray:
+        """Alias: stacked array of aligned configs (n_samples, n_landmarks, dims)."""
+        return np.stack(self.aligned_configs)
+
+    @property
     def n_samples(self) -> int:
         """样本数量"""
         return len(self.aligned_configs)
@@ -195,7 +200,7 @@ class GPA3D:
             ValueError: 构型形状不一致
         """
         # 验证输入
-        if not configs:
+        if configs is None or len(configs) == 0:
             raise ValueError("No configurations provided")
         
         n_samples = len(configs)
@@ -227,7 +232,7 @@ class GPA3D:
         prev_mean = None
         n_iterations = 0
         
-        for iteration in range(self._max_iterations):
+        for iteration in range(self._max_iter):
             n_iterations = iteration + 1
             
             # 步骤1: 计算当前均值

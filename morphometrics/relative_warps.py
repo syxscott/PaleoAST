@@ -31,6 +31,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any
@@ -38,6 +39,9 @@ from dataclasses import dataclass
 import threading
 
 from utils.exceptions import ComputationError
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,14 +62,14 @@ class RelativeWarpsResult:
     def summary(self) -> str:
         """Generate summary text."""
         lines = [
-            "Relative Warps Analysis Results",
+            _("Relative Warps Analysis Results"),
             "=" * 50,
-            f"Number of specimens: {self.relative_warps.shape[0]}",
-            f"Number of landmarks: {self.n_landmarks}",
-            f"Dimensionality: {self.n_dims}D",
-            f"Number of components: {self.n_components}",
+            _("Number of specimens: {0}").format(self.relative_warps.shape[0]),
+            _("Number of landmarks: {0}").format(self.n_landmarks),
+            _("Dimensionality: {0}D").format(self.n_dims),
+            _("Number of components: {0}").format(self.n_components),
             "",
-            "RW  | Eigenvalue | Variance % | Cumulative",
+            _("RW  | Eigenvalue | Variance % | Cumulative"),
             "-" * 50,
         ]
         
@@ -89,6 +93,8 @@ class RelativeWarpsAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the Relative Warps analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.RelativeWarpsAnalyzer")
+        self._logger.info("RelativeWarpsAnalyzer initialized")
         self._lock = threading.RLock()
         self._last_result: Optional[RelativeWarpsResult] = None
     
@@ -115,7 +121,11 @@ class RelativeWarpsAnalyzer:
                 )
             
             n_specimens, n_landmarks, n_dims = aligned_configurations.shape
-            
+            self._logger.info(
+                f"Relative Warps analysis started: n_specimens={n_specimens}, "
+                f"n_landmarks={n_landmarks}, n_dimensions={n_dims}"
+            )
+
             # Determine number of components
             max_components = min(n_specimens - 1, n_landmarks * n_dims)
             if n_components is None:
@@ -160,7 +170,12 @@ class RelativeWarpsAnalyzer:
             total_variance = np.sum(eigenvalues)
             explained_variance = (eigenvalues / total_variance) * 100
             cumulative_variance = np.cumsum(explained_variance)
-            
+            self._logger.info(
+                f"Relative Warps analysis completed: {n_components} components, "
+                f"PC1 variance={explained_variance[0]:.2f}%, "
+                f"cumulative={cumulative_variance[-1]:.2f}%"
+            )
+
             result = RelativeWarpsResult(
                 relative_warps=relative_warps,
                 eigenvalues=eigenvalues,

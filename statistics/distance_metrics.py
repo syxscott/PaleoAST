@@ -19,6 +19,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any, Union, List
@@ -27,6 +28,9 @@ import threading
 
 from utils.exceptions import MatrixDimensionError
 from utils.validators import validate_data_array
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,13 +55,13 @@ class DistanceMatrix:
         """Generate summary text."""
         n = self.matrix.shape[0]
         return (
-            f"Distance Matrix\n"
+            f"{_('Distance Matrix')}\n"
             f"{'=' * 40}\n"
-            f"Metric: {self.metric}\n"
-            f"Size: {n} × {n}\n"
-            f"Min distance: {np.min(self.matrix[np.triu_indices(n, k=1)]):.4f}\n"
-            f"Max distance: {np.max(self.matrix):.4f}\n"
-            f"Mean distance: {np.mean(self.matrix[np.triu_indices(n, k=1)]):.4f}"
+            f"{_('Metric: {0}').format(self.metric)}\n"
+            f"{_('Size: {0} x {1}').format(n, n)}\n"
+            f"{_('Min distance: {0}').format(f'{np.min(self.matrix[np.triu_indices(n, k=1)]):.4f}')}\n"
+            f"{_('Max distance: {0}').format(f'{np.max(self.matrix):.4f}')}\n"
+            f"{_('Mean distance: {0}').format(f'{np.mean(self.matrix[np.triu_indices(n, k=1)]):.4f}')}"
         )
 
 
@@ -88,6 +92,9 @@ def compute_distance_matrix(
     # Validate data
     X = validate_data_array(data, allow_nan=False, name="distance_input")
     n = X.shape[0]
+    logger.info(
+        f"Computing distance matrix: {X.shape[0]}x{X.shape[1]} data, metric={metric}"
+    )
     
     # Default labels
     if labels is None:
@@ -98,7 +105,8 @@ def compute_distance_matrix(
     
     # Compute based on metric
     metric_lower = metric.lower()
-    
+    logger.debug(f"Distance computation dispatching to '{metric_lower}' metric")
+
     if metric_lower == 'euclidean':
         D = _euclidean_distance_matrix(X)
     elif metric_lower == 'manhattan':
@@ -113,7 +121,11 @@ def compute_distance_matrix(
         D = _chebychev_distance_matrix(X)
     else:
         raise ValueError(f"Unknown distance metric: '{metric}'")
-    
+
+    logger.info(
+        f"Distance matrix computed: {n}x{n}, metric={metric}, "
+        f"min={np.min(D[np.triu_indices(n, k=1)]):.4f}, max={np.max(D):.4f}"
+    )
     return DistanceMatrix(matrix=D, metric=metric, labels=labels)
 
 

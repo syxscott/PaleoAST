@@ -15,6 +15,7 @@ import numpy as np
 import numpy.typing as npt
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
+from config.i18n import _
 
 
 @dataclass
@@ -144,27 +145,27 @@ class DiversityResult:
     def summary(self) -> str:
         """Generate text summary of diversity results."""
         lines = [
-            f"Diversity Analysis: {self.sample_name}",
+            _("Diversity Analysis: {0}").format(self.sample_name),
             "=" * 50,
-            f"Taxa Richness (S): {self.taxa_count}",
-            f"Total Individuals (N): {self.individuals}",
+            _("Taxa Richness (S): {0}").format(self.taxa_count),
+            _("Total Individuals (N): {0}").format(self.individuals),
             ""
         ]
-        
+
         if 'shannon' in self.indices:
-            lines.append(f"Shannon Index (H'): {self.indices['shannon'].value:.4f}")
-        
+            lines.append(_("Shannon Index (H'): {0}").format(f"{self.indices['shannon'].value:.4f}"))
+
         if 'simpson' in self.indices:
-            lines.append(f"Simpson Index (1-D): {self.indices['simpson'].value:.4f}")
-        
+            lines.append(_("Simpson Index (1-D): {0}").format(f"{self.indices['simpson'].value:.4f}"))
+
         if self.evenness is not None:
-            lines.append(f"Pielou's Evenness (J): {self.evenness:.4f}")
-        
+            lines.append(_("Pielou's Evenness (J): {0}").format(f"{self.evenness:.4f}"))
+
         if 'margalef' in self.indices:
-            lines.append(f"Margalef Index: {self.indices['margalef'].value:.4f}")
-        
+            lines.append(_("Margalef Index: {0}").format(f"{self.indices['margalef'].value:.4f}"))
+
         if 'fisher_alpha' in self.indices:
-            lines.append(f"Fisher's Alpha: {self.indices['fisher_alpha'].value:.4f}")
+            lines.append(_("Fisher's Alpha: {0}").format(f"{self.indices['fisher_alpha'].value:.4f}"))
         
         return "\n".join(lines)
     

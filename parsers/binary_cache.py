@@ -123,7 +123,7 @@ class BinaryCacheHeader:
         # Q = unsigned long long (8 bytes)
         
         header_data = struct.pack(
-            '!IIIIIII QQII',
+            '!IIIIII QQII',
             self.magic,
             self.version,
             self.flags,
@@ -158,7 +158,7 @@ class BinaryCacheHeader:
                 f"Header data too short: expected {cls.HEADER_SIZE}, got {len(data)}"
             )
         
-        unpacked = struct.unpack('!IIIIIII QQII', data[:56])
+        unpacked = struct.unpack('!IIIIII QQII', data[:48])
         
         return cls(
             magic=unpacked[0],

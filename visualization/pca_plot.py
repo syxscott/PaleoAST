@@ -14,6 +14,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any, Tuple
@@ -24,6 +25,8 @@ import matplotlib
 from statistics.pca import PCAResult
 from config.colors import CATEGORY_COLORS, get_color_scheme
 
+logger = logging.getLogger(__name__)
+
 
 class PCAPlotter:
     """
@@ -32,6 +35,8 @@ class PCAPlotter:
     
     def __init__(self) -> None:
         """Initialize the PCA plotter."""
+        self._logger = logging.getLogger(f"{__name__}.PCAPlotter")
+        self._logger.info("PCAPlotter initialized")
         self._style = 'seaborn-v0_8-paper'
         self._figure_size = (8, 6)
         self._dpi = 300
@@ -76,15 +81,20 @@ class PCAPlotter:
         """
         # Set style
         self.set_style(self._style)
-        
+
         # Create figure
         fig, ax = plt.subplots(figsize=self._figure_size)
-        
+
         # Get scores
         scores = result.get_scores(n_components=max(pc1, pc2) + 1)
         x = scores[:, pc1]
         y = scores[:, pc2]
-        
+        self._logger.info(
+            f"plot_scores called: n_points={len(x)}, "
+            f"n_groups={len(set(groups)) if groups else 0}, "
+            f"PC{pc1+1} vs PC{pc2+1}"
+        )
+
         # Plot points
         if groups is not None:
             unique_groups = sorted(set(groups))
@@ -366,7 +376,7 @@ class PCAPlotter:
             
             ellipse = Ellipse(
                 (mean_x, mean_y),
-                width, height, angle,
+                width, height, angle=angle,
                 fill=False,
                 edgecolor=colors[idx],
                 linewidth=2,

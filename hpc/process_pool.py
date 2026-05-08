@@ -318,15 +318,16 @@ class ProcessPool:
         for i in range(n):
             for j in range(i + 1, n):
                 pairs.append((i, j))
-        
-        # 并行计算
+
+        # 并行计算 (pass matrix as second element of each item)
+        items = [((i, j), matrix) for (i, j) in pairs]
         distances = self.map(
             func=_compute_pair_distance,
-            items=pairs,
+            items=items,
             chunk_size=max(1, len(pairs) // (self._n_workers * 4)),
             callback=None
         )
-        
+
         # 构建距离矩阵
         dist_matrix = np.zeros((n, n), dtype=np.float64)
         for (i, j), d in zip(pairs, distances):

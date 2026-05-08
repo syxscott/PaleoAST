@@ -30,9 +30,12 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple, Union
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
@@ -43,7 +46,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import (
     Qt, QSize, QRect, QPoint, pyqtSignal, pyqtSlot,
-    QAbstractTableModel, QModelIndex, QVariant, QMimeData
+    QAbstractTableModel, QModelIndex, QVariant, QMimeData, QItemSelection
 )
 from PyQt6.QtGui import (
     QPainter, QPen, QBrush, QColor, QFont, QCursor, QPixmap,
@@ -51,6 +54,8 @@ from PyQt6.QtGui import (
 )
 
 from models.state_manager import get_state_manager
+from models.data_matrix import DataMatrix
+from config.i18n import _
 
 
 class MarkerStyle(Enum):
@@ -387,15 +392,15 @@ class ColumnHeaderMenu(QMenu):
         self.clear()
         
         # Group operations
-        group_menu = self.addMenu("Set as Group Column")
+        group_menu = self.addMenu(_("Set as Group Column"))
         for i in range(8):
-            action = group_menu.addAction(f"Group {i+1}")
+            action = group_menu.addAction(_("Group {0}").format(i+1))
             action.setData(('group', i))
         
         self.addSeparator()
         
         # Data type
-        type_menu = self.addMenu("Set Data Type")
+        type_menu = self.addMenu(_("Set Data Type"))
         for dtype in DataType:
             action = type_menu.addAction(dtype.value.capitalize())
             action.setData(('type', dtype))
@@ -403,33 +408,33 @@ class ColumnHeaderMenu(QMenu):
         self.addSeparator()
         
         # Transformations
-        transform_menu = self.addMenu("Transform Column")
-        
-        log_action = transform_menu.addAction("Log Transform: x' = ln(x + 1)")
+        transform_menu = self.addMenu(_("Transform Column"))
+
+        log_action = transform_menu.addAction(_("Log Transform: x' = ln(x + 1)"))
         log_action.setData(('transform', 'log'))
-        
-        zscore_action = transform_menu.addAction("Z-score: x' = (x - μ) / σ")
+
+        zscore_action = transform_menu.addAction(_("Z-score: x' = (x - μ) / σ"))
         zscore_action.setData(('transform', 'zscore'))
-        
-        center_action = transform_menu.addAction("Center: x' = x - μ")
+
+        center_action = transform_menu.addAction(_("Center: x' = x - μ"))
         center_action.setData(('transform', 'center'))
-        
-        scale_action = transform_menu.addAction("Scale: x' = x / σ")
+
+        scale_action = transform_menu.addAction(_("Scale: x' = x / σ"))
         scale_action.setData(('transform', 'scale'))
         
         self.addSeparator()
         
         # Sort operations
-        sort_asc_action = self.addAction("Sort Ascending")
+        sort_asc_action = self.addAction(_("Sort Ascending"))
         sort_asc_action.setData(('sort', 'asc'))
-        
-        sort_desc_action = self.addAction("Sort Descending")
+
+        sort_desc_action = self.addAction(_("Sort Descending"))
         sort_desc_action.setData(('sort', 'desc'))
-        
+
         self.addSeparator()
-        
+
         # Delete column
-        delete_action = self.addAction("Delete Column")
+        delete_action = self.addAction(_("Delete Column"))
         delete_action.setData(('delete',))
 
 
@@ -458,7 +463,7 @@ class RowHeaderMenu(QMenu):
         self.clear()
         
         # Marker style
-        marker_menu = self.addMenu("Set Marker")
+        marker_menu = self.addMenu(_("Set Marker"))
         for style in MarkerStyle:
             action = marker_menu.addAction(style.value.capitalize())
             action.setData(('marker', style))
@@ -466,7 +471,7 @@ class RowHeaderMenu(QMenu):
         self.addSeparator()
         
         # Row color
-        color_menu = self.addMenu("Set Color")
+        color_menu = self.addMenu(_("Set Color"))
         colors = [
             ("Red", "#E74C3C"),
             ("Orange", "#F39C12"),
@@ -483,18 +488,18 @@ class RowHeaderMenu(QMenu):
         self.addSeparator()
         
         # Assign to group
-        group_menu = self.addMenu("Assign to Group")
+        group_menu = self.addMenu(_("Assign to Group"))
         for i in range(8):
-            action = group_menu.addAction(f"Group {i+1}")
+            action = group_menu.addAction(_("Group {0}").format(i+1))
             action.setData(('group', i))
         
         self.addSeparator()
         
         # Hide/Show
-        hide_action = self.addAction("Hide Row")
+        hide_action = self.addAction(_("Hide Row"))
         hide_action.setData(('hide',))
-        
-        show_all_action = self.addAction("Show All Rows")
+
+        show_all_action = self.addAction(_("Show All Rows"))
         show_all_action.setData(('show_all',))
 
 
@@ -540,10 +545,12 @@ class ScientificSpreadsheet(QWidget):
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        
+        self._logger = logging.getLogger(f"{__name__}.ScientificSpreadsheet")
+        self._logger.info("ScientificSpreadsheet initialized")
+
         # State manager reference
         self._state = get_state_manager()
-        
+
         # Data
         self._data: Optional[np.ndarray] = None
         self._row_labels: List[str] = []
@@ -564,7 +571,8 @@ class ScientificSpreadsheet(QWidget):
         self._setup_connections()
         
         # Connect to state manager
-        self._state.data_changed.connect(self._on_state_data_changed)
+            # Note: StateManager doesn't inherit from QObject, so it has no signals
+            # self._state.data_changed.connect(self._on_state_data_changed)
     
     def _setup_ui(self) -> None:
         """Setup UI components."""
@@ -712,7 +720,10 @@ class ScientificSpreadsheet(QWidget):
         """
         self._data = np.array(data, dtype=np.float64)
         n_rows, n_cols = self._data.shape
-        
+        self._logger.info(
+            f"load_data called: n_rows={n_rows}, n_cols={n_cols}"
+        )
+
         # Generate labels if not provided
         if row_labels is None:
             self._row_labels = [f"Sample_{i+1}" for i in range(n_rows)]
@@ -751,7 +762,9 @@ class ScientificSpreadsheet(QWidget):
         self._delegate.set_metadata(self._row_metadata, self._col_metadata)
         
         # Update state manager
-        self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
         
         # Resize columns to content
         self._table.resizeColumnsToContents()
@@ -907,11 +920,14 @@ class ScientificSpreadsheet(QWidget):
         """
         if self._data is None or col < 0 or col >= self._data.shape[1]:
             return
-        
+
+        self._logger.info(
+            f"Column transform: col={col}, transform='{transform}'"
+        )
         # Save for undo
         self._undo_stack.append(('transform', col, transform, self._data[:, col].copy()))
         self._redo_stack.clear()
-        
+
         col_data = self._data[:, col]
         
         if transform == 'log':
@@ -958,7 +974,9 @@ class ScientificSpreadsheet(QWidget):
             self._table.setItem(i, col, item)
         
         # Update state
-        self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
         
         # Emit signal
         self.columnTransformed.emit(col, transform)
@@ -968,6 +986,9 @@ class ScientificSpreadsheet(QWidget):
         """Sort data by column."""
         if self._data is None or col < 0 or col >= self._data.shape[1]:
             return
+        self._logger.info(
+            f"Sort by column: col={col}, ascending={ascending}"
+        )
         
         # Get sort indices
         sort_data = self._data[:, col]
@@ -991,14 +1012,17 @@ class ScientificSpreadsheet(QWidget):
         self._table.blockSignals(False)
         
         # Update state
-        self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
         self.dataChanged.emit()
     
     def _delete_column(self, col: int) -> None:
         """Delete column from data."""
         if self._data is None or col < 0 or col >= self._data.shape[1]:
             return
-        
+        self._logger.info(f"Delete column: col={col}")
+
         # Save for undo
         self._undo_stack.append(('delete_col', col, self._data[:, col].copy(), 
                                 self._col_labels[col], self._col_metadata.get(col, {})))
@@ -1022,7 +1046,9 @@ class ScientificSpreadsheet(QWidget):
         self._table.setHorizontalHeaderLabels(self._col_labels)
         
         # Update state
-        self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
         self.dataChanged.emit()
     
     def _on_selection_changed(
@@ -1059,7 +1085,9 @@ class ScientificSpreadsheet(QWidget):
             self._redo_stack.clear()
             
             # Update state
-            self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+            self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
             self.dataChanged.emit()
             
         except ValueError:
@@ -1127,9 +1155,11 @@ class ScientificSpreadsheet(QWidget):
             return
         
         operation = self._undo_stack.pop()
-        
+
         if operation[0] == 'transform':
             _, col, transform, old_data = operation
+            # Push redo info
+            self._redo_stack.append(('transform', col, transform))
             # Restore old data
             self._data[:, col] = old_data
             # Update table
@@ -1137,14 +1167,16 @@ class ScientificSpreadsheet(QWidget):
                 item = QTableWidgetItem(str(old_data[i]))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self._table.setItem(i, col, item)
-        
+
         elif operation[0] == 'delete_col':
             _, col, col_data, label, metadata = operation
+            # Push redo info
+            self._redo_stack.append(('delete_col', col))
             # Reinsert column
             self._data = np.insert(self._data, col, col_data, axis=1)
             self._col_labels.insert(col, label)
             self._col_metadata[col] = metadata
-            
+
             # Update table
             self._table.insertColumn(col)
             self._table.setHorizontalHeaderLabels(self._col_labels)
@@ -1152,23 +1184,46 @@ class ScientificSpreadsheet(QWidget):
                 item = QTableWidgetItem(str(col_data[i]))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self._table.setItem(i, col, item)
-        
+
         elif operation[0] == 'cell':
             _, row, col, old_value = operation
+            # Save current value for redo
+            self._redo_stack.append(('cell', row, col, self._data[row, col]))
             self._data[row, col] = old_value
             item = QTableWidgetItem(str(old_value))
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self._table.setItem(row, col, item)
-        
+
         # Update state
-        self._state.set_data_matrix(self._data, self._row_labels, self._col_labels)
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+        )
         self.dataChanged.emit()
     
     def redo(self) -> None:
         """Redo last undone operation."""
         if not self._redo_stack:
             return
-        
+
         operation = self._redo_stack.pop()
-        # Similar to undo but in reverse
-        # (Implementation would mirror undo logic)
+
+        if operation[0] == 'transform':
+            _, col, transform = operation
+            self._apply_transform(col, transform)
+
+        elif operation[0] == 'delete_col':
+            _, col = operation
+            self._delete_column(col)
+
+        elif operation[0] == 'cell':
+            _, row, col, new_value = operation
+            # Save current value for undo
+            self._undo_stack.append(('cell', row, col, self._data[row, col]))
+            self._data[row, col] = new_value
+            item = QTableWidgetItem(str(new_value))
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._table.setItem(row, col, item)
+            self._state.set_data_matrix(
+                DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+            )
+            self.dataChanged.emit()

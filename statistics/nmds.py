@@ -26,6 +26,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any, Tuple
@@ -33,9 +34,12 @@ from dataclasses import dataclass
 import threading
 import random
 
-from utils.exceptions import ComputationError, ConvergenceError
+from utils.exceptions import ComputationError, ConvergenceError, MatrixDimensionError
 from utils.validators import validate_data_array
 from config.constants import NMDS_MAX_ITERATIONS, NMDS_RANDOM_RESTARTS
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,13 +59,13 @@ class NMDSResult:
     def summary(self) -> str:
         """Generate summary text."""
         return (
-            f"Non-metric MDS Results\n"
+            f"{_('Non-metric MDS Results')}\n"
             f"{'=' * 40}\n"
-            f"Distance metric: {self.metric}\n"
-            f"Final stress: {self.stress:.4f}\n"
-            f"Iterations: {self.n_iterations}\n"
-            f"Converged: {self.converged}\n"
-            f"Random restarts: {self.n_restarts}"
+            f"{_('Distance metric: {0}').format(self.metric)}\n"
+            f"{_('Final stress: {0}').format(f'{self.stress:.4f}')}\n"
+            f"{_('Iterations: {0}').format(self.n_iterations)}\n"
+            f"{_('Converged: {0}').format('Yes' if self.converged else 'No')}\n"
+            f"{_('Random restarts: {0}').format(self.n_restarts)}"
         )
 
 
@@ -76,11 +80,13 @@ class NMDSAnalyzer:
     
     def __init__(self) -> None:
         """Initialize the NMDS analyzer."""
+        self._logger = logging.getLogger(f"{__name__}.NMDSAnalyzer")
         self._lock = threading.RLock()
         self._last_result: Optional[NMDSResult] = None
         self._max_iterations = NMDS_MAX_ITERATIONS
         self._n_restarts = NMDS_RANDOM_RESTARTS
         self._tolerance = 1e-6
+        self._logger.info("NMDSAnalyzer initialized")
     
     def analyze(
         self,
@@ -108,8 +114,12 @@ class NMDSAnalyzer:
         with self._lock:
             # Validate input
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
-            
+
             n = D.shape[0]
+            self._logger.info(
+                f"NMDS analyze started: distance matrix {D.shape[0]}x{D.shape[1]}, "
+                f"n_dimensions={n_dimensions}, n_restarts={n_restarts}, metric={metric}"
+            )
             
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError(
@@ -133,15 +143,20 @@ class NMDSAnalyzer:
             for restart in range(n_restarts):
                 if random_seed is not None:
                     np.random.seed(random_seed + restart)
-                
+
                 # Initialize random configuration
                 X = np.random.randn(n, n_dimensions) * 0.01
-                
+                self._logger.debug(f"NMDS restart {restart + 1}/{n_restarts} started")
+
                 # Run SMACOF optimization
                 result = self._smacof(
                     D, X, max_iterations, restart
                 )
-                
+                self._logger.debug(
+                    f"NMDS restart {restart + 1}/{n_restarts} finished: "
+                    f"stress={result['stress']:.6f}, iterations={result['n_iterations']}"
+                )
+
                 if result['stress'] < best_stress:
                     best_stress = result['stress']
                     best_coordinates = result['coordinates']
@@ -158,8 +173,22 @@ class NMDSAnalyzer:
                 metric=metric,
                 n_restarts=n_restarts
             )
-            
+
             self._last_result = nmds_result
+            self._logger.info(
+                f"NMDS completed: final stress={best_stress:.6f}, "
+                f"iterations={best_iterations}, converged={nmds_result.converged}"
+            )
+            if best_stress > 0.20:
+                self._logger.warning(
+                    f"NMDS poor fit: stress={best_stress:.4f} > 0.20, "
+                    f"consider increasing n_restarts or n_dimensions"
+                )
+            if not nmds_result.converged:
+                self._logger.error(
+                    f"NMDS did not converge after {n_restarts} restarts, "
+                    f"best stress={best_stress:.6f}"
+                )
             return nmds_result
     
     def _smacof(
@@ -182,17 +211,28 @@ class NMDSAnalyzer:
         for iteration in range(max_iterations):
             # Compute distances in current configuration
             D_hat = self._compute_distances(X)
-            
+
             # Compute stress
             numerator = np.sum((D - D_hat) ** 2)
             denominator = np.sum(D ** 2)
             stress = np.sqrt(numerator / denominator)
             stress_history.append(stress)
-            
+
+            # Log convergence progress every 50 iterations
+            if iteration > 0 and iteration % 50 == 0:
+                logger.debug(
+                    f"SMACOF restart={restart_id} iteration={iteration}: "
+                    f"stress={stress:.6f}, change={abs(stress_history[-1] - stress_history[-2]):.8f}"
+                )
+
             # Check convergence
             if iteration > 0:
                 stress_change = abs(stress_history[-1] - stress_history[-2])
                 if stress_change < self._tolerance:
+                    logger.debug(
+                        f"SMACOF restart={restart_id} converged at iteration {iteration}: "
+                        f"stress={stress:.6f}"
+                    )
                     break
             
             # Compute stress weights (avoid division by zero)

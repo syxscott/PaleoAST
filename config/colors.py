@@ -361,3 +361,33 @@ DEFAULT_EDGE_COLOR: Final[str] = "#000000"
 
 DEFAULT_LINE_COLOR: Final[str] = "#333333"
 """Default line color for vector graphic strokes."""
+
+
+# =============================================================================
+# COMPATIBILITY ALIASES (for backward compatibility)
+# =============================================================================
+
+# Alias for CATEGORY_COLORS
+CATEGORY_COLORS: Final[list] = CHART_COLORS
+"""
+Alias for CHART_COLORS for backward compatibility.
+"""
+
+# Color scheme getter
+def get_color_scheme(name: str = "default") -> list:
+    """
+    Get color scheme by name.
+    
+    Parameters:
+        name: Scheme name ('default', 'colorblind', 'extended')
+    
+    Returns:
+        List of hex color codes
+    """
+    schemes = {
+        "default": CHART_COLORS,
+        "colorblind": COLORBLIND_FRIENDLY_PALETTE,
+        "extended": CHART_COLORS_EXTENDED,
+        "ibm": IBM_COLORBLIND_SAFE,
+    }
+    return schemes.get(name, CHART_COLORS)

@@ -18,23 +18,18 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 
 from .tree import PhyloTree, PhyloNode
 from .fitch import FitchAlgorithm
-from .heuristic_search import HeuristicSearch, NNIOperator, TBROperator
+from .heuristic_search import HeuristicSearch, NNIOperation, TBROperation
 from .strict_consensus import StrictConsensusTree
 from .distance_methods import UPGMA, NeighborJoining
-from .likelihood import MaximumLikelihood, SubstitutionModel
-from .bootstrap import BootstrapAnalysis
 
 __all__ = [
     'PhyloTree',
     'PhyloNode',
     'FitchAlgorithm',
     'HeuristicSearch',
-    'NNIOperator',
-    'TBROperator',
+    'NNIOperation',
+    'TBROperation',
     'StrictConsensusTree',
     'UPGMA',
     'NeighborJoining',
-    'MaximumLikelihood',
-    'SubstitutionModel',
-    'BootstrapAnalysis',
 ]

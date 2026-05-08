@@ -38,16 +38,20 @@ class Mesh3D:
     def __post_init__(self):
         """验证网格数据"""
         if self.vertices.ndim != 2 or self.vertices.shape[1] != 3:
+            logger.error(f"Vertices must be (n, 3), got {self.vertices.shape}")
             raise ValueError(f"Vertices must be (n, 3), got {self.vertices.shape}")
-        
+
         if self.faces.ndim != 2 or self.faces.shape[1] != 3:
+            logger.error(f"Faces must be (n, 3), got {self.faces.shape}")
             raise ValueError(f"Faces must be (n, 3), got {self.faces.shape}")
-        
+
+        logger.info(f"Mesh3D created: {len(self.vertices)} vertices, {len(self.faces)} faces")
         if self.normals is None:
             self.compute_normals()
     
     def compute_normals(self) -> None:
         """计算顶点法向量"""
+        logger.debug(f"Computing vertex normals for {len(self.vertices)} vertices")
         n_vertices = len(self.vertices)
         normals = np.zeros((n_vertices, 3))
         
@@ -90,40 +94,46 @@ class Mesh3D:
     
     def compute_surface_area(self) -> float:
         """计算表面积"""
+        logger.debug(f"Computing surface area for {len(self.faces)} faces")
         total_area = 0.0
-        
+
         for face in self.faces:
             v0, v1, v2 = self.vertices[face]
             e1 = v1 - v0
             e2 = v2 - v0
             area = 0.5 * np.linalg.norm(np.cross(e1, e2))
             total_area += area
-        
+
+        logger.info(f"Surface area computed: {total_area:.4f}")
         return total_area
     
     def compute_volume(self) -> float:
         """计算体积 (假设闭合曲面)"""
+        logger.debug(f"Computing volume for {len(self.faces)} faces (assuming closed surface)")
         total_volume = 0.0
-        
+
         for face in self.faces:
             v0, v1, v2 = self.vertices[face]
-            
+
             # 四面体体积 = (1/6) * dot(v0, cross(v1, v2))
             vol = np.dot(v0, np.cross(v1, v2))
             total_volume += vol
-        
-        return abs(total_volume) / 6.0
+
+        volume = abs(total_volume) / 6.0
+        logger.info(f"Volume computed: {volume:.4f}")
+        return volume
     
     def sample_points(self, n_points: int) -> np.ndarray:
         """
         在曲面上采样点
-        
+
         参数:
             n_points: 采样点数
-        
+
         返回:
             采样点坐标 (n_points, 3)
         """
+        logger.info(f"Sampling {n_points} points on mesh surface ({len(self.faces)} faces)")
         # 计算每个面的面积权重
         areas = []
         for face in self.faces:
@@ -187,24 +197,29 @@ class SurfaceInterpolator:
     ) -> np.ndarray:
         """
         在查询点插值顶点值
-        
+
         参数:
             vertex_values: 顶点值 (n_vertices,)
             query_points: 查询点 (n_query, 3)
-        
+
         返回:
             插值值 (n_query,)
         """
         from scipy.spatial import KDTree
-        
+
+        self._logger.info(f"Interpolating values at {len(query_points)} query points from {len(self._mesh.vertices)} mesh vertices")
         tree = KDTree(self._mesh.vertices)
         
-        # 找最近顶点
-        distances, indices = tree.query(query_points)
-        
+        # 找最近顶点 (k=4 for IDW interpolation)
+        k = min(4, len(self._mesh.vertices))
+        distances, indices = tree.query(query_points, k=k)
+
+        if k == 1:
+            return vertex_values[indices]
+
         # 使用距离倒数加权平均
         weights = 1.0 / (distances + 1e-10)
-        
+
         interpolated = np.sum(
             weights * vertex_values[indices],
             axis=1

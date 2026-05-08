@@ -28,10 +28,14 @@ import numpy as np
 import numpy.typing as npt
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
+import logging
 import threading
 
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
+from config.i18n import _
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,15 +53,15 @@ class SpectralResult:
     def summary(self) -> str:
         """Generate summary text."""
         lines = [
-            "Spectral Analysis Results",
+            _("Spectral Analysis Results"),
             "=" * 50,
-            f"Number of frequencies: {len(self.frequencies)}",
+            _("Number of frequencies: {0}").format(len(self.frequencies)),
         ]
-        
+
         if self.peak_frequency is not None:
-            lines.append(f"Peak frequency: {self.peak_frequency:.6f}")
-            lines.append(f"Peak period: {self.peak_period:.4f}")
-            lines.append(f"Peak power: {self.peak_power:.4f}")
+            lines.append(_("Peak frequency: {0}").format(f"{self.peak_frequency:.6f}"))
+            lines.append(_("Peak period: {0}").format(f"{self.peak_period:.4f}"))
+            lines.append(_("Peak power: {0}").format(f"{self.peak_power:.4f}"))
         
         return "\n".join(lines)
 
@@ -92,6 +96,7 @@ class SpectralAnalyzer:
             SpectralResult: Spectral analysis results
         """
         with self._lock:
+            logger.info(f"Starting Lomb-Scargle spectral analysis: {len(time)} data points, n_frequencies={n_frequencies}")
             # Validate input
             time = validate_data_array(time, allow_nan=False, name="time")
             values = validate_data_array(values, allow_nan=False, name="values")
@@ -128,6 +133,8 @@ class SpectralAnalyzer:
                 max_freq = len(time) / (2 * time_span)  # Nyquist-like
             else:
                 min_freq, max_freq = frequency_range
+
+            logger.info(f"Frequency range: [{min_freq:.6f}, {max_freq:.6f}]")
             
             # Generate frequency array
             frequencies = np.linspace(min_freq, max_freq, n_frequencies)
@@ -149,8 +156,9 @@ class SpectralAnalyzer:
                 peak_period=peak_period,
                 peak_power=peak_power
             )
-            
+
             self._last_result = result
+            logger.info(f"Spectral analysis complete: peak frequency={peak_frequency:.6f}, peak period={peak_period:.4f}, peak power={peak_power:.4f}")
             return result
     
     def _lomb_scargle(
@@ -237,10 +245,11 @@ class SpectralAnalyzer:
         """
         if result is None:
             result = self._last_result
-        
+
         if result is None:
             raise ComputationError("No spectral result available")
-        
+
+        logger.info(f"Finding significant peaks with threshold={threshold}")
         max_power = np.max(result.power)
         threshold_value = threshold * max_power
         
@@ -279,7 +288,8 @@ class SpectralAnalyzer:
         
         # Sort by power
         peaks.sort(key=lambda x: x['power'], reverse=True)
-        
+
+        logger.info(f"Found {len(peaks)} significant peaks")
         return peaks
     
     @property

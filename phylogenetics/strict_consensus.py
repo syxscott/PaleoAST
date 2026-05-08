@@ -75,8 +75,11 @@ class Split:
     
     def __post_init__(self):
         """确保set1 < set2 (保持唯一性)"""
-        if self.set1 > self.set2:
-            self.set1, self.set2 = self.set2, self.set1
+        # Use min element comparison for canonical ordering
+        # (frozenset > means superset, not ordering)
+        if self.set1 and self.set2:
+            if min(self.set1) > min(self.set2):
+                self.set1, self.set2 = self.set2, self.set1
     
     @property
     def is_trivial(self) -> bool:

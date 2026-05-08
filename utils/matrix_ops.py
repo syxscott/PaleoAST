@@ -37,12 +37,15 @@ Version: 1.0.0
 
 import numpy as np
 import numpy.typing as npt
+import logging
 from typing import Optional, Union, Tuple
 
 from .exceptions import (
     MatrixDimensionError,
     ComputationError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_matrix(
@@ -232,11 +235,12 @@ def center_matrix(matrix: npt.NDArray, axis: int = 0) -> npt.NDArray:
                [ 0.,  0.],
                [ 2.,  2.]])
     """
+    logger.debug(f"Centering matrix of shape {matrix.shape} along axis {axis}")
     validate_matrix_shape(matrix, allow_empty=False)
-    
+
     mean = np.mean(matrix, axis=axis, keepdims=True)
     centered = matrix - mean
-    
+
     return centered
 
 
@@ -287,8 +291,9 @@ def standardize_matrix(
                [ 0.        ,  0.        ],
                [ 1.22474487,  1.22474487]])
     """
+    logger.debug(f"Standardizing matrix of shape {matrix.shape} along axis {axis} with ddof={ddof}")
     validate_matrix_shape(matrix, allow_empty=False)
-    
+
     mean = np.mean(matrix, axis=axis, keepdims=True)
     std = np.std(matrix, axis=axis, keepdims=True, ddof=ddof)
     
@@ -347,7 +352,12 @@ def covariance_matrix(
                [4., 4.]])
     """
     validate_matrix_shape(matrix, min_rows=2, allow_empty=False)
-    
+    n, p = matrix.shape
+    if n * p > 10000:
+        logger.info(f"Computing covariance matrix for large dataset: {n} samples x {p} features")
+    else:
+        logger.debug(f"Computing covariance matrix: {n} samples x {p} features")
+
     # Handle the ddof/bias interaction
     if bias:
         divisor = matrix.shape[0]
@@ -366,11 +376,11 @@ def covariance_matrix(
     
     # Compute covariance using matrix multiplication
     if rowvar:
-        # Treat rows as variables
-        cov = centered.T @ centered / divisor
-    else:
-        # Treat columns as variables
+        # Treat rows as variables: centered is (p, n), result should be (p, p)
         cov = centered @ centered.T / divisor
+    else:
+        # Treat columns as variables: centered is (n, p), result should be (p, p)
+        cov = centered.T @ centered / divisor
     
     return cov
 
@@ -415,16 +425,21 @@ def correlation_matrix(
                [1., 1.]])
     """
     validate_matrix_shape(matrix, min_rows=2, allow_empty=False)
-    
+    n, p = matrix.shape
+    if n * p > 10000:
+        logger.info(f"Computing correlation matrix for large dataset: {n} samples x {p} features")
+    else:
+        logger.debug(f"Computing correlation matrix: {n} samples x {p} features, method={method}")
+
     if method.lower() != "pearson":
         raise NotImplementedError(
             f"Correlation method '{method}' not yet implemented"
         )
-    
+
     # Use NumPy's corrcoef which is optimized and stable
     # Transpose so rows are variables if rowvar convention
     corr = np.corrcoef(matrix.T)
-    
+
     return corr
 
 
@@ -475,10 +490,11 @@ def mahalanobis_distance(
         >>> mahalanobis_distance(x, mean, cov)
         2.0
     """
+    logger.debug(f"Computing Mahalanobis distance: point shape={np.asarray(x).shape}, inverted={inverted}")
     x = ensure_matrix(x)
     mean = ensure_matrix(mean).flatten()
     cov = ensure_matrix(cov)
-    
+
     # Handle single point case
     single_point = x.ndim == 1 or x.shape[0] == 1
     if x.ndim == 1:
@@ -584,7 +600,12 @@ def euclidean_distance_matrix(
                [4.        , 3.        , 0.        ]])
     """
     validate_matrix_shape(matrix, min_rows=2, allow_empty=False)
-    
+    n = matrix.shape[0]
+    if n > 500:
+        logger.info(f"Computing Euclidean distance matrix for {n} points ({n * (n - 1) // 2} pairs)")
+    else:
+        logger.debug(f"Computing Euclidean distance matrix for {n} points")
+
     # Compute squared Euclidean distances using vectorized operations
     # D_sq[i,j] = ||x_i||² - 2*x_i·x_j + ||x_j||²
     sq_norms = np.sum(matrix ** 2, axis=1)
@@ -651,11 +672,12 @@ def pairwise_distances(
                [4., 2., 0.]])
     """
     matrix1 = ensure_matrix(matrix1)
-    
+
     if matrix2 is not None:
         matrix2 = ensure_matrix(matrix2)
-        
+
         if matrix1.shape[1] != matrix2.shape[1]:
+            logger.error(f"Column mismatch: {matrix1.shape[1]} vs {matrix2.shape[1]}")
             raise MatrixDimensionError(
                 "Matrices must have same number of columns",
                 details={
@@ -663,10 +685,16 @@ def pairwise_distances(
                     "matrix2_cols": matrix2.shape[1]
                 }
             )
-        
+
+        logger.info(f"Computing cross-distances: {matrix1.shape[0]} x {matrix2.shape[0]} points, metric='{metric}'")
         # Compute cross-distances using custom implementation
         return _compute_cross_distances(matrix1, matrix2, metric, **kwargs)
     else:
+        n = matrix1.shape[0]
+        if n > 500:
+            logger.info(f"Computing pairwise distances for {n} points, metric='{metric}'")
+        else:
+            logger.debug(f"Computing pairwise distances for {n} points, metric='{metric}'")
         # Compute self-distances
         return _compute_self_distances(matrix1, metric, **kwargs)
 

@@ -13,6 +13,7 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+import logging
 import numpy as np
 import numpy.typing as npt
 from typing import Optional, List, Dict, Any
@@ -22,6 +23,8 @@ from matplotlib.figure import Figure
 from models.diversity_result import DiversityResult, RarefactionResult
 from config.colors import get_color_scheme
 
+logger = logging.getLogger(__name__)
+
 
 class DiversityPlotter:
     """
@@ -30,10 +33,22 @@ class DiversityPlotter:
     
     def __init__(self) -> None:
         """Initialize the diversity plotter."""
+        self._logger = logging.getLogger(f"{__name__}.DiversityPlotter")
+        self._logger.info("DiversityPlotter initialized")
         self._style = 'seaborn-v0_8-paper'
         self._figure_size = (8, 6)
         self._dpi = 300
         self._font_size = 10
+
+    def _apply_style(self) -> None:
+        """Apply matplotlib style with fallback for older versions."""
+        try:
+            plt.style.use(self._style)
+        except OSError:
+            try:
+                plt.style.use(self._style.replace('v0_8-', ''))
+            except OSError:
+                pass
     
     def plot_rarefaction(
         self,
@@ -52,10 +67,13 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
-        
+        self._apply_style()
+        self._logger.info(
+            f"plot_rarefaction called: sample_name='{result.sample_name}'"
+        )
+
         fig, ax = plt.subplots(figsize=self._figure_size)
-        
+
         ax.plot(
             result.sample_sizes,
             result.expected_taxa,
@@ -102,7 +120,7 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
+        self._apply_style()
         
         fig, ax = plt.subplots(figsize=self._figure_size)
         
@@ -147,7 +165,7 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
+        self._apply_style()
         
         fig, ax = plt.subplots(figsize=self._figure_size)
         
@@ -181,7 +199,7 @@ class DiversityPlotter:
             )
         
         index_labels = {
-            'shannon': 'Shannon Index (H\')',
+            'shannon': "Shannon Index (H')",
             'simpson': 'Simpson Index (1-D)',
             'margalef': 'Margalef Index',
             'pielou': "Pielou's Evenness (J)"
@@ -212,8 +230,12 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        plt.style.use(self._style)
-        
+        self._apply_style()
+        self._logger.info(
+            f"plot_diversity_summary called: sample_name='{result.sample_name}', "
+            f"taxa_count={result.taxa_count}"
+        )
+
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
         
         # 1. Shannon vs Simpson comparison

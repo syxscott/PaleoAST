@@ -24,7 +24,7 @@ PaleoAST State Machine Framework - Tokenizer Module
 from __future__ import annotations
 from typing import (
     Dict, Set, List, Optional, Callable, Any, 
-    Iterator, Tuple, NamedTuple, Match, Pattern
+    Iterator, Tuple, Pattern
 )
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -95,12 +95,13 @@ class TokenType(Enum):
     NEWICK = auto()
 
 
-class Token(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class Token:
     """
     Token数据结构 (Immutable)
-    
+
     表示词法分析器输出的最小语义单元。
-    
+
     属性:
         type: Token类型
         value: Token的文本值
@@ -109,10 +110,10 @@ class Token(NamedTuple):
         end_line: 结束行号
         end_column: 结束列号
         metadata: 额外的元数据字典
-    
+
     数学表示:
         T = (τ, v, l, c) ∈ Τ × Σ* × ℕ × ℕ
-    
+
     示例:
         >>> Token(TokenType.IDENTIFIER, "TAXLABELS", 1, 1, 1, 10)
         >>> Token(TokenType.NUMBER, "42", 5, 10, 5, 12)
@@ -124,27 +125,15 @@ class Token(NamedTuple):
     end_line: int = 0
     end_column: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def __new__(
-        cls,
-        type: TokenType,
-        value: str,
-        line: int,
-        column: int,
-        end_line: int = 0,
-        end_column: int = 0,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Token:
-        """创建Token，确保位置信息正确"""
-        if end_line == 0:
-            end_line = line
-        if end_column == 0:
-            end_column = column + len(value) - 1
-        return super().__new__(
-            cls, type, value, line, column, 
-            end_line, end_column, 
-            metadata or {}
-        )
+
+    def __post_init__(self):
+        """确保位置信息正确"""
+        if self.end_line == 0:
+            object.__setattr__(self, 'end_line', self.line)
+        if self.end_column == 0:
+            object.__setattr__(self, 'end_column', self.column + len(self.value) - 1)
+        if self.metadata is None:
+            object.__setattr__(self, 'metadata', {})
     
     @property
     def span(self) -> Tuple[int, int]:

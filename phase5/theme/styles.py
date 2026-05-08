@@ -1616,9 +1616,7 @@ class PaleoASTStyles:
             
             QRadioButton::indicator:checked {
                 border: 2px solid #3498DB;
-                background-color: radial-gradient(
-                    circle, #3498DB 6px, transparent 8px
-                );
+                background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3498DB, stop:0.75 #3498DB, stop:0.76 transparent);
             }
             
             QRadioButton::indicator:checked:hover {
@@ -1643,9 +1641,7 @@ class PaleoASTStyles:
             
             QRadioButton::indicator:checked {
                 border-color: #3498DB;
-                background-color: radial-gradient(
-                    circle, #3498DB 6px, transparent 8px
-                );
+                background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3498DB, stop:0.75 #3498DB, stop:0.76 transparent);
             }
             """
     

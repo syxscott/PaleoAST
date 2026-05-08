@@ -208,11 +208,11 @@ class CohortSurvivorshipAnalysis:
             
             for o, L in records:
                 if o < t_start and L > t_end:
-                    n_fb += 1
-                elif L < t_end and o > t_start:
-                    n_lb += 1
-                elif o < t_start and L > t_end:
-                    n_surv += 1
+                    n_surv += 1  # through-timer: spans entire interval
+                elif o >= t_start and o < t_end and L > t_end:
+                    n_fb += 1  # boundary crosser: originated in interval
+                elif L >= t_start and L < t_end and o < t_start:
+                    n_lb += 1  # boundary crosser: went extinct in interval
             
             n_total = n_fb + n_lb + n_surv
             

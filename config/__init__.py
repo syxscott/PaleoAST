@@ -37,6 +37,14 @@ from .colors import (
     COLORBLIND_FRIENDLY_PALETTE,
 )
 
+from .i18n import (
+    _,
+    get_translator,
+    set_language,
+    get_language,
+    register_translations,
+)
+
 __all__ = [
     'APP_NAME',
     'APP_VERSION',
@@ -58,4 +66,9 @@ __all__ = [
     'CHART_COLORS',
     'CHART_MARKERS',
     'COLORBLIND_FRIENDLY_PALETTE',
+    '_',
+    'get_translator',
+    'set_language',
+    'get_language',
+    'register_translations',
 ]
