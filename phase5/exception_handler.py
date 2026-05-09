@@ -153,7 +153,8 @@ class SystemInfoCollector:
             try:
                 info['hostname'] = socket.gethostname()
                 info['ip_address'] = socket.gethostbyname(socket.gethostname())
-            except:
+            except (OSError, socket.error) as e:
+                logger.debug(f"Could not get network info: {e}")
                 info['hostname'] = 'Unknown'
                 info['ip_address'] = 'Unknown'
             
@@ -174,8 +175,8 @@ class SystemInfoCollector:
                     if screen:
                         info['screen_resolution'] = f"{screen.geometry().width()}x{screen.geometry().height()}"
                         info['screen_dpi'] = str(screen.logicalDotsPerInch())
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not get screen resolution: {e}")
             
         except Exception as e:
             logger.error(f"Error collecting system info: {e}")
@@ -482,8 +483,8 @@ class GlobalExceptionHandler(QObject):
                 app_state = f"Active Windows: {len(windows)}\n"
                 for i, w in enumerate(windows[:5]):
                     app_state += f"  {i+1}. {w.__class__.__name__}: {w.windowTitle()}\n"
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not get application state: {e}")
         
         return ExceptionInfo(
             id=exc_id,

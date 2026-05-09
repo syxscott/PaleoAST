@@ -245,7 +245,8 @@ class ExceptionHandler:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(tb_text)
                 QMessageBox.information(None, _("Exported"), _("Log saved to:\n{0}").format(path))
-        except:
+        except Exception as e:
+            # 忽略导出失败，继续执行
             pass
 
 

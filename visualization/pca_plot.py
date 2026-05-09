@@ -47,8 +47,8 @@ class PCAPlotter:
         """Set matplotlib style."""
         try:
             plt.style.use(style)
-        except:
-            pass  # Fall back to default
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
     
     def plot_scores(
         self,
