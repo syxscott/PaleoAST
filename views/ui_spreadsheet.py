@@ -230,7 +230,7 @@ class SpreadsheetDelegate(QStyledItemDelegate):
             )
             
             # Draw header border
-            painter.setPen(QPen(QColor("#34495E"), 1))
+            painter.setPen(QPen(QColor("#3498DB"), 2))
             painter.drawLine(
                 option.rect.bottomLeft(),
                 option.rect.bottomRight()
@@ -582,11 +582,13 @@ class ScientificSpreadsheet(QWidget):
         
         # Create table widget
         self._table = QTableWidget()
-        self._table.setAlternatingRowColors(False)
+        self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setShowGrid(True)
         self._table.setCornerButtonEnabled(True)
+        self._table.setColumnCount(0)
+        self._table.setRowCount(0)
         
         # Custom delegate
         self._delegate = SpreadsheetDelegate()
@@ -595,59 +597,64 @@ class ScientificSpreadsheet(QWidget):
         # Header settings
         h_header = self._table.horizontalHeader()
         h_header.setStretchLastSection(True)
-        h_header.setMinimumSectionSize(80)
+        h_header.setMinimumSectionSize(100)
+        h_header.setDefaultSectionSize(120)
         h_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         
         v_header = self._table.verticalHeader()
-        v_header.setMinimumSectionSize(25)
+        v_header.setMinimumSectionSize(32)
+        v_header.setDefaultSectionSize(28)
         v_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         
-        # Style
+        # Style - Modern light theme with alternating rows
         self._table.setStyleSheet("""
             QTableWidget {
-                background-color: #1A1A2E;
-                alternate-background-color: #232342;
-                color: #ECF0F1;
-                gridline-color: #34495E;
-                font-family: Consolas, monospace;
-                font-size: 11px;
-                border: none;
+                background-color: #FFFFFF;
+                alternate-background-color: #F8F9FA;
+                color: #2C3E50;
+                gridline-color: #E4E7EB;
+                font-family: 'Segoe UI', 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
             }
             QTableWidget::item {
-                padding: 4px 8px;
-                border: 1px solid #34495E;
+                padding: 6px 8px;
+                border-bottom: 1px solid #E4E7EB;
             }
             QTableWidget::item:selected {
-                background-color: rgba(52, 152, 219, 0.4);
-                color: #ECF0F1;
+                background-color: rgba(52, 152, 219, 0.15);
+                color: #2C3E50;
             }
             QHeaderView {
-                background-color: #2C3E50;
-                color: #ECF0F1;
-                font-weight: bold;
+                background-color: #F0F2F5;
+                color: #2C3E50;
             }
             QHeaderView::section {
-                background-color: #2C3E50;
-                color: #ECF0F1;
-                padding: 4px;
-                border: 1px solid #34495E;
-                border-left: none;
+                background-color: #F0F2F5;
+                color: #2C3E50;
+                padding: 8px;
+                border: none;
+                border-right: 1px solid #E4E7EB;
+                border-bottom: 2px solid #3498DB;
+                font-weight: 600;
             }
             QHeaderView::section:first {
-                border-left: 1px solid #34495E;
+                border-left: none;
             }
             QScrollBar:vertical {
-                background-color: #1A1A2E;
+                background-color: #F8F9FA;
                 width: 12px;
                 margin: 0px;
+                border-radius: 6px;
             }
             QScrollBar::handle:vertical {
-                background-color: #34495E;
+                background-color: #C0C4CC;
                 min-height: 20px;
                 border-radius: 6px;
             }
             QScrollBar::handle:vertical:hover {
-                background-color: #3D566E;
+                background-color: #909399;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -656,17 +663,18 @@ class ScientificSpreadsheet(QWidget):
                 background-color: transparent;
             }
             QScrollBar:horizontal {
-                background-color: #1A1A2E;
+                background-color: #F8F9FA;
                 height: 12px;
                 margin: 0px;
+                border-radius: 6px;
             }
             QScrollBar::handle:horizontal {
-                background-color: #34495E;
+                background-color: #C0C4CC;
                 min-width: 20px;
                 border-radius: 6px;
             }
             QScrollBar::handle:horizontal:hover {
-                background-color: #3D566E;
+                background-color: #909399;
             }
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
                 width: 0px;

@@ -76,6 +76,17 @@ plt.rcParams.update({
     'savefig.dpi': 300,
     'axes.spines.top': False,
     'axes.spines.right': False,
+    'axes.facecolor': '#FAFBFC',
+    'figure.facecolor': '#FFFFFF',
+    'axes.edgecolor': '#E4E7EB',
+    'axes.labelcolor': '#2C3E50',
+    'xtick.color': '#2C3E50',
+    'ytick.color': '#2C3E50',
+    'text.color': '#2C3E50',
+    'grid.color': '#E4E7EB',
+    'grid.linestyle': '-',
+    'grid.linewidth': 0.5,
+    'axes.linewidth': 0.8,
 })
 
 
@@ -156,13 +167,13 @@ class InteractivePlotCanvas(QWidget):
         layout.addWidget(self._toolbar)
         
         # Matplotlib canvas
-        self._figure = Figure(figsize=(8, 6), facecolor='#1A1A2E')
+        self._figure = Figure(figsize=(8, 6), facecolor='#FFFFFF')
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Setup axes
         self._ax = self._figure.add_subplot(111)
-        self._ax.set_facecolor('#232342')
+        self._ax.set_facecolor('#FAFBFC')
         
         # Enable interaction
         self._canvas.mpl_connect('motion_notify_event', self._on_motion)
@@ -222,48 +233,83 @@ class InteractivePlotCanvas(QWidget):
         self._toolbar.addWidget(self._show_ellipses_check)
     
     def _apply_stylesheet(self) -> None:
-        """Apply dark theme stylesheet."""
+        """Apply modern light theme stylesheet."""
         self.setStyleSheet("""
             QWidget {
-                background-color: #1A1A2E;
+                background-color: #FFFFFF;
             }
             QToolBar {
-                background-color: #2C3E50;
-                border: none;
+                background-color: #F8F9FA;
+                border: 1px solid #E4E7EB;
                 spacing: 8px;
-                padding: 4px;
+                padding: 6px;
             }
             QPushButton {
-                background-color: #34495E;
-                color: #ECF0F1;
-                border: 1px solid #2C3E50;
-                border-radius: 4px;
-                padding: 4px 8px;
+                background-color: #F0F2F5;
+                color: #2C3E50;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
+                padding: 6px 12px;
                 min-width: 50px;
+                font-weight: 500;
             }
             QPushButton:hover {
-                background-color: #3D566E;
-                border: 1px solid #3498DB;
+                background-color: #E4E7EB;
+                border: 1px solid #BFC9D4;
+            }
+            QPushButton:pressed {
+                background-color: #D9DFE8;
             }
             QComboBox {
-                background-color: #34495E;
-                color: #ECF0F1;
-                border: 1px solid #2C3E50;
-                border-radius: 4px;
-                padding: 4px 8px;
+                background-color: #FFFFFF;
+                color: #2C3E50;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
+                padding: 6px 8px;
                 min-width: 100px;
             }
+            QComboBox:hover {
+                border: 1px solid #3498DB;
+            }
+            QComboBox:focus {
+                border: 1px solid #3498DB;
+            }
+            QComboBox::down-arrow {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #3498DB;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #FFFFFF;
+                color: #2C3E50;
+                selection-background-color: #3498DB;
+                selection-color: #FFFFFF;
+            }
             QCheckBox {
-                color: #ECF0F1;
-                spacing: 4px;
+                color: #2C3E50;
+                spacing: 6px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #E4E7EB;
+                border-radius: 3px;
+                background-color: #FFFFFF;
+            }
+            QCheckBox::indicator:hover {
+                border: 2px solid #3498DB;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #3498DB;
+                border-color: #2980B9;
             }
             QLabel {
-                color: #BDC3C7;
+                color: #2C3E50;
                 padding: 0 4px;
             }
         """)
         
-        self._figure.patch.set_facecolor('#1A1A2E')
+        self._figure.patch.set_facecolor('#FFFFFF')
     
     def _setup_connections(self) -> None:
         """Setup signal connections."""
@@ -373,30 +419,30 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(_("PCA Scores Plot"))
         
         # Style
-        self._ax.set_facecolor('#232342')
-        self._ax.tick_params(colors='#BDC3C7')
-        self._ax.xaxis.label.set_color('#ECF0F1')
-        self._ax.yaxis.label.set_color('#ECF0F1')
-        self._ax.title.set_color('#ECF0F1')
+        self._ax.set_facecolor('#FAFBFC')
+        self._ax.tick_params(colors='#2C3E50')
+        self._ax.xaxis.label.set_color('#2C3E50')
+        self._ax.yaxis.label.set_color('#2C3E50')
+        self._ax.title.set_color('#2C3E50')
         
         for spine in self._ax.spines.values():
-            spine.set_color('#34495E')
+            spine.set_color('#E4E7EB')
         
         if len(unique_groups) > 1:
             self._ax.legend(
                 loc='upper right',
-                framealpha=0.9,
-                facecolor='#2C3E50',
-                edgecolor='#34495E',
-                labelcolor='#ECF0F1'
+                framealpha=0.95,
+                facecolor='#FFFFFF',
+                edgecolor='#E4E7EB',
+                labelcolor='#2C3E50'
             )
         
         # Add grid
-        self._ax.grid(True, alpha=0.3, color='#34495E')
+        self._ax.grid(True, alpha=0.3, color='#E4E7EB')
         
         # Draw reference lines
-        self._ax.axhline(y=0, color='#7F8C8D', linestyle='--', linewidth=0.5, alpha=0.5)
-        self._ax.axvline(x=0, color='#7F8C8D', linestyle='--', linewidth=0.5, alpha=0.5)
+        self._ax.axhline(y=0, color='#BDC3C7', linestyle='--', linewidth=0.5, alpha=0.5)
+        self._ax.axvline(x=0, color='#BDC3C7', linestyle='--', linewidth=0.5, alpha=0.5)
         
         self._canvas.draw()
     
@@ -779,18 +825,18 @@ class InteractivePlotCanvas(QWidget):
     
     def _apply_axis_style(self) -> None:
         """Apply consistent axis styling."""
-        self._ax.set_facecolor('#232342')
-        self._ax.tick_params(colors='#BDC3C7')
-        self._ax.xaxis.label.set_color('#ECF0F1')
-        self._ax.yaxis.label.set_color('#ECF0F1')
-        self._ax.title.set_color('#ECF0F1')
+        self._ax.set_facecolor('#FAFBFC')
+        self._ax.tick_params(colors='#2C3E50')
+        self._ax.xaxis.label.set_color('#2C3E50')
+        self._ax.yaxis.label.set_color('#2C3E50')
+        self._ax.title.set_color('#2C3E50')
         
         for spine in self._ax.spines.values():
-            spine.set_color('#34495E')
+            spine.set_color('#E4E7EB')
         
-        self._ax.grid(True, alpha=0.3, color='#34495E')
-        self._ax.axhline(y=0, color='#7F8C8D', linestyle='--', linewidth=0.5, alpha=0.5)
-        self._ax.axvline(x=0, color='#7F8C8D', linestyle='--', linewidth=0.5, alpha=0.5)
+        self._ax.grid(True, alpha=0.3, color='#E4E7EB')
+        self._ax.axhline(y=0, color='#BDC3C7', linestyle='--', linewidth=0.5, alpha=0.5)
+        self._ax.axvline(x=0, color='#BDC3C7', linestyle='--', linewidth=0.5, alpha=0.5)
     
     # =========================================================================
     # Interaction Methods

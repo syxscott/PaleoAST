@@ -148,7 +148,7 @@ class VectorIconEngine:
             # Floppy disk
             painter.drawRect(QRect(margin, margin + inner_size // 6, 
                                    inner_size, inner_size - inner_size // 6))
-            painter.setBrush(QBrush(QColor("#2C3E50")))
+            painter.setBrush(QBrush(QColor("#E4E7EB")))
             painter.drawRect(QRect(margin + inner_size // 4, margin,
                                    inner_size // 2, inner_size // 4))
             
@@ -229,7 +229,7 @@ class VectorIconEngine:
             painter.drawPath(path)
             
             # Center hole
-            painter.setBrush(QBrush(QColor("#2C3E50")))
+            painter.setBrush(QBrush(QColor("#E4E7EB")))
             painter.drawEllipse(QRect(-inner_radius // 2, -inner_radius // 2,
                                      inner_radius, inner_radius))
             painter.restore()
@@ -396,63 +396,44 @@ class RibbonButton(QPushButton):
         self._apply_stylesheet()
     
     def _apply_stylesheet(self) -> None:
-        """Apply themed stylesheet to button."""
-        if self._is_dark_theme:
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: #34495E;
-                    border: 1px solid #2C3E50;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    color: #ECF0F1;
-                    font-family: Arial, sans-serif;
-                    font-size: 11px;
-                    min-width: 70px;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #3D566E;
-                    border: 1px solid #3498DB;
-                }
-                QPushButton:pressed {
-                    background-color: #2C3E50;
-                    border: 1px solid #2980B9;
-                }
-                QPushButton:disabled {
-                    background-color: #2C3E50;
-                    color: #7F8C8D;
-                    border: 1px solid #34495E;
-                }
-                QPushButton[flat="true"] {
-                    background-color: transparent;
-                    border: none;
-                }
-                QPushButton[flat="true"]:hover {
-                    background-color: rgba(52, 152, 219, 0.2);
-                }
-            """)
-        else:
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: #ECF0F1;
-                    border: 1px solid #BDC3C7;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    color: #2C3E50;
-                    font-family: Arial, sans-serif;
-                    font-size: 11px;
-                    min-width: 70px;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #3498DB;
-                    color: white;
-                    border: 1px solid #2980B9;
-                }
-                QPushButton:pressed {
-                    background-color: #2980B9;
-                }
-            """)
+        """Apply modern themed stylesheet to button with smooth transitions."""
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #F8F9FA;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
+                padding: 10px 18px;
+                color: #2C3E50;
+                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                font-size: 12px;
+                font-weight: 500;
+                min-width: 70px;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background-color: #F0F2F5;
+                border: 1px solid #3498DB;
+                color: #3498DB;
+            }
+            QPushButton:pressed {
+                background-color: #3498DB;
+                color: white;
+                border: 1px solid #2980B9;
+            }
+            QPushButton:disabled {
+                background-color: #F8F9FA;
+                color: #95A5A6;
+                border: 1px solid #E4E7EB;
+            }
+            QPushButton[flat="true"] {
+                background-color: transparent;
+                border: none;
+            }
+            QPushButton[flat="true"]:hover {
+                background-color: rgba(52, 152, 219, 0.08);
+                border: none;
+            }
+        """)
 
 
 class RibbonGroup(QWidget):
@@ -473,7 +454,7 @@ class RibbonGroup(QWidget):
         self._buttons: List[RibbonButton] = []
         
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(4, 4, 4, 4)
+        self._layout.setContentsMargins(8, 4, 8, 4)
         self._layout.setSpacing(4)
         
         # Button container
@@ -491,8 +472,8 @@ class RibbonGroup(QWidget):
             QLabel {
                 color: #3498DB;
                 font-size: 10px;
-                font-weight: bold;
-                padding: 2px;
+                font-weight: 600;
+                padding: 3px;
             }
         """)
         self._layout.addWidget(self._title_label)
@@ -597,8 +578,8 @@ class RibbonBar(QWidget):
         self._separator.setFrameShape(QFrame.Shape.HLine)
         self._separator.setStyleSheet("""
             QFrame {
-                background-color: #2C3E50;
-                max-height: 2px;
+                background-color: #E4E7EB;
+                max-height: 1px;
             }
         """)
         self._main_layout.addWidget(self._separator)
@@ -653,52 +634,31 @@ class RibbonBar(QWidget):
     
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
-        if self._is_dark_theme:
-            self.setStyleSheet("""
-                QWidget {
-                    background-color: #2C3E50;
-                }
-                QPushButton {
-                    background-color: transparent;
-                    border: none;
-                    color: #ECF0F1;
-                    padding: 8px 16px;
-                    font-size: 11px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: rgba(52, 152, 219, 0.3);
-                }
-                QPushButton:checked {
-                    background-color: #34495E;
-                    border-bottom: 2px solid #3498DB;
-                    color: #3498DB;
-                }
-            """)
-            self._separator.setStyleSheet("background-color: #34495E; max-height: 1px;")
-        else:
-            self.setStyleSheet("""
-                QWidget {
-                    background-color: #ECF0F1;
-                }
-                QPushButton {
-                    background-color: transparent;
-                    border: none;
-                    color: #2C3E50;
-                    padding: 8px 16px;
-                    font-size: 11px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: rgba(52, 152, 219, 0.2);
-                }
-                QPushButton:checked {
-                    background-color: white;
-                    border-bottom: 2px solid #3498DB;
-                    color: #3498DB;
-                }
-            """)
-            self._separator.setStyleSheet("background-color: #BDC3C7; max-height: 1px;")
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #FFFFFF;
+                border: none;
+            }
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #2C3E50;
+                padding: 8px 14px;
+                font-size: 11px;
+                font-weight: 600;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(52, 152, 219, 0.08);
+                color: #3498DB;
+            }
+            QPushButton:checked {
+                background-color: rgba(52, 152, 219, 0.12);
+                border-bottom: 3px solid #3498DB;
+                color: #3498DB;
+            }
+        """)
+        self._separator.setStyleSheet("background-color: #E4E7EB; max-height: 1px;")
 
 
 class StatusBarWidget(QStatusBar):
@@ -709,6 +669,13 @@ class StatusBarWidget(QStatusBar):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setContentsMargins(8, 2, 8, 2)
+        self.setStyleSheet("""
+            QStatusBar {
+                background-color: #F8F9FA;
+                border-top: 1px solid #E4E7EB;
+                color: #2C3E50;
+            }
+        """)
 
         # Data info label (left side)
         self._info_label = QLabel(_("No data loaded"))
@@ -724,7 +691,7 @@ class StatusBarWidget(QStatusBar):
         self._memory_label = QLabel(_("Memory: 0 MB"))
         self._memory_label.setStyleSheet("""
             QLabel {
-                color: #7F8C8D;
+                color: #95A5A6;
                 font-size: 10px;
             }
         """)
@@ -737,14 +704,14 @@ class StatusBarWidget(QStatusBar):
         self._progress_bar.setVisible(False)
         self._progress_bar.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #34495E;
-                border-radius: 4px;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
                 text-align: center;
-                background-color: #2C3E50;
+                background-color: #F8F9FA;
             }
             QProgressBar::chunk {
                 background-color: #3498DB;
-                border-radius: 3px;
+                border-radius: 5px;
             }
         """)
         self.addPermanentWidget(self._progress_bar)
@@ -784,9 +751,9 @@ class WorkspaceArea(QWidget):
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet("""
             QLabel {
-                color: #7F8C8D;
+                color: #95A5A6;
                 font-size: 14px;
-                background-color: #1A1A2E;
+                background-color: #FFFFFF;
             }
         """)
         self._stack.addWidget(self._placeholder)

@@ -155,16 +155,16 @@ class NavigationDelegate(QStyledItemDelegate):
         
         # Background painting
         if is_selected:
-            # Selected state - blue highlight
+            # Selected state - blue highlight with rounded background
             painter.fillRect(
                 option.rect,
-                QBrush(QColor("#3498DB"))
+                QBrush(QColor("rgba(52, 152, 219, 0.2)"))
             )
         elif is_hovered:
-            # Hover state - subtle highlight
+            # Hover state - subtle light background
             painter.fillRect(
                 option.rect,
-                QBrush(QColor("#2C3E50"))
+                QBrush(QColor("rgba(52, 152, 219, 0.08)"))
             )
         
         # Determine icon type from item data (UserRole)
@@ -208,11 +208,11 @@ class NavigationDelegate(QStyledItemDelegate):
                 text = ''
         
         # Draw text
-        text_color = "#ECF0F1" if is_selected else "#BDC3C7"
+        text_color = "#3498DB" if is_selected else "#2C3E50"
         if is_hovered and not is_selected:
-            text_color = "#FFFFFF"
+            text_color = "#3498DB"
         
-        font = QFont("Arial", 10)
+        font = QFont("'Segoe UI', 'Microsoft YaHei'", 11)
         # Top-level if no valid parent index
         if not index.parent().isValid():
             font.setBold(True)
@@ -376,8 +376,8 @@ class NavigationDelegate(QStyledItemDelegate):
         x: float, y: float, size: float
     ) -> None:
         """Draw default document icon."""
-        painter.setPen(QPen(QColor("#95A5A6"), 1.5))
-        painter.setBrush(QBrush(QColor("#34495E")))
+        painter.setPen(QPen(QColor("#3498DB"), 1.5))
+        painter.setBrush(QBrush(QColor("#E8F4F8")))
         painter.drawRect(int(x), int(y), int(size), int(size))
     
     def _draw_expand_arrow(
@@ -459,45 +459,48 @@ class NavigationTree(QWidget):
         self._delegate = NavigationDelegate()
         self._tree.setItemDelegate(self._delegate)
         
-        # Style
+        # Style - Modern light theme
         self._tree.setStyleSheet("""
             QTreeWidget {
-                background-color: #1A1A2E;
-                border: none;
+                background-color: #FFFFFF;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
                 outline: none;
-                color: #BDC3C7;
-                font-family: Arial, sans-serif;
-                font-size: 11px;
+                color: #2C3E50;
+                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                font-size: 12px;
             }
             QTreeWidget::item {
-                padding: 6px 8px;
+                padding: 6px 4px;
                 min-height: 28px;
+                border-radius: 4px;
             }
             QTreeWidget::item:hover {
-                background-color: #2C3E50;
+                background-color: rgba(52, 152, 219, 0.08);
             }
             QTreeWidget::item:selected {
-                background-color: #3498DB;
-                color: #ECF0F1;
+                background-color: rgba(52, 152, 219, 0.15);
+                color: #3498DB;
             }
             QTreeWidget::item:selected:active {
-                background-color: #2980B9;
+                background-color: rgba(52, 152, 219, 0.25);
             }
             QTreeWidget::branch {
-                background-color: #1A1A2E;
+                background-color: transparent;
             }
             QScrollBar:vertical {
-                background-color: #1A1A2E;
+                background-color: #F8F9FA;
                 width: 10px;
                 margin: 0px;
+                border-radius: 5px;
             }
             QScrollBar::handle:vertical {
-                background-color: #34495E;
+                background-color: #C0C4CC;
                 min-height: 20px;
                 border-radius: 5px;
             }
             QScrollBar::handle:vertical:hover {
-                background-color: #3D566E;
+                background-color: #909399;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -515,15 +518,16 @@ class NavigationTree(QWidget):
         self._filter_input.setClearButtonEnabled(True)
         self._filter_input.setStyleSheet("""
             QLineEdit {
-                color: #BDC3C7;
-                background-color: #2C3E50;
-                border: 1px solid #34495E;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
+                color: #2C3E50;
+                background-color: #F8F9FA;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
+                padding: 6px 8px;
+                font-size: 12px;
             }
             QLineEdit:focus {
-                border-color: #3498DB;
+                border: 1px solid #3498DB;
+                background-color: #FFFFFF;
             }
         """)
         self._filter_input.textChanged.connect(self._filter_tree)
