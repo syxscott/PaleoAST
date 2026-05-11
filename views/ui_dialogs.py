@@ -1212,16 +1212,18 @@ class ImportDialog(QDialog):
             return
 
         try:
-            delimiter = ","
-            if self._format_combo.currentIndex() == 1:
-                delimiter = "\t"
-
             try:
                 import pandas as pd
             except ImportError:
                 self._preview_text.setText(_("pandas is required for data preview. Install with: pip install pandas"))
                 return
-            df = pd.read_csv(filepath, delimiter=delimiter, nrows=5)
+
+            fmt_index = self._format_combo.currentIndex()
+            if fmt_index == 3:  # Excel
+                df = pd.read_excel(filepath, nrows=5)
+            else:
+                delimiter = "\t" if fmt_index == 1 else ","
+                df = pd.read_csv(filepath, delimiter=delimiter, nrows=5)
             self._preview_text.setText(df.head().to_string())
         except Exception as e:
             self._preview_text.setText(_("Error loading preview:\n{0}").format(str(e)))
@@ -1242,10 +1244,6 @@ class ImportDialog(QDialog):
                 )
                 return
 
-            delimiter = ","
-            if self._format_combo.currentIndex() == 1:
-                delimiter = "\t"
-
             na_values = [v.strip() for v in self._na_values_edit.text().split(",")]
             if not na_values or na_values == [""]:
                 na_values = ["NA", "NaN", "-", ""]
@@ -1265,14 +1263,26 @@ class ImportDialog(QDialog):
             else:
                 skip = None
 
-            df = pd.read_csv(
-                filepath,
-                delimiter=delimiter,
-                header=0 if has_header else None,
-                index_col=0 if self._row_labels_check.isChecked() else False,
-                skiprows=skip,
-                na_values=na_values,
-            )
+            fmt_index = self._format_combo.currentIndex()
+            if fmt_index == 3:  # Excel
+                df = pd.read_excel(
+                    filepath,
+                    sheet_name=0,
+                    header=0 if has_header else None,
+                    index_col=0 if self._row_labels_check.isChecked() else False,
+                    skiprows=skip,
+                    na_values=na_values,
+                )
+            else:
+                delimiter = "\t" if fmt_index == 1 else ","
+                df = pd.read_csv(
+                    filepath,
+                    delimiter=delimiter,
+                    header=0 if has_header else None,
+                    index_col=0 if self._row_labels_check.isChecked() else False,
+                    skiprows=skip,
+                    na_values=na_values,
+                )
 
             data = df.values.astype(float)
             row_labels = list(df.index.astype(str))

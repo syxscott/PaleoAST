@@ -1368,15 +1368,20 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("New matrix: {0} samples x {1} variables").format(n_samples, n_vars))
 
     def _on_open_file(self) -> None:
-        """Open CSV file."""
+        """Open data file (CSV/TXT/Excel)."""
         filepath, _ext = QFileDialog.getOpenFileName(
-            self, _("Open Data File"), "", _("CSV Files (*.csv);;Text Files (*.txt);;All Files (*)")
+            self, _("Open Data File"), "",
+            _("Data Files (*.csv *.txt *.xlsx *.xls);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xlsx *.xls);;All Files (*)")
         )
 
         if filepath:
             try:
                 self._logger.info(f"Opening file: '{filepath}'")
-                matrix = self._data_controller.load_csv(filepath, has_header=True, has_row_labels=True)
+                ext = filepath.rsplit(".", 1)[-1].lower() if "." in filepath else ""
+                if ext in ("xlsx", "xls"):
+                    matrix = self._data_controller.load_excel(filepath, has_header=True, has_row_labels=True)
+                else:
+                    matrix = self._data_controller.load_csv(filepath, has_header=True, has_row_labels=True)
 
                 # Update state manager
                 self._state.set_data_matrix(matrix)
