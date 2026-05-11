@@ -288,6 +288,11 @@ class UnivariateAnalyzer:
             vals_0 = vals_0[~np.isnan(vals_0)]
             vals_1 = vals_1[~np.isnan(vals_1)]
 
+            if len(vals_0) < 2 or len(vals_1) < 2:
+                raise ComputationError(
+                    f"Not enough valid data after NaN filtering: group sizes {len(vals_0)}, {len(vals_1)}"
+                )
+
             if paired:
                 if len(vals_0) != len(vals_1):
                     raise ComputationError("Paired t-test requires equal sample sizes")
@@ -446,45 +451,58 @@ class UnivariateAnalyzer:
         """Perform Tukey HSD post-hoc pairwise comparisons."""
         results = []
         n_groups = len(group_data)
-        all_vals = np.concatenate(group_data)
-        n_total = len(all_vals)
-        n_group_means = len(group_data)
-        df_within = n_total - n_group_means
 
-        ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
+        try:
+            tukey_result = sp_stats.tukey_hsd(*group_data)
+            for i in range(n_groups):
+                for j in range(i + 1, n_groups):
+                    mean_diff = float(np.mean(group_data[i]) - np.mean(group_data[j]))
+                    p_adj = float(tukey_result.pvalue[i, j])
+                    # Compute q-statistic from p-value approximation
+                    all_vals = np.concatenate(group_data)
+                    df_within = len(all_vals) - n_groups
+                    ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
+                    se = np.sqrt(ms_within * (1 / len(group_data[i]) + 1 / len(group_data[j])))
+                    q_stat = abs(mean_diff) / se if se > 0 else 0.0
 
-        for i in range(n_groups):
-            for j in range(i + 1, n_groups):
-                ni = len(group_data[i])
-                nj = len(group_data[j])
-                mean_diff = np.mean(group_data[i]) - np.mean(group_data[j])
+                    results.append({
+                        "group_a": group_labels[i],
+                        "group_b": group_labels[j],
+                        "diff": mean_diff,
+                        "q_stat": float(q_stat),
+                        "p_value": p_adj,
+                        "significant": p_adj < 0.05,
+                    })
+        except (AttributeError, TypeError):
+            # Fallback for older scipy without tukey_hsd
+            all_vals = np.concatenate(group_data)
+            n_total = len(all_vals)
+            df_within = n_total - n_groups
+            ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
 
-                se = np.sqrt(ms_within * (1 / ni + 1 / nj))
-                if se == 0:
-                    q_stat = 0.0
-                else:
-                    q_stat = abs(mean_diff) / se
+            for i in range(n_groups):
+                for j in range(i + 1, n_groups):
+                    ni = len(group_data[i])
+                    nj = len(group_data[j])
+                    mean_diff = np.mean(group_data[i]) - np.mean(group_data[j])
+                    se = np.sqrt(ms_within * (1 / ni + 1 / nj))
+                    q_stat = abs(mean_diff) / se if se > 0 else 0.0
+                    try:
+                        t_stat = q_stat / np.sqrt(2)
+                        p_raw = 2 * (1 - sp_stats.t.cdf(abs(t_stat), df=max(df_within, 1)))
+                        n_comparisons = n_groups * (n_groups - 1) / 2
+                        p_adj = min(p_raw * n_comparisons, 1.0)
+                    except Exception:
+                        p_adj = 1.0
 
-                # Approximate p-value using studentized range distribution
-                # Use scipy's tukey if available, else approximate
-                try:
-                    # Approximate: p from t-distribution adjusted for multiple comparisons
-                    t_stat = q_stat / np.sqrt(2)
-                    p_raw = 2 * (1 - sp_stats.t.cdf(abs(t_stat), df=max(df_within, 1)))
-                    # Bonferroni-like correction for pairwise comparisons
-                    n_comparisons = n_groups * (n_groups - 1) / 2
-                    p_adj = min(p_raw * n_comparisons, 1.0)
-                except Exception:
-                    p_adj = 1.0
-
-                results.append({
-                    "group_a": group_labels[i],
-                    "group_b": group_labels[j],
-                    "diff": float(mean_diff),
-                    "q_stat": float(q_stat),
-                    "p_adj": float(p_adj),
-                    "significant": p_adj < 0.05,
-                })
+                    results.append({
+                        "group_a": group_labels[i],
+                        "group_b": group_labels[j],
+                        "diff": float(mean_diff),
+                        "q_stat": float(q_stat),
+                        "p_value": float(p_adj),
+                        "significant": p_adj < 0.05,
+                    })
 
         return results
 

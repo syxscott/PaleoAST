@@ -145,7 +145,7 @@ class EFAAnalyzer:
         for n in range(1, n_harmonics + 1):
             omega = 2 * np.pi * n / T
 
-            # Integrate using trapezoidal rule (uniform spacing)
+            # Integrate using rectangle rule (uniform spacing)
             dt = T / n_points
 
             a_n = (2 / T) * np.sum(x * np.cos(omega * t)) * dt
@@ -282,6 +282,8 @@ class EigenshapeAnalyzer:
         # SVD-based PCA on the coefficient matrix
         U, S, Vt = np.linalg.svd(centered, full_matrices=False)
 
+        if n_specimens < 2:
+            raise ValueError("Eigenshape analysis requires at least 2 specimens")
         eigenvalues = S ** 2 / (n_specimens - 1)
         explained = eigenvalues / np.sum(eigenvalues)
         cumulative = np.cumsum(explained)

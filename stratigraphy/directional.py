@@ -143,4 +143,5 @@ class DirectionalAnalyzer:
         """
         bin_edges = np.linspace(0, 360, n_bins + 1)
         counts, _ = np.histogram(angles_deg % 360, bins=bin_edges)
-        return bin_edges, counts
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        return bin_centers, counts

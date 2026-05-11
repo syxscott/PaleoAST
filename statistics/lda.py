@@ -130,7 +130,7 @@ class LDAAnalyzer:
         with self._lock:
             try:
                 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-                from sklearn.model_selection import cross_val_score
+                from sklearn.model_selection import cross_val_score, cross_val_predict
             except ImportError:
                 raise ComputationError(
                     "scikit-learn is required for LDA. Install with: pip install scikit-learn"
@@ -204,9 +204,16 @@ class LDAAnalyzer:
                 lda_full.fit(data_grouped, groups_grouped)
                 accuracy = float(lda_full.score(data_grouped, groups_grouped))
 
-            # Confusion matrix
-            lda_full.fit(data_grouped, groups_grouped)
-            predictions = lda_full.predict(data_grouped)
+            # Confusion matrix via cross-validated predictions
+            if cv_folds_actual >= 2:
+                try:
+                    predictions = cross_val_predict(lda_full, data_grouped, groups_grouped, cv=cv_folds_actual)
+                except Exception:
+                    lda_full.fit(data_grouped, groups_grouped)
+                    predictions = lda_full.predict(data_grouped)
+            else:
+                lda_full.fit(data_grouped, groups_grouped)
+                predictions = lda_full.predict(data_grouped)
             cm = np.zeros((n_classes, n_classes), dtype=int)
             class_to_idx = {c: i for i, c in enumerate(unique_classes)}
             for true, pred in zip(groups_grouped, predictions):
@@ -216,7 +223,7 @@ class LDAAnalyzer:
                 scores=scores,
                 loadings=loadings,
                 explained_variance_ratio=explained_var,
-                eigenvalues=lda.explained_variance_ratio_,
+                eigenvalues=eigenvalues,
                 confusion_matrix=cm,
                 accuracy=accuracy,
                 n_classes=n_classes,

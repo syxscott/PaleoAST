@@ -173,6 +173,8 @@ class StatisticsController:
         n_dimensions: int = 2,
         metric: str = "bray_curtis",
         n_restarts: int = 10,
+        max_iterations: int | None = None,
+        tolerance: float | None = None,
         random_seed: int | None = None,
     ) -> NMDSResult:
         """
@@ -206,6 +208,7 @@ class StatisticsController:
                 n_dimensions=n_dimensions,
                 metric=metric,
                 n_restarts=n_restarts,
+                max_iterations=max_iterations,
                 random_seed=random_seed,
             )
 
@@ -549,7 +552,10 @@ class StatisticsController:
                 data = self._state.data_matrix.data
                 if column_names is None:
                     column_names = self._state.data_matrix.col_labels
-            results = self._univariate_analyzer.normality_test(data, column_names)
+            n_vars = data.shape[1] if data.ndim == 2 else 1
+            results = []
+            for i in range(n_vars):
+                results.append(self._univariate_analyzer.normality_test(data, column=i))
             self._state.cache_result("normality_results", results)
             return results
 
@@ -564,7 +570,10 @@ class StatisticsController:
                 data = self._state.data_matrix.data
             if groups is None:
                 groups = [0] * data.shape[0]
-            results = self._univariate_analyzer.t_test(data, groups, paired=paired)
+            n_vars = data.shape[1] if data.ndim == 2 else 1
+            results = []
+            for i in range(n_vars):
+                results.append(self._univariate_analyzer.t_test(data, column=i, groups=groups, paired=paired))
             self._state.cache_result("t_test_results", results)
             return results
 
@@ -579,7 +588,10 @@ class StatisticsController:
                 data = self._state.data_matrix.data
             if groups is None:
                 groups = [0] * data.shape[0]
-            results = self._univariate_analyzer.one_way_anova(data, groups)
+            n_vars = data.shape[1] if data.ndim == 2 else 1
+            results = []
+            for i in range(n_vars):
+                results.append(self._univariate_analyzer.one_way_anova(data, groups, column=i))
             self._state.cache_result("anova_results", results)
             return results
 
@@ -594,7 +606,10 @@ class StatisticsController:
                 data = self._state.data_matrix.data
             if groups is None:
                 groups = [0] * data.shape[0]
-            results = self._univariate_analyzer.kruskal_wallis(data, groups)
+            n_vars = data.shape[1] if data.ndim == 2 else 1
+            results = []
+            for i in range(n_vars):
+                results.append(self._univariate_analyzer.kruskal_wallis(data, groups, column=i))
             self._state.cache_result("kruskal_results", results)
             return results
 

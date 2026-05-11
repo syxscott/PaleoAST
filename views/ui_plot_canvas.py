@@ -910,12 +910,10 @@ class InteractivePlotCanvas(QWidget):
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
 
-        # Get top contributors across all group pairs
+        # Get top contributors (flat list from SimperResult)
         all_contribs: dict[str, float] = {}
-        for pair_result in result.pair_results:
-            for vc in pair_result.contributions:
-                name = vc.variable_name
-                all_contribs[name] = max(all_contribs.get(name, 0), vc.average_contribution)
+        for vc in result.contributions:
+            all_contribs[vc.name] = max(all_contribs.get(vc.name, 0), vc.average)
 
         # Sort by contribution
         sorted_items = sorted(all_contribs.items(), key=lambda x: x[1], reverse=True)[:15]
@@ -1016,12 +1014,12 @@ class InteractivePlotCanvas(QWidget):
                         color_threshold=result.linkage_matrix[-(result.n_clusters - 1), 2]
                         if result.n_clusters > 1 else 0)
 
-        self._ax.set_title(f"{_('Hierarchical Clustering')} (cophenetic r={result.cophenetic_correlation:.3f})")
+        self._ax.set_title(f"{_('Hierarchical Clustering')} (cophenetic r={result.cophenetic_corr:.3f})")
         self._ax.set_ylabel(_("Distance"))
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_rose_diagram(self, bin_edges: np.ndarray, counts: np.ndarray,
+    def plot_rose_diagram(self, bin_centers: np.ndarray, counts: np.ndarray,
                           mean_direction_deg: float = 0.0) -> None:
         """Plot rose diagram for directional data."""
         self._current_plot_type = "rose"
@@ -1030,9 +1028,10 @@ class InteractivePlotCanvas(QWidget):
 
         n_bins = len(counts)
         bin_width = 2 * np.pi / n_bins
-        bin_centers = np.linspace(0, 2 * np.pi, n_bins, endpoint=False)
+        # Convert degree centers to radians if values > 2*pi
+        centers = np.deg2rad(bin_centers) if np.max(bin_centers) > 2 * np.pi else bin_centers
 
-        bars = self._ax.bar(bin_centers, counts, width=bin_width * 0.8,
+        bars = self._ax.bar(centers, counts, width=bin_width * 0.8,
                            color=self.COLORS[0], alpha=0.7, edgecolor="white")
 
         # Mean direction arrow
@@ -1316,9 +1315,10 @@ class InteractivePlotCanvas(QWidget):
         x2, y2 = erelease.xdata, erelease.ydata
 
         # Find points in rectangle
+        d1, d2 = self._current_dim1, self._current_dim2
         selected = []
         for i, point in enumerate(self._scores):
-            if min(x1, x2) <= point[0] <= max(x1, x2) and min(y1, y2) <= point[1] <= max(y1, y2):
+            if min(x1, x2) <= point[d1] <= max(x1, x2) and min(y1, y2) <= point[d2] <= max(y1, y2):
                 selected.append(i)
 
         self._highlight_selection(selected)
@@ -1330,9 +1330,10 @@ class InteractivePlotCanvas(QWidget):
         path = Path(verts)
 
         # Find points inside path
+        d1, d2 = self._current_dim1, self._current_dim2
         selected = []
         for i, point in enumerate(self._scores):
-            if path.contains_point((point[0], point[1])):
+            if path.contains_point((point[d1], point[d2])):
                 selected.append(i)
 
         self._highlight_selection(selected)

@@ -522,8 +522,10 @@ class PCADialog(BaseAnalysisDialog):
         method_index = self._method_combo.currentIndex()
         if method_index == 0:
             method = "correlation"
-        else:
+        elif method_index == 1:
             method = "covariance"
+        else:
+            method = "spcs"
 
         self._parameters = {
             "n_components": self._n_components_spin.value(),

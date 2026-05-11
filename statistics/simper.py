@@ -97,9 +97,7 @@ class SimperResult:
             f"{'Variable':<20} {'Avg':>8} {'SD':>8} {'Cum%':>8} {'Ratio':>8}",
             "-" * 55,
         ]
-        cum = 0.0
         for c in sorted(self.contributions, key=lambda x: x.average, reverse=True):
-            cum += c.average
             lines.append(f"{c.name:<20} {c.average:>8.4f} {c.std:>8.4f} {c.cumulative * 100:>7.1f}% {c.ratio:>8.2f}")
         return "\n".join(lines)
 
@@ -179,9 +177,6 @@ class SimperAnalyzer:
                     all_contributions += pair_contribs
                     pair_count += 1
 
-            # Average across all group pairs
-            avg_contributions = all_contributions / pair_count
-
             # Compute per-variable stats across all group pairs
             contrib_list = []
             for k in range(n_vars):
@@ -203,7 +198,7 @@ class SimperAnalyzer:
                         means_b.append(np.mean(data_b[:, k]))
 
                 avg_k = np.mean(pair_vals)
-                std_k = np.std(pair_vals) if len(pair_vals) > 1 else 0.0
+                std_k = np.std(pair_vals, ddof=1) if len(pair_vals) > 1 else 0.0
 
                 contrib_list.append({
                     "index": k,

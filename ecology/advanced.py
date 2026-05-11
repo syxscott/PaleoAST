@@ -187,8 +187,8 @@ class AbundanceModelFitter:
         ])
 
         r_sq = self._r_squared(abundances, predicted)
-        # Broken stick has no free parameters
-        aic_val = self._aic(abundances, predicted, 0)
+        # Broken stick has no free parameters, but n_params=1 for AIC (variance only)
+        aic_val = self._aic(abundances, predicted, 1)
 
         return AbundanceModelFit(
             model_name="Broken Stick (MacArthur)",
@@ -207,6 +207,8 @@ class AbundanceModelFitter:
 
         where α is Fisher's alpha and x is estimated from N/S.
         """
+        abundances = np.asarray(abundances, dtype=float)
+        abundances = abundances[~np.isnan(abundances)]
         abundances = abundances[abundances > 0]
         S = len(abundances)
         N = np.sum(abundances)
@@ -342,7 +344,8 @@ class SHEAnalyzer:
 
             # Shannon H'
             proportions = pooled / np.sum(pooled)
-            H = -np.sum(proportions * np.log(proportions + 1e-10))
+            proportions = proportions[proportions > 0]
+            H = -np.sum(proportions * np.log(proportions))
 
             # Pielou's evenness
             E = H / np.log(S) if S > 1 else 1.0

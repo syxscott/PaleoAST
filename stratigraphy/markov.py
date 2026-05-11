@@ -109,6 +109,8 @@ class MarkovAnalyzer:
             MarkovResult
         """
         sequence = np.array(sequence)
+        if len(sequence) < 2:
+            raise ValueError("Sequence must have at least 2 elements for Markov chain analysis")
         n_states = int(np.max(sequence)) + 1
 
         if facies_names is None:

@@ -1576,7 +1576,9 @@ class MainWindow(QMainWindow):
 
             try:
                 result = self._statistics_controller.run_nmds(
-                    metric=params["metric"], n_dimensions=params["n_dimensions"], n_restarts=params["n_restarts"]
+                    metric=params["metric"], n_dimensions=params["n_dimensions"],
+                    n_restarts=params["n_restarts"], max_iterations=params["max_iterations"],
+                    tolerance=params["tolerance"]
                 )
 
                 plot = InteractivePlotCanvas()
@@ -1751,7 +1753,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, _("Summary Statistics"), msg)
                 elif test_type == 1:  # Normality
                     results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.statistic:.4f}, p={r.p_value:.4f} {'*' if r.is_normal else 'ns'}"
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
                              for i, r in enumerate(results)]
                     QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
                 elif test_type == 2:  # t-test
