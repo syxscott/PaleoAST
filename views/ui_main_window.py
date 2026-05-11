@@ -1031,6 +1031,21 @@ class MainWindow(QMainWindow):
         # Monitor state changes
         self._last_has_data = False
 
+    def _get_groups(self) -> list[str] | None:
+        """Get group labels from row metadata, or None if not available."""
+        rm = self._state.row_metadata
+        if rm is None:
+            return None
+        groups_dict = rm.get_groups()
+        if not groups_dict:
+            return None
+        # Check if any group is actually set (not None)
+        values = [groups_dict[i] for i in sorted(groups_dict.keys())]
+        if all(v is None for v in values):
+            return None
+        # Fill None with a default group
+        return [v if v is not None else "Ungrouped" for v in values]
+
     def _update_ui_state(self) -> None:
         """Update UI element states based on data availability."""
         has_data = self._state.has_data
@@ -1724,7 +1739,7 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(0, 0)
                 result = self._statistics_controller.analyze_simper(
                     data=self._state.data_matrix.data,
-                    groups=self._state.get_groups() if hasattr(self._state, 'get_groups') else None,
+                    groups=self._get_groups(),
                     metric=params.get("metric", "bray_curtis"),
                 )
                 plot = InteractivePlotCanvas()
@@ -1762,19 +1777,19 @@ class MainWindow(QMainWindow):
                              for i, r in enumerate(results)]
                     QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
                 elif test_type == 2:  # t-test
-                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    groups = self._get_groups()
                     results = self._statistics_controller.analyze_t_test(data, groups=groups)
                     lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
                              for i, r in enumerate(results)]
                     QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
                 elif test_type == 3:  # ANOVA
-                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    groups = self._get_groups()
                     results = self._statistics_controller.analyze_anova(data, groups=groups)
                     lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
                              for i, r in enumerate(results)]
                     QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
                 elif test_type == 4:  # Kruskal-Wallis
-                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    groups = self._get_groups()
                     results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
                     lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
                              for i, r in enumerate(results)]
@@ -1792,12 +1807,20 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
+        groups = self._get_groups()
+        if groups is None:
+            QMessageBox.warning(
+                self, _("No Groups"),
+                _("LDA requires group assignments. Please set row groups first via the spreadsheet metadata.")
+            )
+            return
+
         dialog = LDADialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
                 self._status_bar.setProgress(0, 0)
-                groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                self._logger.info(f"Running LDA with {len(set(groups))} groups, n_components={params.get('n_components')}")
                 result = self._statistics_controller.analyze_lda(
                     data=self._state.data_matrix.data,
                     groups=groups,
@@ -1808,8 +1831,10 @@ class MainWindow(QMainWindow):
                 plot_index = self._workspace.addWidget(plot, "LDA")
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(_("LDA analysis completed"))
+                self._logger.info(f"LDA completed: accuracy={result.accuracy:.4f}, {result.n_classes} classes")
             except Exception as e:
-                QMessageBox.critical(self, "LDA Error", str(e))
+                self._logger.error(f"LDA analysis failed: {e}")
+                QMessageBox.critical(self, _("LDA Error"), str(e))
             finally:
                 self._status_bar.setProgress(100, 100)
 
