@@ -13,13 +13,13 @@ PaleoAST Macroevolution - Fossilized Birth-Death Process
 化石生灭过程是系统发育树的先验模型:
 
     - 出生率 (Speciation): λ
-    - 灭绝率 (Extinction): μ  
+    - 灭绝率 (Extinction): μ
     - 化石保存率 (Fossilization): ψ
 
 2. 连续时间马尔可夫链
 --------------------------------------------------------------------------------
 状态空间: {N(t), 当前节点活跃}
-    
+
 转移率:
     (n, active) → (n+1, active): nλ    (出生事件)
     (n, active) → (n-1, active): nμ   (灭绝事件)
@@ -35,7 +35,7 @@ PaleoAST Macroevolution - Fossilized Birth-Death Process
     3. 生成事件时间: τ = -ln(U₁)/R, U₁~Uniform(0,1)
     4. 选择事件类型:
        - 出生: 概率 λ/R
-       - 灭绝: 概率 μ/R  
+       - 灭绝: 概率 μ/R
        - 化石保存: 概率 ψ/R
     5. 更新状态和时间
     6. 重复直到达到时间终点
@@ -76,11 +76,12 @@ PaleoAST Macroevolution - Fossilized Birth-Death Process
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Callable
-from dataclasses import dataclass, field
-import numpy as np
+
 import logging
+from dataclasses import dataclass, field
 from enum import Enum, auto
+
+import numpy as np
 from scipy import stats
 
 logger = logging.getLogger(__name__)
@@ -88,30 +89,33 @@ logger = logging.getLogger(__name__)
 
 class FBDEventType(Enum):
     """FBD事件类型"""
-    BIRTH = auto()      # 物种形成
-    DEATH = auto()      # 灭绝
+
+    BIRTH = auto()  # 物种形成
+    DEATH = auto()  # 灭绝
     FOSSILIZATION = auto()  # 化石保存
 
 
 @dataclass
 class FBDEvent:
     """FBD事件"""
+
     event_type: FBDEventType
     time: float
     parent_id: int
-    child_id: Optional[int] = None
-    lineage_id: Optional[int] = None
+    child_id: int | None = None
+    lineage_id: int | None = None
 
 
 @dataclass
 class Lineage:
     """谱系"""
+
     lineage_id: int
     birth_time: float
-    death_time: Optional[float] = None
-    fossil_ages: List[float] = field(default_factory=list)
-    parent_id: Optional[int] = None
-    children_ids: List[int] = field(default_factory=list)
+    death_time: float | None = None
+    fossil_ages: list[float] = field(default_factory=list)
+    parent_id: int | None = None
+    children_ids: list[int] = field(default_factory=list)
     is_alive: bool = True
 
 
@@ -119,7 +123,7 @@ class Lineage:
 class FBDSimulationResult:
     """
     FBD模拟结果
-    
+
     属性:
         lineages: 谱系列表
         events: 事件序列
@@ -129,21 +133,22 @@ class FBDSimulationResult:
         extinction_times: 灭绝时间
         diversity_curve: 多样性随时间变化
     """
-    lineages: List[Lineage]
-    events: List[FBDEvent]
+
+    lineages: list[Lineage]
+    events: list[FBDEvent]
     extant_species: int
     fossil_count: int
     speciation_times: np.ndarray
     extinction_times: np.ndarray
     diversity_curve: np.ndarray
-    
+
     @property
     def tree_height(self) -> float:
         """树高度 (最老物种年龄)"""
         if not self.lineages:
             return 0.0
         return max(l.birth_time for l in self.lineages)
-    
+
     @property
     def survival_fraction(self) -> float:
         """存活比例"""
@@ -157,9 +162,9 @@ class FBDSimulationResult:
 class GillespieSimulator:
     """
     Gillespie随机模拟器
-    
+
     实现Gillespie算法进行FBD过程模拟。
-    
+
     使用示例:
         >>> sim = GillespieSimulator(
         ...     speciation_rate=0.5,
@@ -171,17 +176,13 @@ class GillespieSimulator:
         >>> result = sim.get_result()
         >>> print(f"Diversity curve: {result.diversity_curve}")
     """
-    
+
     def __init__(
-        self,
-        speciation_rate: float,
-        extinction_rate: float,
-        fossilization_rate: float,
-        random_seed: Optional[int] = None
+        self, speciation_rate: float, extinction_rate: float, fossilization_rate: float, random_seed: int | None = None
     ):
         """
         初始化模拟器
-        
+
         参数:
             speciation_rate: 物种形成率 λ
             extinction_rate: 灭绝率 μ
@@ -194,26 +195,26 @@ class GillespieSimulator:
             raise ValueError("Extinction rate must be non-negative")
         if fossilization_rate < 0:
             raise ValueError("Fossilization rate must be non-negative")
-        
+
         self._lambda = speciation_rate
         self._mu = extinction_rate
         self._psi = fossilization_rate
-        
+
         if random_seed is not None:
             np.random.seed(random_seed)
-        
+
         self._logger = logging.getLogger(f"{__name__}.GillespieSimulator")
-        
-        self._lineages: List[Lineage] = []
-        self._events: List[FBDEvent] = []
+
+        self._lineages: list[Lineage] = []
+        self._events: list[FBDEvent] = []
         self._next_lineage_id = 0
         self._current_time = 0.0
         self._is_initialized = False
-    
+
     def initialize(self, n_lineages: int = 1, start_time: float = 0.0) -> None:
         """
         初始化模拟
-        
+
         参数:
             n_lineages: 初始谱系数
             start_time: 起始时间
@@ -222,32 +223,20 @@ class GillespieSimulator:
         self._events = []
         self._next_lineage_id = 0
         self._current_time = start_time
-        
+
         for _ in range(n_lineages):
-            lineage = Lineage(
-                lineage_id=self._next_lineage_id,
-                birth_time=start_time,
-                parent_id=None,
-                is_alive=True
-            )
+            lineage = Lineage(lineage_id=self._next_lineage_id, birth_time=start_time, parent_id=None, is_alive=True)
             self._lineages.append(lineage)
             self._next_lineage_id += 1
-        
+
         self._is_initialized = True
-        
-        self._logger.info(
-            f"Initialized with {n_lineages} lineages at time {start_time}"
-        )
-    
-    def run(
-        self,
-        duration: Optional[float] = None,
-        end_time: Optional[float] = None,
-        max_events: int = 100000
-    ) -> None:
+
+        self._logger.info(f"Initialized with {n_lineages} lineages at time {start_time}")
+
+    def run(self, duration: float | None = None, end_time: float | None = None, max_events: int = 100000) -> None:
         """
         运行模拟
-        
+
         参数:
             duration: 模拟时长
             end_time: 结束时间 (与duration二选一)
@@ -255,70 +244,62 @@ class GillespieSimulator:
         """
         if not self._is_initialized:
             raise RuntimeError("Must call initialize() first")
-        
+
         if duration is not None:
             end_time = self._current_time + duration
         elif end_time is None:
             raise ValueError("Must specify either duration or end_time")
-        
+
         self._logger.info(
             f"Running simulation until time {end_time}, "
             f"speciation={self._lambda}, extinction={self._mu}, "
             f"fossilization={self._psi}"
         )
-        
+
         event_count = 0
-        
+
         while self._current_time < end_time and event_count < max_events:
             # 获取活跃谱系
             alive_lineages = [l for l in self._lineages if l.is_alive]
             n_alive = len(alive_lineages)
-            
+
             if n_alive == 0:
                 self._logger.info("All lineages extinct, stopping simulation")
                 break
-            
+
             # 计算总速率
             total_rate = n_alive * (self._lambda + self._mu + self._psi)
-            
+
             if total_rate <= 0:
                 break
-            
+
             # 生成事件时间
             tau = np.random.exponential(1.0 / total_rate)
-            
+
             # 检查是否超过结束时间
             if self._current_time + tau > end_time:
                 self._current_time = end_time
                 break
-            
+
             # 更新时间
             self._current_time += tau
-            
+
             # 选择事件类型和谱系
             rates = np.array([self._lambda, self._mu, self._psi])
             probs = rates / rates.sum()
-            
+
             event_type_idx = np.random.choice(3, p=probs)
-            event_types = [
-                FBDEventType.BIRTH,
-                FBDEventType.DEATH,
-                FBDEventType.FOSSILIZATION
-            ]
+            event_types = [FBDEventType.BIRTH, FBDEventType.DEATH, FBDEventType.FOSSILIZATION]
             event_type = event_types[event_type_idx]
-            
+
             # 选择活跃谱系
             lineage_idx = np.random.randint(0, n_alive)
             parent_lineage = alive_lineages[lineage_idx]
-            
+
             # 创建事件
-            event = FBDEvent(
-                event_type=event_type,
-                time=self._current_time,
-                parent_id=parent_lineage.lineage_id
-            )
+            event = FBDEvent(event_type=event_type, time=self._current_time, parent_id=parent_lineage.lineage_id)
             self._events.append(event)
-            
+
             # 处理事件
             if event_type == FBDEventType.BIRTH:
                 # 创建新谱系
@@ -326,57 +307,48 @@ class GillespieSimulator:
                     lineage_id=self._next_lineage_id,
                     birth_time=self._current_time,
                     parent_id=parent_lineage.lineage_id,
-                    is_alive=True
+                    is_alive=True,
                 )
                 parent_lineage.children_ids.append(new_lineage.lineage_id)
-                
+
                 self._lineages.append(new_lineage)
                 self._next_lineage_id += 1
-                
+
                 event.child_id = new_lineage.lineage_id
-                
+
             elif event_type == FBDEventType.DEATH:
                 # 谱系灭绝
                 parent_lineage.is_alive = False
                 parent_lineage.death_time = self._current_time
-                
+
             elif event_type == FBDEventType.FOSSILIZATION:
                 # 保存化石年龄
                 parent_lineage.fossil_ages.append(self._current_time)
-            
+
             event_count += 1
-        
-        self._logger.info(
-            f"Simulation complete: {event_count} events, "
-            f"time = {self._current_time}"
-        )
-    
+
+        self._logger.info(f"Simulation complete: {event_count} events, time = {self._current_time}")
+
     def get_result(self) -> FBDSimulationResult:
         """
         获取模拟结果
-        
+
         返回:
             FBDSimulationResult
         """
         # 统计
         extant = sum(1 for l in self._lineages if l.is_alive)
         fossil_count = sum(len(l.fossil_ages) for l in self._lineages)
-        
+
         # 物种形成时间
-        speciation_times = np.array([
-            l.birth_time for l in self._lineages
-            if l.parent_id is not None
-        ])
-        
+        speciation_times = np.array([l.birth_time for l in self._lineages if l.parent_id is not None])
+
         # 灭绝时间
-        extinction_times = np.array([
-            l.death_time for l in self._lineages
-            if l.death_time is not None
-        ])
-        
+        extinction_times = np.array([l.death_time for l in self._lineages if l.death_time is not None])
+
         # 多样性曲线
         diversity_curve = self._compute_diversity_curve()
-        
+
         return FBDSimulationResult(
             lineages=self._lineages,
             events=self._events,
@@ -384,9 +356,9 @@ class GillespieSimulator:
             fossil_count=fossil_count,
             speciation_times=speciation_times,
             extinction_times=extinction_times,
-            diversity_curve=diversity_curve
+            diversity_curve=diversity_curve,
         )
-    
+
     def _compute_diversity_curve(self) -> np.ndarray:
         """计算多样性随时间变化"""
         if not self._events:
@@ -396,10 +368,11 @@ class GillespieSimulator:
 
         # Build event lookup: time -> (births, deaths)
         from collections import Counter
+
         births = Counter()
         deaths = Counter()
         for e in self._events:
-            if hasattr(e, 'event_type'):
+            if hasattr(e, "event_type"):
                 if e.event_type == FBDEventType.BIRTH:
                     births[e.time] += 1
                 elif e.event_type == FBDEventType.DEATH:
@@ -407,8 +380,9 @@ class GillespieSimulator:
 
         diversity = []
         # Count initial lineages (those created at initialize time, with parent_id=None)
-        initial_lineages = sum(1 for l in self._lineages
-                               if l.parent_id is None and l.birth_time == self._lineages[0].birth_time)
+        initial_lineages = sum(
+            1 for l in self._lineages if l.parent_id is None and l.birth_time == self._lineages[0].birth_time
+        )
         current_n = initial_lineages
         for t in times:
             current_n += births.get(t, 0) - deaths.get(t, 0)
@@ -420,36 +394,30 @@ class GillespieSimulator:
 class FossilizedBirthDeathProcess:
     """
     化石生灭过程
-    
+
     提供FBD分布的解析计算和MCMC采样。
-    
+
     使用示例:
         >>> fbd = FossilizedBirthDeathProcess(
         ...     lambda_=0.5,
         ...     mu=0.2,
         ...     psi=0.1
         ... )
-        >>> 
+        >>>
         >>> # 计算存活概率
         >>> S = fbd.survival_probability(age=5.0)
         >>> print(f"Survival prob: {S:.4f}")
-        >>> 
+        >>>
         >>> # 计算似然
         >>> tree = read_phylogeny(...)
         >>> fossils = [(4.0,), (2.5,), (1.0,)]
         >>> log_lik = fbd.log_likelihood(tree, fossils)
     """
-    
-    def __init__(
-        self,
-        lambda_: float,
-        mu: float,
-        psi: float,
-        sampling_probability: Optional[float] = None
-    ):
+
+    def __init__(self, lambda_: float, mu: float, psi: float, sampling_probability: float | None = None):
         """
         初始化FBD过程
-        
+
         参数:
             lambda_: 物种形成率
             mu: 灭绝率
@@ -460,128 +428,157 @@ class FossilizedBirthDeathProcess:
         self._mu = mu
         self._psi = psi
         self._rho = sampling_probability  # 采样比例
-        
+
         self._logger = logging.getLogger(f"{__name__}.FBDProcess")
-    
+
     def survival_probability(self, age: float) -> float:
         """
-        计算物种存活概率
-        
+        计算物种存活概率（至少有一个后裔存活到时间t的概率）
+
         参数:
             age: 年龄
-        
+
         返回:
             存活概率 S(t)
-        
+
         数学公式:
-            S(t) = exp(-(λ + μ)t) / (1 + μ/λ × (1 - exp(-(λ-μ)t)))
-            
-            当 λ ≠ μ 时
-            
-            S(t) = (1 + μt)⁻¹ 当 λ = μ 时
+            令 r = λ - μ
+
+            当 r ≠ 0 时:
+                S(t) = r / (r + μ × (1 - exp(-r × t)))
+
+            当 r = 0 (λ = μ) 时:
+                S(t) = 1 / (1 + μ × t)
         """
         if age < 0:
             raise ValueError("Age must be non-negative")
-        
+
         if age == 0:
             return 1.0
-        
+
         r = self._lambda - self._mu
-        
+
         if abs(r) < 1e-10:
             # λ ≈ μ
             return 1.0 / (1.0 + self._mu * age)
         else:
             # λ ≠ μ
+            # S(t) = r / (r + μ * (1 - exp(-r*t)))
             exp_rt = np.exp(-r * age)
-            numerator = exp_rt
-            denominator = 1.0 + (self._mu / r) * (1 - exp_rt)
-            
-            return numerator / denominator
-    
+            return r / (r + self._mu * (1.0 - exp_rt))
+
     def expected_diversity(self, time: float) -> float:
         """
         计算期望多样性
-        
+
+        对于纯生灭过程，从1个物种开始，t时刻的期望物种数为：
+
+            E[N(t)] = exp((λ - μ) × t)
+
+        当 λ > μ 时指数增长，当 λ < μ 时指数衰减。
+
         参数:
             time: 时间
-        
+
         返回:
             期望物种数
         """
-        # 简化模型: 从1个物种开始
-        S = self.survival_probability(time)
-        return max(1.0, S * np.exp((self._lambda - self._mu) * time))
-    
-    def fossil_count_distribution(
-        self,
-        age: float,
-        max_k: int = 20
-    ) -> np.ndarray:
+        r = self._lambda - self._mu
+        return np.exp(r * time)
+
+    def fossil_count_distribution(self, age: float, max_k: int = 20) -> np.ndarray:
         """
         计算化石数量的概率分布
-        
+
         参数:
             age: 物种年龄
             max_k: 最大化石数
-        
+
         返回:
             P(K = k) 概率分布
         """
         mean_count = self._psi * age
-        
+
         # Poisson分布
         k = np.arange(max_k + 1)
         probs = stats.poisson.pmf(k, mean_count)
-        
+
         return probs
-    
-    def log_likelihood(
-        self,
-        tree,
-        fossils: List[Tuple[float, ...]],
-        complete_tree: bool = True
-    ) -> float:
+
+    def log_likelihood(self, tree, fossils: list[tuple[float, ...]], complete_tree: bool = True) -> float:
         """
         计算FBD过程的日志似然
-        
+
+        基于Stadler (2010)的FBD模型，似然函数由两部分组成：
+
+            log L = log L_tree + log L_fossils
+
+        树拓扑似然:
+            L_tree = ∏_{branches i} exp(-(λ + μ + ψ) × L_i) × (内部分支: λ, 叶分支: q(t))
+
+        化石保存似然:
+            L_fossils = ∏_{fossil j} ψ × exp(-ψ × age_j)
+
         参数:
-            tree: 系统发育树 (newick格式或树对象)
-            fossils: 化石年龄列表
+            tree: 系统发育树 (PhyloTree对象或newick字符串)
+            fossils: 化石年龄列表，如 [(4.0,), (2.5, 1.0)]
             complete_tree: 树是否包含完整信息
-        
+
         返回:
             log L
         """
-        # 这是一个高度简化的实现
-        # 完整实现需要处理树的拓扑结构
-        
+        # 解析树
+        from ..phylogenetics.tree import PhyloTree
+
+        if isinstance(tree, str):
+            tree_obj = PhyloTree.from_newick(tree)
+        else:
+            tree_obj = tree
+
         log_lik = 0.0
-        
-        # 化石似然
+
+        # 1. 树拓扑似然：遍历所有分支
+        if tree_obj.root is not None:
+            for node in tree_obj.root.preorder_traverse():
+                if node.parent is None:
+                    continue  # 跳过根节点
+                branch_length = node.branch_length if node.branch_length is not None else 0.0
+                if branch_length > 0:
+                    # 每个分支贡献: exp(-(λ + μ + ψ) × L)
+                    log_lik += -(self._lambda + self._mu + self._psi) * branch_length
+
+                    if node.is_leaf:
+                        # 叶节点分支：终止似然项
+                        # 对于灭绝谱系: μ, 对于存活谱系: λ × ρ（采样概率）
+                        if not node.metadata.get("is_extant", True):
+                            log_lik += np.log(self._mu) if self._mu > 0 else float("-inf")
+                        else:
+                            rho = self._rho if self._rho is not None else 1.0
+                            log_lik += np.log(self._lambda * rho) if self._lambda * rho > 0 else float("-inf")
+                    else:
+                        # 内部节点分支：物种形成事件
+                        log_lik += np.log(self._lambda) if self._lambda > 0 else float("-inf")
+
+        # 2. 化石保存似然：每个化石独立的泊松过程
         for fossil_group in fossils:
             for age in fossil_group:
-                # Poisson化石日志似然
-                mean_count = self._psi * age
-                log_lik += stats.poisson.logpmf(1, mean_count)  # 假设每个化石组1个化石
-        
-        # 树似然 (简化)
-        # 完整实现需要遍历分支
-        
+                if age < 0:
+                    continue
+                # 化石保存的对数似然: log(ψ) - ψ × age
+                if self._psi > 0:
+                    log_lik += np.log(self._psi) - self._psi * age
+                else:
+                    log_lik += float("-inf")
+
         return log_lik
 
 
 def simulate_fbd_process(
-    lambda_: float,
-    mu: float,
-    psi: float,
-    duration: float,
-    n_replicates: int = 1,
-    random_seed: Optional[int] = None
-) -> List[FBDSimulationResult]:
+    lambda_: float, mu: float, psi: float, duration: float, n_replicates: int = 1, random_seed: int | None = None
+) -> list[FBDSimulationResult]:
     """
     模拟FBD过程的便捷函数
-    
+
     参数:
         lambda_: 物种形成率
         mu: 灭绝率
@@ -589,24 +586,24 @@ def simulate_fbd_process(
         duration: 模拟时长
         n_replicates: 重复次数
         random_seed: 随机种子
-    
+
     返回:
         FBDSimulationResult列表
     """
     if random_seed is not None:
         np.random.seed(random_seed)
-    
+
     results = []
-    
+
     for i in range(n_replicates):
         sim = GillespieSimulator(
             speciation_rate=lambda_,
             extinction_rate=mu,
             fossilization_rate=psi,
-            random_seed=random_seed + i if random_seed is not None else None
+            random_seed=random_seed + i if random_seed is not None else None,
         )
         sim.initialize(n_lineages=1)
         sim.run(duration=duration)
         results.append(sim.get_result())
-    
+
     return results

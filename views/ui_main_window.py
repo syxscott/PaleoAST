@@ -27,47 +27,55 @@ Version: 1.0.0
 
 import logging
 import sys
-import traceback
-from typing import Optional, Dict, Any, List
 from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QLabel, QStatusBar, QMessageBox,
-    QMenuBar, QMenu, QToolBar, QPushButton, QStackedWidget,
-    QFrame, QScrollArea, QGroupBox, QCheckBox, QSpinBox,
-    QComboBox, QProgressBar, QApplication, QFileDialog,
-    QDialog, QSizePolicy, QStyle
-)
-from PyQt6.QtCore import (
-    Qt, QSize, QTimer, QPoint, QRect, pyqtSignal, pyqtSlot,
-    QThread, QSettings, QObject, QAbstractItemModel,
-    QItemSelectionModel
-)
-from PyQt6.QtWidgets import QAbstractItemView
+from PyQt6.QtCore import QPoint, QRect, QSettings, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
-    QAction, QIcon, QPainter, QPen, QBrush, QColor, QFont,
-    QPixmap, QImage, QCursor, QKeySequence, QPalette,
-    QLinearGradient, QRadialGradient, QConicalGradient, QPainterPath
+    QAction,
+    QBrush,
+    QColor,
+    QCursor,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QStackedWidget,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
 )
 
-from models.state_manager import get_state_manager
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
-from views.ui_spreadsheet import ScientificSpreadsheet
-from views.ui_navigation import NavigationTree, NavigationItem
-from views.ui_dialogs import (
-    PCADialog, PCoADialog, NMDSOptionsDialog,
-    DiversityDialog, RarefactionDialog, ImportDialog
-)
+from models.state_manager import get_state_manager
+from views.ui_dialogs import DiversityDialog, ImportDialog, NMDSOptionsDialog, PCADialog, PCoADialog, RarefactionDialog
+from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_plot_canvas import InteractivePlotCanvas
+from views.ui_spreadsheet import ScientificSpreadsheet
 
 
 class RibbonStyle(Enum):
     """Ribbon button styles."""
+
     LARGE_ICON = 1
     SMALL_ICON = 2
     TEXT_ONLY = 3
@@ -77,16 +85,16 @@ class RibbonStyle(Enum):
 class VectorIconEngine:
     """
     Vector Icon Engine using QPainter.
-    
+
     Generates all application icons programmatically without external files.
     Each icon is drawn using primitive shapes and paths.
     """
-    
+
     @staticmethod
     def create_icon(icon_type: str, size: int = 32) -> QPixmap:
         """
         Create a vector icon of the specified type.
-        
+
         Icon Types:
             - 'new_file': New data matrix
             - 'open_file': Open CSV file
@@ -101,38 +109,32 @@ class VectorIconEngine:
         """
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
-        
+
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        
+
         # Set default pen and brush
         pen = QPen(QColor("#2C3E50"))
         pen.setWidth(max(1, size // 16))
         brush = QBrush(QColor("#3498DB"))
         painter.setPen(pen)
         painter.setBrush(brush)
-        
+
         margin = size // 8
         inner_size = size - 2 * margin
-        
-        if icon_type == 'new_file':
+
+        if icon_type == "new_file":
             # Document with plus sign
             doc_rect = QRect(margin, margin, inner_size, inner_size)
             painter.drawRect(doc_rect)
             # Plus sign
             painter.setPen(QPen(QColor("#27AE60"), max(2, size // 12)))
             center = doc_rect.center()
-            painter.drawLine(
-                center.x() - inner_size // 6, center.y(),
-                center.x() + inner_size // 6, center.y()
-            )
-            painter.drawLine(
-                center.x(), center.y() - inner_size // 6,
-                center.x(), center.y() + inner_size // 6
-            )
-            
-        elif icon_type == 'open_file':
+            painter.drawLine(center.x() - inner_size // 6, center.y(), center.x() + inner_size // 6, center.y())
+            painter.drawLine(center.x(), center.y() - inner_size // 6, center.x(), center.y() + inner_size // 6)
+
+        elif icon_type == "open_file":
             # Folder with document
             folder_path = QPainterPath()
             folder_path.moveTo(margin, inner_size // 3 + margin)
@@ -143,77 +145,74 @@ class VectorIconEngine:
             folder_path.lineTo(inner_size // 3, margin)
             folder_path.closeSubpath()
             painter.drawPath(folder_path)
-            
-        elif icon_type == 'save_file':
+
+        elif icon_type == "save_file":
             # Floppy disk
-            painter.drawRect(QRect(margin, margin + inner_size // 6, 
-                                   inner_size, inner_size - inner_size // 6))
+            painter.drawRect(QRect(margin, margin + inner_size // 6, inner_size, inner_size - inner_size // 6))
             painter.setBrush(QBrush(QColor("#E4E7EB")))
-            painter.drawRect(QRect(margin + inner_size // 4, margin,
-                                   inner_size // 2, inner_size // 4))
-            
-        elif icon_type == 'transpose':
+            painter.drawRect(QRect(margin + inner_size // 4, margin, inner_size // 2, inner_size // 4))
+
+        elif icon_type == "transpose":
             # Matrix transpose icon (diagonal arrow)
             painter.drawLine(margin, margin, inner_size + margin, inner_size + margin)
             painter.drawLine(margin, margin, margin, margin + inner_size // 4)
             painter.drawLine(margin, margin, margin + inner_size // 4, margin)
-            painter.drawLine(inner_size + margin, inner_size + margin, 
-                           inner_size + margin - inner_size // 4, inner_size + margin)
-            painter.drawLine(inner_size + margin, inner_size + margin,
-                           inner_size + margin, inner_size + margin - inner_size // 4)
-            
-        elif icon_type == 'pca':
+            painter.drawLine(
+                inner_size + margin, inner_size + margin, inner_size + margin - inner_size // 4, inner_size + margin
+            )
+            painter.drawLine(
+                inner_size + margin, inner_size + margin, inner_size + margin, inner_size + margin - inner_size // 4
+            )
+
+        elif icon_type == "pca":
             # 3D coordinate axes with ellipse (PC1, PC2, PC3)
             center_x = size // 2
             center_y = size // 2
             axis_length = inner_size // 2
-            
+
             # X-axis (PC1)
             painter.setPen(QPen(QColor("#E74C3C"), max(2, size // 16)))
             painter.drawLine(center_x, center_y, center_x + axis_length, center_y)
-            
+
             # Y-axis (PC2)
             painter.setPen(QPen(QColor("#27AE60"), max(2, size // 16)))
             painter.drawLine(center_x, center_y, center_x, center_y - axis_length)
-            
+
             # Z-axis hint (PC3)
             painter.setPen(QPen(QColor("#3498DB"), max(2, size // 16)))
-            painter.drawLine(center_x, center_y, center_x - axis_length // 2, 
-                           center_y + axis_length // 2)
-            
+            painter.drawLine(center_x, center_y, center_x - axis_length // 2, center_y + axis_length // 2)
+
             # Ellipse representing variance
             painter.setPen(QPen(QColor("#F39C12"), max(1, size // 24)))
-            ellipse_rect = QRect(center_x - axis_length // 3, center_y - axis_length // 3,
-                                axis_length * 2 // 3, axis_length * 2 // 3)
+            ellipse_rect = QRect(
+                center_x - axis_length // 3, center_y - axis_length // 3, axis_length * 2 // 3, axis_length * 2 // 3
+            )
             painter.drawEllipse(ellipse_rect)
-            
-        elif icon_type == 'diversity':
+
+        elif icon_type == "diversity":
             # Biodiversity tree/branch icon
             center_x = size // 2
             base_y = size - margin
-            
+
             # Main trunk
             painter.setPen(QPen(QColor("#27AE60"), max(2, size // 12)))
             painter.drawLine(center_x, base_y, center_x, margin + inner_size // 4)
-            
+
             # Branches
-            painter.drawLine(center_x, margin + inner_size // 2,
-                           margin + inner_size // 4, margin)
-            painter.drawLine(center_x, margin + inner_size // 2,
-                           center_x, margin)
-            painter.drawLine(center_x, margin + inner_size // 2,
-                           size - margin - inner_size // 4, margin)
-            
-        elif icon_type == 'settings':
+            painter.drawLine(center_x, margin + inner_size // 2, margin + inner_size // 4, margin)
+            painter.drawLine(center_x, margin + inner_size // 2, center_x, margin)
+            painter.drawLine(center_x, margin + inner_size // 2, size - margin - inner_size // 4, margin)
+
+        elif icon_type == "settings":
             # Gear/cog wheel
             painter.save()
             painter.translate(size // 2, size // 2)
-            
+
             num_teeth = 8
             outer_radius = inner_size // 2
             inner_radius = inner_size // 3
             tooth_depth = inner_size // 8
-            
+
             path = QPainterPath()
             for i in range(num_teeth * 2):
                 angle = i * 3.14159 / num_teeth
@@ -225,56 +224,71 @@ class VectorIconEngine:
                 else:
                     path.lineTo(x, y)
             path.closeSubpath()
-            
+
             painter.drawPath(path)
-            
+
             # Center hole
             painter.setBrush(QBrush(QColor("#E4E7EB")))
-            painter.drawEllipse(QRect(-inner_radius // 2, -inner_radius // 2,
-                                     inner_radius, inner_radius))
+            painter.drawEllipse(QRect(-inner_radius // 2, -inner_radius // 2, inner_radius, inner_radius))
             painter.restore()
-            
-        elif icon_type == 'export':
+
+        elif icon_type == "export":
             # Arrow pointing outward from box
-            box_rect = QRect(margin, margin + inner_size // 4,
-                           inner_size, inner_size * 2 // 3)
+            box_rect = QRect(margin, margin + inner_size // 4, inner_size, inner_size * 2 // 3)
             painter.drawRect(box_rect)
             # Arrow
-            painter.drawLine(box_rect.center().x(), box_rect.top(),
-                           box_rect.center().x(), margin)
-            painter.drawLine(box_rect.center().x(), margin,
-                           margin, margin + inner_size // 4)
-            painter.drawLine(box_rect.center().x(), margin,
-                           size - margin, margin + inner_size // 4)
-            
-        elif icon_type == 'undo':
+            painter.drawLine(box_rect.center().x(), box_rect.top(), box_rect.center().x(), margin)
+            painter.drawLine(box_rect.center().x(), margin, margin, margin + inner_size // 4)
+            painter.drawLine(box_rect.center().x(), margin, size - margin, margin + inner_size // 4)
+
+        elif icon_type == "undo":
             # Curved arrow left
             center = pixmap.rect().center()
-            painter.drawArc(QRect(center.x() - inner_size // 3, center.y() - inner_size // 3,
-                                 inner_size * 2 // 3, inner_size * 2 // 3),
-                          180 * 16, 180 * 16)
+            painter.drawArc(
+                QRect(
+                    center.x() - inner_size // 3, center.y() - inner_size // 3, inner_size * 2 // 3, inner_size * 2 // 3
+                ),
+                180 * 16,
+                180 * 16,
+            )
             # Arrow head
-            painter.drawLine(center.x() - inner_size // 3, center.y(),
-                           center.x() - inner_size // 3 - inner_size // 6, 
-                           center.y() + inner_size // 6)
-            painter.drawLine(center.x() - inner_size // 3, center.y(),
-                           center.x() - inner_size // 3 - inner_size // 6,
-                           center.y() - inner_size // 6)
-            
-        elif icon_type == 'redo':
+            painter.drawLine(
+                center.x() - inner_size // 3,
+                center.y(),
+                center.x() - inner_size // 3 - inner_size // 6,
+                center.y() + inner_size // 6,
+            )
+            painter.drawLine(
+                center.x() - inner_size // 3,
+                center.y(),
+                center.x() - inner_size // 3 - inner_size // 6,
+                center.y() - inner_size // 6,
+            )
+
+        elif icon_type == "redo":
             # Curved arrow right
             center = pixmap.rect().center()
-            painter.drawArc(QRect(center.x() - inner_size // 3, center.y() - inner_size // 3,
-                                 inner_size * 2 // 3, inner_size * 2 // 3),
-                          0 * 16, 180 * 16)
-            painter.drawLine(center.x() + inner_size // 3, center.y(),
-                           center.x() + inner_size // 3 + inner_size // 6,
-                           center.y() + inner_size // 6)
-            painter.drawLine(center.x() + inner_size // 3, center.y(),
-                           center.x() + inner_size // 3 + inner_size // 6,
-                           center.y() - inner_size // 6)
-            
-        elif icon_type == 'morphometrics':
+            painter.drawArc(
+                QRect(
+                    center.x() - inner_size // 3, center.y() - inner_size // 3, inner_size * 2 // 3, inner_size * 2 // 3
+                ),
+                0 * 16,
+                180 * 16,
+            )
+            painter.drawLine(
+                center.x() + inner_size // 3,
+                center.y(),
+                center.x() + inner_size // 3 + inner_size // 6,
+                center.y() + inner_size // 6,
+            )
+            painter.drawLine(
+                center.x() + inner_size // 3,
+                center.y(),
+                center.x() + inner_size // 3 + inner_size // 6,
+                center.y() - inner_size // 6,
+            )
+
+        elif icon_type == "morphometrics":
             # Landmark points connected by lines
             points = [
                 QPoint(margin + inner_size // 4, margin + inner_size // 4),
@@ -286,18 +300,17 @@ class VectorIconEngine:
             for pt in points:
                 painter.setBrush(QBrush(QColor("#9B59B6")))
                 painter.drawEllipse(pt, size // 10, size // 10)
-                
-        elif icon_type == 'stratigraphy':
+
+        elif icon_type == "stratigraphy":
             # Layered sedimentary strata
             num_layers = 4
             layer_height = inner_size // num_layers
             colors = ["#E74C3C", "#F39C12", "#27AE60", "#3498DB"]
             for i, color in enumerate(colors):
                 painter.setBrush(QBrush(QColor(color)))
-                painter.drawRect(QRect(margin, margin + i * layer_height,
-                                      inner_size, layer_height - 1))
-                
-        elif icon_type == 'nmds':
+                painter.drawRect(QRect(margin, margin + i * layer_height, inner_size, layer_height - 1))
+
+        elif icon_type == "nmds":
             # Stress plot icon
             painter.setPen(QPen(QColor("#16A085"), max(2, size // 16)))
             points_data = [
@@ -309,33 +322,37 @@ class VectorIconEngine:
                 painter.setBrush(QBrush(QColor("#16A085")))
                 painter.drawEllipse(pt, size // 12, size // 12)
             painter.drawPolyline(points_data)
-            
-        elif icon_type == 'anosim':
+
+        elif icon_type == "anosim":
             # Box plots comparison
             box_width = inner_size // 4
             box1_x = margin + inner_size // 6
             box2_x = size - margin - inner_size // 6 - box_width
-            
+
             painter.setBrush(QBrush(QColor("#3498DB")))
-            painter.drawRect(QRect(box1_x, margin + inner_size // 3,
-                                  box_width, inner_size // 2))
-            painter.drawLine(box1_x + box_width // 2, margin,
-                            box1_x + box_width // 2, margin + inner_size // 3)
-            painter.drawLine(box1_x + box_width // 2, margin + inner_size // 3 + inner_size // 2,
-                            box1_x + box_width // 2, size - margin)
-            
+            painter.drawRect(QRect(box1_x, margin + inner_size // 3, box_width, inner_size // 2))
+            painter.drawLine(box1_x + box_width // 2, margin, box1_x + box_width // 2, margin + inner_size // 3)
+            painter.drawLine(
+                box1_x + box_width // 2,
+                margin + inner_size // 3 + inner_size // 2,
+                box1_x + box_width // 2,
+                size - margin,
+            )
+
             painter.setBrush(QBrush(QColor("#E74C3C")))
-            painter.drawRect(QRect(box2_x, margin + inner_size // 5,
-                                  box_width, inner_size // 3))
-            painter.drawLine(box2_x + box_width // 2, margin,
-                            box2_x + box_width // 2, margin + inner_size // 5)
-            painter.drawLine(box2_x + box_width // 2, margin + inner_size // 5 + inner_size // 3,
-                            box2_x + box_width // 2, size - margin)
-            
+            painter.drawRect(QRect(box2_x, margin + inner_size // 5, box_width, inner_size // 3))
+            painter.drawLine(box2_x + box_width // 2, margin, box2_x + box_width // 2, margin + inner_size // 5)
+            painter.drawLine(
+                box2_x + box_width // 2,
+                margin + inner_size // 5 + inner_size // 3,
+                box2_x + box_width // 2,
+                size - margin,
+            )
+
         else:
             # Default circle icon
             painter.drawEllipse(QRect(margin, margin, inner_size, inner_size))
-        
+
         painter.end()
         return pixmap
 
@@ -343,58 +360,60 @@ class VectorIconEngine:
 def qCos(angle: float) -> float:
     """Compute cosine using math module."""
     import math
+
     return math.cos(angle)
 
 
 def qSin(angle: float) -> float:
     """Compute sine using math module."""
     import math
+
     return math.sin(angle)
 
 
 class RibbonButton(QPushButton):
     """
     Modern Ribbon Button with vector icon support.
-    
+
     Features:
         - Vector icon rendering
         - Multiple display styles (icon only, text only, icon+text)
         - Hover/pressed state animations
         - Tooltip with keyboard shortcut
     """
-    
+
     def __init__(
         self,
         icon_type: str = "",
         text: str = "",
         style: RibbonStyle = RibbonStyle.ICON_TEXT,
-        parent: Optional[QWidget] = None
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        
+
         self._icon_type = icon_type
         self._style = style
         self._is_dark_theme = True
-        
+
         # Set button properties
         self.setText(text)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        
+
         # Create icon
         if icon_type:
             icon_pixmap = VectorIconEngine.create_icon(icon_type, 24)
             icon = QIcon(icon_pixmap)
             self.setIcon(icon)
-        
+
         # Apply stylesheet
         self._apply_stylesheet()
-    
+
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set theme and update stylesheet."""
         self._is_dark_theme = is_dark
         self._apply_stylesheet()
-    
+
     def _apply_stylesheet(self) -> None:
         """Apply modern themed stylesheet to button with smooth transitions."""
         self.setStyleSheet("""
@@ -439,24 +458,20 @@ class RibbonButton(QPushButton):
 class RibbonGroup(QWidget):
     """
     Ribbon Group containing related buttons.
-    
+
     A group has a title and contains a horizontal layout of buttons.
     """
-    
-    def __init__(
-        self,
-        title: str,
-        parent: Optional[QWidget] = None
-    ) -> None:
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        
+
         self._title = title
-        self._buttons: List[RibbonButton] = []
-        
+        self._buttons: list[RibbonButton] = []
+
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(8, 4, 8, 4)
         self._layout.setSpacing(4)
-        
+
         # Button container
         self._button_container = QWidget()
         self._button_layout = QHBoxLayout(self._button_container)
@@ -477,55 +492,47 @@ class RibbonGroup(QWidget):
             }
         """)
         self._layout.addWidget(self._title_label)
-    
+
     def addButton(
-        self,
-        icon_type: str = "",
-        text: str = "",
-        tooltip: str = "",
-        style: RibbonStyle = RibbonStyle.ICON_TEXT
+        self, icon_type: str = "", text: str = "", tooltip: str = "", style: RibbonStyle = RibbonStyle.ICON_TEXT
     ) -> RibbonButton:
         """Add a button to the ribbon group."""
         button = RibbonButton(icon_type, text, style, self)
-        
+
         if tooltip:
             button.setToolTip(tooltip)
-        
+
         self._buttons.append(button)
         self._button_layout.insertWidget(self._button_layout.count() - 1, button)
-        
+
         return button
 
 
 class RibbonTab(QWidget):
     """
     Ribbon Tab containing multiple ribbon groups.
-    
+
     A tab represents a category of operations (e.g., 'Home', 'Analysis').
     """
-    
-    def __init__(
-        self,
-        title: str,
-        parent: Optional[QWidget] = None
-    ) -> None:
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        
+
         self._title = title
-        self._groups: List[RibbonGroup] = []
-        
+        self._groups: list[RibbonGroup] = []
+
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(8, 4, 8, 4)
         self._layout.setSpacing(8)
         self._layout.addStretch()
-    
+
     def addGroup(self, title: str) -> RibbonGroup:
         """Add a group to the ribbon tab."""
         group = RibbonGroup(title, self)
         self._groups.append(group)
         self._layout.insertWidget(self._layout.count() - 1, group)
         return group
-    
+
     def title(self) -> str:
         """Get tab title."""
         return self._title
@@ -534,36 +541,36 @@ class RibbonTab(QWidget):
 class RibbonBar(QWidget):
     """
     Modern Ribbon Bar for application toolbar.
-    
+
     Features:
         - Multiple tabs with groups
         - Collapsible tabs
         - Quick access toolbar
         - Contextual tabs
     """
-    
+
     tabChanged = pyqtSignal(int)
-    
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        
-        self._tabs: List[RibbonTab] = []
+
+        self._tabs: list[RibbonTab] = []
         self._current_tab_index = 0
         self._is_dark_theme = False
-        
+
         # Main layout
         self._main_layout = QVBoxLayout(self)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
-        
+
         # Tab bar
         self._tab_bar = QWidget()
         self._tab_bar_layout = QHBoxLayout(self._tab_bar)
         self._tab_bar_layout.setContentsMargins(4, 4, 4, 4)
         self._tab_bar_layout.setSpacing(0)
-        self._tab_button_group: List[QPushButton] = []
+        self._tab_button_group: list[QPushButton] = []
         self._main_layout.addWidget(self._tab_bar)
-        
+
         # Content area
         self._content_area = QWidget()
         self._content_area.setMinimumHeight(80)
@@ -572,7 +579,7 @@ class RibbonBar(QWidget):
         self._content_layout.setContentsMargins(8, 4, 8, 4)
         self._content_layout.addStretch()
         self._main_layout.addWidget(self._content_area)
-        
+
         # Separator line
         self._separator = QFrame()
         self._separator.setFrameShape(QFrame.Shape.HLine)
@@ -583,41 +590,37 @@ class RibbonBar(QWidget):
             }
         """)
         self._main_layout.addWidget(self._separator)
-        
+
         self._apply_stylesheet()
-    
+
     def addTab(self, title: str) -> RibbonTab:
         """Add a new tab to the ribbon."""
         tab = RibbonTab(title, self)
         self._tabs.append(tab)
-        
+
         # Create tab button
         tab_button = QPushButton(title)
         tab_button.setCheckable(True)
         tab_button.setChecked(len(self._tabs) - 1 == self._current_tab_index)
-        tab_button.clicked.connect(lambda: self._on_tab_clicked(len(self._tabs) - 1))
+        tab_button.clicked.connect(lambda checked=False, idx=len(self._tabs) - 1: self._on_tab_clicked(idx))
         self._tab_button_group.append(tab_button)
-        self._tab_bar_layout.insertWidget(self._tab_bar_layout.count() - 1, tab_button)
-        
-        # Connect to tab change signal
-        tab_button.clicked.connect(lambda checked, idx=len(self._tabs) - 1: 
-                                  self.tabChanged.emit(idx) if checked else None)
-        
+        self._tab_bar_layout.addWidget(tab_button)
+
         # Show first tab content
         if len(self._tabs) == 1:
             self._show_tab(0)
-        
+
         return tab
-    
+
     def _on_tab_clicked(self, index: int) -> None:
         """Handle tab button click."""
         for i, btn in enumerate(self._tab_button_group):
             btn.setChecked(i == index)
-        
+
         self._current_tab_index = index
         self._show_tab(index)
         self.tabChanged.emit(index)
-    
+
     def _show_tab(self, index: int) -> None:
         """Show the content of specified tab."""
         # Remove current content
@@ -625,13 +628,13 @@ class RibbonBar(QWidget):
             item = self._content_layout.takeAt(0)
             if item.widget():
                 item.widget().hide()
-        
+
         # Add new tab content
         if 0 <= index < len(self._tabs):
             tab = self._tabs[index]
             self._content_layout.insertWidget(0, tab)
             tab.show()
-    
+
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
         self.setStyleSheet("""
@@ -665,8 +668,8 @@ class StatusBarWidget(QStatusBar):
     """
     Custom status bar widget with data info and progress.
     """
-    
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setContentsMargins(8, 2, 8, 2)
         self.setStyleSheet("""
@@ -715,15 +718,22 @@ class StatusBarWidget(QStatusBar):
             }
         """)
         self.addPermanentWidget(self._progress_bar)
-    
+
     def setInfo(self, text: str) -> None:
         """Set info text."""
         self._info_label.setText(text)
-    
+
     def setProgress(self, value: int, maximum: int = 100) -> None:
         """Show and update progress bar."""
         if maximum <= 0:
+            # Indeterminate mode: show bouncing progress bar
+            self._progress_bar.setVisible(True)
+            self._progress_bar.setMaximum(0)
+        elif value >= maximum:
+            # Complete: hide progress bar
             self._progress_bar.setVisible(False)
+            self._progress_bar.setMaximum(100)
+            self._progress_bar.setValue(0)
         else:
             self._progress_bar.setVisible(True)
             self._progress_bar.setMaximum(maximum)
@@ -734,18 +744,18 @@ class WorkspaceArea(QWidget):
     """
     Central workspace area containing spreadsheet and plot views.
     """
-    
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        
+
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
-        
+
         # Stacked widget for different views
         self._stack = QStackedWidget()
         self._layout.addWidget(self._stack)
-        
+
         # Placeholder widget
         self._placeholder = QLabel(_("Load data to begin analysis"))
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -757,19 +767,19 @@ class WorkspaceArea(QWidget):
             }
         """)
         self._stack.addWidget(self._placeholder)
-    
+
     def addWidget(self, widget: QWidget, name: str = "") -> int:
         """Add a widget to the workspace."""
         return self._stack.addWidget(widget)
-    
+
     def setCurrentIndex(self, index: int) -> None:
         """Set current widget index."""
         self._stack.setCurrentIndex(index)
-    
-    def currentWidget(self) -> Optional[QWidget]:
+
+    def currentWidget(self) -> QWidget | None:
         """Get current widget."""
         return self._stack.currentWidget()
-    
+
     def removeWidget(self, widget: QWidget) -> None:
         """Remove widget from workspace."""
         self._stack.removeWidget(widget)
@@ -778,19 +788,19 @@ class WorkspaceArea(QWidget):
 class MainWindow(QMainWindow):
     """
     Main Application Window for PaleoAST.
-    
+
     This is the central widget that orchestrates all UI components.
     It follows the MVC pattern and observes the StateManager for changes.
-    
+
     Signals:
         dataLoaded: Emitted when new data is loaded
         analysisCompleted: Emitted when analysis finishes
         plotRequested: Emitted when plot is requested
-    
+
     Mathematical Context:
         The main window serves as the orchestrator for all statistical operations.
         When user clicks "Run PCA", the following pipeline executes:
-        
+
         1. User selects columns in spreadsheet (SpreadsheetView)
         2. Click triggers analysisRequested signal
         3. MainWindow slot receives signal
@@ -800,14 +810,14 @@ class MainWindow(QMainWindow):
         7. InteractivePlotCanvas displays PC1 vs PC2 scores
         8. State change triggers Observer updates
     """
-    
+
     # Signal definitions
     dataLoaded = pyqtSignal(object)  # DataMatrix
     analysisRequested = pyqtSignal(str, dict)  # analysis_type, parameters
     analysisCompleted = pyqtSignal(str, object)  # analysis_type, result
     plotRequested = pyqtSignal(str, object)  # plot_type, data
     navigationChanged = pyqtSignal(str)  # section_name
-    
+
     def __init__(self) -> None:
         super().__init__()
         self._logger = logging.getLogger(f"{__name__}.MainWindow")
@@ -823,20 +833,24 @@ class MainWindow(QMainWindow):
         # Initialize state manager
         self._state = get_state_manager()
         
+        # UI state management - register data-dependent elements
+        self._data_actions = []
+        self._data_buttons = []
+
         # Create widgets
         self._create_ui()
-        
+
         # Setup connections
         self._setup_connections()
-        
+
         # Load settings
         self._load_settings()
-        
+
         # Status update timer
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
         self._status_timer.start(1000)
-    
+
     def _create_ui(self) -> None:
         """Create all UI components."""
         # Set window properties
@@ -850,12 +864,12 @@ class MainWindow(QMainWindow):
         central_layout = QVBoxLayout(central_widget)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
-        
+
         # Ribbon bar
         self._ribbon = RibbonBar()
         self._setup_ribbon()
         central_layout.addWidget(self._ribbon)
-        
+
         # Main content splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -867,26 +881,27 @@ class MainWindow(QMainWindow):
         # Workspace area
         self._workspace = WorkspaceArea()
         splitter.addWidget(self._workspace)
-        
+
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([250, 1000])
-        
+
         central_layout.addWidget(splitter)
-        
+
         # Status bar
         self._status_bar = StatusBarWidget()
         self.setStatusBar(self._status_bar)
-        
+
         # Create menu bar
         self._create_menu_bar()
-        
+
         # Create spreadsheet (initially hidden)
         self._spreadsheet = ScientificSpreadsheet()
-        self._spreadsheet_index = self._workspace.addWidget(
-            self._spreadsheet, _("Spreadsheet")
-        )
-    
+        self._spreadsheet_index = self._workspace.addWidget(self._spreadsheet, _("Spreadsheet"))
+        
+        # Initialize UI state based on data availability
+        self._update_ui_state()
+
     def _setup_ribbon(self) -> None:
         """Setup ribbon tabs and groups."""
         # Home tab
@@ -894,9 +909,9 @@ class MainWindow(QMainWindow):
 
         # File operations group
         file_group = home_tab.addGroup(_("File"))
-        file_group.addButton("new_file", _("New"), _("Create new data matrix (Ctrl+N)"))
-        file_group.addButton("open_file", _("Open"), _("Open CSV file (Ctrl+O)"))
-        file_group.addButton("save_file", _("Save"), _("Save to file (Ctrl+S)"))
+        self._btn_new = file_group.addButton("new_file", _("New"), _("Create new data matrix (Ctrl+N)"))
+        self._btn_open = file_group.addButton("open_file", _("Open"), _("Open CSV file (Ctrl+O)"))
+        self._btn_save = file_group.addButton("save_file", _("Save"), _("Save to file (Ctrl+S)"))
 
         # Edit operations group
         edit_group = home_tab.addGroup(_("Edit"))
@@ -913,17 +928,17 @@ class MainWindow(QMainWindow):
 
         # Multivariate group
         multivar_group = analysis_tab.addGroup(_("Multivariate"))
-        multivar_group.addButton("pca", "PCA", _("Principal Component Analysis"))
-        multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
-        multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
+        self._btn_pca = multivar_group.addButton("pca", "PCA", _("Principal Component Analysis"))
+        self._btn_pcoa = multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
+        self._btn_nmds = multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
 
         # Diversity group
         diversity_group = analysis_tab.addGroup(_("Diversity"))
-        diversity_group.addButton("diversity", _("Diversity"), _("Biodiversity indices"))
+        self._btn_diversity = diversity_group.addButton("diversity", _("Diversity"), _("Biodiversity indices"))
 
         # Group tests group
         tests_group = analysis_tab.addGroup(_("Tests"))
-        tests_group.addButton("anosim", "ANOSIM", _("Analysis of Similarities"))
+        self._btn_anosim = tests_group.addButton("anosim", "ANOSIM", _("Analysis of Similarities"))
 
         # Morphometrics tab
         morpho_tab = self._ribbon.addTab(_("Morphometrics"))
@@ -935,43 +950,63 @@ class MainWindow(QMainWindow):
         strat_tab = self._ribbon.addTab(_("Stratigraphy"))
 
         strat_group = strat_tab.addGroup(_("Time Series"))
-        strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
-    
+        self._btn_spectral = strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
+
     def _setup_connections(self) -> None:
         """Setup signal-slot connections."""
         # Navigation signals
         self._navigation.itemClicked.connect(self._on_navigation_clicked)
+
+        # File operation buttons (always enabled)
+        self._btn_new.clicked.connect(self._on_new_file)
+        self._btn_open.clicked.connect(self._on_open_file)
+        self._btn_save.clicked.connect(self._on_save_file)
+
+        # Analysis buttons (require data)
+        self._btn_pca.clicked.connect(self._on_run_pca)
+        self._register_data_button(self._btn_pca)
+        self._btn_pcoa.clicked.connect(self._on_run_pcoa)
+        self._register_data_button(self._btn_pcoa)
+        self._btn_nmds.clicked.connect(self._on_run_nmds)
+        self._register_data_button(self._btn_nmds)
+        self._btn_diversity.clicked.connect(self._on_run_diversity)
+        self._register_data_button(self._btn_diversity)
+        self._btn_anosim.clicked.connect(self._on_run_anosim)
+        self._register_data_button(self._btn_anosim)
+        self._btn_spectral.clicked.connect(self._on_run_spectral)
+        self._register_data_button(self._btn_spectral)
+
+        # Monitor state changes
+        self._last_has_data = False
+
+    def _update_ui_state(self) -> None:
+        """Update UI element states based on data availability."""
+        has_data = self._state.has_data
         
-        # Ribbon signals (simplified connection to actions)
-        # Each ribbon button connects to appropriate handler
-        ribbon_buttons = self._find_ribbon_buttons()
-        for button in ribbon_buttons:
-            text = button.text().lower()
-            if "new" in text:
-                button.clicked.connect(self._on_new_file)
-            elif "open" in text:
-                button.clicked.connect(self._on_open_file)
-            elif "save" in text:
-                button.clicked.connect(self._on_save_file)
-            elif "pca" in text:
-                button.clicked.connect(self._on_run_pca)
-            elif "diversity" in text:
-                button.clicked.connect(self._on_run_diversity)
-            elif "spectral" in text or "stratigraphy" in text:
-                button.clicked.connect(self._on_run_spectral)
+        # Update all registered data-dependent actions
+        for action in self._data_actions:
+            action.setEnabled(has_data)
+        
+        # Update all registered data-dependent buttons
+        for button in self._data_buttons:
+            button.setEnabled(has_data)
     
-    def _find_ribbon_buttons(self) -> List[RibbonButton]:
-        """Find all ribbon buttons."""
-        buttons = []
-        for tab in (self._ribbon._tabs if hasattr(self._ribbon, '_tabs') else []):
-            for group in tab._groups:
-                buttons.extend(group._buttons)
-        return buttons
+    def _register_data_action(self, action: QAction) -> None:
+        """Register an action as data-dependent."""
+        if action not in self._data_actions:
+            self._data_actions.append(action)
+            action.setEnabled(self._state.has_data)
     
+    def _register_data_button(self, button) -> None:
+        """Register a button as data-dependent."""
+        if button not in self._data_buttons:
+            self._data_buttons.append(button)
+            button.setEnabled(self._state.has_data)
+
     def _create_menu_bar(self) -> None:
         """Create application menu bar."""
         menubar = self.menuBar()
-        
+
         # File menu
         file_menu = menubar.addMenu(_("&File"))
 
@@ -989,11 +1024,14 @@ class MainWindow(QMainWindow):
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self._on_save_file)
         file_menu.addAction(save_action)
+        self._register_data_action(save_action)
+        self._save_action = save_action
 
         save_as_action = QAction(_("Save &As..."), self)
         save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_as_action.triggered.connect(self._on_save_file_as)
         file_menu.addAction(save_as_action)
+        self._register_data_action(save_as_action)
 
         file_menu.addSeparator()
 
@@ -1006,6 +1044,8 @@ class MainWindow(QMainWindow):
         export_action.setShortcut(QKeySequence("Ctrl+E"))
         export_action.triggered.connect(self._on_export)
         file_menu.addAction(export_action)
+        self._register_data_action(export_action)
+        self._export_action = export_action
 
         file_menu.addSeparator()
 
@@ -1021,16 +1061,22 @@ class MainWindow(QMainWindow):
         pca_action.setShortcut(QKeySequence("Ctrl+1"))
         pca_action.triggered.connect(self._on_run_pca)
         analysis_menu.addAction(pca_action)
+        self._register_data_action(pca_action)
+        self._pca_action = pca_action
 
         pcoa_action = QAction(_("P&CoA..."), self)
         pcoa_action.setShortcut(QKeySequence("Ctrl+2"))
         pcoa_action.triggered.connect(self._on_run_pcoa)
         analysis_menu.addAction(pcoa_action)
+        self._register_data_action(pcoa_action)
+        self._pcoa_action = pcoa_action
 
         nmds_action = QAction(_("&NMDS..."), self)
         nmds_action.setShortcut(QKeySequence("Ctrl+3"))
         nmds_action.triggered.connect(self._on_run_nmds)
         analysis_menu.addAction(nmds_action)
+        self._register_data_action(nmds_action)
+        self._nmds_action = nmds_action
 
         analysis_menu.addSeparator()
 
@@ -1038,11 +1084,33 @@ class MainWindow(QMainWindow):
         diversity_action.setShortcut(QKeySequence("Ctrl+D"))
         diversity_action.triggered.connect(self._on_run_diversity)
         analysis_menu.addAction(diversity_action)
+        self._register_data_action(diversity_action)
 
         rarefaction_action = QAction(_("&Rarefaction..."), self)
         rarefaction_action.setShortcut(QKeySequence("Ctrl+R"))
         rarefaction_action.triggered.connect(self._on_run_rarefaction)
         analysis_menu.addAction(rarefaction_action)
+        self._register_data_action(rarefaction_action)
+        
+        analysis_menu.addSeparator()
+        
+        anosim_action = QAction(_("&ANOSIM..."), self)
+        anosim_action.setShortcut(QKeySequence("Ctrl+Shift+A"))
+        anosim_action.triggered.connect(self._on_run_anosim)
+        analysis_menu.addAction(anosim_action)
+        self._register_data_action(anosim_action)
+        
+        permanova_action = QAction(_("&PERMANOVA..."), self)
+        permanova_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
+        permanova_action.triggered.connect(self._on_run_permanova)
+        analysis_menu.addAction(permanova_action)
+        self._register_data_action(permanova_action)
+        
+        spectral_action = QAction(_("&Spectral Analysis..."), self)
+        spectral_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        spectral_action.triggered.connect(self._on_run_spectral)
+        analysis_menu.addAction(spectral_action)
+        self._register_data_action(spectral_action)
 
         # Language menu
         language_menu = menubar.addMenu(_("&Language"))
@@ -1074,6 +1142,7 @@ class MainWindow(QMainWindow):
     def _switch_language(self, lang: str) -> None:
         """Switch application language."""
         from PyQt6.QtCore import QSettings
+
         get_translator().set_language(lang)
         self._lang_action_en.setChecked(lang == "en")
         self._lang_action_zh.setChecked(lang == "zh")
@@ -1083,37 +1152,45 @@ class MainWindow(QMainWindow):
     def _on_navigation_clicked(self, item: NavigationItem) -> None:
         """
         Handle navigation item click.
-        
-        Mathematical Context:
-            Navigation items trigger different analysis workflows:
-            
-            For "Multivariate > PCA":
-                User navigates: Home > Multivariate > PCA
-                System loads selected columns from spreadsheet
-                User configures parameters in dialog
-                Pipeline executes: X ∈ ℝ^(n×p) → PCA → PC_scores ∈ ℝ^(n×k)
-                
-                Eigenvalue decomposition: $S v_j = \\lambda_j v_j$
-                where $S = \\frac{1}{n-1} X^T X$ is the covariance matrix
+
+        Routes leaf item clicks to the corresponding action handler.
         """
         section = item.section
-        self._logger.info(f"Navigation event: section='{section}'")
+        name = item.name
+        self._logger.info(f"Navigation event: section='{section}', name='{name}'")
         self.navigationChanged.emit(section)
 
-        # Switch workspace view based on section
-        if section in ["Data Management", "Univariate", "Multivariate", 
-                       "Morphometrics", "Stratigraphy", "Ecology"]:
-            self._workspace.setCurrentIndex(self._spreadsheet_index)
-    
+        # Action routing for leaf items (items without children)
+        action_map = {
+            _("Import Data"): self._on_import_data,
+            _("Export Data"): self._on_export,
+            "PCA": self._on_run_pca,
+            "PCoA": self._on_run_pcoa,
+            "NMDS": self._on_run_nmds,
+            "ANOSIM": self._on_run_anosim,
+            "PERMANOVA": self._on_run_permanova,
+            _("Diversity"): self._on_run_diversity,
+            _("Rarefaction"): self._on_run_rarefaction,
+            _("Spectral Analysis"): self._on_run_spectral,
+        }
+
+        handler = action_map.get(name)
+        if handler is not None:
+            handler()
+            return
+
+        # For category clicks or un-mapped items, switch to spreadsheet view
+        self._workspace.setCurrentIndex(self._spreadsheet_index)
+
     def _on_new_file(self) -> None:
         """Create new empty data matrix."""
         # Show dialog to specify dimensions
         dialog = QDialog(self)
         dialog.setWindowTitle(_("New Data Matrix"))
         dialog.setModal(True)
-        
+
         layout = QVBoxLayout(dialog)
-        
+
         # Sample count
         samples_layout = QHBoxLayout()
         samples_label = QLabel(_("Number of Samples:"))
@@ -1124,7 +1201,7 @@ class MainWindow(QMainWindow):
         samples_layout.addWidget(samples_spin)
         samples_layout.addStretch()
         layout.addLayout(samples_layout)
-        
+
         # Variable count
         vars_layout = QHBoxLayout()
         vars_label = QLabel(_("Number of Variables:"))
@@ -1135,7 +1212,7 @@ class MainWindow(QMainWindow):
         vars_layout.addWidget(vars_spin)
         vars_layout.addStretch()
         layout.addLayout(vars_layout)
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         ok_button = QPushButton(_("Create"))
@@ -1146,122 +1223,166 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(ok_button)
         button_layout.addWidget(cancel_button)
         layout.addLayout(button_layout)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             n_samples = samples_spin.value()
             n_vars = vars_spin.value()
-            
+
             # Create random data
             import numpy as np
+            from models.data_matrix import DataMatrix
+
             data = np.random.randn(n_samples, n_vars) * 10 + 50
-            
+            row_labels = [f"Sample_{i+1}" for i in range(n_samples)]
+            col_labels = [f"Var_{j+1}" for j in range(n_vars)]
+            matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
+
+            # Update state manager
+            self._state.set_data_matrix(matrix)
+
             # Load into spreadsheet
-            self._spreadsheet.load_data(data)
+            self._spreadsheet.load_data(data, row_labels=row_labels, col_labels=col_labels)
             self._workspace.setCurrentIndex(self._spreadsheet_index)
-            
-            self._status_bar.setInfo(
-                _("New matrix: {0} samples x {1} variables").format(n_samples, n_vars)
-            )
-    
+
+            # Update UI state now that we have data
+            self._update_ui_state()
+
+            self._status_bar.setInfo(_("New matrix: {0} samples x {1} variables").format(n_samples, n_vars))
+
     def _on_open_file(self) -> None:
         """Open CSV file."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            _("Open Data File"),
-            "",
-            _("CSV Files (*.csv);;Text Files (*.txt);;All Files (*)")
+        filepath, _ext = QFileDialog.getOpenFileName(
+            self, _("Open Data File"), "", _("CSV Files (*.csv);;Text Files (*.txt);;All Files (*)")
         )
-        
+
         if filepath:
             try:
                 self._logger.info(f"Opening file: '{filepath}'")
-                matrix = self._data_controller.load_csv(
-                    filepath,
-                    has_header=True,
-                    has_row_labels=True
-                )
+                matrix = self._data_controller.load_csv(filepath, has_header=True, has_row_labels=True)
 
-                self._spreadsheet.load_data(
-                    matrix.data,
-                    row_labels=matrix.row_labels,
-                    col_labels=matrix.col_labels
-                )
+                # Update state manager
+                self._state.set_data_matrix(matrix)
+
+                self._spreadsheet.load_data(matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels)
                 self._workspace.setCurrentIndex(self._spreadsheet_index)
-                
-                self._status_bar.setInfo(
-                    _("Loaded: {0}").format(filepath.split('/')[-1])
-                )
-                
+
+                # Update UI state now that we have data
+                self._update_ui_state()
+
+                self._status_bar.setInfo(_("Loaded: {0}").format(filepath.split("/")[-1]))
+
             except Exception as e:
                 self._logger.error(f"Failed to load file '{filepath}': {e}")
-                QMessageBox.critical(
-                    self,
-                    _("Import Error"),
-                    _("Failed to load file:\n{0}").format(str(e))
-                )
-    
-    def _on_save_file(self) -> None:
-        """Save current data."""
+                QMessageBox.critical(self, _("Import Error"), _("Failed to load file:\n{0}").format(str(e)))
+
+    def _on_save_file(self) -> bool:
+        """Save current data. Returns True if save succeeded, False otherwise."""
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("No data to save."))
+            return False
+
+        filepath, _ext = QFileDialog.getSaveFileName(self, _("Save Data"), "", _("CSV Files (*.csv);;All Files (*)"))
+
+        if filepath:
+            try:
+                self._data_controller.export_csv(filepath)
+                self._status_bar.setInfo(_("Saved: {0}").format(filepath.split("/")[-1]))
+                return True
+            except Exception as e:
+                QMessageBox.critical(self, _("Save Error"), str(e))
+                return False
+        return False
+
+    def _on_save_file_as(self) -> None:
+        """Save data with new name."""
+        self._on_save_file()
+
+    def _on_import_data(self) -> None:
+        """Show import data dialog with conflict checking."""
+        # Check if we need to confirm overwrite
+        if self._state.has_data:
+            reply = QMessageBox.question(
+                self, _("Overwrite Data?"),
+                _("You already have data loaded. Do you want to replace it?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        dialog = ImportDialog(self)
+        dialog.dataImported.connect(self._on_data_imported)
+        dialog.exec()
+
+    def _on_data_imported(self, data, metadata) -> None:
+        """Handle imported data with UI state updates."""
+        from models.data_matrix import DataMatrix
+
+        row_labels = metadata.get("row_labels")
+        col_labels = metadata.get("col_labels")
+        matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
+
+        # Update state manager
+        self._state.set_data_matrix(matrix)
+
+        self._spreadsheet.load_data(data, **metadata)
+        self._workspace.setCurrentIndex(self._spreadsheet_index)
+
+        # Update UI state now that we have data
+        self._update_ui_state()
+
+        # Show success message
+        n_samples, n_vars = data.shape
+        self._status_bar.setInfo(
+            _("Data imported: {0} samples x {1} variables").format(n_samples, n_vars)
+        )
+
+    def _on_export(self) -> None:
+        """Export analysis results and data."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
         
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            _("Save Data"),
-            "",
+        filepath, _ext = QFileDialog.getSaveFileName(
+            self, _("Export Data"), "",
             _("CSV Files (*.csv);;All Files (*)")
         )
         
         if filepath:
             try:
                 self._data_controller.export_csv(filepath)
-                self._status_bar.setInfo(_("Saved: {0}").format(filepath.split('/')[-1]))
+                QMessageBox.information(
+                    self, _("Export Successful"),
+                    _("Data successfully exported to {0}").format(filepath.split("/")[-1])
+                )
+                self._logger.info(f"Data exported to {filepath}")
             except Exception as e:
-                QMessageBox.critical(self, _("Save Error"), str(e))
-    
-    def _on_save_file_as(self) -> None:
-        """Save data with new name."""
-        self._on_save_file()
-    
-    def _on_import_data(self) -> None:
-        """Show import data dialog."""
-        dialog = ImportDialog(self)
-        dialog.dataImported.connect(self._on_data_imported)
-        dialog.exec()
-    
-    def _on_data_imported(self, data, metadata) -> None:
-        """Handle imported data."""
-        self._spreadsheet.load_data(data, **metadata)
-        self._workspace.setCurrentIndex(self._spreadsheet_index)
-    
-    def _on_export(self) -> None:
-        """Export analysis results."""
-        QMessageBox.information(self, _("Export"), _("Export functionality"))
-    
+                self._logger.error(f"Export failed: {e}")
+                QMessageBox.critical(self, _("Export Error"), str(e))
+
     def _on_run_pca(self) -> None:
         """
         Run Principal Component Analysis.
-        
+
         Mathematical Pipeline:
             Given data matrix X ∈ ℝ^(n×p):
-            
+
             1. Center the data: Z = X - μ (subtract column means)
                where μ_j = (1/n) Σᵢ x_ij
-            
+
             2. Compute covariance matrix:
                C = (1/(n-1)) Z^T Z ∈ ℝ^(p×p)
-            
+
             3. Eigendecomposition:
                C v_j = λ_j v_j
                where λ_1 ≥ λ_2 ≥ ... ≥ λ_p are eigenvalues
                      v_j are corresponding eigenvectors
-            
+
             4. Project onto principal components:
                PC_scores = Z @ V ∈ ℝ^(n×k)
-               
+
                where V = [v_1, v_2, ..., v_k] is the loading matrix
-            
+
             5. Variance explained by PC_j:
                r²_j = λ_j / Σλ_i × 100%
         """
@@ -1270,37 +1391,35 @@ class MainWindow(QMainWindow):
             return
 
         dialog = PCADialog(self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            
+
             try:
                 self._status_bar.setProgress(0, 0)  # Show indeterminate
-                
+
                 result = self._statistics_controller.run_pca(
-                    n_components=params['n_components'],
-                    method=params['method']
+                    n_components=params["n_components"], method=params["method"]
                 )
-                
+
                 self._status_bar.setProgress(100, 100)
-                
+
                 # Create and display plot
                 plot = InteractivePlotCanvas()
                 plot.plot_pca_scores(result)
-                
+
                 plot_index = self._workspace.addWidget(plot, _("PCA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
-                
+
                 self._status_bar.setInfo(
                     _("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(
-                        result.n_components,
-                        result.explained_variance[0] + result.explained_variance[1]
+                        result.n_components, result.explained_variance[0] + result.explained_variance[1]
                     )
                 )
-                
+
             except Exception as e:
                 QMessageBox.critical(self, _("PCA Error"), str(e))
-    
+
     def _on_run_pcoa(self) -> None:
         """Run Principal Coordinate Analysis."""
         if not self._state.has_data:
@@ -1308,25 +1427,24 @@ class MainWindow(QMainWindow):
             return
 
         dialog = PCoADialog(self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            
+
             try:
                 result = self._statistics_controller.run_pcoa(
-                    metric=params['metric'],
-                    n_components=params['n_components']
+                    metric=params["metric"], n_components=params["n_components"]
                 )
-                
+
                 plot = InteractivePlotCanvas()
                 plot.plot_pcoa_scores(result)
-                
+
                 plot_index = self._workspace.addWidget(plot, _("PCoA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
-                
+
             except Exception as e:
                 QMessageBox.critical(self, _("PCoA Error"), str(e))
-    
+
     def _on_run_nmds(self) -> None:
         """Run Non-metric MDS."""
         if not self._state.has_data:
@@ -1334,30 +1452,26 @@ class MainWindow(QMainWindow):
             return
 
         dialog = NMDSOptionsDialog(self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            
+
             try:
                 result = self._statistics_controller.run_nmds(
-                    metric=params['metric'],
-                    n_dimensions=params['n_dimensions'],
-                    n_restarts=params['n_restarts']
+                    metric=params["metric"], n_dimensions=params["n_dimensions"], n_restarts=params["n_restarts"]
                 )
-                
+
                 plot = InteractivePlotCanvas()
                 plot.plot_nmds(result)
-                
+
                 plot_index = self._workspace.addWidget(plot, _("NMDS Plot"))
                 self._workspace.setCurrentIndex(plot_index)
-                
-                self._status_bar.setInfo(
-                    _("NMDS: stress = {0:.4f}").format(result.stress)
-                )
-                
+
+                self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
+
             except Exception as e:
                 QMessageBox.critical(self, _("NMDS Error"), str(e))
-    
+
     def _on_run_diversity(self) -> None:
         """Run diversity analysis."""
         if not self._state.has_data:
@@ -1365,24 +1479,23 @@ class MainWindow(QMainWindow):
             return
 
         dialog = DiversityDialog(self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            
+
             try:
-                result = self._statistics_controller.analyze_diversity(
-                    sample_name=params['sample_name']
-                )
-                
+                sample_name = params.get("sample_name", "").strip() or "Sample 1"
+                result = self._statistics_controller.analyze_diversity(sample_name=sample_name)
+
                 plot = InteractivePlotCanvas()
                 plot.plot_diversity_summary(result)
-                
+
                 plot_index = self._workspace.addWidget(plot, _("Diversity Plot"))
                 self._workspace.setCurrentIndex(plot_index)
-                
+
             except Exception as e:
                 QMessageBox.critical(self, _("Diversity Error"), str(e))
-    
+
     def _on_run_rarefaction(self) -> None:
         """Run rarefaction analysis."""
         if not self._state.has_data:
@@ -1390,29 +1503,111 @@ class MainWindow(QMainWindow):
             return
 
         dialog = RarefactionDialog(self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            
+
             try:
-                result = self._statistics_controller.analyze_rarefaction(
-                    sample_name=params['sample_name']
-                )
-                
+                sample_name = params.get("samples", ["Sample 1"])[0] if params.get("samples") else "Sample 1"
+                result = self._statistics_controller.analyze_rarefaction(sample_name=sample_name)
+
                 plot = InteractivePlotCanvas()
                 plot.plot_rarefaction(result)
-                
+
                 plot_index = self._workspace.addWidget(plot, _("Rarefaction Plot"))
                 self._workspace.setCurrentIndex(plot_index)
-                
+
             except Exception as e:
                 QMessageBox.critical(self, _("Rarefaction Error"), str(e))
-    
+
     def _on_run_spectral(self) -> None:
-        """Run spectral analysis."""
-        QMessageBox.information(self, _("Spectral Analysis"),
-                               _("Spectral analysis: select time and value columns first."))
+        """Run spectral analysis (power spectrum and periodogram analysis)."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        
+        try:
+            # Show progress
+            self._status_bar.setProgress(0, 0)
+            
+            # Run spectral analysis on all numeric columns
+            result = self._statistics_controller.analyze_spectral(
+                data=self._state.data_matrix.data
+            )
+            
+            # Display spectral plot
+            plot = InteractivePlotCanvas()
+            plot.plot_spectral(result)
+            
+            plot_index = self._workspace.addWidget(plot, _("Spectral Analysis"))
+            self._workspace.setCurrentIndex(plot_index)
+            
+            self._status_bar.setInfo(_("Spectral analysis completed"))
+            self._logger.info("Spectral analysis completed successfully")
+        except Exception as e:
+            self._logger.error(f"Spectral analysis failed: {e}")
+            QMessageBox.critical(self, _("Spectral Analysis Error"), str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
     
+    def _on_run_anosim(self) -> None:
+        """Run Analysis of Similarity (ANOSIM) test."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        
+        try:
+            self._status_bar.setProgress(0, 0)
+            
+            # Run ANOSIM analysis
+            result = self._statistics_controller.analyze_anosim(
+                data=self._state.data_matrix.data
+            )
+            
+            # Display results in plot canvas
+            plot = InteractivePlotCanvas()
+            plot.plot_anosim_results(result)
+            
+            plot_index = self._workspace.addWidget(plot, _("ANOSIM Results"))
+            self._workspace.setCurrentIndex(plot_index)
+            
+            self._status_bar.setInfo(_("ANOSIM analysis completed"))
+            self._logger.info("ANOSIM analysis completed successfully")
+        except Exception as e:
+            self._logger.error(f"ANOSIM analysis failed: {e}")
+            QMessageBox.critical(self, _("ANOSIM Error"), str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
+    
+    def _on_run_permanova(self) -> None:
+        """Run Permutational Multivariate Analysis of Variance (PERMANOVA) test."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        
+        try:
+            self._status_bar.setProgress(0, 0)
+            
+            # Run PERMANOVA analysis
+            result = self._statistics_controller.analyze_permanova(
+                data=self._state.data_matrix.data
+            )
+            
+            # Display results in plot canvas
+            plot = InteractivePlotCanvas()
+            plot.plot_permanova_results(result)
+            
+            plot_index = self._workspace.addWidget(plot, _("PERMANOVA Results"))
+            self._workspace.setCurrentIndex(plot_index)
+            
+            self._status_bar.setInfo(_("PERMANOVA analysis completed"))
+            self._logger.info("PERMANOVA analysis completed successfully")
+        except Exception as e:
+            self._logger.error(f"PERMANOVA analysis failed: {e}")
+            QMessageBox.critical(self, _("PERMANOVA Error"), str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
+
     def _show_about(self) -> None:
         """Show about dialog."""
         QMessageBox.about(
@@ -1441,19 +1636,23 @@ class MainWindow(QMainWindow):
                 _("Geometric Morphometrics (GPA, TPS)"),
                 _("Biodiversity Analysis"),
                 _("Spectral Analysis"),
-            )
+            ),
         )
-    
+
     def _show_documentation(self) -> None:
         """Show documentation."""
         QMessageBox.information(
-            self,
-            _("Documentation"),
-            _("See ARCHITECTURE_BLUEPRINT.md for detailed documentation.")
+            self, _("Documentation"), _("See ARCHITECTURE_BLUEPRINT.md for detailed documentation.")
         )
-    
+
     def _update_status(self) -> None:
-        """Update status bar information."""
+        """Update status bar information and monitor data state changes."""
+        # Check if data state changed
+        current_has_data = self._state.has_data
+        if current_has_data != self._last_has_data:
+            self._last_has_data = current_has_data
+            self._update_ui_state()
+        
         if self._state.has_data:
             matrix = self._state.data_matrix
             info = _("Data: {0} samples x {1} variables").format(matrix.n_samples, matrix.n_variables)
@@ -1464,28 +1663,28 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(info)
         else:
             self._status_bar.setInfo(_("No data loaded"))
-    
+
     def _load_settings(self) -> None:
         """Load application settings."""
         settings = QSettings("PaleoAST", "PaleoAST")
-        
+
         # Restore window geometry
         geometry = settings.value("window/geometry")
         if geometry:
             self.restoreGeometry(geometry)
-        
+
         # Restore state
         state = settings.value("window/state")
         if state:
             self.restoreState(state)
-    
+
     def _save_settings(self) -> None:
         """Save application settings."""
         settings = QSettings("PaleoAST", "PaleoAST")
-        
+
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState())
-    
+
     def closeEvent(self, event) -> None:
         """Handle window close event."""
         # Check for unsaved changes
@@ -1494,44 +1693,45 @@ class MainWindow(QMainWindow):
                 self,
                 _("Unsaved Changes"),
                 _("You have unsaved changes. Do you want to save before closing?"),
-                QMessageBox.StandardButton.Save |
-                QMessageBox.StandardButton.Discard |
-                QMessageBox.StandardButton.Cancel
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
             )
-            
+
             if reply == QMessageBox.StandardButton.Save:
-                self._on_save_file()
-                event.accept()
+                # Try to save; if user cancels or save fails, don't close
+                if not self._on_save_file():
+                    event.ignore()
+                    return
             elif reply == QMessageBox.StandardButton.Discard:
-                event.accept()
+                pass
             else:
                 event.ignore()
                 return
-        
+
         # Save settings
         self._save_settings()
-        
+
         # Stop status timer
         self._status_timer.stop()
-        
+
         event.accept()
 
 
 def main() -> None:
     """Main entry point for GUI application."""
-    from PyQt6.QtWidgets import QApplication
-    
+
     app = QApplication(sys.argv)
     app.setApplicationName("PaleoAST")
     app.setOrganizationName("PaleoAST")
     app.setOrganizationDomain("paleoast.org")
-    
+
     # Set application style
     app.setStyle("Fusion")
-    
+
     window = MainWindow()
     window.show()
-    
+
     sys.exit(app.exec())
 
 
