@@ -139,8 +139,6 @@ TRANSLATIONS = {
     "Exported": "已导出",
     "Log saved to:\n{0}": "日志已保存到:\n{0}",
     "Initializing...": "正在初始化...",
-    "Version 5.0.0": "版本 5.0.0",
-
     # ============================================================
     # Dialogs
     # ============================================================
@@ -244,7 +242,6 @@ TRANSLATIONS = {
     "No File": "未选择文件",
     "Please select a file to import.": "请选择要导入的文件。",
     "Failed to import data:\n{0}": "导入数据失败:\n{0}",
-
     # ============================================================
     # Help Text (titles/explanations only, NOT formulas)
     # ============================================================
@@ -295,7 +292,6 @@ TRANSLATIONS = {
     "Rarefaction standardizes species counts to a common sampling effort.": "稀释分析将物种计数标准化到共同的采样努力量。",
     "Expected species at n individuals:": "在n个个体时的期望物种数:",
     "Rarefaction curves that plateau indicate adequate sampling.": "趋于平缓的稀释曲线表明采样充分。",
-
     # ============================================================
     # Navigation
     # ============================================================
@@ -324,7 +320,6 @@ TRANSLATIONS = {
     "Beta Diversity": "Beta多样性",
     "Rarefaction": "稀释分析",
     "Filter:": "筛选:",
-
     # ============================================================
     # Spreadsheet
     # ============================================================
@@ -348,7 +343,6 @@ TRANSLATIONS = {
     "Assign to Group": "分配到组",
     "Hide Row": "隐藏行",
     "Show All Rows": "显示所有行",
-
     # ============================================================
     # Plot Canvas
     # ============================================================
@@ -375,7 +369,6 @@ TRANSLATIONS = {
     "Export Successful": "导出成功",
     "Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm": "图形已保存到:\n{0}\n\n分辨率: {1} DPI\n尺寸: {2:.1f} x {3:.1f} 厘米",
     "Failed to export plot:\n{0}": "导出图形失败:\n{0}",
-
     # ============================================================
     # Summary Methods
     # ============================================================
@@ -440,7 +433,6 @@ TRANSLATIONS = {
     "Peak frequency: {0}": "峰值频率: {0}",
     "Peak period: {0}": "峰值周期: {0}",
     "Peak power: {0}": "峰值功率: {0}",
-
     # ============================================================
     # Additional entries (missing from initial generation)
     # ============================================================
@@ -451,7 +443,6 @@ TRANSLATIONS = {
     "GPA": "GPA",
     "Spectral": "频谱",
     "None": "无",
-
     # Color names (kept as English - visual identifiers)
     "Red": "Red",
     "Orange": "Orange",
@@ -460,14 +451,12 @@ TRANSLATIONS = {
     "Blue": "Blue",
     "Purple": "Purple",
     "Gray": "Gray",
-
     # Marker styles (kept as English - visual identifiers)
     "Circle": "Circle",
     "Triangle_up": "Triangle_up",
     "Triangle_down": "Triangle_down",
     "Triangle_left": "Triangle_left",
     "Triangle_right": "Triangle_right",
-    "Square": "Square",
     "Diamond": "Diamond",
     "Star": "Star",
     "Cross": "Cross",

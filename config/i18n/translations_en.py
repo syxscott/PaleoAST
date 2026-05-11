@@ -5,1008 +5,492 @@ Reference/default language. Keys = English text used in source code.
 """
 
 TRANSLATIONS = {
-
     # =========================================================================
     # Main Window (views/ui_main_window.py)
     # =========================================================================
-
-    "PaleoAST - Paleontological Advanced Statistical Toolkit":
-        "PaleoAST - Paleontological Advanced Statistical Toolkit",
-
-    "Navigation":
-        "Navigation",
-    "Home":
-        "Home",
-    "Analysis":
-        "Analysis",
-    "Morphometrics":
-        "Morphometrics",
-    "Stratigraphy":
-        "Stratigraphy",
-
+    "PaleoAST - Paleontological Advanced Statistical Toolkit": "PaleoAST - Paleontological Advanced Statistical Toolkit",
+    "Navigation": "Navigation",
+    "Home": "Home",
+    "Analysis": "Analysis",
+    "Morphometrics": "Morphometrics",
+    "Stratigraphy": "Stratigraphy",
     # Menu bar items
-    "File":
-        "File",
-    "Edit":
-        "Edit",
-    "View":
-        "View",
-    "Multivariate":
-        "Multivariate",
-    "Diversity":
-        "Diversity",
-    "Tests":
-        "Tests",
-    "Landmarks":
-        "Landmarks",
-    "Time Series":
-        "Time Series",
-
+    "File": "File",
+    "Edit": "Edit",
+    "View": "View",
+    "Multivariate": "Multivariate",
+    "Diversity": "Diversity",
+    "Tests": "Tests",
+    "Landmarks": "Landmarks",
+    "Time Series": "Time Series",
     # Toolbar buttons
-    "New":
-        "New",
-    "Open":
-        "Open",
-    "Save":
-        "Save",
-    "Undo":
-        "Undo",
-    "Redo":
-        "Redo",
-    "Transpose":
-        "Transpose",
-    "Preferences":
-        "Preferences",
-
-    "PCA":
-        "PCA",
-    "PCoA":
-        "PCoA",
-    "NMDS":
-        "NMDS",
-    "ANOSIM":
-        "ANOSIM",
-    "GPA":
-        "GPA",
-    "Spectral":
-        "Spectral",
-
+    "New": "New",
+    "Open": "Open",
+    "Save": "Save",
+    "Undo": "Undo",
+    "Redo": "Redo",
+    "Transpose": "Transpose",
+    "Preferences": "Preferences",
+    "PCA": "PCA",
+    "PCoA": "PCoA",
+    "NMDS": "NMDS",
+    "ANOSIM": "ANOSIM",
+    "GPA": "GPA",
+    "Spectral": "Spectral",
     # Toolbar tooltips
-    "Create new data matrix (Ctrl+N)":
-        "Create new data matrix (Ctrl+N)",
-    "Open CSV file (Ctrl+O)":
-        "Open CSV file (Ctrl+O)",
-    "Save to file (Ctrl+S)":
-        "Save to file (Ctrl+S)",
-    "Undo last action (Ctrl+Z)":
-        "Undo last action (Ctrl+Z)",
-    "Redo action (Ctrl+Y)":
-        "Redo action (Ctrl+Y)",
-    "Transpose data matrix":
-        "Transpose data matrix",
-    "Application settings":
-        "Application settings",
-
+    "Create new data matrix (Ctrl+N)": "Create new data matrix (Ctrl+N)",
+    "Open CSV file (Ctrl+O)": "Open CSV file (Ctrl+O)",
+    "Save to file (Ctrl+S)": "Save to file (Ctrl+S)",
+    "Undo last action (Ctrl+Z)": "Undo last action (Ctrl+Z)",
+    "Redo action (Ctrl+Y)": "Redo action (Ctrl+Y)",
+    "Transpose data matrix": "Transpose data matrix",
+    "Application settings": "Application settings",
     # Analysis descriptions
-    "Principal Component Analysis":
-        "Principal Component Analysis",
-    "Principal Coordinate Analysis":
-        "Principal Coordinate Analysis",
-    "Non-metric MDS":
-        "Non-metric MDS",
-    "Biodiversity indices":
-        "Biodiversity indices",
-    "Analysis of Similarities":
-        "Analysis of Similarities",
-    "Generalized Procrustes Analysis":
-        "Generalized Procrustes Analysis",
-    "Spectral Analysis":
-        "Spectral Analysis",
-
+    "Principal Component Analysis": "Principal Component Analysis",
+    "Principal Coordinate Analysis": "Principal Coordinate Analysis",
+    "Non-metric MDS": "Non-metric MDS",
+    "Biodiversity indices": "Biodiversity indices",
+    "Analysis of Similarities": "Analysis of Similarities",
+    "Generalized Procrustes Analysis": "Generalized Procrustes Analysis",
+    "Spectral Analysis": "Spectral Analysis",
     # File menu
-    "&File":
-        "&File",
-    "&New Matrix":
-        "&New Matrix",
-    "&Open...":
-        "&Open...",
-    "&Save":
-        "&Save",
-    "Save &As...":
-        "Save &As...",
-    "&Import Data...":
-        "&Import Data...",
-    "&Export...":
-        "&Export...",
-    "E&xit":
-        "E&xit",
-
+    "&File": "&File",
+    "&New Matrix": "&New Matrix",
+    "&Open...": "&Open...",
+    "&Save": "&Save",
+    "Save &As...": "Save &As...",
+    "&Import Data...": "&Import Data...",
+    "&Export...": "&Export...",
+    "E&xit": "E&xit",
     # Analysis menu
-    "&Analysis":
-        "&Analysis",
-    "&PCA...":
-        "&PCA...",
-    "P&CoA...":
-        "P&CoA...",
-    "&NMDS...":
-        "&NMDS...",
-    "&Diversity...":
-        "&Diversity...",
-    "&Rarefaction...":
-        "&Rarefaction...",
-
+    "&Analysis": "&Analysis",
+    "&PCA...": "&PCA...",
+    "P&CoA...": "P&CoA...",
+    "&NMDS...": "&NMDS...",
+    "&Diversity...": "&Diversity...",
+    "&Rarefaction...": "&Rarefaction...",
     # Help menu
-    "&Help":
-        "&Help",
-    "&About PaleoAST":
-        "&About PaleoAST",
-    "&Documentation":
-        "&Documentation",
-
+    "&Help": "&Help",
+    "&About PaleoAST": "&About PaleoAST",
+    "&Documentation": "&Documentation",
     # Status bar
-    "No data loaded":
-        "No data loaded",
-    "Memory: 0 MB":
-        "Memory: 0 MB",
-    "Load data to begin analysis":
-        "Load data to begin analysis",
-
-    "Spreadsheet":
-        "Spreadsheet",
-
+    "No data loaded": "No data loaded",
+    "Memory: 0 MB": "Memory: 0 MB",
+    "Load data to begin analysis": "Load data to begin analysis",
+    "Spreadsheet": "Spreadsheet",
     # New Data Matrix dialog
-    "New Data Matrix":
-        "New Data Matrix",
-    "Number of Samples:":
-        "Number of Samples:",
-    "Number of Variables:":
-        "Number of Variables:",
-    "Create":
-        "Create",
-    "Cancel":
-        "Cancel",
-
+    "New Data Matrix": "New Data Matrix",
+    "Number of Samples:": "Number of Samples:",
+    "Number of Variables:": "Number of Variables:",
+    "Create": "Create",
+    "Cancel": "Cancel",
     # File dialogs
-    "Open Data File":
-        "Open Data File",
-    "CSV Files (*.csv);;Text Files (*.txt);;All Files (*)":
-        "CSV Files (*.csv);;Text Files (*.txt);;All Files (*)",
-    "Save Data":
-        "Save Data",
-    "CSV Files (*.csv);;All Files (*)":
-        "CSV Files (*.csv);;All Files (*)",
-
+    "Open Data File": "Open Data File",
+    "CSV Files (*.csv);;Text Files (*.txt);;All Files (*)": "CSV Files (*.csv);;Text Files (*.txt);;All Files (*)",
+    "Save Data": "Save Data",
+    "CSV Files (*.csv);;All Files (*)": "CSV Files (*.csv);;All Files (*)",
     # Error messages
-    "Import Error":
-        "Import Error",
-    "Failed to load file:\n{0}":
-        "Failed to load file:\n{0}",
-    "No Data":
-        "No Data",
-    "No data to save.":
-        "No data to save.",
-    "Save Error":
-        "Save Error",
-    "Export":
-        "Export",
-    "Export functionality":
-        "Export functionality",
-    "Please load data first.":
-        "Please load data first.",
-
-    "PCA Error":
-        "PCA Error",
-    "PCoA Error":
-        "PCoA Error",
-    "NMDS Error":
-        "NMDS Error",
-    "Diversity Error":
-        "Diversity Error",
-    "Rarefaction Error":
-        "Rarefaction Error",
-
-    "Spectral analysis: select time and value columns first.":
-        "Spectral analysis: select time and value columns first.",
-
+    "Import Error": "Import Error",
+    "Failed to load file:\n{0}": "Failed to load file:\n{0}",
+    "No Data": "No Data",
+    "No data to save.": "No data to save.",
+    "Save Error": "Save Error",
+    "Export": "Export",
+    "Export functionality": "Export functionality",
+    "Please load data first.": "Please load data first.",
+    "PCA Error": "PCA Error",
+    "PCoA Error": "PCoA Error",
+    "NMDS Error": "NMDS Error",
+    "Diversity Error": "Diversity Error",
+    "Rarefaction Error": "Rarefaction Error",
+    "Spectral analysis: select time and value columns first.": "Spectral analysis: select time and value columns first.",
     # About dialog
-    "About PaleoAST":
-        "About PaleoAST",
-    "Version 1.0.0":
-        "Version 1.0.0",
-    "Copyright (c) 2024 PaleoAST Development Team":
-        "Copyright (c) 2024 PaleoAST Development Team",
-    "A comprehensive tool for paleontological data analysis including:":
-        "A comprehensive tool for paleontological data analysis including:",
-    "Multivariate Statistics (PCA, PCoA, NMDS)":
-        "Multivariate Statistics (PCA, PCoA, NMDS)",
-    "Group Comparison Tests (ANOSIM, PERMANOVA)":
-        "Group Comparison Tests (ANOSIM, PERMANOVA)",
-    "Geometric Morphometrics (GPA, TPS)":
-        "Geometric Morphometrics (GPA, TPS)",
-    "Biodiversity Analysis":
-        "Biodiversity Analysis",
-    "Documentation":
-        "Documentation",
-    "See ARCHITECTURE_BLUEPRINT.md for detailed documentation.":
-        "See ARCHITECTURE_BLUEPRINT.md for detailed documentation.",
-
+    "About PaleoAST": "About PaleoAST",
+    "Version 1.0.0": "Version 1.0.0",
+    "Copyright (c) 2024 PaleoAST Development Team": "Copyright (c) 2024 PaleoAST Development Team",
+    "A comprehensive tool for paleontological data analysis including:": "A comprehensive tool for paleontological data analysis including:",
+    "Multivariate Statistics (PCA, PCoA, NMDS)": "Multivariate Statistics (PCA, PCoA, NMDS)",
+    "Group Comparison Tests (ANOSIM, PERMANOVA)": "Group Comparison Tests (ANOSIM, PERMANOVA)",
+    "Geometric Morphometrics (GPA, TPS)": "Geometric Morphometrics (GPA, TPS)",
+    "Biodiversity Analysis": "Biodiversity Analysis",
+    "Documentation": "Documentation",
+    "See ARCHITECTURE_BLUEPRINT.md for detailed documentation.": "See ARCHITECTURE_BLUEPRINT.md for detailed documentation.",
     # Dynamic status messages
-    "Data: {0} samples x {1} variables":
-        "Data: {0} samples x {1} variables",
-    " (modified)":
-        " (modified)",
-    "New matrix: {0} samples x {1} variables":
-        "New matrix: {0} samples x {1} variables",
-    "Loaded: {0}":
-        "Loaded: {0}",
-    "Saved: {0}":
-        "Saved: {0}",
-    "PCA: {0} components, PC1+PC2 = {1:.1f}%":
-        "PCA: {0} components, PC1+PC2 = {1:.1f}%",
-    "NMDS: stress = {0:.4f}":
-        "NMDS: stress = {0:.4f}",
-
+    "Data: {0} samples x {1} variables": "Data: {0} samples x {1} variables",
+    " (modified)": " (modified)",
+    "New matrix: {0} samples x {1} variables": "New matrix: {0} samples x {1} variables",
+    "Loaded: {0}": "Loaded: {0}",
+    "Saved: {0}": "Saved: {0}",
+    "PCA: {0} components, PC1+PC2 = {1:.1f}%": "PCA: {0} components, PC1+PC2 = {1:.1f}%",
+    "NMDS: stress = {0:.4f}": "NMDS: stress = {0:.4f}",
     # Unsaved changes dialog
-    "Unsaved Changes":
-        "Unsaved Changes",
-    "You have unsaved changes. Do you want to save before closing?":
-        "You have unsaved changes. Do you want to save before closing?",
-
+    "Unsaved Changes": "Unsaved Changes",
+    "You have unsaved changes. Do you want to save before closing?": "You have unsaved changes. Do you want to save before closing?",
     # Plot window titles
-    "PCA Plot":
-        "PCA Plot",
-    "PCoA Plot":
-        "PCoA Plot",
-    "NMDS Plot":
-        "NMDS Plot",
-    "Diversity Plot":
-        "Diversity Plot",
-    "Rarefaction Plot":
-        "Rarefaction Plot",
-
-    "&Language":
-        "&Language",
-
+    "PCA Plot": "PCA Plot",
+    "PCoA Plot": "PCoA Plot",
+    "NMDS Plot": "NMDS Plot",
+    "Diversity Plot": "Diversity Plot",
+    "Rarefaction Plot": "Rarefaction Plot",
+    "&Language": "&Language",
     # Splash / startup messages
-    "Warming up NumPy/SciPy...":
-        "Warming up NumPy/SciPy...",
-    "Loading configuration...":
-        "Loading configuration...",
-    "Loading modules...":
-        "Loading modules...",
-    "Creating main window...":
-        "Creating main window...",
-    "Applying theme...":
-        "Applying theme...",
-    "Ready!":
-        "Ready!",
-    "Loaded {0}...":
-        "Loaded {0}...",
-    "Data models":
-        "Data models",
-    "Statistics engine":
-        "Statistics engine",
-    "Ecology engine":
-        "Ecology engine",
-    "Visualization":
-        "Visualization",
-    "Controllers":
-        "Controllers",
-    "Views":
-        "Views",
-    "Ready":
-        "Ready",
-
+    "Warming up NumPy/SciPy...": "Warming up NumPy/SciPy...",
+    "Loading configuration...": "Loading configuration...",
+    "Loading modules...": "Loading modules...",
+    "Creating main window...": "Creating main window...",
+    "Applying theme...": "Applying theme...",
+    "Ready!": "Ready!",
+    "Loaded {0}...": "Loaded {0}...",
+    "Data models": "Data models",
+    "Statistics engine": "Statistics engine",
+    "Ecology engine": "Ecology engine",
+    "Visualization": "Visualization",
+    "Controllers": "Controllers",
+    "Views": "Views",
+    "Ready": "Ready",
     # Error handler dialog
-    "PaleoAST - Error Detected":
-        "PaleoAST - Error Detected",
-    "Application Error":
-        "Application Error",
-    "PaleoAST encountered an error. The error has been logged.\nYou can continue, but unexpected behavior may occur.":
-        "PaleoAST encountered an error. The error has been logged.\nYou can continue, but unexpected behavior may occur.",
-    "Technical Details":
-        "Technical Details",
-    "Export Log":
-        "Export Log",
-    "Continue":
-        "Continue",
-    "Quit":
-        "Quit",
-    "Export Error Log":
-        "Export Error Log",
-    "Log Files (*.log);;Text Files (*.txt)":
-        "Log Files (*.log);;Text Files (*.txt)",
-    "Exported":
-        "Exported",
-    "Log saved to:\n{0}":
-        "Log saved to:\n{0}",
-
+    "PaleoAST - Error Detected": "PaleoAST - Error Detected",
+    "Application Error": "Application Error",
+    "PaleoAST encountered an error. The error has been logged.\nYou can continue, but unexpected behavior may occur.": "PaleoAST encountered an error. The error has been logged.\nYou can continue, but unexpected behavior may occur.",
+    "Technical Details": "Technical Details",
+    "Export Log": "Export Log",
+    "Continue": "Continue",
+    "Quit": "Quit",
+    "Export Error Log": "Export Error Log",
+    "Log Files (*.log);;Text Files (*.txt)": "Log Files (*.log);;Text Files (*.txt)",
+    "Exported": "Exported",
+    "Log saved to:\n{0}": "Log saved to:\n{0}",
     # Initializing messages
-    "Initializing...":
-        "Initializing...",
-    "Version 5.0.0":
-        "Version 5.0.0",
-    "Paleontological Advanced Statistical Toolkit":
-        "Paleontological Advanced Statistical Toolkit",
-
+    "Initializing...": "Initializing...",
+    "Paleontological Advanced Statistical Toolkit": "Paleontological Advanced Statistical Toolkit",
     # =========================================================================
     # Dialogs (views/ui_dialogs.py)
     # =========================================================================
-
-    "Help":
-        "Help",
-    "Run":
-        "Run",
-
-    "{0} - Help":
-        "{0} - Help",
-    "No help available for this analysis.":
-        "No help available for this analysis.",
-
+    "Help": "Help",
+    "Run": "Run",
+    "{0} - Help": "{0} - Help",
+    "No help available for this analysis.": "No help available for this analysis.",
     # PCA dialog
-    "Analysis Method":
-        "Analysis Method",
-    "Correlation Matrix (Standardize)":
-        "Correlation Matrix (Standardize)",
-    "Covariance Matrix (Center only)":
-        "Covariance Matrix (Center only)",
-    "SPCS (Specialized)":
-        "SPCS (Specialized)",
-    "Similarity Matrix:":
-        "Similarity Matrix:",
-    "Components":
-        "Components",
-    "Number of components: ":
-        "Number of components: ",
-    "Minimum variance: ":
-        "Minimum variance: ",
-    "Display Options":
-        "Display Options",
-    "Show loadings table":
-        "Show loadings table",
-    "Show scores table":
-        "Show scores table",
-    "Show scree plot":
-        "Show scree plot",
-    "Show biplot":
-        "Show biplot",
-    "Scaling factor:":
-        "Scaling factor:",
-    "Advanced Options":
-        "Advanced Options",
-    "Use correlation matrix (Z-score standardization)":
-        "Use correlation matrix (Z-score standardization)",
-    "Impute missing values (pairwise deletion)":
-        "Impute missing values (pairwise deletion)",
-    "Use parallel computation":
-        "Use parallel computation",
-
+    "Analysis Method": "Analysis Method",
+    "Correlation Matrix (Standardize)": "Correlation Matrix (Standardize)",
+    "Covariance Matrix (Center only)": "Covariance Matrix (Center only)",
+    "SPCS (Specialized)": "SPCS (Specialized)",
+    "Similarity Matrix:": "Similarity Matrix:",
+    "Components": "Components",
+    "Number of components: ": "Number of components: ",
+    "Minimum variance: ": "Minimum variance: ",
+    "Display Options": "Display Options",
+    "Show loadings table": "Show loadings table",
+    "Show scores table": "Show scores table",
+    "Show scree plot": "Show scree plot",
+    "Show biplot": "Show biplot",
+    "Scaling factor:": "Scaling factor:",
+    "Advanced Options": "Advanced Options",
+    "Use correlation matrix (Z-score standardization)": "Use correlation matrix (Z-score standardization)",
+    "Impute missing values (pairwise deletion)": "Impute missing values (pairwise deletion)",
+    "Use parallel computation": "Use parallel computation",
     # PCoA dialog
-    "Distance Metric":
-        "Distance Metric",
-    "Distance measure:":
-        "Distance measure:",
-    "Coordinates":
-        "Coordinates",
-    "Number of coordinates: ":
-        "Number of coordinates: ",
-    "Negative Eigenvalue Handling":
-        "Negative Eigenvalue Handling",
-    "Keep all eigenvalues (may produce complex coordinates)":
-        "Keep all eigenvalues (may produce complex coordinates)",
-    "Wickoff correction (add constant to squared distances)":
-        "Wickoff correction (add constant to squared distances)",
-    "Torgerson correction (approximate Euclidean)":
-        "Torgerson correction (approximate Euclidean)",
-    "Classical MDS with majorization":
-        "Classical MDS with majorization",
-    "Display":
-        "Display",
-    "Show eigenvalues":
-        "Show eigenvalues",
-    "Show distance vectors":
-        "Show distance vectors",
-
+    "Distance Metric": "Distance Metric",
+    "Distance measure:": "Distance measure:",
+    "Coordinates": "Coordinates",
+    "Number of coordinates: ": "Number of coordinates: ",
+    "Negative Eigenvalue Handling": "Negative Eigenvalue Handling",
+    "Keep all eigenvalues (may produce complex coordinates)": "Keep all eigenvalues (may produce complex coordinates)",
+    "Wickoff correction (add constant to squared distances)": "Wickoff correction (add constant to squared distances)",
+    "Torgerson correction (approximate Euclidean)": "Torgerson correction (approximate Euclidean)",
+    "Classical MDS with majorization": "Classical MDS with majorization",
+    "Display": "Display",
+    "Show eigenvalues": "Show eigenvalues",
+    "Show distance vectors": "Show distance vectors",
     # NMDS dialog
-    "Non-metric MDS (NMDS)":
-        "Non-metric MDS (NMDS)",
-    "Dissimilarity Index":
-        "Dissimilarity Index",
-    "Ordination Dimensions":
-        "Ordination Dimensions",
-    "Dimensions: ":
-        "Dimensions: ",
-    "2D: Best for visualization\n3D: May reveal additional structure":
-        "2D: Best for visualization\n3D: May reveal additional structure",
-    "Optimization":
-        "Optimization",
-    "Random restarts: ":
-        "Random restarts: ",
-    "Max iterations: ":
-        "Max iterations: ",
-    "Convergence tolerance: ":
-        "Convergence tolerance: ",
-    "Show stress plot":
-        "Show stress plot",
-    "Show Shepard diagram":
-        "Show Shepard diagram",
-    "Show points with labels":
-        "Show points with labels",
-    "Show 95% confidence ellipses":
-        "Show 95% confidence ellipses",
-
+    "Non-metric MDS (NMDS)": "Non-metric MDS (NMDS)",
+    "Dissimilarity Index": "Dissimilarity Index",
+    "Ordination Dimensions": "Ordination Dimensions",
+    "Dimensions: ": "Dimensions: ",
+    "2D: Best for visualization\n3D: May reveal additional structure": "2D: Best for visualization\n3D: May reveal additional structure",
+    "Optimization": "Optimization",
+    "Random restarts: ": "Random restarts: ",
+    "Max iterations: ": "Max iterations: ",
+    "Convergence tolerance: ": "Convergence tolerance: ",
+    "Show stress plot": "Show stress plot",
+    "Show Shepard diagram": "Show Shepard diagram",
+    "Show points with labels": "Show points with labels",
+    "Show 95% confidence ellipses": "Show 95% confidence ellipses",
     # Diversity dialog
-    "Sample":
-        "Sample",
-    "Enter sample name...":
-        "Enter sample name...",
-    "Sample name:":
-        "Sample name:",
-    "Diversity Indices":
-        "Diversity Indices",
-    "Species Richness (S)":
-        "Species Richness (S)",
-    "Shannon Index (H')":
-        "Shannon Index (H')",
-    "Simpson Index (1-D)":
-        "Simpson Index (1-D)",
-    "Fisher's Alpha":
-        "Fisher's Alpha",
-    "Chao1 Richness Estimator":
-        "Chao1 Richness Estimator",
-    "Pielou's Evenness (J')":
-        "Pielou's Evenness (J')",
-    "Options":
-        "Options",
-    "Shannon log base:":
-        "Shannon log base:",
-    "Natural log (e)":
-        "Natural log (e)",
-    "Log base 2":
-        "Log base 2",
-    "Log base 10":
-        "Log base 10",
-    "Calculate confidence intervals (bootstrap)":
-        "Calculate confidence intervals (bootstrap)",
-    "Bootstrap iterations: ":
-        "Bootstrap iterations: ",
-    "Confidence level: ":
-        "Confidence level: ",
-    "Bar chart comparison":
-        "Bar chart comparison",
-    "Radar chart":
-        "Radar chart",
-
+    "Sample": "Sample",
+    "Enter sample name...": "Enter sample name...",
+    "Sample name:": "Sample name:",
+    "Diversity Indices": "Diversity Indices",
+    "Species Richness (S)": "Species Richness (S)",
+    "Shannon Index (H')": "Shannon Index (H')",
+    "Simpson Index (1-D)": "Simpson Index (1-D)",
+    "Fisher's Alpha": "Fisher's Alpha",
+    "Chao1 Richness Estimator": "Chao1 Richness Estimator",
+    "Pielou's Evenness (J')": "Pielou's Evenness (J')",
+    "Options": "Options",
+    "Shannon log base:": "Shannon log base:",
+    "Natural log (e)": "Natural log (e)",
+    "Log base 2": "Log base 2",
+    "Log base 10": "Log base 10",
+    "Calculate confidence intervals (bootstrap)": "Calculate confidence intervals (bootstrap)",
+    "Bootstrap iterations: ": "Bootstrap iterations: ",
+    "Confidence level: ": "Confidence level: ",
+    "Bar chart comparison": "Bar chart comparison",
+    "Radar chart": "Radar chart",
     # Rarefaction dialog
-    "Rarefaction Analysis":
-        "Rarefaction Analysis",
-    "Select Samples":
-        "Select Samples",
-    "Sample 1":
-        "Sample 1",
-    "Sample 2":
-        "Sample 2",
-    "Sample 3":
-        "Sample 3",
-    "Sample 4":
-        "Sample 4",
-    "Sample 5":
-        "Sample 5",
-    "Settings":
-        "Settings",
-    "Maximum individuals: ":
-        "Maximum individuals: ",
-    "Step size: ":
-        "Step size: ",
-    "Show 95% confidence intervals":
-        "Show 95% confidence intervals",
-    "Separate plots per sample":
-        "Separate plots per sample",
-    "Show grid":
-        "Show grid",
-
+    "Rarefaction Analysis": "Rarefaction Analysis",
+    "Select Samples": "Select Samples",
+    "Sample 1": "Sample 1",
+    "Sample 2": "Sample 2",
+    "Sample 3": "Sample 3",
+    "Sample 4": "Sample 4",
+    "Sample 5": "Sample 5",
+    "Settings": "Settings",
+    "Maximum individuals: ": "Maximum individuals: ",
+    "Step size: ": "Step size: ",
+    "Show 95% confidence intervals": "Show 95% confidence intervals",
+    "Separate plots per sample": "Separate plots per sample",
+    "Show grid": "Show grid",
     # Import Data dialog
-    "Import Data":
-        "Import Data",
-    "File Selection":
-        "File Selection",
-    "Select file...":
-        "Select file...",
-    "Browse...":
-        "Browse...",
-    "CSV (Comma Separated)":
-        "CSV (Comma Separated)",
-    "CSV (Tab Separated)":
-        "CSV (Tab Separated)",
-    "Text (Space Separated)":
-        "Text (Space Separated)",
-    "Excel (.xlsx)":
-        "Excel (.xlsx)",
-    "File format:":
-        "File format:",
-    "Import Options":
-        "Import Options",
-    "First row contains headers":
-        "First row contains headers",
-    "First column contains row labels":
-        "First column contains row labels",
-    "Rows to skip:":
-        "Rows to skip:",
-    "NA, NaN, -, empty":
-        "NA, NaN, -, empty",
-    "NA values:":
-        "NA values:",
-    "Data Preview":
-        "Data Preview",
-    "Import":
-        "Import",
-    "Select Data File":
-        "Select Data File",
-    "Data Files (*.csv *.txt *.xlsx);;All Files (*)":
-        "Data Files (*.csv *.txt *.xlsx);;All Files (*)",
-    "Error loading preview:\n{0}":
-        "Error loading preview:\n{0}",
-    "No File":
-        "No File",
-    "Please select a file to import.":
-        "Please select a file to import.",
-    "Failed to import data:\n{0}":
-        "Failed to import data:\n{0}",
-
+    "Import Data": "Import Data",
+    "File Selection": "File Selection",
+    "Select file...": "Select file...",
+    "Browse...": "Browse...",
+    "CSV (Comma Separated)": "CSV (Comma Separated)",
+    "CSV (Tab Separated)": "CSV (Tab Separated)",
+    "Text (Space Separated)": "Text (Space Separated)",
+    "Excel (.xlsx)": "Excel (.xlsx)",
+    "File format:": "File format:",
+    "Import Options": "Import Options",
+    "First row contains headers": "First row contains headers",
+    "First column contains row labels": "First column contains row labels",
+    "Rows to skip:": "Rows to skip:",
+    "NA, NaN, -, empty": "NA, NaN, -, empty",
+    "NA values:": "NA values:",
+    "Data Preview": "Data Preview",
+    "Import": "Import",
+    "Select Data File": "Select Data File",
+    "Data Files (*.csv *.txt *.xlsx);;All Files (*)": "Data Files (*.csv *.txt *.xlsx);;All Files (*)",
+    "Error loading preview:\n{0}": "Error loading preview:\n{0}",
+    "No File": "No File",
+    "Please select a file to import.": "Please select a file to import.",
+    "Failed to import data:\n{0}": "Failed to import data:\n{0}",
     # =========================================================================
     # Help Text - titles and explanations only (NOT formulas)
     # =========================================================================
-
-    "Principal Component Analysis (PCA)":
-        "Principal Component Analysis (PCA)",
-    "PCA is a dimension reduction technique that finds orthogonal axes (maximum variance directions) in multidimensional data.":
-        "PCA is a dimension reduction technique that finds orthogonal axes (maximum variance directions) in multidimensional data.",
-    "Mathematical Formulation:":
-        "Mathematical Formulation:",
-    "Given data matrix":
-        "Given data matrix",
-    "Centering":
-        "Centering",
-    "Covariance":
-        "Covariance",
-    "Eigendecomposition":
-        "Eigendecomposition",
-    "Project":
-        "Project",
-    "where":
-        "where",
-    "Parameters:":
-        "Parameters:",
-    "Correlation vs. Covariance: Use correlation for standardized data":
-        "Correlation vs. Covariance: Use correlation for standardized data",
-    "Components: Number of PCs to retain":
-        "Components: Number of PCs to retain",
-    "Minimum variance: Eigenvalue threshold":
-        "Minimum variance: Eigenvalue threshold",
-    "Interpretation:":
-        "Interpretation:",
-    "PC1 captures the direction of maximum variance, PC2 the second most, etc.":
-        "PC1 captures the direction of maximum variance, PC2 the second most, etc.",
-
-    "Principal Coordinate Analysis (PCoA)":
-        "Principal Coordinate Analysis (PCoA)",
-    "PCoA (also called Classical MDS) finds coordinates that represent a given distance matrix as accurately as possible in lower dimensions.":
-        "PCoA (also called Classical MDS) finds coordinates that represent a given distance matrix as accurately as possible in lower dimensions.",
-    "Given distance matrix":
-        "Given distance matrix",
-    "Square":
-        "Square",
-    "Gower centering":
-        "Gower centering",
-    "Eigen-decomposition":
-        "Eigen-decomposition",
-    "Coordinates":
-        "Coordinates",
-    "Negative Eigenvalues:":
-        "Negative Eigenvalues:",
-    "Non-Euclidean distances may produce negative eigenvalues.":
-        "Non-Euclidean distances may produce negative eigenvalues.",
-
-    "Non-metric Multidimensional Scaling (NMDS)":
-        "Non-metric Multidimensional Scaling (NMDS)",
-    "NMDS is an ordination technique that finds coordinates preserving the rank order of distances.":
-        "NMDS is an ordination technique that finds coordinates preserving the rank order of distances.",
-    "The stress function measures rank distortion:":
-        "The stress function measures rank distortion:",
-    "Algorithm (SMACOF):":
-        "Algorithm (SMACOF):",
-    "Initialize random configuration":
-        "Initialize random configuration",
-    "Compute distances in current configuration":
-        "Compute distances in current configuration",
-    "Apply monotone regression to get disparities":
-        "Apply monotone regression to get disparities",
-    "Find optimal configuration for disparities":
-        "Find optimal configuration for disparities",
-    "Repeat until convergence":
-        "Repeat until convergence",
-    "Stress < 0.05: Excellent":
-        "Stress < 0.05: Excellent",
-    "Stress < 0.10: Good":
-        "Stress < 0.10: Good",
-    "Stress < 0.15: Acceptable":
-        "Stress < 0.15: Acceptable",
-    "Stress > 0.20: Poor":
-        "Stress > 0.20: Poor",
-
-    "Biodiversity indices quantify species richness and evenness in ecological communities.":
-        "Biodiversity indices quantify species richness and evenness in ecological communities.",
-    "Common Indices:":
-        "Common Indices:",
-    "Species Richness (S):":
-        "Species Richness (S):",
-    "Shannon Index (H'):":
-        "Shannon Index (H'):",
-    "Simpson Index (1-D):":
-        "Simpson Index (1-D):",
-    "Fisher's Alpha:":
-        "Fisher's Alpha:",
-    "Chao1 Estimator:":
-        "Chao1 Estimator:",
-    "Higher values generally indicate greater diversity. Compare across samples to assess patterns.":
-        "Higher values generally indicate greater diversity. Compare across samples to assess patterns.",
-    "Rarefaction standardizes species counts to a common sampling effort.":
-        "Rarefaction standardizes species counts to a common sampling effort.",
-    "Expected species at n individuals:":
-        "Expected species at n individuals:",
-    "Rarefaction curves that plateau indicate adequate sampling.":
-        "Rarefaction curves that plateau indicate adequate sampling.",
-
+    "Principal Component Analysis (PCA)": "Principal Component Analysis (PCA)",
+    "PCA is a dimension reduction technique that finds orthogonal axes (maximum variance directions) in multidimensional data.": "PCA is a dimension reduction technique that finds orthogonal axes (maximum variance directions) in multidimensional data.",
+    "Mathematical Formulation:": "Mathematical Formulation:",
+    "Given data matrix": "Given data matrix",
+    "Centering": "Centering",
+    "Covariance": "Covariance",
+    "Eigendecomposition": "Eigendecomposition",
+    "Project": "Project",
+    "where": "where",
+    "Parameters:": "Parameters:",
+    "Correlation vs. Covariance: Use correlation for standardized data": "Correlation vs. Covariance: Use correlation for standardized data",
+    "Components: Number of PCs to retain": "Components: Number of PCs to retain",
+    "Minimum variance: Eigenvalue threshold": "Minimum variance: Eigenvalue threshold",
+    "Interpretation:": "Interpretation:",
+    "PC1 captures the direction of maximum variance, PC2 the second most, etc.": "PC1 captures the direction of maximum variance, PC2 the second most, etc.",
+    "Principal Coordinate Analysis (PCoA)": "Principal Coordinate Analysis (PCoA)",
+    "PCoA (also called Classical MDS) finds coordinates that represent a given distance matrix as accurately as possible in lower dimensions.": "PCoA (also called Classical MDS) finds coordinates that represent a given distance matrix as accurately as possible in lower dimensions.",
+    "Given distance matrix": "Given distance matrix",
+    "Square": "Square",
+    "Gower centering": "Gower centering",
+    "Eigen-decomposition": "Eigen-decomposition",
+    "Coordinates": "Coordinates",
+    "Negative Eigenvalues:": "Negative Eigenvalues:",
+    "Non-Euclidean distances may produce negative eigenvalues.": "Non-Euclidean distances may produce negative eigenvalues.",
+    "Non-metric Multidimensional Scaling (NMDS)": "Non-metric Multidimensional Scaling (NMDS)",
+    "NMDS is an ordination technique that finds coordinates preserving the rank order of distances.": "NMDS is an ordination technique that finds coordinates preserving the rank order of distances.",
+    "The stress function measures rank distortion:": "The stress function measures rank distortion:",
+    "Algorithm (SMACOF):": "Algorithm (SMACOF):",
+    "Initialize random configuration": "Initialize random configuration",
+    "Compute distances in current configuration": "Compute distances in current configuration",
+    "Apply monotone regression to get disparities": "Apply monotone regression to get disparities",
+    "Find optimal configuration for disparities": "Find optimal configuration for disparities",
+    "Repeat until convergence": "Repeat until convergence",
+    "Stress < 0.05: Excellent": "Stress < 0.05: Excellent",
+    "Stress < 0.10: Good": "Stress < 0.10: Good",
+    "Stress < 0.15: Acceptable": "Stress < 0.15: Acceptable",
+    "Stress > 0.20: Poor": "Stress > 0.20: Poor",
+    "Biodiversity indices quantify species richness and evenness in ecological communities.": "Biodiversity indices quantify species richness and evenness in ecological communities.",
+    "Common Indices:": "Common Indices:",
+    "Species Richness (S):": "Species Richness (S):",
+    "Shannon Index (H'):": "Shannon Index (H'):",
+    "Simpson Index (1-D):": "Simpson Index (1-D):",
+    "Fisher's Alpha:": "Fisher's Alpha:",
+    "Chao1 Estimator:": "Chao1 Estimator:",
+    "Higher values generally indicate greater diversity. Compare across samples to assess patterns.": "Higher values generally indicate greater diversity. Compare across samples to assess patterns.",
+    "Rarefaction standardizes species counts to a common sampling effort.": "Rarefaction standardizes species counts to a common sampling effort.",
+    "Expected species at n individuals:": "Expected species at n individuals:",
+    "Rarefaction curves that plateau indicate adequate sampling.": "Rarefaction curves that plateau indicate adequate sampling.",
     # =========================================================================
     # Navigation (views/ui_navigation.py)
     # =========================================================================
-
-    "Data Management":
-        "Data Management",
-    "Univariate":
-        "Univariate",
-    "Ecology":
-        "Ecology",
-
-    "Import Data":
-        "Import Data",
-    "Export Data":
-        "Export Data",
-    "Matrix Operations":
-        "Matrix Operations",
-
-    "Descriptive Statistics":
-        "Descriptive Statistics",
-    "Histogram":
-        "Histogram",
-    "Box Plot":
-        "Box Plot",
-
-    "Cluster Analysis":
-        "Cluster Analysis",
-    "Group Tests":
-        "Group Tests",
-
-    "PERMANOVA":
-        "PERMANOVA",
-
-    "GPA Alignment":
-        "GPA Alignment",
-    "TPS Deformation":
-        "TPS Deformation",
-    "Relative Warps":
-        "Relative Warps",
-
-    "Unitary Associations":
-        "Unitary Associations",
-    "Confidence Intervals":
-        "Confidence Intervals",
-
-    "Alpha Diversity":
-        "Alpha Diversity",
-    "Beta Diversity":
-        "Beta Diversity",
-    "Rarefaction":
-        "Rarefaction",
-
-    "Filter:":
-        "Filter:",
-
+    "Data Management": "Data Management",
+    "Univariate": "Univariate",
+    "Ecology": "Ecology",
+    "Import Data": "Import Data",
+    "Export Data": "Export Data",
+    "Matrix Operations": "Matrix Operations",
+    "Descriptive Statistics": "Descriptive Statistics",
+    "Histogram": "Histogram",
+    "Box Plot": "Box Plot",
+    "Cluster Analysis": "Cluster Analysis",
+    "Group Tests": "Group Tests",
+    "PERMANOVA": "PERMANOVA",
+    "GPA Alignment": "GPA Alignment",
+    "TPS Deformation": "TPS Deformation",
+    "Relative Warps": "Relative Warps",
+    "Unitary Associations": "Unitary Associations",
+    "Confidence Intervals": "Confidence Intervals",
+    "Alpha Diversity": "Alpha Diversity",
+    "Beta Diversity": "Beta Diversity",
+    "Rarefaction": "Rarefaction",
+    "Filter:": "Filter:",
     # =========================================================================
     # Spreadsheet (views/ui_spreadsheet.py)
     # =========================================================================
-
-    "Set as Group Column":
-        "Set as Group Column",
-    "Group {0}":
-        "Group {0}",
-
-    "Set Data Type":
-        "Set Data Type",
-    "Continuous":
-        "Continuous",
-    "Ordinal":
-        "Ordinal",
-    "Nominal":
-        "Nominal",
-    "Count":
-        "Count",
-
-    "Transform Column":
-        "Transform Column",
-    "Log Transform: x' = ln(x + 1)":
-        "Log Transform: x' = ln(x + 1)",
-    "Z-score: x' = (x - μ) / σ":
-        "Z-score: x' = (x - μ) / σ",
-    "Center: x' = x - μ":
-        "Center: x' = x - μ",
-    "Scale: x' = x / σ":
-        "Scale: x' = x / σ",
-
-    "Sort Ascending":
-        "Sort Ascending",
-    "Sort Descending":
-        "Sort Descending",
-    "Delete Column":
-        "Delete Column",
-
-    "Set Marker":
-        "Set Marker",
-    "Circle":
-        "Circle",
-    "Triangle_up":
-        "Triangle_up",
-    "Triangle_down":
-        "Triangle_down",
-    "Triangle_left":
-        "Triangle_left",
-    "Triangle_right":
-        "Triangle_right",
-    "Square":
-        "Square",
-    "Diamond":
-        "Diamond",
-    "Star":
-        "Star",
-    "Cross":
-        "Cross",
-    "None":
-        "None",
-
-    "Set Color":
-        "Set Color",
-    "Red":
-        "Red",
-    "Orange":
-        "Orange",
-    "Yellow":
-        "Yellow",
-    "Green":
-        "Green",
-    "Blue":
-        "Blue",
-    "Purple":
-        "Purple",
-    "Gray":
-        "Gray",
-
-    "Assign to Group":
-        "Assign to Group",
-
-    "Hide Row":
-        "Hide Row",
-    "Show All Rows":
-        "Show All Rows",
-
-    "Failed to import data:\n{0}":
-        "Failed to import data:\n{0}",
-
+    "Set as Group Column": "Set as Group Column",
+    "Group {0}": "Group {0}",
+    "Set Data Type": "Set Data Type",
+    "Continuous": "Continuous",
+    "Ordinal": "Ordinal",
+    "Nominal": "Nominal",
+    "Count": "Count",
+    "Transform Column": "Transform Column",
+    "Log Transform: x' = ln(x + 1)": "Log Transform: x' = ln(x + 1)",
+    "Z-score: x' = (x - μ) / σ": "Z-score: x' = (x - μ) / σ",
+    "Center: x' = x - μ": "Center: x' = x - μ",
+    "Scale: x' = x / σ": "Scale: x' = x / σ",
+    "Sort Ascending": "Sort Ascending",
+    "Sort Descending": "Sort Descending",
+    "Delete Column": "Delete Column",
+    "Set Marker": "Set Marker",
+    "Circle": "Circle",
+    "Triangle_up": "Triangle_up",
+    "Triangle_down": "Triangle_down",
+    "Triangle_left": "Triangle_left",
+    "Triangle_right": "Triangle_right",
+    "Square": "Square",
+    "Diamond": "Diamond",
+    "Star": "Star",
+    "Cross": "Cross",
+    "None": "None",
+    "Set Color": "Set Color",
+    "Red": "Red",
+    "Orange": "Orange",
+    "Yellow": "Yellow",
+    "Green": "Green",
+    "Blue": "Blue",
+    "Purple": "Purple",
+    "Gray": "Gray",
+    "Assign to Group": "Assign to Group",
+    "Hide Row": "Hide Row",
+    "Show All Rows": "Show All Rows",
+    "Failed to import data:\n{0}": "Failed to import data:\n{0}",
     # =========================================================================
     # Plot Canvas (views/ui_plot_canvas.py)
     # =========================================================================
-
-    "Selection:":
-        "Selection:",
-    "Rectangle":
-        "Rectangle",
-    "Lasso":
-        "Lasso",
-
-    "Reset":
-        "Reset",
-    "Show Labels":
-        "Show Labels",
-    "Show 95% Ellipses":
-        "Show 95% Ellipses",
-
-    "PCA Scores Plot":
-        "PCA Scores Plot",
-    "PCoA Scores Plot":
-        "PCoA Scores Plot",
-
-    "NMDS1":
-        "NMDS1",
-    "NMDS2":
-        "NMDS2",
-
-    "NMDS Ordination (Stress = {0:.4f})":
-        "NMDS Ordination (Stress = {0:.4f})",
-
-    "Index Value":
-        "Index Value",
-    "Biodiversity Indices":
-        "Biodiversity Indices",
-
-    "Number of Individuals":
-        "Number of Individuals",
-    "Expected Species Richness":
-        "Expected Species Richness",
-    "Rarefaction Curves":
-        "Rarefaction Curves",
-
-    "Export Plot":
-        "Export Plot",
-    "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)":
-        "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)",
-    "Export Size":
-        "Export Size",
-    "Select export size:":
-        "Select export size:",
-    "Export Successful":
-        "Export Successful",
-    "Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm":
-        "Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm",
-    "Export Error":
-        "Export Error",
-    "Failed to export plot:\n{0}":
-        "Failed to export plot:\n{0}",
-
+    "Selection:": "Selection:",
+    "Rectangle": "Rectangle",
+    "Lasso": "Lasso",
+    "Reset": "Reset",
+    "Show Labels": "Show Labels",
+    "Show 95% Ellipses": "Show 95% Ellipses",
+    "PCA Scores Plot": "PCA Scores Plot",
+    "PCoA Scores Plot": "PCoA Scores Plot",
+    "NMDS1": "NMDS1",
+    "NMDS2": "NMDS2",
+    "NMDS Ordination (Stress = {0:.4f})": "NMDS Ordination (Stress = {0:.4f})",
+    "Index Value": "Index Value",
+    "Biodiversity Indices": "Biodiversity Indices",
+    "Number of Individuals": "Number of Individuals",
+    "Expected Species Richness": "Expected Species Richness",
+    "Rarefaction Curves": "Rarefaction Curves",
+    "Export Plot": "Export Plot",
+    "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)": "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)",
+    "Export Size": "Export Size",
+    "Select export size:": "Select export size:",
+    "Export Successful": "Export Successful",
+    "Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm": "Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm",
+    "Export Error": "Export Error",
+    "Failed to export plot:\n{0}": "Failed to export plot:\n{0}",
     # =========================================================================
     # Summary Methods (various result classes)
     # =========================================================================
-
     # PCA Results
-    "Principal Component Analysis Results":
-        "Principal Component Analysis Results",
-    "Method: {0}":
-        "Method: {0}",
-    "Number of components: {0}":
-        "Number of components: {0}",
-    "Component | Eigenvalue | Variance % | Cumulative %":
-        "Component | Eigenvalue | Variance % | Cumulative %",
-
+    "Principal Component Analysis Results": "Principal Component Analysis Results",
+    "Method: {0}": "Method: {0}",
+    "Number of components: {0}": "Number of components: {0}",
+    "Component | Eigenvalue | Variance % | Cumulative %": "Component | Eigenvalue | Variance % | Cumulative %",
     # PCoA Results
-    "Principal Coordinate Analysis Results":
-        "Principal Coordinate Analysis Results",
-    "Distance metric: {0}":
-        "Distance metric: {0}",
-    "Number of coordinates: {0}":
-        "Number of coordinates: {0}",
-    "Coord | Eigenvalue | Proportion | Cumulative":
-        "Coord | Eigenvalue | Proportion | Cumulative",
-
+    "Principal Coordinate Analysis Results": "Principal Coordinate Analysis Results",
+    "Distance metric: {0}": "Distance metric: {0}",
+    "Number of coordinates: {0}": "Number of coordinates: {0}",
+    "Coord | Eigenvalue | Proportion | Cumulative": "Coord | Eigenvalue | Proportion | Cumulative",
     # NMDS Results
-    "Non-metric MDS Results":
-        "Non-metric MDS Results",
-    "Final stress: {0}":
-        "Final stress: {0}",
-    "Iterations: {0}":
-        "Iterations: {0}",
-    "Converged: {0}":
-        "Converged: {0}",
-    "Random restarts: {0}":
-        "Random restarts: {0}",
-
+    "Non-metric MDS Results": "Non-metric MDS Results",
+    "Final stress: {0}": "Final stress: {0}",
+    "Iterations: {0}": "Iterations: {0}",
+    "Converged: {0}": "Converged: {0}",
+    "Random restarts: {0}": "Random restarts: {0}",
     # ANOSIM Results
-    "Analysis of Similarities (ANOSIM)":
-        "Analysis of Similarities (ANOSIM)",
-    "Test statistic (R): {0}":
-        "Test statistic (R): {0}",
-    "P-value: {0}":
-        "P-value: {0}",
-    "Permutations: {0}":
-        "Permutations: {0}",
-    "Groups: {0}":
-        "Groups: {0}",
-
+    "Analysis of Similarities (ANOSIM)": "Analysis of Similarities (ANOSIM)",
+    "Test statistic (R): {0}": "Test statistic (R): {0}",
+    "P-value: {0}": "P-value: {0}",
+    "Permutations: {0}": "Permutations: {0}",
+    "Groups: {0}": "Groups: {0}",
     # PERMANOVA Results
-    "PERMANOVA Results":
-        "PERMANOVA Results",
-    "F statistic: {0}":
-        "F statistic: {0}",
-    "Degrees of freedom:":
-        "Degrees of freedom:",
-    "Between groups: {0}":
-        "Between groups: {0}",
-    "Within groups: {0}":
-        "Within groups: {0}",
-    "Sum of squares:":
-        "Sum of squares:",
-    "Between (SS_B): {0}":
-        "Between (SS_B): {0}",
-    "Within (SS_W): {0}":
-        "Within (SS_W): {0}",
-    "Mean squares:":
-        "Mean squares:",
-    "Between (MS_B): {0}":
-        "Between (MS_B): {0}",
-    "Within (MS_W): {0}":
-        "Within (MS_W): {0}",
-
+    "PERMANOVA Results": "PERMANOVA Results",
+    "F statistic: {0}": "F statistic: {0}",
+    "Degrees of freedom:": "Degrees of freedom:",
+    "Between groups: {0}": "Between groups: {0}",
+    "Within groups: {0}": "Within groups: {0}",
+    "Sum of squares:": "Sum of squares:",
+    "Between (SS_B): {0}": "Between (SS_B): {0}",
+    "Within (SS_W): {0}": "Within (SS_W): {0}",
+    "Mean squares:": "Mean squares:",
+    "Between (MS_B): {0}": "Between (MS_B): {0}",
+    "Within (MS_W): {0}": "Within (MS_W): {0}",
     # Distance Matrix
-    "Distance Matrix":
-        "Distance Matrix",
-    "Metric: {0}":
-        "Metric: {0}",
-    "Size: {0} x {1}":
-        "Size: {0} x {1}",
-    "Min distance: {0}":
-        "Min distance: {0}",
-    "Max distance: {0}":
-        "Max distance: {0}",
-    "Mean distance: {0}":
-        "Mean distance: {0}",
-
+    "Distance Matrix": "Distance Matrix",
+    "Metric: {0}": "Metric: {0}",
+    "Size: {0} x {1}": "Size: {0} x {1}",
+    "Min distance: {0}": "Min distance: {0}",
+    "Max distance: {0}": "Max distance: {0}",
+    "Mean distance: {0}": "Mean distance: {0}",
     # Diversity Results
-    "Diversity Analysis: {0}":
-        "Diversity Analysis: {0}",
-    "Taxa Richness (S): {0}":
-        "Taxa Richness (S): {0}",
-    "Total Individuals (N): {0}":
-        "Total Individuals (N): {0}",
-    "Shannon Index (H'): {0}":
-        "Shannon Index (H'): {0}",
-    "Simpson Index (1-D): {0}":
-        "Simpson Index (1-D): {0}",
-    "Pielou's Evenness (J): {0}":
-        "Pielou's Evenness (J): {0}",
-    "Margalef Index: {0}":
-        "Margalef Index: {0}",
-    "Fisher's Alpha: {0}":
-        "Fisher's Alpha: {0}",
-
+    "Diversity Analysis: {0}": "Diversity Analysis: {0}",
+    "Taxa Richness (S): {0}": "Taxa Richness (S): {0}",
+    "Total Individuals (N): {0}": "Total Individuals (N): {0}",
+    "Shannon Index (H'): {0}": "Shannon Index (H'): {0}",
+    "Simpson Index (1-D): {0}": "Simpson Index (1-D): {0}",
+    "Pielou's Evenness (J): {0}": "Pielou's Evenness (J): {0}",
+    "Margalef Index: {0}": "Margalef Index: {0}",
+    "Fisher's Alpha: {0}": "Fisher's Alpha: {0}",
     # GPA Results
-    "Generalized Procrustes Analysis Results":
-        "Generalized Procrustes Analysis Results",
-    "Number of specimens: {0}":
-        "Number of specimens: {0}",
-    "Number of landmarks: {0}":
-        "Number of landmarks: {0}",
-    "Dimensions: {0}":
-        "Dimensions: {0}",
-    "Final SSE: {0}":
-        "Final SSE: {0}",
-
+    "Generalized Procrustes Analysis Results": "Generalized Procrustes Analysis Results",
+    "Number of specimens: {0}": "Number of specimens: {0}",
+    "Number of landmarks: {0}": "Number of landmarks: {0}",
+    "Dimensions: {0}": "Dimensions: {0}",
+    "Final SSE: {0}": "Final SSE: {0}",
     # TPS Results
-    "Thin-Plate Spline Analysis Results":
-        "Thin-Plate Spline Analysis Results",
-    "Source landmarks: {0}":
-        "Source landmarks: {0}",
-    "Target landmarks: {0}":
-        "Target landmarks: {0}",
-    "Bending energy: {0}":
-        "Bending energy: {0}",
-    "Grid shape: {0}":
-        "Grid shape: {0}",
-
+    "Thin-Plate Spline Analysis Results": "Thin-Plate Spline Analysis Results",
+    "Source landmarks: {0}": "Source landmarks: {0}",
+    "Target landmarks: {0}": "Target landmarks: {0}",
+    "Bending energy: {0}": "Bending energy: {0}",
+    "Grid shape: {0}": "Grid shape: {0}",
     # Relative Warps Results
-    "Relative Warps Analysis Results":
-        "Relative Warps Analysis Results",
-    "Dimensionality: {0}D":
-        "Dimensionality: {0}D",
-    "RW  | Eigenvalue | Variance % | Cumulative":
-        "RW  | Eigenvalue | Variance % | Cumulative",
-
+    "Relative Warps Analysis Results": "Relative Warps Analysis Results",
+    "Dimensionality: {0}D": "Dimensionality: {0}D",
+    "RW  | Eigenvalue | Variance % | Cumulative": "RW  | Eigenvalue | Variance % | Cumulative",
     # Spectral Analysis Results
-    "Spectral Analysis Results":
-        "Spectral Analysis Results",
-    "Number of frequencies: {0}":
-        "Number of frequencies: {0}",
-    "Peak frequency: {0}":
-        "Peak frequency: {0}",
-    "Peak period: {0}":
-        "Peak period: {0}",
-    "Peak power: {0}":
-        "Peak power: {0}",
-
+    "Spectral Analysis Results": "Spectral Analysis Results",
+    "Number of frequencies: {0}": "Number of frequencies: {0}",
+    "Peak frequency: {0}": "Peak frequency: {0}",
+    "Peak period: {0}": "Peak period: {0}",
+    "Peak power: {0}": "Peak power: {0}",
 }
