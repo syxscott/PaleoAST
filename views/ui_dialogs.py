@@ -1283,3 +1283,238 @@ class ImportDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, _("Import Error"), _("Failed to import data:\n{0}").format(str(e)))
+
+
+class SimperDialog(BaseAnalysisDialog):
+    """SIMPER analysis configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__("SIMPER", parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        metric_group = self.add_parameter_group(_("Distance Metric"))
+        metric_layout = QVBoxLayout(metric_group)
+        self._metric_combo = QComboBox()
+        self._metric_combo.addItems(["Bray-Curtis", "Euclidean", "Jaccard"])
+        metric_layout.addWidget(QLabel(_("Distance measure:")))
+        metric_layout.addWidget(self._metric_combo)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "metric": self._metric_combo.currentText().lower().replace("-", "_"),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("SIMPER decomposes Bray-Curtis dissimilarity to identify which variables contribute most to between-group differences.")
+
+
+class UnivariateDialog(BaseAnalysisDialog):
+    """Univariate statistics configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Univariate Statistics"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        test_group = self.add_parameter_group(_("Test Type"))
+        test_layout = QVBoxLayout(test_group)
+        self._test_group = QButtonGroup()
+        tests = [
+            (_("Summary Statistics"), 0),
+            (_("Normality Test (Shapiro-Wilk)"), 1),
+            (_("t-test (2 groups)"), 2),
+            (_("One-way ANOVA (3+ groups)"), 3),
+            (_("Kruskal-Wallis (non-parametric)"), 4),
+        ]
+        for text, idx in tests:
+            rb = QRadioButton(text)
+            if idx == 0:
+                rb.setChecked(True)
+            self._test_group.addButton(rb, idx)
+            test_layout.addWidget(rb)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {"test_type": self._test_group.checkedId()}
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Choose the univariate statistical test to perform on each variable.")
+
+
+class LDADialog(BaseAnalysisDialog):
+    """LDA/CVA configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Linear Discriminant Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        comp_group = self.add_parameter_group(_("Components"))
+        comp_layout = QVBoxLayout(comp_group)
+        self._n_comp_spin = QSpinBox()
+        self._n_comp_spin.setRange(2, 20)
+        self._n_comp_spin.setValue(2)
+        self._n_comp_spin.setPrefix(_("Number of LD axes: "))
+        comp_layout.addWidget(self._n_comp_spin)
+
+        opt_group = self.add_parameter_group(_("Options"))
+        opt_layout = QVBoxLayout(opt_group)
+        self._cv_check = QCheckBox(_("Cross-validation (leave-one-out)"))
+        self._cv_check.setChecked(True)
+        opt_layout.addWidget(self._cv_check)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "n_components": self._n_comp_spin.value(),
+            "cross_validate": self._cv_check.isChecked(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("LDA finds linear combinations that best separate known groups. CVA is equivalent to LDA when applied to MANOVA results.")
+
+
+class ClusteringDialog(BaseAnalysisDialog):
+    """Hierarchical clustering configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Hierarchical Clustering"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        method_group = self.add_parameter_group(_("Linkage Method"))
+        method_layout = QVBoxLayout(method_group)
+        self._method_combo = QComboBox()
+        self._method_combo.addItems(["Ward", "Complete", "Average", "Single"])
+        method_layout.addWidget(QLabel(_("Linkage:")))
+        method_layout.addWidget(self._method_combo)
+
+        metric_group = self.add_parameter_group(_("Distance Metric"))
+        metric_layout = QVBoxLayout(metric_group)
+        self._metric_combo = QComboBox()
+        self._metric_combo.addItems(["Euclidean", "Bray-Curtis", "Jaccard", "Manhattan", "Canberra"])
+        metric_layout.addWidget(self._metric_combo)
+
+        n_group = self.add_parameter_group(_("Clusters"))
+        n_layout = QVBoxLayout(n_group)
+        self._n_clusters_spin = QSpinBox()
+        self._n_clusters_spin.setRange(2, 20)
+        self._n_clusters_spin.setValue(3)
+        self._n_clusters_spin.setPrefix(_("Number of clusters: "))
+        n_layout.addWidget(self._n_clusters_spin)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "method": self._method_combo.currentText().lower(),
+            "metric": self._metric_combo.currentText().lower().replace("-", "_"),
+            "n_clusters": self._n_clusters_spin.value(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Hierarchical clustering groups similar samples together using agglomerative merging. Ward's method minimizes within-cluster variance.")
+
+
+class CONISSDialog(BaseAnalysisDialog):
+    """CONISS zonation configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("CONISS Zonation"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        zone_group = self.add_parameter_group(_("Zonation"))
+        zone_layout = QVBoxLayout(zone_group)
+        self._n_zones_spin = QSpinBox()
+        self._n_zones_spin.setRange(2, 20)
+        self._n_zones_spin.setValue(4)
+        self._n_zones_spin.setPrefix(_("Number of zones: "))
+        zone_layout.addWidget(self._n_zones_spin)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {"n_zones": self._n_zones_spin.value()}
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("CONISS performs constrained hierarchical clustering for stratigraphic data. Only adjacent levels can be merged, preserving stratigraphic order.")
+
+
+class MarkovDialog(BaseAnalysisDialog):
+    """Markov chain analysis configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Markov Chain Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        info_group = self.add_parameter_group(_("Input"))
+        info_layout = QVBoxLayout(info_group)
+        info_layout.addWidget(QLabel(_("The analysis uses the first column of data as facies codes (integers starting from 0).")))
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {}
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Tests whether vertical facies transitions follow a random sequence or exhibit first-order Markov dependency.")
+
+
+class DirectionalDialog(BaseAnalysisDialog):
+    """Directional statistics configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Directional Statistics"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        bins_group = self.add_parameter_group(_("Rose Diagram"))
+        bins_layout = QVBoxLayout(bins_group)
+        self._n_bins_spin = QSpinBox()
+        self._n_bins_spin.setRange(4, 36)
+        self._n_bins_spin.setValue(12)
+        self._n_bins_spin.setPrefix(_("Number of bins: "))
+        bins_layout.addWidget(self._n_bins_spin)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {"n_bins": self._n_bins_spin.value()}
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Computes circular statistics (mean direction, resultant length, Rayleigh test) and generates rose diagrams for directional data.")
+
+
+class EFADialog(BaseAnalysisDialog):
+    """Elliptic Fourier Analysis configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Elliptic Fourier Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        harm_group = self.add_parameter_group(_("Harmonics"))
+        harm_layout = QVBoxLayout(harm_group)
+        self._n_harm_spin = QSpinBox()
+        self._n_harm_spin.setRange(1, 50)
+        self._n_harm_spin.setValue(10)
+        self._n_harm_spin.setPrefix(_("Number of harmonics: "))
+        harm_layout.addWidget(self._n_harm_spin)
+
+        pts_group = self.add_parameter_group(_("Resampling"))
+        pts_layout = QVBoxLayout(pts_group)
+        self._n_pts_spin = QSpinBox()
+        self._n_pts_spin.setRange(50, 1000)
+        self._n_pts_spin.setValue(200)
+        self._n_pts_spin.setPrefix(_("Contour points: "))
+        pts_layout.addWidget(self._n_pts_spin)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "n_harmonics": self._n_harm_spin.value(),
+            "n_points": self._n_pts_spin.value(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("EFA decomposes closed contours into elliptic Fourier functions. Each harmonic adds 4 coefficients (a, b, c, d). Use first 2 columns as (x, y) coordinates.")

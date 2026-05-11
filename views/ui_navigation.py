@@ -555,9 +555,7 @@ class NavigationTree(QWidget):
 
         # Univariate children
         univariate_children = [
-            NavigationItem(_("Descriptive Statistics"), NavigationCategory.UNIVARIATE, "chart"),
-            NavigationItem(_("Histogram"), NavigationCategory.UNIVARIATE, "chart"),
-            NavigationItem(_("Box Plot"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("Univariate"), NavigationCategory.UNIVARIATE, "chart"),
         ]
         for child in univariate_children:
             categories[NavigationCategory.UNIVARIATE].children.append(child)
@@ -567,8 +565,10 @@ class NavigationTree(QWidget):
             NavigationItem("PCA", NavigationCategory.MULTIVARIATE, "pca"),
             NavigationItem("PCoA", NavigationCategory.MULTIVARIATE, "pca"),
             NavigationItem("NMDS", NavigationCategory.MULTIVARIATE, "pca"),
-            NavigationItem(_("Cluster Analysis"), NavigationCategory.MULTIVARIATE, "chart"),
+            NavigationItem("LDA", NavigationCategory.MULTIVARIATE, "pca"),
+            NavigationItem(_("Clustering"), NavigationCategory.MULTIVARIATE, "chart"),
             NavigationItem(_("Group Tests"), NavigationCategory.MULTIVARIATE, "folder"),
+            NavigationItem("SIMPER", NavigationCategory.MULTIVARIATE, "chart"),
         ]
         for child in multivar_children:
             categories[NavigationCategory.MULTIVARIATE].children.append(child)
@@ -578,13 +578,14 @@ class NavigationTree(QWidget):
             NavigationItem("ANOSIM", NavigationCategory.MULTIVARIATE, "chart"),
             NavigationItem("PERMANOVA", NavigationCategory.MULTIVARIATE, "chart"),
         ]
-        categories[NavigationCategory.MULTIVARIATE].children[-1].children.extend(group_tests_children)
+        categories[NavigationCategory.MULTIVARIATE].children[-2].children.extend(group_tests_children)
 
         # Morphometrics children
         morpho_children = [
             NavigationItem(_("GPA Alignment"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("TPS Deformation"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Relative Warps"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
+            NavigationItem("EFA", NavigationCategory.MORPHOMETRICS, "morphometrics"),
         ]
         for child in morpho_children:
             categories[NavigationCategory.MORPHOMETRICS].children.append(child)
@@ -593,16 +594,19 @@ class NavigationTree(QWidget):
         strat_children = [
             NavigationItem(_("Unitary Associations"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Spectral Analysis"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
-            NavigationItem(_("Confidence Intervals"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem("CONISS", NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem(_("Markov"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem(_("Directional"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
         ]
         for child in strat_children:
             categories[NavigationCategory.STRATIGRAPHY].children.append(child)
 
         # Ecology children
         ecology_children = [
-            NavigationItem(_("Alpha Diversity"), NavigationCategory.ECOLOGY, "diversity"),
-            NavigationItem(_("Beta Diversity"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Diversity"), NavigationCategory.ECOLOGY, "diversity"),
             NavigationItem(_("Rarefaction"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Abundance Models"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem("SHE", NavigationCategory.ECOLOGY, "diversity"),
         ]
         for child in ecology_children:
             categories[NavigationCategory.ECOLOGY].children.append(child)

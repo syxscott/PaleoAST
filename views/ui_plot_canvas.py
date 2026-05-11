@@ -901,6 +901,220 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     # =========================================================================
+    # New Feature Plot Methods
+    # =========================================================================
+
+    def plot_simper_results(self, result: Any) -> None:
+        """Plot SIMPER contribution bar chart."""
+        self._current_plot_type = "simper"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        # Get top contributors across all group pairs
+        all_contribs: dict[str, float] = {}
+        for pair_result in result.pair_results:
+            for vc in pair_result.contributions:
+                name = vc.variable_name
+                all_contribs[name] = max(all_contribs.get(name, 0), vc.average_contribution)
+
+        # Sort by contribution
+        sorted_items = sorted(all_contribs.items(), key=lambda x: x[1], reverse=True)[:15]
+        names = [item[0] for item in sorted_items]
+        values = [item[1] for item in sorted_items]
+
+        y_pos = np.arange(len(names))
+        bars = self._ax.barh(y_pos, values, color=self.COLORS[0], alpha=0.8)
+        self._ax.set_yticks(y_pos)
+        self._ax.set_yticklabels(names, fontsize=8)
+        self._ax.invert_yaxis()
+        self._ax.set_xlabel(_("Average Contribution (%)"))
+        self._ax.set_title(_("SIMPER: Top Contributing Variables"))
+
+        for bar, val in zip(bars, values):
+            self._ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
+                         f"{val:.1f}%", va="center", fontsize=8, color="#2C3E50")
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_anova_boxplot(self, data: np.ndarray, groups: list[int],
+                           variable_name: str = "", group_names: list[str] | None = None) -> None:
+        """Plot boxplot comparing groups for a variable."""
+        self._current_plot_type = "anova_boxplot"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        unique_groups = sorted(set(groups))
+        if group_names is None:
+            group_names = [f"Group {g+1}" for g in unique_groups]
+
+        plot_data = []
+        for g in unique_groups:
+            mask = np.array(groups) == g
+            plot_data.append(data[mask])
+
+        bp = self._ax.boxplot(plot_data, labels=group_names[:len(unique_groups)], patch_artist=True)
+        for i, patch in enumerate(bp["boxes"]):
+            patch.set_facecolor(self.COLORS[i % len(self.COLORS)])
+            patch.set_alpha(0.7)
+
+        self._ax.set_ylabel(variable_name)
+        self._ax.set_title(f"{_('Group Comparison')}: {variable_name}")
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_lda_scores(self, result: Any) -> None:
+        """Plot LDA scatter plot with confidence ellipses."""
+        self._current_plot_type = "lda"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        scores = result.scores
+        n_dims = scores.shape[1]
+
+        if n_dims >= 2:
+            x_data = scores[:, 0]
+            y_data = scores[:, 1]
+            x_label = "LD1"
+            y_label = "LD2"
+        else:
+            x_data = scores[:, 0]
+            y_data = np.zeros(len(x_data))
+            x_label = "LD1"
+            y_label = ""
+
+        groups = result.groups if hasattr(result, "groups") else np.zeros(len(x_data), dtype=int)
+        unique_groups = np.unique(groups)
+
+        for i, g in enumerate(unique_groups):
+            mask = groups == g
+            color = self.COLORS[i % len(self.COLORS)]
+            self._ax.scatter(x_data[mask], y_data[mask], c=color, s=50, alpha=0.7,
+                           edgecolors="white", linewidth=0.5, label=f"Group {g+1}")
+
+        if hasattr(result, "explained_variance_ratio") and len(result.explained_variance_ratio) >= 2:
+            x_label = f"LD1 ({result.explained_variance_ratio[0]:.1%})"
+            y_label = f"LD2 ({result.explained_variance_ratio[1]:.1%})"
+
+        self._ax.set_xlabel(x_label)
+        self._ax.set_ylabel(y_label)
+        self._ax.set_title(_("Linear Discriminant Analysis"))
+        self._ax.legend(fontsize=8)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_dendrogram(self, result: Any, labels: list[str] | None = None) -> None:
+        """Plot hierarchical clustering dendrogram."""
+        self._current_plot_type = "dendrogram"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
+
+        scipy_dendrogram(result.linkage_matrix, labels=labels, ax=self._ax,
+                        leaf_rotation=90, leaf_font_size=8,
+                        color_threshold=result.linkage_matrix[-(result.n_clusters - 1), 2]
+                        if result.n_clusters > 1 else 0)
+
+        self._ax.set_title(f"{_('Hierarchical Clustering')} (cophenetic r={result.cophenetic_correlation:.3f})")
+        self._ax.set_ylabel(_("Distance"))
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_rose_diagram(self, bin_edges: np.ndarray, counts: np.ndarray,
+                          mean_direction_deg: float = 0.0) -> None:
+        """Plot rose diagram for directional data."""
+        self._current_plot_type = "rose"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111, projection="polar")
+
+        n_bins = len(counts)
+        bin_width = 2 * np.pi / n_bins
+        bin_centers = np.linspace(0, 2 * np.pi, n_bins, endpoint=False)
+
+        bars = self._ax.bar(bin_centers, counts, width=bin_width * 0.8,
+                           color=self.COLORS[0], alpha=0.7, edgecolor="white")
+
+        # Mean direction arrow
+        max_count = max(counts) if len(counts) > 0 else 1
+        mean_rad = np.deg2rad(mean_direction_deg)
+        self._ax.annotate("", xy=(mean_rad, max_count * 0.9), xytext=(0, 0),
+                         arrowprops=dict(arrowstyle="->", color=self.COLORS[3], lw=2))
+
+        self._ax.set_title(_("Rose Diagram"), pad=20)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_efa_contours(self, original: np.ndarray, reconstructed: np.ndarray,
+                          title: str = "") -> None:
+        """Plot original vs reconstructed EFA contours."""
+        self._current_plot_type = "efa"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        self._ax.plot(original[:, 0], original[:, 1], "o-",
+                     color=self.COLORS[0], markersize=2, linewidth=1, label=_("Original"))
+        self._ax.plot(reconstructed[:, 0], reconstructed[:, 1], "-",
+                     color=self.COLORS[3], linewidth=1.5, label=_("Reconstructed"))
+
+        self._ax.set_aspect("equal")
+        self._ax.legend(fontsize=8)
+        self._ax.set_title(title or _("Elliptic Fourier Analysis"))
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_she_curve(self, result: Any) -> None:
+        """Plot SHE analysis curves (S, H, E vs sample size)."""
+        self._current_plot_type = "she"
+        self._figure.clear()
+
+        ax1 = self._figure.add_subplot(111)
+        ax2 = ax1.twinx()
+
+        ax1.plot(result.sample_sizes, result.s_values, "o-",
+                color=self.COLORS[0], markersize=3, label="S (Richness)")
+        ax2.plot(result.sample_sizes, result.e_values, "s-",
+                color=self.COLORS[2], markersize=3, label="E (Evenness)")
+
+        ax1.set_xlabel(_("Sample Size"))
+        ax1.set_ylabel("S", color=self.COLORS[0])
+        ax2.set_ylabel("E", color=self.COLORS[2])
+        ax1.set_title(_("SHE Analysis"))
+
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="upper left")
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_abundance_models(self, results: dict) -> None:
+        """Plot rank-abundance curves with fitted models."""
+        self._current_plot_type = "abundance_models"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        for i, (name, fit) in enumerate(results.items()):
+            obs = np.sort(fit.observed)[::-1]
+            pred = np.sort(fit.predicted)[::-1]
+            n = min(len(obs), len(pred))
+            ranks = np.arange(1, n + 1)
+
+            if i == 0:
+                self._ax.scatter(ranks, obs, s=20, color="#2C3E50", alpha=0.6, label=_("Observed"), zorder=5)
+
+            self._ax.plot(ranks, pred, "-", color=self.COLORS[i % len(self.COLORS)],
+                         linewidth=1.5, label=f"{fit.model_name} (R²={fit.r_squared:.3f})")
+
+        self._ax.set_yscale("log")
+        self._ax.set_xlabel(_("Rank"))
+        self._ax.set_ylabel(_("Abundance (log)"))
+        self._ax.set_title(_("Species-Abundance Models"))
+        self._ax.legend(fontsize=7, loc="upper right")
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    # =========================================================================
     # Helper Methods
     # =========================================================================
 

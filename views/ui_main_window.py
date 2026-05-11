@@ -67,7 +67,22 @@ from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from models.state_manager import get_state_manager
-from views.ui_dialogs import DiversityDialog, ImportDialog, NMDSOptionsDialog, PCADialog, PCoADialog, RarefactionDialog
+from views.ui_dialogs import (
+    ClusteringDialog,
+    CONISSDialog,
+    DirectionalDialog,
+    DiversityDialog,
+    EFADialog,
+    ImportDialog,
+    LDADialog,
+    MarkovDialog,
+    NMDSOptionsDialog,
+    PCADialog,
+    PCoADialog,
+    RarefactionDialog,
+    SimperDialog,
+    UnivariateDialog,
+)
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_spreadsheet import ScientificSpreadsheet
@@ -931,14 +946,23 @@ class MainWindow(QMainWindow):
         self._btn_pca = multivar_group.addButton("pca", "PCA", _("Principal Component Analysis"))
         self._btn_pcoa = multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
         self._btn_nmds = multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
+        self._btn_lda = multivar_group.addButton("pca", "LDA", _("Linear Discriminant Analysis"))
+
+        # Univariate group
+        univar_group = analysis_tab.addGroup(_("Univariate"))
+        self._btn_univariate = univar_group.addButton("chart", _("Stats"), _("Univariate Statistics"))
+        self._btn_simper = univar_group.addButton("chart", "SIMPER", _("SIMPER Analysis"))
 
         # Diversity group
         diversity_group = analysis_tab.addGroup(_("Diversity"))
         self._btn_diversity = diversity_group.addButton("diversity", _("Diversity"), _("Biodiversity indices"))
+        self._btn_abundance = diversity_group.addButton("diversity", _("Models"), _("Abundance Models"))
+        self._btn_she = diversity_group.addButton("diversity", "SHE", _("SHE Analysis"))
 
         # Group tests group
         tests_group = analysis_tab.addGroup(_("Tests"))
         self._btn_anosim = tests_group.addButton("anosim", "ANOSIM", _("Analysis of Similarities"))
+        self._btn_clustering = tests_group.addButton("chart", _("Cluster"), _("Hierarchical Clustering"))
 
         # Morphometrics tab
         morpho_tab = self._ribbon.addTab(_("Morphometrics"))
@@ -946,11 +970,19 @@ class MainWindow(QMainWindow):
         morpho_group = morpho_tab.addGroup(_("Landmarks"))
         morpho_group.addButton("morphometrics", "GPA", _("Generalized Procrustes Analysis"))
 
+        efa_group = morpho_tab.addGroup(_("Outline"))
+        self._btn_efa = efa_group.addButton("morphometrics", "EFA", _("Elliptic Fourier Analysis"))
+
         # Stratigraphy tab
         strat_tab = self._ribbon.addTab(_("Stratigraphy"))
 
         strat_group = strat_tab.addGroup(_("Time Series"))
         self._btn_spectral = strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
+        self._btn_coniss = strat_group.addButton("stratigraphy", "CONISS", _("CONISS Zonation"))
+
+        markov_group = strat_tab.addGroup(_("Facies"))
+        self._btn_markov = markov_group.addButton("stratigraphy", _("Markov"), _("Markov Chain Analysis"))
+        self._btn_directional = markov_group.addButton("stratigraphy", _("Rose"), _("Directional Statistics"))
 
     def _setup_connections(self) -> None:
         """Setup signal-slot connections."""
@@ -969,12 +1001,32 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_pcoa)
         self._btn_nmds.clicked.connect(self._on_run_nmds)
         self._register_data_button(self._btn_nmds)
+        self._btn_lda.clicked.connect(self._on_run_lda)
+        self._register_data_button(self._btn_lda)
+        self._btn_univariate.clicked.connect(self._on_run_univariate)
+        self._register_data_button(self._btn_univariate)
+        self._btn_simper.clicked.connect(self._on_run_simper)
+        self._register_data_button(self._btn_simper)
         self._btn_diversity.clicked.connect(self._on_run_diversity)
         self._register_data_button(self._btn_diversity)
+        self._btn_abundance.clicked.connect(self._on_run_abundance_models)
+        self._register_data_button(self._btn_abundance)
+        self._btn_she.clicked.connect(self._on_run_she)
+        self._register_data_button(self._btn_she)
         self._btn_anosim.clicked.connect(self._on_run_anosim)
         self._register_data_button(self._btn_anosim)
+        self._btn_clustering.clicked.connect(self._on_run_clustering)
+        self._register_data_button(self._btn_clustering)
         self._btn_spectral.clicked.connect(self._on_run_spectral)
         self._register_data_button(self._btn_spectral)
+        self._btn_coniss.clicked.connect(self._on_run_coniss)
+        self._register_data_button(self._btn_coniss)
+        self._btn_markov.clicked.connect(self._on_run_markov)
+        self._register_data_button(self._btn_markov)
+        self._btn_directional.clicked.connect(self._on_run_directional)
+        self._register_data_button(self._btn_directional)
+        self._btn_efa.clicked.connect(self._on_run_efa)
+        self._register_data_button(self._btn_efa)
 
         # Monitor state changes
         self._last_has_data = False
@@ -1093,19 +1145,75 @@ class MainWindow(QMainWindow):
         self._register_data_action(rarefaction_action)
         
         analysis_menu.addSeparator()
-        
+
         anosim_action = QAction(_("&ANOSIM..."), self)
         anosim_action.setShortcut(QKeySequence("Ctrl+Shift+A"))
         anosim_action.triggered.connect(self._on_run_anosim)
         analysis_menu.addAction(anosim_action)
         self._register_data_action(anosim_action)
-        
+
         permanova_action = QAction(_("&PERMANOVA..."), self)
         permanova_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
         permanova_action.triggered.connect(self._on_run_permanova)
         analysis_menu.addAction(permanova_action)
         self._register_data_action(permanova_action)
-        
+
+        analysis_menu.addSeparator()
+
+        simper_action = QAction(_("&SIMPER..."), self)
+        simper_action.triggered.connect(self._on_run_simper)
+        analysis_menu.addAction(simper_action)
+        self._register_data_action(simper_action)
+
+        lda_action = QAction(_("&LDA / CVA..."), self)
+        lda_action.triggered.connect(self._on_run_lda)
+        analysis_menu.addAction(lda_action)
+        self._register_data_action(lda_action)
+
+        univariate_action = QAction(_("&Univariate Statistics..."), self)
+        univariate_action.triggered.connect(self._on_run_univariate)
+        analysis_menu.addAction(univariate_action)
+        self._register_data_action(univariate_action)
+
+        clustering_action = QAction(_("&Hierarchical Clustering..."), self)
+        clustering_action.triggered.connect(self._on_run_clustering)
+        analysis_menu.addAction(clustering_action)
+        self._register_data_action(clustering_action)
+
+        analysis_menu.addSeparator()
+
+        abundance_action = QAction(_("&Abundance Models..."), self)
+        abundance_action.triggered.connect(self._on_run_abundance_models)
+        analysis_menu.addAction(abundance_action)
+        self._register_data_action(abundance_action)
+
+        she_action = QAction(_("&SHE Analysis..."), self)
+        she_action.triggered.connect(self._on_run_she)
+        analysis_menu.addAction(she_action)
+        self._register_data_action(she_action)
+
+        analysis_menu.addSeparator()
+
+        coniss_action = QAction(_("&CONISS Zonation..."), self)
+        coniss_action.triggered.connect(self._on_run_coniss)
+        analysis_menu.addAction(coniss_action)
+        self._register_data_action(coniss_action)
+
+        markov_action = QAction(_("&Markov Chain..."), self)
+        markov_action.triggered.connect(self._on_run_markov)
+        analysis_menu.addAction(markov_action)
+        self._register_data_action(markov_action)
+
+        directional_action = QAction(_("&Directional Statistics..."), self)
+        directional_action.triggered.connect(self._on_run_directional)
+        analysis_menu.addAction(directional_action)
+        self._register_data_action(directional_action)
+
+        efa_action = QAction(_("&Elliptic Fourier Analysis..."), self)
+        efa_action.triggered.connect(self._on_run_efa)
+        analysis_menu.addAction(efa_action)
+        self._register_data_action(efa_action)
+
         spectral_action = QAction(_("&Spectral Analysis..."), self)
         spectral_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         spectral_action.triggered.connect(self._on_run_spectral)
@@ -1167,11 +1275,21 @@ class MainWindow(QMainWindow):
             "PCA": self._on_run_pca,
             "PCoA": self._on_run_pcoa,
             "NMDS": self._on_run_nmds,
+            "LDA": self._on_run_lda,
             "ANOSIM": self._on_run_anosim,
             "PERMANOVA": self._on_run_permanova,
+            "SIMPER": self._on_run_simper,
             _("Diversity"): self._on_run_diversity,
             _("Rarefaction"): self._on_run_rarefaction,
             _("Spectral Analysis"): self._on_run_spectral,
+            _("Univariate"): self._on_run_univariate,
+            _("Clustering"): self._on_run_clustering,
+            _("Abundance Models"): self._on_run_abundance_models,
+            "SHE": self._on_run_she,
+            "CONISS": self._on_run_coniss,
+            _("Markov"): self._on_run_markov,
+            _("Directional"): self._on_run_directional,
+            "EFA": self._on_run_efa,
         }
 
         handler = action_map.get(name)
@@ -1525,88 +1643,342 @@ class MainWindow(QMainWindow):
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         try:
-            # Show progress
             self._status_bar.setProgress(0, 0)
-            
-            # Run spectral analysis on all numeric columns
             result = self._statistics_controller.analyze_spectral(
                 data=self._state.data_matrix.data
             )
-            
-            # Display spectral plot
             plot = InteractivePlotCanvas()
             plot.plot_spectral(result)
-            
             plot_index = self._workspace.addWidget(plot, _("Spectral Analysis"))
             self._workspace.setCurrentIndex(plot_index)
-            
             self._status_bar.setInfo(_("Spectral analysis completed"))
-            self._logger.info("Spectral analysis completed successfully")
         except Exception as e:
             self._logger.error(f"Spectral analysis failed: {e}")
             QMessageBox.critical(self, _("Spectral Analysis Error"), str(e))
         finally:
             self._status_bar.setProgress(100, 100)
-    
+
     def _on_run_anosim(self) -> None:
         """Run Analysis of Similarity (ANOSIM) test."""
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         try:
             self._status_bar.setProgress(0, 0)
-            
-            # Run ANOSIM analysis
             result = self._statistics_controller.analyze_anosim(
                 data=self._state.data_matrix.data
             )
-            
-            # Display results in plot canvas
             plot = InteractivePlotCanvas()
             plot.plot_anosim_results(result)
-            
             plot_index = self._workspace.addWidget(plot, _("ANOSIM Results"))
             self._workspace.setCurrentIndex(plot_index)
-            
             self._status_bar.setInfo(_("ANOSIM analysis completed"))
-            self._logger.info("ANOSIM analysis completed successfully")
         except Exception as e:
             self._logger.error(f"ANOSIM analysis failed: {e}")
             QMessageBox.critical(self, _("ANOSIM Error"), str(e))
         finally:
             self._status_bar.setProgress(100, 100)
-    
+
     def _on_run_permanova(self) -> None:
         """Run Permutational Multivariate Analysis of Variance (PERMANOVA) test."""
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
+
         try:
             self._status_bar.setProgress(0, 0)
-            
-            # Run PERMANOVA analysis
             result = self._statistics_controller.analyze_permanova(
                 data=self._state.data_matrix.data
             )
-            
-            # Display results in plot canvas
             plot = InteractivePlotCanvas()
             plot.plot_permanova_results(result)
-            
             plot_index = self._workspace.addWidget(plot, _("PERMANOVA Results"))
             self._workspace.setCurrentIndex(plot_index)
-            
             self._status_bar.setInfo(_("PERMANOVA analysis completed"))
-            self._logger.info("PERMANOVA analysis completed successfully")
         except Exception as e:
             self._logger.error(f"PERMANOVA analysis failed: {e}")
             QMessageBox.critical(self, _("PERMANOVA Error"), str(e))
         finally:
             self._status_bar.setProgress(100, 100)
+
+    def _on_run_simper(self) -> None:
+        """Run SIMPER analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = SimperDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_simper(
+                    data=self._state.data_matrix.data,
+                    groups=self._state.get_groups() if hasattr(self._state, 'get_groups') else None,
+                    metric=params.get("metric", "bray_curtis"),
+                )
+                plot = InteractivePlotCanvas()
+                plot.plot_simper_results(result)
+                plot_index = self._workspace.addWidget(plot, "SIMPER")
+                self._workspace.setCurrentIndex(plot_index)
+                self._status_bar.setInfo("SIMPER analysis completed")
+            except Exception as e:
+                QMessageBox.critical(self, "SIMPER Error", str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_univariate(self) -> None:
+        """Run univariate statistics."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = UnivariateDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                test_type = params.get("test_type", 0)
+                data = self._state.data_matrix.data
+                col_names = self._state.data_matrix.col_labels
+
+                if test_type == 0:  # Summary
+                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
+                    msg = result.summary()
+                    QMessageBox.information(self, _("Summary Statistics"), msg)
+                elif test_type == 1:  # Normality
+                    results = self._statistics_controller.analyze_normality(data, col_names)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.statistic:.4f}, p={r.p_value:.4f} {'*' if r.is_normal else 'ns'}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
+                elif test_type == 2:  # t-test
+                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
+                elif test_type == 3:  # ANOVA
+                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    results = self._statistics_controller.analyze_anova(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
+                elif test_type == 4:  # Kruskal-Wallis
+                    groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
+
+                self._status_bar.setInfo(_("Univariate analysis completed"))
+            except Exception as e:
+                QMessageBox.critical(self, _("Univariate Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_lda(self) -> None:
+        """Run Linear Discriminant Analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = LDADialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                groups = self._state.get_groups() if hasattr(self._state, 'get_groups') else None
+                result = self._statistics_controller.analyze_lda(
+                    data=self._state.data_matrix.data,
+                    groups=groups,
+                    n_components=params.get("n_components"),
+                )
+                plot = InteractivePlotCanvas()
+                plot.plot_lda_scores(result)
+                plot_index = self._workspace.addWidget(plot, "LDA")
+                self._workspace.setCurrentIndex(plot_index)
+                self._status_bar.setInfo(_("LDA analysis completed"))
+            except Exception as e:
+                QMessageBox.critical(self, "LDA Error", str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_clustering(self) -> None:
+        """Run hierarchical clustering."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = ClusteringDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_clustering(
+                    data=self._state.data_matrix.data,
+                    n_clusters=params.get("n_clusters", 3),
+                    method=params.get("method", "ward"),
+                    metric=params.get("metric", "euclidean"),
+                )
+                plot = InteractivePlotCanvas()
+                plot.plot_dendrogram(result, labels=self._state.data_matrix.row_labels)
+                plot_index = self._workspace.addWidget(plot, _("Clustering"))
+                self._workspace.setCurrentIndex(plot_index)
+                self._status_bar.setInfo(
+                    _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(
+                        result.n_clusters, result.cophenetic_correlation
+                    )
+                )
+            except Exception as e:
+                QMessageBox.critical(self, _("Clustering Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_abundance_models(self) -> None:
+        """Fit species-abundance distribution models."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        try:
+            self._status_bar.setProgress(0, 0)
+            results = self._statistics_controller.analyze_abundance_models()
+            plot = InteractivePlotCanvas()
+            plot.plot_abundance_models(results)
+            plot_index = self._workspace.addWidget(plot, _("Abundance Models"))
+            self._workspace.setCurrentIndex(plot_index)
+            msg_lines = [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
+            self._status_bar.setInfo(_("Abundance models fitted"))
+        except Exception as e:
+            QMessageBox.critical(self, _("Abundance Models Error"), str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
+
+    def _on_run_she(self) -> None:
+        """Run SHE analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        try:
+            self._status_bar.setProgress(0, 0)
+            result = self._statistics_controller.analyze_she()
+            plot = InteractivePlotCanvas()
+            plot.plot_she_curve(result)
+            plot_index = self._workspace.addWidget(plot, "SHE")
+            self._workspace.setCurrentIndex(plot_index)
+            self._status_bar.setInfo(_("SHE analysis completed"))
+        except Exception as e:
+            QMessageBox.critical(self, "SHE Error", str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
+
+    def _on_run_coniss(self) -> None:
+        """Run CONISS zonation."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = CONISSDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_coniss(
+                    data=self._state.data_matrix.data,
+                    n_zones=params.get("n_zones", 4),
+                )
+                QMessageBox.information(
+                    self, "CONISS",
+                    result.summary()
+                )
+                self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
+            except Exception as e:
+                QMessageBox.critical(self, "CONISS Error", str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_markov(self) -> None:
+        """Run Markov chain analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = MarkovDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_markov()
+                QMessageBox.information(
+                    self, _("Markov Chain Analysis"),
+                    result.summary()
+                )
+                self._status_bar.setInfo(_("Markov analysis completed"))
+            except Exception as e:
+                QMessageBox.critical(self, _("Markov Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_directional(self) -> None:
+        """Run directional statistics."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = DirectionalDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_directional()
+                bin_edges, counts = self._statistics_controller.bin_rose_diagram(
+                    n_bins=params.get("n_bins", 12)
+                )
+                plot = InteractivePlotCanvas()
+                plot.plot_rose_diagram(bin_edges, counts, result.mean_direction_deg)
+                plot_index = self._workspace.addWidget(plot, _("Rose Diagram"))
+                self._workspace.setCurrentIndex(plot_index)
+                self._status_bar.setInfo(
+                    _("Directional: mean={0:.1f}°, Rayleigh p={1:.4f}").format(
+                        result.mean_direction_deg, result.rayleigh_p
+                    )
+                )
+            except Exception as e:
+                QMessageBox.critical(self, _("Directional Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_efa(self) -> None:
+        """Run Elliptic Fourier Analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = EFADialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                result = self._statistics_controller.analyze_efa(
+                    contour=self._state.data_matrix.data[:, :2],
+                    n_harmonics=params.get("n_harmonics", 10),
+                    n_points=params.get("n_points", 200),
+                )
+                plot = InteractivePlotCanvas()
+                plot.plot_efa_contours(result.original, result.reconstructed,
+                                       f"EFA ({result.n_harmonics} harmonics)")
+                plot_index = self._workspace.addWidget(plot, "EFA")
+                self._workspace.setCurrentIndex(plot_index)
+                self._status_bar.setInfo(
+                    _("EFA: {0} harmonics, {1} points").format(result.n_harmonics, result.n_points)
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "EFA Error", str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
 
     def _show_about(self) -> None:
         """Show about dialog."""
@@ -1626,16 +1998,20 @@ class MainWindow(QMainWindow):
                 <li>{}</li>
                 <li>{}</li>
                 <li>{}</li>
+                <li>{}</li>
+                <li>{}</li>
             </ul>
             """.format(
                 _("Paleontological Advanced Statistical Toolkit"),
                 _("Version 1.0.0"),
                 _("A comprehensive tool for paleontological data analysis including:"),
-                _("Multivariate Statistics (PCA, PCoA, NMDS)"),
-                _("Group Comparison Tests (ANOSIM, PERMANOVA)"),
-                _("Geometric Morphometrics (GPA, TPS)"),
-                _("Biodiversity Analysis"),
-                _("Spectral Analysis"),
+                _("Multivariate Statistics (PCA, PCoA, NMDS, LDA)"),
+                _("Group Comparison Tests (ANOSIM, PERMANOVA, SIMPER)"),
+                _("Univariate Statistics (ANOVA, t-test, Kruskal-Wallis)"),
+                _("Ecology (Diversity, Abundance Models, SHE, Clustering)"),
+                _("Stratigraphy (CONISS, Markov, Directional/Rose)"),
+                _("Morphometrics (GPA, EFA, Eigenshape)"),
+                _("Data Transformations (Hellinger, Box-Cox, KNN Imputation)"),
             ),
         )
 
