@@ -19,7 +19,6 @@ Version: 1.0.0
 
 from typing import Final
 
-
 # =============================================================================
 # APPLICATION METADATA
 # =============================================================================
@@ -246,16 +245,12 @@ Transparency of background grid lines in plots.
 # FILE FORMAT CONSTANTS
 # =============================================================================
 
-SUPPORTED_DATA_EXTENSIONS: Final[tuple] = (
-    '.csv', '.tsv', '.txt', '.xlsx', '.xls', '.json', '.mat'
-)
+SUPPORTED_DATA_EXTENSIONS: Final[tuple] = (".csv", ".tsv", ".txt", ".xlsx", ".xls", ".json", ".mat")
 """
 Tuple of supported data file extensions for import.
 """
 
-SUPPORTED_IMAGE_EXTENSIONS: Final[tuple] = (
-    '.png', '.jpg', '.jpeg', '.svg', '.pdf', '.tiff', '.tif'
-)
+SUPPORTED_IMAGE_EXTENSIONS: Final[tuple] = (".png", ".jpg", ".jpeg", ".svg", ".pdf", ".tiff", ".tif")
 """
 Tuple of supported image export formats.
 """
@@ -270,28 +265,29 @@ Common DPI options for figure export dialog.
 # DATA TYPE CONSTANTS
 # =============================================================================
 
+
 class DataType:
     """
     Enumeration of supported data types in the spreadsheet.
-    
+
     These types follow standard statistical classification:
     - Nominal: Categorical without order (e.g., species names, sites)
     - Ordinal: Categorical with order (e.g., abundance scales, stages)
     - Continuous: Quantitative measurements (e.g., measurements, ratios)
     """
-    
+
     NOMINAL: Final[str] = "nominal"
     """Nominal/categorical data type - unordered categories"""
-    
+
     ORDINAL: Final[str] = "ordinal"
     """Ordinal data type - ordered categories with meaningful rank"""
-    
+
     CONTINUOUS: Final[str] = "continuous"
     """Continuous data type - real-valued measurements"""
-    
+
     BINARY: Final[str] = "binary"
     """Binary data type - presence/absence (0/1)"""
-    
+
     COUNT: Final[str] = "count"
     """Count data type - non-negative integers"""
 
@@ -299,29 +295,29 @@ class DataType:
 class DistanceMetric:
     """
     Enumeration of supported distance/similarity metrics.
-    
+
     Mathematical definitions:
     - Euclidean: L2 norm distance
-    - Manhattan: L1 norm distance  
+    - Manhattan: L1 norm distance
     - Bray-Curtis: Compositional dissimilarity (ecological)
     - Jaccard: Set-based similarity for presence/absence data
     """
-    
+
     EUCLIDEAN: Final[str] = "euclidean"
     """Euclidean (L2) distance: d(x,y) = ||x-y||_2"""
-    
+
     MANHATTAN: Final[str] = "manhattan"
     """Manhattan (L1) distance: d(x,y) = ||x-y||_1"""
-    
+
     BRAY_CURTIS: Final[str] = "bray_curtis"
     """Bray-Curtis dissimilarity: (Σ|x_i-y_i|)/(Σ|x_i+y_i|)"""
-    
+
     JACCARD: Final[str] = "jaccard"
     """Jaccard dissimilarity: 1 - |A∩B|/|A∪B|"""
-    
+
     CANBERRA: Final[str] = "canberra"
     """Canberra distance: Σ|x_i-y_i|/(|x_i|+|y_i|)"""
-    
+
     CHEBYCHEV: Final[str] = "chebychev"
     """Chebychev (L∞) distance: max|x_i-y_i|"""
 
@@ -330,40 +326,22 @@ class DistanceMetric:
 # ERROR MESSAGE CONSTANTS
 # =============================================================================
 
-ERR_MATRIX_DIMENSION_MISMATCH: Final[str] = (
-    "Matrix dimension mismatch: expected shape {expected}, got {actual}"
-)
+ERR_MATRIX_DIMENSION_MISMATCH: Final[str] = "Matrix dimension mismatch: expected shape {expected}, got {actual}"
 
-ERR_MATRIX_NOT_SQUARE: Final[str] = (
-    "Matrix must be square for this operation. Got shape {shape}"
-)
+ERR_MATRIX_NOT_SQUARE: Final[str] = "Matrix must be square for this operation. Got shape {shape}"
 
-ERR_MATRIX_SINGULAR: Final[str] = (
-    "Matrix is singular or near-singular (determinant ≈ 0). "
-    "Cannot compute inverse."
-)
+ERR_MATRIX_SINGULAR: Final[str] = "Matrix is singular or near-singular (determinant ≈ 0). Cannot compute inverse."
 
-ERR_DIVISION_BY_ZERO: Final[str] = (
-    "Division by zero encountered in computation."
-)
+ERR_DIVISION_BY_ZERO: Final[str] = "Division by zero encountered in computation."
 
-ERR_EIGENVALUE_CONVERGENCE: Final[str] = (
-    "Eigenvalue computation did not converge within maximum iterations."
-)
+ERR_EIGENVALUE_CONVERGENCE: Final[str] = "Eigenvalue computation did not converge within maximum iterations."
 
-ERR_DATA_EMPTY: Final[str] = (
-    "Input data is empty or contains only missing values."
-)
+ERR_DATA_EMPTY: Final[str] = "Input data is empty or contains only missing values."
 
 ERR_INVALID_DATATYPE: Final[str] = (
-    "Invalid data type specified: {dtype}. "
-    "Allowed types: nominal, ordinal, continuous, binary, count"
+    "Invalid data type specified: {dtype}. Allowed types: nominal, ordinal, continuous, binary, count"
 )
 
-ERR_FILE_NOT_FOUND: Final[str] = (
-    "File not found: {filepath}"
-)
+ERR_FILE_NOT_FOUND: Final[str] = "File not found: {filepath}"
 
-ERR_FILE_FORMAT_UNSUPPORTED: Final[str] = (
-    "File format not supported: {extension}"
-)
+ERR_FILE_FORMAT_UNSUPPORTED: Final[str] = "File format not supported: {extension}"

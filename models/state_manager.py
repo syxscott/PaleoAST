@@ -16,16 +16,13 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
-import threading
-from typing import Optional, Dict, Any, List, Callable
-from dataclasses import dataclass, field
-import numpy as np
-
-from .data_matrix import DataMatrix
-from .column_metadata import ColumnMetadataManager
-from .row_metadata import RowMetadataManager
-
 import logging
+import threading
+from typing import Any, Optional
+
+from .column_metadata import ColumnMetadataManager
+from .data_matrix import DataMatrix
+from .row_metadata import RowMetadataManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +30,10 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """
     Thread-safe global state manager for PaleoAST.
-    
+
     This class implements a singleton pattern with read-write locking
     to ensure thread-safe access to application state from multiple threads.
-    
+
     State Components:
         - data_matrix: Current DataMatrix being analyzed
         - column_metadata: ColumnMetadataManager for column properties
@@ -44,27 +41,27 @@ class StateManager:
         - analysis_results: Cache of completed analysis results
         - visualization_settings: Current plot/visualization settings
         - undo_stack: Stack of previous states for undo functionality
-    
+
     Thread Safety:
         - Uses RLock for reentrant locking
         - Read operations acquire read lock (shared access)
         - Write operations acquire write lock (exclusive access)
         - Lock acquisition is automatic via context managers
-    
+
     Example:
         >>> state = StateManager.get_instance()
         >>> with state.read_lock():
         ...     matrix = state.data_matrix
         ...     print(matrix.shape)
     """
-    
-    _instance: Optional['StateManager'] = None
+
+    _instance: Optional["StateManager"] = None
     _instance_lock = threading.Lock()
-    
-    def __new__(cls) -> 'StateManager':
+
+    def __new__(cls) -> "StateManager":
         """
         Create or return the singleton instance.
-        
+
         This ensures only one StateManager exists throughout the
         application lifecycle.
         """
@@ -74,11 +71,11 @@ class StateManager:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self) -> None:
         """
         Initialize the StateManager.
-        
+
         Only initializes once (idempotent). Subsequent calls do nothing.
         """
         if self._initialized:
@@ -91,41 +88,41 @@ class StateManager:
         self._state_lock = threading.Lock()
 
         # Initialize state variables
-        self._data_matrix: Optional[DataMatrix] = None
-        self._column_metadata: Optional[ColumnMetadataManager] = None
-        self._row_metadata: Optional[RowMetadataManager] = None
-        self._analysis_cache: Dict[str, Any] = {}
-        self._visualization_settings: Dict[str, Any] = {}
-        self._undo_stack: List[Dict[str, Any]] = []
-        self._redo_stack: List[Dict[str, Any]] = []
+        self._data_matrix: DataMatrix | None = None
+        self._column_metadata: ColumnMetadataManager | None = None
+        self._row_metadata: RowMetadataManager | None = None
+        self._analysis_cache: dict[str, Any] = {}
+        self._visualization_settings: dict[str, Any] = {}
+        self._undo_stack: list[dict[str, Any]] = []
+        self._redo_stack: list[dict[str, Any]] = []
         self._modified: bool = False
-        self._current_file: Optional[str] = None
+        self._current_file: str | None = None
 
         self._initialized = True
 
         self._logger.info("StateManager initialized")
-    
+
     # =========================================================================
     # Singleton Access
     # =========================================================================
-    
+
     @classmethod
-    def get_instance(cls) -> 'StateManager':
+    def get_instance(cls) -> "StateManager":
         """
         Get the singleton instance.
-        
+
         Returns:
             StateManager: The singleton instance
         """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     @classmethod
     def reset_instance(cls) -> None:
         """
         Reset the singleton instance.
-        
+
         Warning:
             This should only be used for testing or when absolutely
             necessary, as it clears all application state.
@@ -134,58 +131,58 @@ class StateManager:
             if cls._instance is not None:
                 cls._instance.clear()
             cls._instance = None
-    
+
     # =========================================================================
     # Lock Context Managers
     # =========================================================================
-    
-    def read_lock(self) -> 'ReadLockContext':
+
+    def read_lock(self) -> "ReadLockContext":
         """
         Acquire read lock for concurrent read access.
-        
+
         Multiple threads can hold read locks simultaneously.
-        
+
         Returns:
             ReadLockContext: Context manager for read access
-        
+
         Example:
             >>> state = StateManager.get_instance()
             >>> with state.read_lock():
             ...     data = state.data_matrix
         """
         return ReadLockContext(self._read_write_lock)
-    
-    def write_lock(self) -> 'WriteLockContext':
+
+    def write_lock(self) -> "WriteLockContext":
         """
         Acquire write lock for exclusive write access.
-        
+
         Only one thread can hold the write lock.
-        
+
         Returns:
             WriteLockContext: Context manager for write access
         """
         return WriteLockContext(self._read_write_lock)
-    
+
     # =========================================================================
     # Data Matrix Operations
     # =========================================================================
-    
+
     @property
-    def data_matrix(self) -> Optional[DataMatrix]:
+    def data_matrix(self) -> DataMatrix | None:
         """Get current data matrix (thread-safe)."""
         with self._read_write_lock:
             return self._data_matrix
-    
+
     @property
     def has_data(self) -> bool:
         """Check if data matrix is loaded."""
         with self._read_write_lock:
             return self._data_matrix is not None
-    
+
     def set_data_matrix(self, matrix: DataMatrix) -> None:
         """
         Set the current data matrix.
-        
+
         Parameters:
             matrix: New DataMatrix to set
         """
@@ -197,22 +194,16 @@ class StateManager:
             self._data_matrix = matrix
 
             self._logger.info(f"set_data_matrix: shape=({matrix.n_samples} x {matrix.n_variables})")
-            
+
             # Initialize metadata managers
-            self._column_metadata = ColumnMetadataManager(
-                n_columns=matrix.n_variables,
-                column_labels=matrix.col_labels
-            )
-            self._row_metadata = RowMetadataManager(
-                n_rows=matrix.n_samples,
-                row_labels=matrix.row_labels
-            )
-            
+            self._column_metadata = ColumnMetadataManager(n_columns=matrix.n_variables, column_labels=matrix.col_labels)
+            self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
+
             # Clear analysis cache
             self._analysis_cache.clear()
-            
+
             self._modified = True
-    
+
     def clear_data(self) -> None:
         """Clear the current data matrix."""
         with self._read_write_lock:
@@ -223,27 +214,65 @@ class StateManager:
             self._row_metadata = None
             self._analysis_cache.clear()
             self._modified = True
-    
+
     # =========================================================================
     # Metadata Operations
     # =========================================================================
-    
+
     @property
-    def column_metadata(self) -> Optional[ColumnMetadataManager]:
+    def column_metadata(self) -> ColumnMetadataManager | None:
         """Get column metadata manager."""
         with self._read_write_lock:
             return self._column_metadata
-    
+
     @property
-    def row_metadata(self) -> Optional[RowMetadataManager]:
+    def row_metadata(self) -> RowMetadataManager | None:
         """Get row metadata manager."""
         with self._read_write_lock:
             return self._row_metadata
-    
+
+    def set_col_metadata(self, col_index: int, metadata_dict: dict[str, Any]) -> None:
+        """
+        Set column metadata from a dictionary.
+
+        Parameters:
+            col_index: Column index
+            metadata_dict: Dictionary with metadata fields (color, group, data_type, etc.)
+        """
+        with self._read_write_lock:
+            if self._column_metadata is None:
+                return
+            if "data_type" in metadata_dict:
+                self._column_metadata.set_data_type(col_index, metadata_dict["data_type"])
+            if "group" in metadata_dict:
+                self._column_metadata.set_group(col_index, metadata_dict["group"])
+            if "color" in metadata_dict:
+                self._column_metadata.set_color(col_index, metadata_dict["color"])
+            if "marker" in metadata_dict:
+                self._column_metadata.set_marker(col_index, metadata_dict["marker"])
+
+    def set_row_metadata(self, row_index: int, metadata_dict: dict[str, Any]) -> None:
+        """
+        Set row metadata from a dictionary.
+
+        Parameters:
+            row_index: Row index
+            metadata_dict: Dictionary with metadata fields (color, group, marker, etc.)
+        """
+        with self._read_write_lock:
+            if self._row_metadata is None:
+                return
+            if "group" in metadata_dict:
+                self._row_metadata.set_group(row_index, metadata_dict["group"])
+            if "color" in metadata_dict:
+                self._row_metadata.set_color(row_index, metadata_dict["color"])
+            if "marker" in metadata_dict:
+                self._row_metadata.set_marker(row_index, metadata_dict["marker"])
+
     # =========================================================================
     # Analysis Cache
     # =========================================================================
-    
+
     def cache_result(self, key: str, result: Any) -> None:
         """
         Cache an analysis result.
@@ -255,8 +284,8 @@ class StateManager:
         with self._read_write_lock:
             self._logger.debug(f"cache_result: storing result with key='{key}'")
             self._analysis_cache[key] = result
-    
-    def get_cached_result(self, key: str) -> Optional[Any]:
+
+    def get_cached_result(self, key: str) -> Any | None:
         """
         Retrieve a cached analysis result.
 
@@ -269,182 +298,162 @@ class StateManager:
         with self._read_write_lock:
             self._logger.debug(f"get_cached_result: retrieving result with key='{key}'")
             return self._analysis_cache.get(key)
-    
+
     def clear_cache(self) -> None:
         """Clear the analysis cache."""
         with self._read_write_lock:
             self._analysis_cache.clear()
-    
+
     # =========================================================================
     # Visualization Settings
     # =========================================================================
-    
+
     def get_visualization_setting(self, key: str, default: Any = None) -> Any:
         """
         Get a visualization setting.
-        
+
         Parameters:
             key: Setting name
             default: Default value if not found
         """
         with self._read_write_lock:
             return self._visualization_settings.get(key, default)
-    
+
     def set_visualization_setting(self, key: str, value: Any) -> None:
         """
         Set a visualization setting.
-        
+
         Parameters:
             key: Setting name
             value: Setting value
         """
         with self._read_write_lock:
             self._visualization_settings[key] = value
-    
-    def get_all_visualization_settings(self) -> Dict[str, Any]:
+
+    def get_all_visualization_settings(self) -> dict[str, Any]:
         """
         Get all visualization settings.
-        
+
         Returns:
             Dictionary of all settings
         """
         with self._read_write_lock:
             return self._visualization_settings.copy()
-    
+
     # =========================================================================
     # Undo/Redo Operations
     # =========================================================================
-    
+
     def _push_undo(self) -> None:
         """Push current state onto undo stack."""
         if self._data_matrix is not None:
             state = {
-                'data_matrix': self._data_matrix.copy(),
-                'column_metadata': (
-                    self._column_metadata.to_dict() 
-                    if self._column_metadata else None
-                ),
-                'row_metadata': (
-                    self._row_metadata.to_dict()
-                    if self._row_metadata else None
-                ),
+                "data_matrix": self._data_matrix.copy(),
+                "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
+                "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
             }
             self._undo_stack.append(state)
-            
+
             # Limit undo stack size
             if len(self._undo_stack) > 50:
                 self._undo_stack.pop(0)
-            
+
             # Clear redo stack on new action
             self._redo_stack.clear()
-    
+
     def can_undo(self) -> bool:
         """Check if undo is available."""
         with self._read_write_lock:
             return len(self._undo_stack) > 0
-    
+
     def can_redo(self) -> bool:
         """Check if redo is available."""
         with self._read_write_lock:
             return len(self._redo_stack) > 0
-    
+
     def undo(self) -> None:
         """Undo the last state change."""
-        if not self.can_undo():
-            return
-
         with self._read_write_lock:
-            self._logger.debug(f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
+            if not self._undo_stack:
+                return
+            self._logger.debug(
+                f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
+            )
             # Save current state for redo
             if self._data_matrix is not None:
                 current_state = {
-                    'data_matrix': self._data_matrix.copy(),
-                    'column_metadata': (
-                        self._column_metadata.to_dict()
-                        if self._column_metadata else None
-                    ),
-                    'row_metadata': (
-                        self._row_metadata.to_dict()
-                        if self._row_metadata else None
-                    ),
+                    "data_matrix": self._data_matrix.copy(),
+                    "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
+                    "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
                 }
                 self._redo_stack.append(current_state)
-            
+
             # Restore previous state
             state = self._undo_stack.pop()
-            self._data_matrix = state['data_matrix']
-            
-            if state['column_metadata'] is not None and self._data_matrix:
+            self._data_matrix = state["data_matrix"]
+
+            if state["column_metadata"] is not None and self._data_matrix:
                 self._column_metadata = ColumnMetadataManager(
-                    n_columns=self._data_matrix.n_variables,
-                    column_labels=self._data_matrix.col_labels
+                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
                 )
-                self._column_metadata.from_dict(state['column_metadata'])
-            
-            if state['row_metadata'] is not None and self._data_matrix:
+                self._column_metadata.from_dict(state["column_metadata"])
+
+            if state["row_metadata"] is not None and self._data_matrix:
                 self._row_metadata = RowMetadataManager(
-                    n_rows=self._data_matrix.n_samples,
-                    row_labels=self._data_matrix.row_labels
+                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
                 )
-                self._row_metadata.from_dict(state['row_metadata'])
-    
+                self._row_metadata.from_dict(state["row_metadata"])
+
     def redo(self) -> None:
         """Redo the last undone change."""
-        if not self.can_redo():
-            return
-
         with self._read_write_lock:
-            self._logger.debug(f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
+            if not self._redo_stack:
+                return
+            self._logger.debug(
+                f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
+            )
             # Save current state for undo
             if self._data_matrix is not None:
                 current_state = {
-                    'data_matrix': self._data_matrix.copy(),
-                    'column_metadata': (
-                        self._column_metadata.to_dict()
-                        if self._column_metadata else None
-                    ),
-                    'row_metadata': (
-                        self._row_metadata.to_dict()
-                        if self._row_metadata else None
-                    ),
+                    "data_matrix": self._data_matrix.copy(),
+                    "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
+                    "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
                 }
                 self._undo_stack.append(current_state)
-            
+
             # Restore redone state
             state = self._redo_stack.pop()
-            self._data_matrix = state['data_matrix']
-            
-            if state['column_metadata'] is not None and self._data_matrix:
+            self._data_matrix = state["data_matrix"]
+
+            if state["column_metadata"] is not None and self._data_matrix:
                 self._column_metadata = ColumnMetadataManager(
-                    n_columns=self._data_matrix.n_variables,
-                    column_labels=self._data_matrix.col_labels
+                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
                 )
-                self._column_metadata.from_dict(state['column_metadata'])
-            
-            if state['row_metadata'] is not None and self._data_matrix:
+                self._column_metadata.from_dict(state["column_metadata"])
+
+            if state["row_metadata"] is not None and self._data_matrix:
                 self._row_metadata = RowMetadataManager(
-                    n_rows=self._data_matrix.n_samples,
-                    row_labels=self._data_matrix.row_labels
+                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
                 )
-                self._row_metadata.from_dict(state['row_metadata'])
-    
+                self._row_metadata.from_dict(state["row_metadata"])
+
     # =========================================================================
     # File Operations
     # =========================================================================
-    
+
     @property
-    def current_file(self) -> Optional[str]:
+    def current_file(self) -> str | None:
         """Get the current file path."""
         with self._read_write_lock:
             return self._current_file
-    
+
     @property
     def is_modified(self) -> bool:
         """Check if data has been modified since last save."""
         with self._read_write_lock:
             return self._modified
-    
-    def mark_saved(self, filepath: Optional[str] = None) -> None:
+
+    def mark_saved(self, filepath: str | None = None) -> None:
         """
         Mark the data as saved.
 
@@ -456,11 +465,11 @@ class StateManager:
                 self._current_file = filepath
                 self._logger.info(f"mark_saved: data saved to '{filepath}'")
             self._modified = False
-    
+
     # =========================================================================
     # Clear/Reset
     # =========================================================================
-    
+
     def clear(self) -> None:
         """Clear all state."""
         with self._read_write_lock:
@@ -473,69 +482,80 @@ class StateManager:
             self._redo_stack.clear()
             self._modified = False
             self._current_file = None
-    
+
     # =========================================================================
     # Status Information
     # =========================================================================
-    
-    def get_status(self) -> Dict[str, Any]:
+
+    def get_status(self) -> dict[str, Any]:
         """
         Get current state status information.
-        
+
         Returns:
             Dictionary containing status information
         """
         with self._read_write_lock:
             status = {
-                'has_data': self._data_matrix is not None,
-                'is_modified': self._modified,
-                'current_file': self._current_file,
-                'undo_available': len(self._undo_stack) > 0,
-                'redo_available': len(self._redo_stack) > 0,
-                'cache_size': len(self._analysis_cache),
+                "has_data": self._data_matrix is not None,
+                "is_modified": self._modified,
+                "current_file": self._current_file,
+                "undo_available": len(self._undo_stack) > 0,
+                "redo_available": len(self._redo_stack) > 0,
+                "cache_size": len(self._analysis_cache),
             }
-            
+
             if self._data_matrix is not None:
-                status.update({
-                    'n_samples': self._data_matrix.n_samples,
-                    'n_variables': self._data_matrix.n_variables,
-                    'has_missing': self._data_matrix.has_missing,
-                })
-            
+                status.update(
+                    {
+                        "n_samples": self._data_matrix.n_samples,
+                        "n_variables": self._data_matrix.n_variables,
+                        "has_missing": self._data_matrix.has_missing,
+                    }
+                )
+
             return status
-    
+
     def __repr__(self) -> str:
-        return (
-            f"StateManager(has_data={self.has_data}, "
-            f"modified={self._modified})"
-        )
+        return f"StateManager(has_data={self.has_data}, modified={self._modified})"
 
 
 # Context manager classes for lock handling
 class ReadLockContext:
-    """Context manager for read lock acquisition."""
-    
+    """
+    Context manager for read lock acquisition.
+
+    Note: Uses the same exclusive RLock as WriteLockContext.
+    This is not a true read-write lock; both read and write
+    operations are mutually exclusive for thread safety.
+    """
+
     def __init__(self, lock: threading.RLock) -> None:
         self._lock = lock
-    
-    def __enter__(self) -> 'ReadLockContext':
+
+    def __enter__(self) -> "ReadLockContext":
         self._lock.acquire()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self._lock.release()
 
 
 class WriteLockContext:
-    """Context manager for write lock acquisition."""
-    
+    """
+    Context manager for write lock acquisition.
+
+    Note: Uses the same exclusive RLock as ReadLockContext.
+    This is not a true read-write lock; both read and write
+    operations are mutually exclusive for thread safety.
+    """
+
     def __init__(self, lock: threading.RLock) -> None:
         self._lock = lock
-    
-    def __enter__(self) -> 'WriteLockContext':
+
+    def __enter__(self) -> "WriteLockContext":
         self._lock.acquire()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self._lock.release()
 
@@ -544,7 +564,7 @@ class WriteLockContext:
 def get_state_manager() -> StateManager:
     """
     Get the global StateManager instance.
-    
+
     Returns:
         StateManager: The singleton state manager
     """

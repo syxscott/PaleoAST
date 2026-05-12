@@ -15,10 +15,10 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
-from .statistics_controller import StatisticsController
 from .data_controller import DataController
+from .statistics_controller import StatisticsController
 
 __all__ = [
-    'StatisticsController',
-    'DataController',
+    "DataController",
+    "StatisticsController",
 ]

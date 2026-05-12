@@ -18,7 +18,7 @@ from .diversity import DiversityAnalyzer, compute_diversity_indices
 from .rarefaction import RarefactionAnalyzer
 
 __all__ = [
-    'DiversityAnalyzer',
-    'compute_diversity_indices',
-    'RarefactionAnalyzer',
+    "DiversityAnalyzer",
+    "RarefactionAnalyzer",
+    "compute_diversity_indices",
 ]

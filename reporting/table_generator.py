@@ -1,17 +1,13 @@
 """LaTeX table generation utilities for PaleoAST reports."""
-from typing import Any, List, Optional
+
+from typing import Any
 
 
 class TableGenerator:
     """Generates LaTeX table code from data."""
 
     @staticmethod
-    def from_matrix(
-        data: List[List[Any]],
-        headers: Optional[List[str]] = None,
-        caption: str = "",
-        label: str = ""
-    ) -> str:
+    def from_matrix(data: list[list[Any]], headers: list[str] | None = None, caption: str = "", label: str = "") -> str:
         if not data:
             return ""
         n_cols = len(data[0])

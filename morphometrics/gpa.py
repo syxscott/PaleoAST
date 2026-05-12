@@ -151,7 +151,7 @@ class GPAAnalyzer:
                 sizes = self._compute_sizes(aligned)
                 for i in range(n_specimens):
                     aligned[i] = aligned[i] / sizes[i]
-                    scales[i] = sizes[i]
+                    scales[i] *= sizes[i]
 
                 # Step 3: Compute consensus (mean)
                 consensus = np.mean(aligned, axis=0)

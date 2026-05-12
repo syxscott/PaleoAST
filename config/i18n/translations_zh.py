@@ -358,7 +358,7 @@ TRANSLATIONS = {
     "Resampling": "重采样",
     "Contour points: ": "轮廓点数: ",
     "Input": "输入",
-    "Components": "分量",
+    "Components (CCA)": "分量",
     "Options": "选项",
     "Run": "运行",
     "Cancel": "取消",

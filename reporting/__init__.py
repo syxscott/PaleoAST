@@ -9,9 +9,9 @@ PaleoAST Phase 3 - Reporting Module
 版本: 3.0.0
 """
 
-from .report_builder import ReportBuilder, LatexCompiler
+from .report_builder import LatexCompiler, ReportBuilder
 
 __all__ = [
-    'ReportBuilder',
-    'LatexCompiler',
+    "LatexCompiler",
+    "ReportBuilder",
 ]

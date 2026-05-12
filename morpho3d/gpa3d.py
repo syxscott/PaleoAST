@@ -208,7 +208,7 @@ class GPA3D:
         # 检查标志点数量一致性
         n_landmarks = configs[0].shape[0]
         for i, config in enumerate(configs):
-            if config.shape[0] != n_landmarks or config.shape[1] != 3:
+            if len(config.shape) != 2 or config.shape[0] != n_landmarks or config.shape[1] != 3:
                 raise ValueError(
                     f"Config {i} has invalid shape {config.shape}, "
                     f"expected ({n_landmarks}, 3)"
@@ -281,10 +281,15 @@ class GPA3D:
                     target = reference - np.mean(reference, axis=0)
                 
                 if self._scale:
-                    target = target / self._compute_centroid_size(target)
+                    cs_target = self._compute_centroid_size(target)
+                    if cs_target > 1e-10:
+                        target = target / cs_target
                 
                 # SVD旋转对齐
-                R = RotationMatrix.from_svd(scaled, target)
+                try:
+                    R = RotationMatrix.from_svd(scaled, target)
+                except (np.linalg.LinAlgError, ValueError):
+                    R = np.eye(3)
                 rotations[i] = R
                 
                 # 应用旋转

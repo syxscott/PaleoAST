@@ -75,6 +75,7 @@ def zscore_standardize(data: npt.NDArray, axis: int = 0) -> npt.NDArray:
     Returns:
         Standardized array
     """
+    was_1d = data.ndim == 1
     result = np.atleast_2d(data.astype(float).copy())
     if axis == 0:
         for j in range(result.shape[1]):
@@ -94,6 +95,8 @@ def zscore_standardize(data: npt.NDArray, axis: int = 0) -> npt.NDArray:
                 s = np.nanstd(row[valid], ddof=1)
                 if s > 0:
                     result[i, valid] = (row[valid] - m) / s
+    if was_1d:
+        result = result.squeeze()
     return result
 
 

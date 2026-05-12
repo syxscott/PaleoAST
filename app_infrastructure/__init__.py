@@ -1,21 +1,18 @@
 """
 ================================================================================
-PaleoAST Phase 5 - Enterprise Polish & System Audit
+PaleoAST - Application Infrastructure
 ================================================================================
 
-本阶段包含：
-- 目录结构修复与AST源码审计
-- 商业级启动引擎与闪屏动画
-- 全局异常拦截与日志系统
-- 巨型QSS样式引擎
-- 完美入口文件重构
+本包包含应用基础设施代码：
+- 目录结构修复与AST源码审计 (audit)
+- 商业级启动引擎与闪屏动画 (startup)
+- 全局异常拦截与日志系统 (exception_handler)
+- 巨型QSS样式引擎 (theme)
 
 作者: PaleoAST Development Team
-版本: 5.0.0
+版本: 1.0.0
 """
 
-from . import audit
-from . import startup
-from . import theme
+from . import audit, startup, theme
 
-__all__ = ['audit', 'startup', 'theme']
+__all__ = ["audit", "startup", "theme"]

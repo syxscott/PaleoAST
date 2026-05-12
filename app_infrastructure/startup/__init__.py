@@ -1,10 +1,10 @@
 """
 ================================================================================
-PaleoAST Phase 5 - Startup Module Initialization
+PaleoAST - Startup Module Initialization
 ================================================================================
 """
 
-from .splash import SplashScreen, SplashScreenStyle
 from .loader import StartupLoader, StartupProgress
+from .splash import SplashScreen, SplashScreenStyle
 
-__all__ = ['SplashScreen', 'SplashScreenStyle', 'StartupLoader', 'StartupProgress']
+__all__ = ["SplashScreen", "SplashScreenStyle", "StartupLoader", "StartupProgress"]

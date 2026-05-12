@@ -27,6 +27,7 @@ from typing import Dict, Optional
 # PyQt6 imports - must be available (i18n initialized after QApplication)
 try:
     from PyQt6.QtCore import QObject, pyqtSignal
+
     _HAS_QT = True
 except ImportError:
     _HAS_QT = False
@@ -38,9 +39,9 @@ class _TranslatorBase:
     def __init__(self):
         self._lock = threading.RLock()
         self._current_lang: str = "en"
-        self._dictionaries: Dict[str, Dict[str, str]] = {}
+        self._dictionaries: dict[str, dict[str, str]] = {}
 
-    def register_dictionary(self, lang: str, dictionary: Dict[str, str]) -> None:
+    def register_dictionary(self, lang: str, dictionary: dict[str, str]) -> None:
         with self._lock:
             self._dictionaries[lang] = dictionary
 
@@ -62,6 +63,7 @@ class _TranslatorBase:
 
 
 if _HAS_QT:
+
     class _Translator(QObject, _TranslatorBase):
         """Qt-enabled translator with language change signal.
 
@@ -69,6 +71,7 @@ if _HAS_QT:
         so the singleton can be created early (e.g. at import time)
         without crashing.
         """
+
         language_changed = pyqtSignal(str)
 
         def __init__(self):
@@ -81,6 +84,7 @@ if _HAS_QT:
                 return
             try:
                 from PyQt6.QtWidgets import QApplication
+
                 if QApplication.instance() is not None:
                     QObject.__init__(self)
                     self._qt_init_done = True
@@ -95,12 +99,13 @@ if _HAS_QT:
             if old != lang and self._qt_init_done:
                 self.language_changed.emit(lang)
 else:
+
     class _Translator(_TranslatorBase):
         pass
 
 
 # Module-level singleton
-_translator: Optional[_Translator] = None
+_translator: _Translator | None = None
 _init_lock = threading.Lock()
 
 

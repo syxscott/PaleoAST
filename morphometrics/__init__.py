@@ -17,14 +17,14 @@ Version: 1.0.0
 """
 
 from .gpa import GPAAnalyzer, GPAResult
-from .tps import TPSAnalyzer, TPSResult
 from .relative_warps import RelativeWarpsAnalyzer, RelativeWarpsResult
+from .tps import TPSAnalyzer, TPSResult
 
 __all__ = [
-    'GPAAnalyzer',
-    'GPAResult',
-    'TPSAnalyzer',
-    'TPSResult',
-    'RelativeWarpsAnalyzer',
-    'RelativeWarpsResult',
+    "GPAAnalyzer",
+    "GPAResult",
+    "RelativeWarpsAnalyzer",
+    "RelativeWarpsResult",
+    "TPSAnalyzer",
+    "TPSResult",
 ]

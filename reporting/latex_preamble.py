@@ -1,10 +1,11 @@
 """LaTeX preamble and document class definitions for PaleoAST report generation."""
+
 from enum import Enum, auto
-from typing import List, Optional
 
 
 class DocumentClass(Enum):
     """LaTeX document classes."""
+
     ARTICLE = auto()
     REPORT = auto()
     BOOK = auto()
@@ -16,22 +17,19 @@ class LatexPreamble:
     """LaTeX preamble manager for document generation."""
 
     def __init__(
-        self,
-        document_class: DocumentClass = DocumentClass.ARTICLE,
-        font_size: int = 11,
-        paper_size: str = "a4paper"
+        self, document_class: DocumentClass = DocumentClass.ARTICLE, font_size: int = 11, paper_size: str = "a4paper"
     ):
         self._doc_class = document_class
         self._font_size = font_size
         self._paper_size = paper_size
-        self._packages: List[str] = []
-        self._extra_preamble: List[str] = []
+        self._packages: list[str] = []
+        self._extra_preamble: list[str] = []
 
     @property
-    def packages(self) -> List[str]:
+    def packages(self) -> list[str]:
         return self._packages.copy()
 
-    def add_package(self, name: str, options: Optional[str] = None):
+    def add_package(self, name: str, options: str | None = None):
         if options:
             self._packages.append(f"\\usepackage[{options}]{{{name}}}")
         else:

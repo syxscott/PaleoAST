@@ -142,10 +142,6 @@ class BaseAnalysisDialog(QDialog):
                 self, _("Error"),
                 _("An error occurred: {0}").format(str(e))
             )
-    
-    def _validate_parameters(self) -> bool:
-        """Validate all parameters. Override in subclasses. Returns True if valid."""
-        return True
 
     def _apply_stylesheet(self) -> None:
         """Apply modern light theme stylesheet."""
@@ -350,11 +346,10 @@ class BaseAnalysisDialog(QDialog):
         """)
 
     def _on_run(self) -> None:
-        """Validate parameters and accept dialog."""
-        if self._validate_parameters():
-            params = self.get_parameters()
-            self._logger.info(f"Dialog accepted with parameters: {params}")
-            self.accept()
+        """Accept dialog with current parameters."""
+        params = self.get_parameters()
+        self._logger.info(f"Dialog accepted with parameters: {params}")
+        self.accept()
 
     def _validate_parameters(self) -> bool:
         """Validate parameters before running. Override in subclasses."""
@@ -1011,7 +1006,8 @@ class RarefactionDialog(BaseAnalysisDialog):
         confidence: Show confidence intervals
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, sample_names: list[str] | None = None) -> None:
+        self._sample_names = sample_names or []
         super().__init__(_("Rarefaction Analysis"), parent)
         self._setup_parameters()
 
@@ -1023,7 +1019,10 @@ class RarefactionDialog(BaseAnalysisDialog):
 
         self._sample_list = QListWidget()
         self._sample_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self._sample_list.addItems([_("Sample 1"), _("Sample 2"), _("Sample 3"), _("Sample 4"), _("Sample 5")])
+        if self._sample_names:
+            self._sample_list.addItems(self._sample_names)
+        else:
+            self._sample_list.addItems([_("Sample 1")])
         sample_layout.addWidget(self._sample_list)
 
         # Settings
@@ -1223,7 +1222,12 @@ class ImportDialog(QDialog):
             if fmt_index == 3:  # Excel
                 df = pd.read_excel(filepath, nrows=5)
             else:
-                delimiter = "\t" if fmt_index == 1 else ","
+                if fmt_index == 0:
+                    delimiter = ","
+                elif fmt_index == 1:
+                    delimiter = "\t"
+                else:
+                    delimiter = " "
                 df = pd.read_csv(filepath, delimiter=delimiter, nrows=5)
             self._preview_text.setText(df.head().to_string())
         except Exception as e:
@@ -1275,7 +1279,12 @@ class ImportDialog(QDialog):
                     na_values=na_values,
                 )
             else:
-                delimiter = "\t" if fmt_index == 1 else ","
+                if fmt_index == 0:
+                    delimiter = ","
+                elif fmt_index == 1:
+                    delimiter = "\t"
+                else:
+                    delimiter = " "
                 df = pd.read_csv(
                     filepath,
                     delimiter=delimiter,
@@ -1407,7 +1416,7 @@ class ClusteringDialog(BaseAnalysisDialog):
         metric_group = self.add_parameter_group(_("Distance Metric"))
         metric_layout = QVBoxLayout(metric_group)
         self._metric_combo = QComboBox()
-        self._metric_combo.addItems(["Euclidean", "Bray-Curtis", "Jaccard", "Manhattan", "Canberra"])
+        self._metric_combo.addItems(["Euclidean", "Bray-Curtis", "Jaccard", "Cityblock", "Canberra"])
         metric_layout.addWidget(self._metric_combo)
 
         n_group = self.add_parameter_group(_("Clusters"))
@@ -1419,9 +1428,20 @@ class ClusteringDialog(BaseAnalysisDialog):
         n_layout.addWidget(self._n_clusters_spin)
 
     def get_parameters(self) -> dict[str, Any]:
+        metric_map = {
+            "euclidean": "euclidean",
+            "bray-curtis": "braycurtis",
+            "jaccard": "jaccard",
+            "cityblock": "cityblock",
+            "canberra": "canberra",
+        }
+        raw_metric = self._metric_combo.currentText().lower().replace("-", "_")
+        # Map display names to scipy-compatible metric names
+        metric_display = self._metric_combo.currentText().lower()
+        metric = metric_map.get(metric_display, raw_metric)
         self._parameters = {
             "method": self._method_combo.currentText().lower(),
-            "metric": self._metric_combo.currentText().lower().replace("-", "_"),
+            "metric": metric,
             "n_clusters": self._n_clusters_spin.value(),
         }
         return self._parameters
@@ -1531,3 +1551,251 @@ class EFADialog(BaseAnalysisDialog):
 
     def _get_help_text(self) -> str:
         return _("EFA decomposes closed contours into elliptic Fourier functions. Each harmonic adds 4 coefficients (a, b, c, d). Use first 2 columns as (x, y) coordinates.")
+
+
+class TPSGridDialog(BaseAnalysisDialog):
+    """TPS Deformation Grid configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("TPS Deformation Grid"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        grid_group = self.add_parameter_group(_("Grid Settings"))
+        grid_layout = QVBoxLayout(grid_group)
+
+        row_layout = QHBoxLayout()
+        row_layout.addWidget(QLabel(_("Grid rows:")))
+        self._grid_rows = QSpinBox()
+        self._grid_rows.setRange(5, 30)
+        self._grid_rows.setValue(15)
+        row_layout.addWidget(self._grid_rows)
+        grid_layout.addLayout(row_layout)
+
+        col_layout = QHBoxLayout()
+        col_layout.addWidget(QLabel(_("Grid columns:")))
+        self._grid_cols = QSpinBox()
+        self._grid_cols.setRange(5, 30)
+        self._grid_cols.setValue(15)
+        col_layout.addWidget(self._grid_cols)
+        grid_layout.addLayout(col_layout)
+
+        self._show_vectors = QCheckBox(_("Show displacement vectors"))
+        self._show_vectors.setChecked(True)
+        grid_layout.addWidget(self._show_vectors)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "grid_rows": self._grid_rows.value(),
+            "grid_cols": self._grid_cols.value(),
+            "show_vectors": self._show_vectors.isChecked(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Visualize Thin-Plate Spline deformation grid. The grid shows how landmark configurations are warped from source to target. Arrows show displacement vectors if enabled.")
+
+
+class SpatialRipleyKDialog(BaseAnalysisDialog):
+    """Ripley's K spatial point pattern analysis dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Ripley's K Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        dist_group = self.add_parameter_group(_("Distance Settings"))
+        dist_layout = QVBoxLayout(dist_group)
+
+        rmax_layout = QHBoxLayout()
+        rmax_layout.addWidget(QLabel(_("Max distance (r_max):")))
+        self._rmax_spin = QDoubleSpinBox()
+        self._rmax_spin.setRange(0.01, 1000.0)
+        self._rmax_spin.setValue(0.5)
+        self._rmax_spin.setDecimals(3)
+        rmax_layout.addWidget(self._rmax_spin)
+        dist_layout.addLayout(rmax_layout)
+
+        npoints_layout = QHBoxLayout()
+        npoints_layout.addWidget(QLabel(_("Number of distances:")))
+        self._npoints_spin = QSpinBox()
+        self._npoints_spin.setRange(10, 200)
+        self._npoints_spin.setValue(50)
+        npoints_layout.addWidget(self._npoints_spin)
+        dist_layout.addLayout(npoints_layout)
+
+        sim_group = self.add_parameter_group(_("Monte Carlo Settings"))
+        sim_layout = QVBoxLayout(sim_group)
+
+        nsim_layout = QHBoxLayout()
+        nsim_layout.addWidget(QLabel(_("Simulations:")))
+        self._nsim_spin = QSpinBox()
+        self._nsim_spin.setRange(19, 999)
+        self._nsim_spin.setValue(99)
+        self._nsim_spin.setSingleStep(10)
+        nsim_layout.addWidget(self._nsim_spin)
+        sim_layout.addLayout(nsim_layout)
+
+        self._show_points = QCheckBox(_("Show point locations"))
+        self._show_points.setChecked(True)
+        sim_layout.addWidget(self._show_points)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "r_max": self._rmax_spin.value(),
+            "n_r_values": self._npoints_spin.value(),
+            "n_simulations": self._nsim_spin.value(),
+            "show_points": self._show_points.isChecked(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Ripley's K function analyzes spatial point patterns. L(r) > 0 indicates clustering, L(r) < 0 indicates regularity/dispersion. The envelope is from 95% Monte Carlo simulations under complete spatial randomness.")
+
+
+class BiostratigraphyDialog(BaseAnalysisDialog):
+    """Biostratigraphy (UA/RASC) configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Biostratigraphy Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        method_group = self.add_parameter_group(_("Method"))
+        method_layout = QVBoxLayout(method_group)
+        self._method_combo = QComboBox()
+        self._method_combo.addItems(["UA (Unitary Associations)", "RASC (Ranking and Scaling)"])
+        self._method_combo.setCurrentText("UA (Unitary Associations)")
+        method_layout.addWidget(QLabel(_("Analysis method:")))
+        method_layout.addWidget(self._method_combo)
+
+        opt_group = self.add_parameter_group(_("Options"))
+        opt_layout = QVBoxLayout(opt_group)
+        self._min_events_spin = QSpinBox()
+        self._min_events_spin.setRange(2, 20)
+        self._min_events_spin.setValue(2)
+        self._min_events_spin.setPrefix(_("Min events per zone: "))
+        opt_layout.addWidget(self._min_events_spin)
+
+        self._rasc_iterations = QSpinBox()
+        self._rasc_iterations.setRange(10, 500)
+        self._rasc_iterations.setValue(100)
+        self._rasc_iterations.setPrefix(_("RASC iterations: "))
+        opt_layout.addWidget(self._rasc_iterations)
+
+    def get_parameters(self) -> dict[str, Any]:
+        method_text = self._method_combo.currentText()
+        method = "ua" if "UA" in method_text else "rasc"
+        self._parameters = {
+            "method": method,
+            "min_events": self._min_events_spin.value(),
+            "rasc_iterations": self._rasc_iterations.value(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy.")
+
+
+class WaveletDialog(BaseAnalysisDialog):
+    """Wavelet CWT configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Wavelet Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        wavelet_group = self.add_parameter_group(_("Wavelet Settings"))
+        wavelet_layout = QVBoxLayout(wavelet_group)
+        self._wavelet_combo = QComboBox()
+        self._wavelet_combo.addItems(["morlet", "ricker", "mexican_hat"])
+        self._wavelet_combo.setCurrentText("morlet")
+        wavelet_layout.addWidget(QLabel(_("Wavelet type:")))
+        wavelet_layout.addWidget(self._wavelet_combo)
+
+        scale_group = self.add_parameter_group(_("Scale Settings"))
+        scale_layout = QVBoxLayout(scale_group)
+
+        min_layout = QHBoxLayout()
+        min_layout.addWidget(QLabel(_("Min scale:")))
+        self._min_scale = QSpinBox()
+        self._min_scale.setRange(1, 50)
+        self._min_scale.setValue(2)
+        min_layout.addWidget(self._min_scale)
+        scale_layout.addLayout(min_layout)
+
+        max_layout = QHBoxLayout()
+        max_layout.addWidget(QLabel(_("Max scale:")))
+        self._max_scale = QSpinBox()
+        self._max_scale.setRange(10, 200)
+        self._max_scale.setValue(50)
+        max_layout.addWidget(self._max_scale)
+        scale_layout.addLayout(max_layout)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "wavelet": self._wavelet_combo.currentText(),
+            "min_scale": self._min_scale.value(),
+            "max_scale": self._max_scale.value(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("Wavelet CWT provides time-frequency analysis for non-stationary signals. Morlet wavelet is good for oscillatory signals. Ricker (Mexican Hat) is better for sharp transitions.")
+
+
+class CCADialog(BaseAnalysisDialog):
+    """CCA/RDA configuration dialog."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Canonical Correspondence Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        method_group = self.add_parameter_group(_("Method"))
+        method_layout = QVBoxLayout(method_group)
+        self._method_combo = QComboBox()
+        self._method_combo.addItems(["CCA", "RDA"])
+        self._method_combo.setCurrentText("CCA")
+        method_layout.addWidget(QLabel(_("Ordination method:")))
+        method_layout.addWidget(self._method_combo)
+
+        comp_group = self.add_parameter_group(_("Components (CCA)"))
+        comp_layout = QVBoxLayout(comp_group)
+        self._n_comp_spin = QSpinBox()
+        self._n_comp_spin.setRange(2, 10)
+        self._n_comp_spin.setValue(3)
+        self._n_comp_spin.setPrefix(_("Constrained axes: "))
+        comp_layout.addWidget(self._n_comp_spin)
+
+        env_group = self.add_parameter_group(_("Environmental Variables"))
+        env_layout = QVBoxLayout(env_group)
+        self._env_col_list = QListWidget()
+        self._env_col_list.setSelectionMode(QListWidget.MultiSelection)
+        self._env_col_list.setMinimumHeight(100)
+        env_layout.addWidget(QLabel(_("Select environmental variables:")))
+        env_layout.addWidget(self._env_col_list)
+
+    def set_column_names(self, species_cols: list[str], env_cols: list[str]) -> None:
+        """Set available column names for selection."""
+        self._env_col_list.clear()
+        for col in env_cols:
+            self._env_col_list.addItem(col)
+        # Select all by default
+        for i in range(self._env_col_list.count()):
+            self._env_col_list.item(i).setSelected(True)
+
+    def get_selected_env_columns(self) -> list[str]:
+        """Get list of selected environmental column names."""
+        return [item.text() for item in self._env_col_list.selectedItems()]
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "method": self._method_combo.currentText().lower(),
+            "n_components": self._n_comp_spin.value(),
+            "env_columns": self.get_selected_env_columns(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("CCA relates species composition to environmental variables using chi-square distance. RDA uses Euclidean distance and is suitable for continuous data. Both are constrained ordination methods.")

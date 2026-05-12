@@ -156,26 +156,11 @@ class SimperAnalyzer:
                 f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups"
             )
 
-            # Compute contributions for each group pair
-            all_contributions = np.zeros(n_vars)
-            pair_count = 0
-
+            # Build group pair list
             group_pairs = []
             for gi in range(n_groups):
                 for gj in range(gi + 1, n_groups):
-                    ga, gb = unique_groups[gi], unique_groups[gj]
-                    group_pairs.append((ga, gb))
-
-                    idx_a = [i for i, g in enumerate(groups) if g == ga]
-                    idx_b = [i for i, g in enumerate(groups) if g == gb]
-
-                    data_a = data[idx_a]
-                    data_b = data[idx_b]
-
-                    # Compute pairwise contributions
-                    pair_contribs = self._pairwise_contributions(data_a, data_b)
-                    all_contributions += pair_contribs
-                    pair_count += 1
+                    group_pairs.append((unique_groups[gi], unique_groups[gj]))
 
             # Compute per-variable stats across all group pairs
             contrib_list = []
@@ -231,7 +216,7 @@ class SimperAnalyzer:
                     )
                 )
 
-            overall = total / n_vars if n_vars > 0 else 0.0
+            overall = total
 
             result = SimperResult(
                 overall_dissimilarity=overall,

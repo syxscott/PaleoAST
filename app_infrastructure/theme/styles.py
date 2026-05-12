@@ -1,6 +1,6 @@
 """
 ================================================================================
-PaleoAST Phase 5 - Ultimate QSS Style Engine
+PaleoAST - Ultimate QSS Style Engine
 ================================================================================
 
 本模块包含极其庞大的现代化QSS样式字符串池，
@@ -9,13 +9,13 @@ PaleoAST Phase 5 - Ultimate QSS Style Engine
 作者: PaleoAST Development Team
 """
 
-from typing import Dict, Optional
 from dataclasses import dataclass
 from enum import Enum
 
 
 class StyleMode(Enum):
     """样式模式"""
+
     DARK = "dark"
     LIGHT = "light"
 
@@ -23,42 +23,43 @@ class StyleMode(Enum):
 @dataclass
 class ColorPalette:
     """调色板"""
+
     # 主色
     primary: str = "#3498DB"
     primary_hover: str = "#5DADE2"
     primary_pressed: str = "#2980B9"
-    
+
     # 强调色
     accent: str = "#2ECC71"
     accent_hover: str = "#58D68D"
-    
+
     # 警告/错误
     warning: str = "#F39C12"
     error: str = "#E74C3C"
     success: str = "#27AE60"
     info: str = "#3498DB"
-    
+
     # 背景色 (深色模式)
     bg_dark_1: str = "#1A1A2E"
     bg_dark_2: str = "#16213E"
     bg_dark_3: str = "#0F3460"
     bg_dark_4: str = "#1F4068"
-    
+
     # 背景色 (浅色模式)
     bg_light_1: str = "#FFFFFF"
     bg_light_2: str = "#F8F9FA"
     bg_light_3: str = "#E9ECEF"
-    
+
     # 文字色
     text_dark: str = "#ECF0F1"
     text_dark_secondary: str = "#95A5A6"
     text_light: str = "#2C3E50"
     text_light_secondary: str = "#7F8C8D"
-    
+
     # 边框色
     border_dark: str = "#34495E"
     border_light: str = "#BDC3C7"
-    
+
     # 表格色
     table_header: str = "#34495E"
     table_row_alt: str = "#2C3E50"
@@ -68,47 +69,47 @@ class ColorPalette:
 class PaleoASTStyles:
     """
     巨型QSS样式字符串池
-    
+
     包含针对所有PyQt6组件的深度美化样式。
-    
+
     使用示例:
         >>> styles = PaleoASTStyles()
         >>> qss = styles.get_complete_stylesheet()
         >>> app.setStyleSheet(qss)
     """
-    
+
     def __init__(self, mode: StyleMode = StyleMode.DARK):
         """
         初始化样式引擎
-        
+
         参数:
             mode: 样式模式
         """
         self._mode = mode
         self._colors = ColorPalette()
-    
+
     @property
     def mode(self) -> StyleMode:
         """获取当前模式"""
         return self._mode
-    
-    def set_mode(self, mode: StyleMode) -> 'PaleoASTStyles':
+
+    def set_mode(self, mode: StyleMode) -> "PaleoASTStyles":
         """
         设置模式
-        
+
         参数:
             mode: 新模式
-        
+
         返回:
             self
         """
         self._mode = mode
         return self
-    
+
     def get_qmainwindow_styles(self) -> str:
         """
         获取QMainWindow样式
-        
+
         返回:
             QSS字符串
         """
@@ -146,7 +147,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qwidget_styles(self) -> str:
         """获取QWidget样式"""
         if self._mode == StyleMode.DARK:
@@ -175,7 +176,7 @@ class PaleoASTStyles:
                 color: #BDC3C7;
             }
             """
-    
+
     def get_qpushbutton_styles(self) -> str:
         """获取QPushButton样式"""
         if self._mode == StyleMode.DARK:
@@ -348,7 +349,7 @@ class PaleoASTStyles:
                 border: 1px solid #DEE2E6;
             }
             """
-    
+
     def get_qlineedit_styles(self) -> str:
         """获取QLineEdit样式"""
         if self._mode == StyleMode.DARK:
@@ -415,7 +416,7 @@ class PaleoASTStyles:
                 border: 1px solid #DEE2E6;
             }
             """
-    
+
     def get_qtextedit_styles(self) -> str:
         """获取QTextEdit样式"""
         if self._mode == StyleMode.DARK:
@@ -468,7 +469,7 @@ class PaleoASTStyles:
                 border: 2px solid #3498DB;
             }
             """
-    
+
     def get_qcombobox_styles(self) -> str:
         """获取QComboBox样式"""
         if self._mode == StyleMode.DARK:
@@ -593,7 +594,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qspinbox_styles(self) -> str:
         """获取QSpinBox样式"""
         if self._mode == StyleMode.DARK:
@@ -703,7 +704,7 @@ class PaleoASTStyles:
                 border-top: 5px solid #7F8C8D;
             }
             """
-    
+
     def get_qslider_styles(self) -> str:
         """获取QSlider样式"""
         if self._mode == StyleMode.DARK:
@@ -799,7 +800,7 @@ class PaleoASTStyles:
                 border-radius: 3px;
             }
             """
-    
+
     def get_qscrollbar_styles(self) -> str:
         """获取QScrollBar样式"""
         if self._mode == StyleMode.DARK:
@@ -911,7 +912,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qtreeview_styles(self) -> str:
         """获取QTreeView样式"""
         if self._mode == StyleMode.DARK:
@@ -1058,7 +1059,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qgroupbox_styles(self) -> str:
         """获取QGroupBox样式"""
         if self._mode == StyleMode.DARK:
@@ -1121,7 +1122,7 @@ class PaleoASTStyles:
                 background-color: #FFFFFF;
             }
             """
-    
+
     def get_qtabwidget_styles(self) -> str:
         """获取QTabWidget样式"""
         if self._mode == StyleMode.DARK:
@@ -1225,7 +1226,7 @@ class PaleoASTStyles:
                 border-bottom: 1px solid #FFFFFF;
             }
             """
-    
+
     def get_qmenu_styles(self) -> str:
         """获取QMenu样式"""
         if self._mode == StyleMode.DARK:
@@ -1340,7 +1341,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qmenubar_styles(self) -> str:
         """获取QMenuBar样式"""
         if self._mode == StyleMode.DARK:
@@ -1380,7 +1381,7 @@ class PaleoASTStyles:
                 color: #FFFFFF;
             }
             """
-    
+
     def get_qtoolbar_styles(self) -> str:
         """获取QToolBar样式"""
         if self._mode == StyleMode.DARK:
@@ -1458,11 +1459,11 @@ class PaleoASTStyles:
                 color: #FFFFFF;
             }
             """
-    
+
     def get_qtoolbutton_styles(self) -> str:
         """获取QToolButton样式"""
         return self.get_qtoolbar_styles()
-    
+
     def get_qdialog_styles(self) -> str:
         """获取QDialog样式"""
         if self._mode == StyleMode.DARK:
@@ -1487,7 +1488,7 @@ class PaleoASTStyles:
                 color: #2C3E50;
             }
             """
-    
+
     def get_qmessagebox_styles(self) -> str:
         """获取QMessageBox样式"""
         if self._mode == StyleMode.DARK:
@@ -1511,7 +1512,7 @@ class PaleoASTStyles:
                 background-color: #FFFFFF;
             }
             """
-    
+
     def get_qcheckbox_styles(self) -> str:
         """获取QCheckBox样式"""
         if self._mode == StyleMode.DARK:
@@ -1583,7 +1584,7 @@ class PaleoASTStyles:
                 border-color: #3498DB;
             }
             """
-    
+
     def get_qradiobutton_styles(self) -> str:
         """获取QRadioButton样式"""
         if self._mode == StyleMode.DARK:
@@ -1644,7 +1645,7 @@ class PaleoASTStyles:
                 background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3498DB, stop:0.75 #3498DB, stop:0.76 transparent);
             }
             """
-    
+
     def get_qlabel_styles(self) -> str:
         """获取QLabel样式"""
         if self._mode == StyleMode.DARK:
@@ -1694,7 +1695,7 @@ class PaleoASTStyles:
                 color: #ADB5BD;
             }
             """
-    
+
     def get_qprogressbar_styles(self) -> str:
         """获取QProgressBar样式"""
         if self._mode == StyleMode.DARK:
@@ -1751,7 +1752,7 @@ class PaleoASTStyles:
                 border-radius: 6px;
             }
             """
-    
+
     def get_qdockwidget_styles(self) -> str:
         """获取QDockWidget样式"""
         if self._mode == StyleMode.DARK:
@@ -1820,7 +1821,7 @@ class PaleoASTStyles:
                 border-top: none;
             }
             """
-    
+
     def get_qsplitter_styles(self) -> str:
         """获取QSplitter样式"""
         if self._mode == StyleMode.DARK:
@@ -1859,7 +1860,7 @@ class PaleoASTStyles:
                 background-color: #3498DB;
             }
             """
-    
+
     def get_qframe_styles(self) -> str:
         """获取QFrame样式"""
         if self._mode == StyleMode.DARK:
@@ -1889,103 +1890,103 @@ class PaleoASTStyles:
                 max-width: 1px;
             }
             """
-    
+
     def get_complete_stylesheet(self) -> str:
         """
         获取完整的QSS样式表
-        
+
         返回:
             完整的QSS字符串
         """
         styles = []
-        
+
         # 基础组件
         styles.append(self.get_qwidget_styles())
         styles.append(self.get_qmainwindow_styles())
-        
+
         # 按钮类
         styles.append(self.get_qpushbutton_styles())
         styles.append(self.get_qtoolbutton_styles())
-        
+
         # 输入类
         styles.append(self.get_qlineedit_styles())
         styles.append(self.get_qtextedit_styles())
         styles.append(self.get_qcombobox_styles())
         styles.append(self.get_qspinbox_styles())
         styles.append(self.get_qslider_styles())
-        
+
         # 选择类
         styles.append(self.get_qcheckbox_styles())
         styles.append(self.get_qradiobutton_styles())
-        
+
         # 显示类
         styles.append(self.get_qlabel_styles())
         styles.append(self.get_qprogressbar_styles())
-        
+
         # 容器类
         styles.append(self.get_qgroupbox_styles())
         styles.append(self.get_qtabwidget_styles())
         styles.append(self.get_qtreeview_styles())
         styles.append(self.get_qdockwidget_styles())
         styles.append(self.get_qsplitter_styles())
-        
+
         # 菜单类
         styles.append(self.get_qmenu_styles())
         styles.append(self.get_qmenubar_styles())
         styles.append(self.get_qtoolbar_styles())
-        
+
         # 对话框
         styles.append(self.get_qdialog_styles())
         styles.append(self.get_qmessagebox_styles())
-        
+
         # 滚动条
         styles.append(self.get_qscrollbar_styles())
-        
+
         # 框架
         styles.append(self.get_qframe_styles())
-        
+
         return "\n\n".join(styles)
-    
+
     def get_component_style(self, component: str) -> str:
         """
         获取特定组件样式
-        
+
         参数:
             component: 组件名称
-        
+
         返回:
             QSS字符串
         """
         component_map = {
-            'mainwindow': self.get_qmainwindow_styles,
-            'widget': self.get_qwidget_styles,
-            'pushbutton': self.get_qpushbutton_styles,
-            'toolbutton': self.get_qtoolbutton_styles,
-            'lineedit': self.get_qlineedit_styles,
-            'textedit': self.get_qtextedit_styles,
-            'combobox': self.get_qcombobox_styles,
-            'spinbox': self.get_qspinbox_styles,
-            'slider': self.get_qslider_styles,
-            'checkbox': self.get_qcheckbox_styles,
-            'radiobutton': self.get_qradiobutton_styles,
-            'label': self.get_qlabel_styles,
-            'progressbar': self.get_qprogressbar_styles,
-            'groupbox': self.get_qgroupbox_styles,
-            'tabwidget': self.get_qtabwidget_styles,
-            'treeview': self.get_qtreeview_styles,
-            'listview': self.get_qtreeview_styles,
-            'tableview': self.get_qtreeview_styles,
-            'dockwidget': self.get_qdockwidget_styles,
-            'splitter': self.get_qsplitter_styles,
-            'menu': self.get_qmenu_styles,
-            'menubar': self.get_qmenubar_styles,
-            'toolbar': self.get_qtoolbar_styles,
-            'dialog': self.get_qdialog_styles,
-            'messagebox': self.get_qmessagebox_styles,
-            'scrollbar': self.get_qscrollbar_styles,
-            'frame': self.get_qframe_styles,
+            "mainwindow": self.get_qmainwindow_styles,
+            "widget": self.get_qwidget_styles,
+            "pushbutton": self.get_qpushbutton_styles,
+            "toolbutton": self.get_qtoolbutton_styles,
+            "lineedit": self.get_qlineedit_styles,
+            "textedit": self.get_qtextedit_styles,
+            "combobox": self.get_qcombobox_styles,
+            "spinbox": self.get_qspinbox_styles,
+            "slider": self.get_qslider_styles,
+            "checkbox": self.get_qcheckbox_styles,
+            "radiobutton": self.get_qradiobutton_styles,
+            "label": self.get_qlabel_styles,
+            "progressbar": self.get_qprogressbar_styles,
+            "groupbox": self.get_qgroupbox_styles,
+            "tabwidget": self.get_qtabwidget_styles,
+            "treeview": self.get_qtreeview_styles,
+            "listview": self.get_qtreeview_styles,
+            "tableview": self.get_qtreeview_styles,
+            "dockwidget": self.get_qdockwidget_styles,
+            "splitter": self.get_qsplitter_styles,
+            "menu": self.get_qmenu_styles,
+            "menubar": self.get_qmenubar_styles,
+            "toolbar": self.get_qtoolbar_styles,
+            "dialog": self.get_qdialog_styles,
+            "messagebox": self.get_qmessagebox_styles,
+            "scrollbar": self.get_qscrollbar_styles,
+            "frame": self.get_qframe_styles,
         }
-        
+
         getter = component_map.get(component.lower())
         if getter:
             return getter()

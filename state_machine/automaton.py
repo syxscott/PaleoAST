@@ -48,24 +48,19 @@ DFA是一个五元组 M = (Q, Σ, δ, q0, F)，其中：
 """
 
 from __future__ import annotations
-from typing import (
-    Dict, Set, List, Optional, Callable, Any,
-    Iterator, Tuple, FrozenSet, Union
-)
+
+import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from abc import ABC, abstractmethod
-import logging
-import re
-from collections import deque
 
-from .base import StateMachine, State, Transition, TransitionType
+from .base import State, StateMachine, Transition, TransitionType
 
 logger = logging.getLogger(__name__)
 
 
 class AutomatonType(Enum):
     """自动机类型枚举"""
+
     NFA = auto()
     DFA = auto()
     MINIMAL_DFA = auto()
@@ -74,61 +69,53 @@ class AutomatonType(Enum):
 class FiniteAutomaton(StateMachine):
     """
     有限自动机基类
-    
+
     继承自StateMachine，提供NFA/DFA的具体实现。
     """
-    
-    def __init__(
-        self,
-        name: str = "Automaton",
-        automaton_type: AutomatonType = AutomatonType.NFA
-    ):
-        super().__init__(
-            name=name,
-            allow_epsilon=True,
-            allow_non_determinism=(automaton_type != AutomatonType.DFA)
-        )
+
+    def __init__(self, name: str = "Automaton", automaton_type: AutomatonType = AutomatonType.NFA):
+        super().__init__(name=name, allow_epsilon=True, allow_non_determinism=(automaton_type != AutomatonType.DFA))
         self._automaton_type = automaton_type
-    
+
     @property
     def automaton_type(self) -> AutomatonType:
         """获取自动机类型"""
         return self._automaton_type
-    
+
     def _validate_input(self, symbol: str) -> bool:
         """验证输入符号（默认所有字符合法）"""
         return len(symbol) == 1
-    
-    def epsilon_closure(self, states: Set[State]) -> Set[State]:
+
+    def epsilon_closure(self, states: set[State]) -> set[State]:
         """
         计算状态的ε闭包
-        
+
         数学公式:
             ε-Closure(S) = S ∪ {p | ∃q∈S, ∃e∈δ(q, ε): e.target = p}
-        
+
         参数:
             states: 输入状态集合
-        
+
         返回:
             ε闭包集合
         """
         return self._epsilon_closure(states)
-    
-    def move(self, states: Set[State], symbol: str) -> Set[State]:
+
+    def move(self, states: set[State], symbol: str) -> set[State]:
         """
         计算从状态集通过符号转移到的状态集合
-        
+
         数学公式:
             Move(S, a) = {q' | ∃q∈S, ∃e∈δ(q, a): e.target = q'}
-        
+
         参数:
             states: 当前状态集合
             symbol: 输入符号
-        
+
         返回:
             转移后的状态集合
         """
-        result: Set[State] = set()
+        result: set[State] = set()
         for state in states:
             for trans in self._transitions.get(state.state_id, set()):
                 if trans.symbol == symbol:
@@ -139,160 +126,147 @@ class FiniteAutomaton(StateMachine):
 class NFA(FiniteAutomaton):
     """
     非确定性有限自动机 (NFA)
-    
+
     核心特性:
         - 允许ε转移
         - 允许一个状态对同一符号有多个转移
         - 可以有多个接受状态
-    
+
     数学定义:
         NFA = (Q, Σ, δ, q0, F)
         其中 δ: Q × (Σ ∪ {ε}) → P(Q)
-    
+
     示例:
         >>> nfa = NFA()
         >>> # 构建匹配 "a(b|c)*" 的NFA
     """
-    
+
     def __init__(self, name: str = "NFA"):
         super().__init__(name=name, automaton_type=AutomatonType.NFA)
         self._logger = logging.getLogger(f"{__name__}.NFA.{name}")
-    
-    def add_epsilon_transition(
-        self,
-        source: State,
-        target: State
-    ) -> Transition:
+
+    def add_epsilon_transition(self, source: State, target: State) -> Transition:
         """
         添加ε转移
-        
+
         参数:
             source: 起始状态
             target: 目标状态
-        
+
         返回:
             创建的转移
         """
-        return self.add_transition(
-            source=source,
-            symbol=None,
-            target=target,
-            transition_type=TransitionType.EPSILON
-        )
-    
+        return self.add_transition(source=source, symbol=None, target=target, transition_type=TransitionType.EPSILON)
+
     def accepts_string(self, input_string: str) -> bool:
         """
         检查NFA是否接受字符串
-        
+
         使用BFS模拟NFA执行。
-        
+
         参数:
             input_string: 输入字符串
-        
+
         返回:
             如果接受返回True
         """
         if self._initial_state is None:
             return False
-        
+
         # 初始状态集
         current_states = self._epsilon_closure({self._initial_state})
-        
+
         for char in input_string:
             # Move操作
             next_states = self.move(current_states, char)
             # ε闭包
             current_states = self._epsilon_closure(next_states)
-            
+
             if not current_states:
                 return False
-        
+
         # 检查是否有接受状态
         return bool(current_states & self._accepting_states)
-    
+
     def to_dfa(self) -> DFA:
         """
         将NFA转换为等价的DFA
-        
+
         使用子集构造法(Powerset Construction)。
-        
+
         数学原理:
             对于NFA N = (Q, Σ, δ_N, q0, F)
             构造DFA D = (Q', Σ, δ_D, q0', F')
-            
+
             其中:
             - Q' = P(Q) 是Q的幂集
             - q0' = ε-Closure({q0})
             - F' = {S ∈ Q' | S ∩ F ≠ ∅}
             - δ_D(S, a) = ε-Closure(Move(S, a))
-        
+
         返回:
             等价的DFA对象
         """
         dfa = DFA(name=f"{self._name}_to_DFA")
-        
+
         # 初始状态: ε-Closure({q0})
         initial = self._epsilon_closure({self._initial_state})
         initial_state = dfa.add_state(
             name=self._state_set_to_string(initial),
             is_initial=True,
-            is_accepting=bool(initial & self._accepting_states)
+            is_accepting=bool(initial & self._accepting_states),
         )
-        
+
         # 状态队列
-        state_queue: List[Set[State]] = [initial]
-        processed: Set[FrozenSet[State]] = {frozenset(initial)}
-        
+        state_queue: list[set[State]] = [initial]
+        processed: set[frozenset[State]] = {frozenset(initial)}
+
         # 符号集合
         symbols = self._get_alphabet()
-        
+
         while state_queue:
             current_nfa_states = state_queue.pop(0)
-            current_dfa_state = dfa._find_state_by_name(
-                self._state_set_to_string(current_nfa_states)
-            )
-            
+            current_dfa_state = dfa._find_state_by_name(self._state_set_to_string(current_nfa_states))
+
             for symbol in symbols:
                 # 计算下一个状态集
                 move_result = self.move(current_nfa_states, symbol)
                 next_states = self._epsilon_closure(move_result)
-                
+
                 if not next_states:
                     continue
-                
+
                 next_frozen = frozenset(next_states)
-                
+
                 # 检查是否已处理
                 if next_frozen not in processed:
                     processed.add(next_frozen)
                     state_queue.append(next_states)
-                    
+
                     # 添加新状态
                     new_state = dfa.add_state(
                         name=self._state_set_to_string(next_states),
-                        is_accepting=bool(next_states & self._accepting_states)
+                        is_accepting=bool(next_states & self._accepting_states),
                     )
                 else:
-                    new_state = dfa._find_state_by_name(
-                        self._state_set_to_string(next_states)
-                    )
-                
+                    new_state = dfa._find_state_by_name(self._state_set_to_string(next_states))
+
                 # 添加转移
                 if new_state is not None and current_dfa_state is not None:
                     dfa.add_transition(current_dfa_state, symbol, new_state)
-        
+
         return dfa
-    
-    def _get_alphabet(self) -> Set[str]:
+
+    def _get_alphabet(self) -> set[str]:
         """获取所有非ε符号"""
-        symbols: Set[str] = set()
+        symbols: set[str] = set()
         for transitions in self._transitions.values():
             for trans in transitions:
                 if trans.symbol is not None:
                     symbols.add(trans.symbol)
         return symbols
-    
-    def _state_set_to_string(self, states: Set[State]) -> str:
+
+    def _state_set_to_string(self, states: set[State]) -> str:
         """将状态集合转换为字符串标识"""
         names = sorted(s.name for s in states)
         return "{" + ",".join(names) + "}"
@@ -301,16 +275,16 @@ class NFA(FiniteAutomaton):
 class DFA(FiniteAutomaton):
     """
     确定性有限自动机 (DFA)
-    
+
     核心特性:
         - 不允许ε转移 (在实现中仍支持但不使用)
         - 每个状态对每个符号最多一个转移
         - 只有一个初始状态
-    
+
     数学定义:
         DFA = (Q, Σ, δ, q0, F)
         其中 δ: Q × Σ → Q 是完全定义的转移函数
-    
+
     示例:
         >>> dfa = DFA()
         >>> dfa.add_state("q0", is_initial=True)
@@ -318,101 +292,95 @@ class DFA(FiniteAutomaton):
         >>> dfa.add_transition(...)
         >>> dfa.accepts_string("abba")
     """
-    
+
     def __init__(self, name: str = "DFA"):
         super().__init__(name=name, automaton_type=AutomatonType.DFA)
         self._allow_epsilon = False  # DFA不允许ε转移
         self._logger = logging.getLogger(f"{__name__}.DFA.{name}")
-    
+
     def _validate_input(self, symbol: str) -> bool:
         """验证输入符号"""
         if symbol is None:
             return False  # DFA不允许ε转移
         return len(symbol) == 1
-    
+
     def accepts_string(self, input_string: str) -> bool:
         """
         检查DFA是否接受字符串
-        
+
         确定性模拟：从初始状态开始，根据输入转移。
-        
+
         参数:
             input_string: 输入字符串
-        
+
         返回:
             如果接受返回True
         """
         if self._initial_state is None:
             return False
-        
+
         current_state = self._initial_state
-        
+
         for char in input_string:
             # 查找转移
             transition = self._find_transition(current_state, char)
-            
+
             if transition is None:
                 return False
-            
+
             current_state = transition.target
-        
+
         return current_state in self._accepting_states
-    
-    def _find_transition(
-        self,
-        source: State,
-        symbol: str
-    ) -> Optional[Transition]:
+
+    def _find_transition(self, source: State, symbol: str) -> Transition | None:
         """查找确定性转移"""
         for trans in self._transitions.get(source.state_id, set()):
             if trans.symbol == symbol:
                 return trans
         return None
-    
+
     def make_complete(self) -> DFA:
         """
         将DFA转换为完全DFA（添加死状态）
-        
+
         返回:
             新的完全DFA
         """
         complete_dfa = DFA(name=f"{self._name}_complete")
-        
+
         # 复制所有状态
-        state_map: Dict[str, State] = {}
+        state_map: dict[str, State] = {}
         for state in self._states.values():
             new_state = complete_dfa.add_state(
-                name=state.name,
-                is_initial=state.is_initial,
-                is_accepting=state.is_accepting
+                name=state.name, is_initial=state.is_initial, is_accepting=state.is_accepting
             )
             state_map[state.state_id] = new_state
-        
+
         # 添加死状态
         dead_state = complete_dfa.add_state(name="dead", is_accepting=False)
-        
+
         # 复制转移并填充缺失的
         symbols = self._get_alphabet()
-        
+
         for state in self._states.values():
             new_state = state_map[state.state_id]
-            
+
             for symbol in symbols:
                 # 查找现有转移
                 existing = self._find_transition(state, symbol)
-                
+
                 if existing is not None:
                     target = state_map[existing.target.state_id]
                     complete_dfa.add_transition(new_state, symbol, target)
                 else:
                     complete_dfa.add_transition(new_state, symbol, dead_state)
-        
+
         # 死状态对所有符号转移回自身
         for symbol in symbols:
             complete_dfa.add_transition(dead_state, symbol, dead_state)
-        
+
         return complete_dfa
-    
+
     def minimize_hopcroft(self) -> DFA:
         """
         使用Hopcroft算法最小化DFA
@@ -422,67 +390,65 @@ class DFA(FiniteAutomaton):
             2. 对于每个等价类W和符号a，计算R = ∪_{q∈W} δ(q, a)
             3. 如果R被划分，将W分割
             4. 重复直到没有新划分
-            
+
         时间复杂度: O(n log n)
-        
+
         返回:
             最小化的DFA
         """
         # Step 1: 构建初始划分
         accepting = set(self._accepting_states)
         non_accepting = set(s for s in self._states.values() if s not in accepting)
-        
-        partitions: List[Set[State]] = []
+
+        partitions: list[set[State]] = []
         if accepting:
             partitions.append(accepting)
         if non_accepting:
             partitions.append(non_accepting)
-        
+
         if not partitions:
             return DFA(name=f"{self._name}_minimized")
-        
+
         # 获取字母表
         alphabet = self._get_alphabet()
-        
+
         # Step 2: 初始化工作集
         if len(partitions) == 2:
             work_set = set(partitions)
         else:
             work_set = {partitions[-1]} if partitions else set()
-        
+
         # 迭代细化
         changed = True
         while changed and len(partitions) > 1:
             changed = False
-            new_partitions: List[Set[State]] = []
+            new_partitions: list[set[State]] = []
             work_queue = list(work_set)
             work_set = set()
-            
+
             for partition in work_queue:
                 if not partition:
                     continue
-                
+
                 # 为每个符号检查是否可以分割
                 split_done = False
                 for symbol in alphabet:
                     # 构建反向映射
-                    reverse_map: Dict[Tuple[FrozenSet[State], str], Set[State]] = {}
-                    
+                    reverse_map: dict[tuple[frozenset[State], str], set[State]] = {}
+
                     for state in partition:
                         # 找到转移目标所在的分区
                         target_state = self._find_transition(state, symbol)
                         if target_state is not None:
-                            target_partition = self._find_partition(
-                                target_state.target, partitions
-                            )
+                            target_partition = self._find_partition(target_state.target, partitions)
                             key = (target_partition, symbol)
                         else:
                             key = (frozenset(), symbol)
-                        
+
                         if key not in reverse_map:
                             reverse_map[key] = set()
                         reverse_map[key].add(state)
-                    
+
                     # 如果产生了分割
                     if len(reverse_map) > 1:
                         for new_part in reverse_map.values():
@@ -491,37 +457,35 @@ class DFA(FiniteAutomaton):
                         split_done = True
                         changed = True
                         break
-                
+
                 if not split_done:
                     new_partitions.append(partition)
-            
+
             if changed:
                 partitions = new_partitions
-        
+
         # 构建最小化DFA
         minimized_dfa = DFA(name=f"{self._name}_minimized")
-        partition_map: Dict[State, State] = {}
-        
+        partition_map: dict[State, State] = {}
+
         for partition in partitions:
             # 检查是否包含初始状态
             is_initial = any(s.is_initial for s in partition)
             is_accepting = any(s.is_accepting for s in partition)
-            
+
             # 使用分区中第一个状态的名称
             first_state = next(iter(partition))
             new_state = minimized_dfa.add_state(
-                name=f"p{len(partition_map)}",
-                is_initial=is_initial,
-                is_accepting=is_accepting
+                name=f"p{len(partition_map)}", is_initial=is_initial, is_accepting=is_accepting
             )
-            
+
             for orig_state in partition:
                 partition_map[orig_state] = new_state
-        
+
         # 添加转移
         for orig_state in self._states.values():
             new_source = partition_map[orig_state]
-            
+
             for symbol in alphabet:
                 target = self._find_transition(orig_state, symbol)
                 if target is not None:
@@ -530,19 +494,19 @@ class DFA(FiniteAutomaton):
                         minimized_dfa.add_transition(new_source, symbol, new_target)
                     except ValueError:
                         pass  # 跳过重复转移
-        
+
         return minimized_dfa
-    
-    def _find_partition(self, state: State, partitions: List[Set[State]]) -> FrozenSet[State]:
+
+    def _find_partition(self, state: State, partitions: list[set[State]]) -> frozenset[State]:
         """找到状态所在的分区"""
         for partition in partitions:
             if state in partition:
                 return frozenset(partition)
         return frozenset()
-    
-    def _get_alphabet(self) -> Set[str]:
+
+    def _get_alphabet(self) -> set[str]:
         """获取所有非ε符号"""
-        symbols: Set[str] = set()
+        symbols: set[str] = set()
         for transitions in self._transitions.values():
             for trans in transitions:
                 if trans.symbol is not None:
@@ -553,10 +517,10 @@ class DFA(FiniteAutomaton):
 class RegexCompiler:
     """
     正则表达式到有限自动机的编译器
-    
+
     使用Thompson构造法将正则表达式转换为NFA，
     然后可选地转换为DFA。
-    
+
     正则表达式语法:
         - 基本: 'a', 'b', ... (单个字符)
         - 连接: AB (A后跟B)
@@ -567,13 +531,13 @@ class RegexCompiler:
         - 分组: (A) (改变优先级)
         - 字符类: [abc], [a-z], [^abc]
         - 转义: \\d, \\w, \\s, \\n, \\t, \\r, \\\\, \\.
-    
+
     运算符优先级 (从高到低):
         1. 分组 ()
         2. 闭包 * + ?
         3. 连接
         4. 或 |
-    
+
     示例:
         >>> compiler = RegexCompiler()
         >>> nfa = compiler.compile("a(b|c)*")
@@ -582,69 +546,69 @@ class RegexCompiler:
         >>> nfa.accepts_string("ac")
         True
     """
-    
+
     def __init__(self):
         self._logger = logging.getLogger(f"{__name__}.RegexCompiler")
         self._state_counter = 0
-    
+
     def compile(self, regex: str, to_dfa: bool = False) -> FiniteAutomaton:
         """
         将正则表达式编译为有限自动机
-        
+
         参数:
             regex: 正则表达式字符串
             to_dfa: 是否转换为DFA
-        
+
         返回:
             NFA或DFA对象
         """
         # 解析正则表达式为AST
         ast = self._parse_regex(regex)
-        
+
         # 重置状态计数器
         self._state_counter = 0
-        
+
         # 构建NFA
         nfa = self._build_nfa(ast)
-        
+
         if to_dfa:
             return nfa.to_dfa()
-        
+
         return nfa
-    
-    def _parse_regex(self, regex: str) -> 'RegexNode':
+
+    def _parse_regex(self, regex: str) -> RegexNode:
         """
         使用递归下降解析正则表达式
-        
+
         语法:
             expr     -> concat ('|' concat)*
             concat   -> star+ (star)*
             star     -> atom ('*'|'+'|'?')?
             atom     -> '(' expr ')' | charclass | char
-        
+
         参数:
             regex: 正则表达式字符串
-        
+
         返回:
             RegexNode AST根节点
         """
         parser = _RegexParser(regex, self)
         return parser.parse()
-    
-    def _build_nfa(self, node: 'RegexNode') -> NFA:
+
+    def _build_nfa(self, node: RegexNode) -> NFA:
         """
         使用Thompson构造法从AST构建NFA
-        
+
         参数:
             node: RegexNode AST节点
-        
+
         返回:
             构造的NFA
         """
         visitor = _NFABuilder(self)
-        return visitor.visit(node)
-    
-    def create_state(self, name: Optional[str] = None) -> State:
+        return visitor.build(node)
+
+    def create_state(self, name: str | None = None) -> State:
         """创建新状态"""
         if name is None:
             name = f"q{self._state_counter}"
@@ -656,8 +620,10 @@ class RegexCompiler:
 # 正则表达式AST节点
 # ================================================================================
 
+
 class RegexNodeType(Enum):
     """正则表达式AST节点类型"""
+
     CONCAT = auto()
     ALTERNATION = auto()
     STAR = auto()
@@ -671,10 +637,11 @@ class RegexNodeType(Enum):
 @dataclass
 class RegexNode:
     """正则表达式抽象语法树节点"""
+
     node_type: RegexNodeType
-    value: Optional[str] = None
-    children: Tuple[RegexNode, ...] = field(default_factory=tuple)
-    
+    value: str | None = None
+    children: tuple[RegexNode, ...] = field(default_factory=tuple)
+
     def __repr__(self) -> str:
         if self.node_type == RegexNodeType.CHAR:
             return f"Char('{self.value}')"
@@ -697,158 +664,155 @@ class RegexNode:
 
 class _RegexParser:
     """正则表达式递归下降解析器"""
-    
+
     def __init__(self, regex: str, compiler: RegexCompiler):
         self._regex = regex
         self._compiler = compiler
         self._pos = 0
         self._length = len(regex)
-    
+
     def parse(self) -> RegexNode:
         """解析正则表达式"""
         if self._pos >= self._length:
             return RegexNode(RegexNodeType.EPSILON)
-        
+
         result = self._parse_concat()
-        
+
         # 处理或运算符
-        if self._pos < self._length and self._peek() == '|':
+        if self._pos < self._length and self._peek() == "|":
             self._advance()
             right = self._parse_concat()
-            result = RegexNode(
-                RegexNodeType.ALTERNATION,
-                children=(result, right)
-            )
-        
+            result = RegexNode(RegexNodeType.ALTERNATION, children=(result, right))
+
         return result
-    
+
     def _parse_concat(self) -> RegexNode:
         """解析连接表达式"""
         children = []
-        
+
         while self._pos < self._length:
             char = self._peek()
-            if char == '|' or char == ')':
+            if char == "|" or char == ")":
                 break
-            
+
             child = self._parse_star()
             children.append(child)
-        
+
         if not children:
             return RegexNode(RegexNodeType.EPSILON)
         elif len(children) == 1:
             return children[0]
         else:
             return RegexNode(RegexNodeType.CONCAT, children=tuple(children))
-    
+
     def _parse_star(self) -> RegexNode:
         """解析带闭包的表达式"""
         atom = self._parse_atom()
-        
+
         if self._pos < self._length:
             char = self._peek()
-            if char == '*':
+            if char == "*":
                 self._advance()
                 return RegexNode(RegexNodeType.STAR, children=(atom,))
-            elif char == '+':
+            elif char == "+":
                 self._advance()
                 return RegexNode(RegexNodeType.PLUS, children=(atom,))
-            elif char == '?':
+            elif char == "?":
                 self._advance()
                 return RegexNode(RegexNodeType.OPTIONAL, children=(atom,))
-        
+
         return atom
-    
+
     def _parse_atom(self) -> RegexNode:
         """解析原子表达式"""
         if self._pos >= self._length:
             return RegexNode(RegexNodeType.EPSILON)
-        
+
         char = self._peek()
-        
-        if char == '(':
+
+        if char == "(":
             self._advance()
             node = self.parse()
-            if self._pos < self._length and self._peek() == ')':
+            if self._pos < self._length and self._peek() == ")":
                 self._advance()
             return node
-        
-        elif char == '[':
+
+        elif char == "[":
             return self._parse_charclass()
-        
-        elif char == '\\':
+
+        elif char == "\\":
             return self._parse_escape()
-        
-        elif char in '.^$':
+
+        elif char in ".^$":
             # 特殊字符暂不支持完整功能
             self._advance()
             return RegexNode(RegexNodeType.CHAR, value=char)
-        
+
         else:
             self._advance()
             return RegexNode(RegexNodeType.CHAR, value=char)
-    
+
     def _parse_charclass(self) -> RegexNode:
         """解析字符类"""
         self._advance()  # 跳过 '['
-        
+
         negated = False
-        if self._pos < self._length and self._peek() == '^':
+        if self._pos < self._length and self._peek() == "^":
             negated = True
             self._advance()
-        
+
         chars = []
-        while self._pos < self._length and self._peek() != ']':
-            if self._peek() == '\\':
+        while self._pos < self._length and self._peek() != "]":
+            if self._peek() == "\\":
                 escape = self._parse_escape()
                 if escape.value:
                     chars.append(escape.value)
             else:
                 chars.append(self._peek())
                 self._advance()
-        
+
         if self._pos < self._length:
             self._advance()  # 跳过 ']'
-        
-        value = ''.join(chars)
+
+        value = "".join(chars)
         if negated:
-            value = '^' + value
-        
+            value = "^" + value
+
         return RegexNode(RegexNodeType.CHARCLASS, value=value)
-    
+
     def _parse_escape(self) -> RegexNode:
         """解析转义序列"""
         self._advance()  # 跳过 '\\'
-        
+
         if self._pos >= self._length:
-            return RegexNode(RegexNodeType.CHAR, value='\\')
-        
+            return RegexNode(RegexNodeType.CHAR, value="\\")
+
         char = self._peek()
         self._advance()
-        
+
         escape_map = {
-            'd': '0123456789',
-            'D': '^0123456789',
-            'w': 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_',
-            'W': '^ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_',
-            's': ' \t\n\r',
-            'S': '^ \t\n\r',
-            'n': '\n',
-            't': '\t',
-            'r': '\r',
+            "d": "0123456789",
+            "D": "^0123456789",
+            "w": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_",
+            "W": "^ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_",
+            "s": " \t\n\r",
+            "S": "^ \t\n\r",
+            "n": "\n",
+            "t": "\t",
+            "r": "\r",
         }
-        
+
         if char in escape_map:
             return RegexNode(RegexNodeType.CHARCLASS, value=escape_map[char])
         else:
             return RegexNode(RegexNodeType.CHAR, value=char)
-    
+
     def _peek(self) -> str:
         """查看当前字符"""
         if self._pos < self._length:
             return self._regex[self._pos]
-        return ''
-    
+        return ""
+
     def _advance(self) -> None:
         """前进到下一个字符"""
         if self._pos < self._length:
@@ -856,15 +820,15 @@ class _RegexParser:
 
 
 class _NFABuilder:
-    """Thompson NFA构建器"""
-    
+    """Thompson NFA构建器（使用正确的Thompson构造算法）"""
+
     def __init__(self, compiler: RegexCompiler):
         self._compiler = compiler
         self._nfa = NFA(name="compiled")
         self._state_counter = 0
-    
-    def visit(self, node: RegexNode) -> NFA:
-        """访问AST节点构建NFA"""
+
+    def visit(self, node: RegexNode) -> tuple[State, State]:
+        """访问AST节点构建NFA片段，返回 (start_state, accept_state)"""
         if node.node_type == RegexNodeType.EPSILON:
             return self._build_epsilon()
         elif node.node_type == RegexNodeType.CHAR:
@@ -881,112 +845,135 @@ class _NFABuilder:
             return self._build_plus(node.children[0])
         elif node.node_type == RegexNodeType.OPTIONAL:
             return self._build_optional(node.children[0])
-        
+
         return self._build_epsilon()
-    
+
     def _new_state(self, is_accepting: bool = False) -> State:
         """创建新状态"""
         name = f"q{self._state_counter}"
         self._state_counter += 1
         return self._nfa.add_state(name, is_accepting=is_accepting)
-    
-    def _build_epsilon(self) -> NFA:
-        """构建ε-NFA"""
+
+    def build(self, node: RegexNode) -> NFA:
+        """构建完整的NFA"""
+        start, accept = self.visit(node)
+        self._nfa._initial_state = start
+        self._nfa._accepting_states.add(accept)
+        return self._nfa
+
+    def _build_epsilon(self) -> tuple[State, State]:
+        """构建ε-NFA片段"""
         start = self._new_state()
-        end = self._new_state(is_accepting=True)
+        end = self._new_state()
         self._nfa.add_epsilon_transition(start, end)
-        return self._nfa
-    
-    def _build_char(self, char: str) -> NFA:
-        """构建单字符NFA: a"""
+        return (start, end)
+
+    def _build_char(self, char: str) -> tuple[State, State]:
+        """构建单字符NFA片段: a"""
         start = self._new_state()
-        end = self._new_state(is_accepting=True)
+        end = self._new_state()
         self._nfa.add_transition(start, char, end)
-        return self._nfa
-    
-    def _build_charclass(self, chars: str) -> NFA:
-        """构建字符类NFA"""
+        return (start, end)
+
+    def _build_charclass(self, chars: str) -> tuple[State, State]:
+        """构建字符类NFA片段"""
         start = self._new_state()
-        end = self._new_state(is_accepting=True)
-        
+        end = self._new_state()
         for char in chars:
             self._nfa.add_transition(start, char, end)
-        
-        return self._nfa
-    
-    def _build_concat(self, children: Tuple[RegexNode, ...]) -> NFA:
-        """构建连接NFA: AB"""
-        # 重置nfa
-        self._nfa = NFA(name="concat")
-        self._state_counter = 0
-        
+        return (start, end)
+
+    def _build_concat(self, children: tuple[RegexNode, ...]) -> tuple[State, State]:
+        """构建连接NFA片段: AB"""
         if not children:
             return self._build_epsilon()
-        
-        # 构建第一个子表达式
-        self.visit(children[0])
-        
-        return self._nfa
-    
-    def _build_alternation(self, left: RegexNode, right: RegexNode) -> NFA:
-        """构建或NFA: A|B"""
-        # 重置nfa
-        self._nfa = NFA(name="alternation")
-        self._state_counter = 0
-        
+
+        first_start, first_accept = self.visit(children[0])
+        for child in children[1:]:
+            child_start, child_accept = self.visit(child)
+            # 连接: first_accept --ε--> child_start
+            self._nfa.add_epsilon_transition(first_accept, child_start)
+            first_accept = child_accept
+
+        return (first_start, first_accept)
+
+    def _build_alternation(self, left: RegexNode, right: RegexNode) -> tuple[State, State]:
+        """构建或NFA片段: A|B"""
         new_start = self._new_state()
-        new_end = self._new_state(is_accepting=True)
-        
-        # 临时存储
-        old_nfa = self._nfa
-        
-        # 构建左子树
-        self._nfa = NFA(name="left")
-        left_builder = _NFABuilder(self._compiler)
-        left_builder._nfa = self._nfa
-        left_builder._state_counter = self._state_counter
-        
-        # 这个简化版本直接返回
-        return self._nfa
-    
-    def _build_star(self, child: RegexNode) -> NFA:
-        """构建闭包NFA: A*"""
-        # 重置nfa
-        self._nfa = NFA(name="star")
-        self._state_counter = 0
-        
+        new_end = self._new_state()
+
+        left_start, left_accept = self.visit(left)
+        right_start, right_accept = self.visit(right)
+
+        # new_start --ε--> left_start
+        self._nfa.add_epsilon_transition(new_start, left_start)
+        # new_start --ε--> right_start
+        self._nfa.add_epsilon_transition(new_start, right_start)
+        # left_accept --ε--> new_end
+        self._nfa.add_epsilon_transition(left_accept, new_end)
+        # right_accept --ε--> new_end
+        self._nfa.add_epsilon_transition(right_accept, new_end)
+
+        return (new_start, new_end)
+
+    def _build_star(self, child: RegexNode) -> tuple[State, State]:
+        """构建闭包NFA片段: A*"""
         new_start = self._new_state()
-        new_end = self._new_state(is_accepting=True)
-        
-        # 跳过循环
+        new_end = self._new_state()
+
+        child_start, child_accept = self.visit(child)
+
+        # new_start --ε--> child_start
+        self._nfa.add_epsilon_transition(new_start, child_start)
+        # new_start --ε--> new_end (跳过)
         self._nfa.add_epsilon_transition(new_start, new_end)
-        
-        return self._nfa
-    
-    def _build_plus(self, child: RegexNode) -> NFA:
-        """构建正闭包NFA: A+"""
-        # 重置nfa
-        self._nfa = NFA(name="plus")
-        self._state_counter = 0
-        
-        return self._nfa
-    
-    def _build_optional(self, child: RegexNode) -> NFA:
-        """构建可选NFA: A?"""
-        # 重置nfa
-        self._nfa = NFA(name="optional")
-        self._state_counter = 0
-        
-        return self._nfa
+        # child_accept --ε--> child_start (循环)
+        self._nfa.add_epsilon_transition(child_accept, child_start)
+        # child_accept --ε--> new_end
+        self._nfa.add_epsilon_transition(child_accept, new_end)
+
+        return (new_start, new_end)
+
+    def _build_plus(self, child: RegexNode) -> tuple[State, State]:
+        """构建正闭包NFA片段: A+"""
+        new_start = self._new_state()
+        new_end = self._new_state()
+
+        child_start, child_accept = self.visit(child)
+
+        # new_start --ε--> child_start
+        self._nfa.add_epsilon_transition(new_start, child_start)
+        # child_accept --ε--> child_start (循环)
+        self._nfa.add_epsilon_transition(child_accept, child_start)
+        # child_accept --ε--> new_end
+        self._nfa.add_epsilon_transition(child_accept, new_end)
+
+        return (new_start, new_end)
+
+    def _build_optional(self, child: RegexNode) -> tuple[State, State]:
+        """构建可选NFA片段: A?"""
+        new_start = self._new_state()
+        new_end = self._new_state()
+
+        child_start, child_accept = self.visit(child)
+
+        # new_start --ε--> child_start
+        self._nfa.add_epsilon_transition(new_start, child_start)
+        # new_start --ε--> new_end (跳过)
+        self._nfa.add_epsilon_transition(new_start, new_end)
+        # child_accept --ε--> new_end
+        self._nfa.add_epsilon_transition(child_accept, new_end)
+
+        return (new_start, new_end)
 
 
 def regex_to_nfa(pattern: str) -> NFA:
     """
     将正则表达式转换为NFA的便捷函数
-    
+
     参数:
         pattern: 正则表达式字符串
-    
+
     返回:
         Thompson NFA
     """
@@ -997,10 +984,10 @@ def regex_to_nfa(pattern: str) -> NFA:
 def regex_to_dfa(pattern: str) -> DFA:
     """
     将正则表达式转换为最小化DFA的便捷函数
-    
+
     参数:
         pattern: 正则表达式字符串
-    
+
     返回:
         DFA
     """

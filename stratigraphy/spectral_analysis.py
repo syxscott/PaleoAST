@@ -5,7 +5,8 @@
 Spectral Analysis Module for PaleoAST
 
 This module implements spectral analysis using the Lomb-Scargle periodogram
-for unevenly sampled time series commonly found in geological data.
+for unevenly sampled time series commonly found in geological data, and
+Wavelet Continuous Transform (CWT) for time-frequency analysis.
 
 Mathematical Foundation:
 
@@ -18,7 +19,14 @@ where τ is the time offset that orthogonalizes the sine and cosine terms:
 
     τ = (1/2ω) × arctan( Σ sin 2ωt_j / Σ cos 2ωt_j )
 
-This formulation handles uneven sampling by finding optimal time shifts.
+Wavelet CWT:
+
+    W(a, b) = (1/√a) × ∫ x(t) × ψ*((t-b)/a) dt
+
+where:
+    ψ = mother wavelet function
+    a = scale parameter
+    b = translation parameter
 
 Author: PaleoAST Development Team
 Version: 1.0.0
@@ -27,15 +35,58 @@ Version: 1.0.0
 import logging
 import threading
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from scipy.signal import cwt, morlet2
 
 from config.i18n import _
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class WaveletResult:
+    """
+    Container for wavelet CWT analysis results.
+
+    Attributes:
+        time: Time axis
+        scales: Wavelet scales used
+        frequencies: Corresponding frequencies
+        power: Wavelet power spectrum (time × scale)
+        coi: Cone of Influence mask
+        wavelet: Wavelet name used
+        peak_scale: Scale with maximum power
+        peak_frequency: Corresponding frequency
+    """
+
+    time: npt.NDArray
+    scales: npt.NDArray
+    frequencies: npt.NDArray
+    power: npt.NDArray
+    coi: npt.NDArray | None
+    wavelet: str
+    peak_scale: float | None
+    peak_frequency: float | None
+
+    def summary(self) -> str:
+        """Generate summary text."""
+        lines = [
+            _("Wavelet CWT Analysis Results"),
+            "=" * 50,
+            _("Wavelet: {0}").format(self.wavelet),
+            _("Time points: {0}").format(len(self.time)),
+            _("Scales: {0}").format(len(self.scales)),
+        ]
+
+        if self.peak_frequency is not None:
+            lines.append(_("Peak frequency: {0}").format(f"{self.peak_frequency:.4f}"))
+
+        return "\n".join(lines)
 
 
 @dataclass
@@ -297,8 +348,101 @@ class SpectralAnalyzer:
         logger.info(f"Found {len(peaks)} significant peaks")
         return peaks
 
+    def wavelet_transform(
+        self,
+        time: npt.NDArray,
+        values: npt.NDArray,
+        wavelet: str = "morlet",
+        scales: npt.NDArray | None = None,
+        dt: float = 1.0,
+    ) -> WaveletResult:
+        """
+        Perform Continuous Wavelet Transform (CWT).
+
+        Parameters:
+            time: Time points
+            values: Signal values
+            wavelet: Wavelet type ('morlet', 'ricker', 'mexican_hat')
+            scales: Wavelet scales. If None, auto-calculated.
+            dt: Time step between samples
+
+        Returns:
+            WaveletResult: Wavelet analysis results
+        """
+        logger.info(f"Starting wavelet CWT: {len(values)} points, wavelet={wavelet}")
+
+        # Validate input
+        time = validate_data_array(time, allow_nan=False, name="time").flatten()
+        values = validate_data_array(values, allow_nan=False, name="values").flatten()
+
+        if len(time) != len(values):
+            raise ComputationError("Time and values must have same length")
+
+        # Auto-calculate scales if not provided
+        if scales is None:
+            # Use scales from 2 to len/2 (dyadic scales)
+            n = len(values)
+            scales = np.arange(2, min(n // 2, 100))
+
+        # Compute CWT using scipy
+        if wavelet == "morlet":
+            # Morlet wavelet
+            cwt_matrix = cwt(values, morlet2, scales)
+            wavelet_name = "Morlet"
+        elif wavelet in ("ricker", "mexican_hat"):
+            from scipy.signal import mexican_hat
+            cwt_matrix = cwt(values, mexican_hat, scales)
+            wavelet_name = "Mexican Hat"
+        else:
+            # Default to Morlet
+            cwt_matrix = cwt(values, morlet2, scales)
+            wavelet_name = "Morlet"
+
+        # Power spectrum
+        power = np.abs(cwt_matrix) ** 2
+
+        # Convert scales to frequencies
+        # For Morlet: freq = (center_freq * sampling_rate) / scale
+        # Center frequency for Morlet is ~0.8125
+        sampling_rate = 1.0 / dt if dt > 0 else 1.0
+        center_freq = 0.8125
+        frequencies = (center_freq * sampling_rate) / scales
+
+        # Find peak
+        peak_idx = np.unravel_index(np.argmax(power), power.shape)
+        peak_scale = scales[peak_idx[0]]
+        peak_frequency = frequencies[peak_idx[0]]
+
+        # Cone of Influence (COI) - regions where edge effects are significant
+        # COI = scale * sqrt(2) in sample units
+        coi = np.zeros_like(values, dtype=bool)
+        for i in range(len(values)):
+            # Time from edge
+            t_from_edge = min(i, len(values) - 1 - i)
+            # Maximum scale that is reliable at this position
+            max_reliable_scale = t_from_edge / (center_freq * np.sqrt(2))
+            coi[i] = np.any(scales > max_reliable_scale) if t_from_edge > 0 else False
+
+        result = WaveletResult(
+            time=time,
+            scales=scales,
+            frequencies=frequencies,
+            power=power,
+            coi=coi if np.any(coi) else None,
+            wavelet=wavelet_name,
+            peak_scale=peak_scale,
+            peak_frequency=peak_frequency,
+        )
+
+        self._last_result = result
+        logger.info(
+            f"Wavelet CWT complete: peak_frequency={peak_frequency:.4f}, "
+            f"peak_scale={peak_scale:.2f}"
+        )
+        return result
+
     @property
-    def last_result(self) -> SpectralResult | None:
-        """Get the last spectral result."""
+    def last_result(self) -> SpectralResult | WaveletResult | None:
+        """Get the last spectral or wavelet result."""
         with self._lock:
             return self._last_result

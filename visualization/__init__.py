@@ -15,12 +15,12 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
-from .pca_plot import PCAPlotter
 from .diversity_plot import DiversityPlotter
+from .pca_plot import PCAPlotter
 from .spectral_plot import SpectralPlotter
 
 __all__ = [
-    'PCAPlotter',
-    'DiversityPlotter',
-    'SpectralPlotter',
+    "DiversityPlotter",
+    "PCAPlotter",
+    "SpectralPlotter",
 ]

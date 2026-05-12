@@ -248,7 +248,10 @@ class CohortSurvivorshipAnalysis:
                     if p > 0:
                         origination_rates[i] = -np.log(p) / dt
                     # μ = -ln(O) / Δt
-                    extinction_rates[i] = -np.log(1 - p) / dt
+                    if p < 1:
+                        extinction_rates[i] = -np.log(1 - p) / dt
+                    else:
+                        extinction_rates[i] = 0.0
             else:
                 survival_rates[i] = np.nan
                 extinction_probs[i] = np.nan

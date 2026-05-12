@@ -201,10 +201,16 @@ class NNIOperation(TreeOperation):
             # Swap a2 with b1: node1 gets {a1, b1}, node2 gets {a2, b2}
             node1.children = [a1, b1]
             node2.children = [a2, b2]
+            # Update parent references for swapped children
+            b1.parent = node1
+            a2.parent = node2
         else:
             # Swap a1 with b2: node1 gets {a1, b2}, node2 gets {a2, b1}
             node1.children = [a1, b2]
             node2.children = [a2, b1]
+            # Update parent references for swapped children
+            b2.parent = node1
+            a1.parent = node2
 
         return PhyloTree(new_root)
 

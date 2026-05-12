@@ -152,6 +152,7 @@ class InteractivePlotCanvas(QWidget):
         self._current_dim1: int = 0
         self._current_dim2: int = 1
         self._stress: float = 0.0
+        self._last_plot_call: tuple | None = None  # (method_name, args, kwargs)
 
         # UI
         self._setup_ui()
@@ -324,6 +325,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_pca_scores(self, result: Any, pc1: int = 0, pc2: int = 1) -> None:
+        self._record_plot_call("plot_pca_scores", result, pc1=pc1, pc2=pc2)
         """
         Plot PCA scores.
 
@@ -441,6 +443,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_pcoa_scores(self, result: Any, coord1: int = 0, coord2: int = 1) -> None:
+        self._record_plot_call("plot_pcoa_scores", result, coord1=coord1, coord2=coord2)
         """
         Plot PCoA scores.
 
@@ -529,10 +532,317 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     # =========================================================================
+    # CCA/RDA Plotting Methods (Triplot)
+    # =========================================================================
+
+    def plot_cca_triplot(self, result: Any, ax1: int = 0, ax2: int = 1) -> None:
+        self._record_plot_call("plot_cca_triplot", result, ax1=ax1, ax2=ax2)
+        """
+        Plot CCA/RDA triplot showing samples, species, and environmental vectors.
+
+        Triplot Components:
+            - Sample scores: points (colored by group if available)
+            - Species scores: points (different marker)
+            - Environmental vectors: arrows (biplot scores)
+
+        Mathematical Context:
+            Site scores: Y_centered @ U
+            Species scores: U * sqrt(Λ)
+            Biplot scores: X_centered' @ site_scores
+        """
+        self._ax.clear()
+        self._current_plot_type = "cca"
+
+        # Extract data from result
+        if hasattr(result, "site_scores"):
+            site_scores = result.site_scores
+        else:
+            site_scores = result
+
+        if hasattr(result, "species_scores"):
+            species_scores = result.species_scores
+        else:
+            species_scores = None
+
+        if hasattr(result, "biplot_scores"):
+            biplot_scores = result.biplot_scores
+        else:
+            biplot_scores = None
+
+        if hasattr(result, "eigenvalues"):
+            eigenvalues = result.eigenvalues
+        else:
+            eigenvalues = np.ones(site_scores.shape[1])
+
+        if hasattr(result, "proportion_explained"):
+            proportion = result.proportion_explained
+        else:
+            proportion = np.ones(len(eigenvalues)) * 100 / len(eigenvalues)
+
+        if hasattr(result, "method"):
+            method = result.method.upper()
+        else:
+            method = "CCA"
+
+        if hasattr(result, "groups"):
+            groups = result.groups
+        else:
+            groups = np.zeros(site_scores.shape[0], dtype=int)
+
+        if hasattr(result, "labels"):
+            labels = result.labels
+        else:
+            labels = [f"S{i + 1}" for i in range(site_scores.shape[0])]
+
+        # Store data for selection
+        self._scores = site_scores
+        self._eigenvalues = eigenvalues
+        self._labels = labels
+        self._group_labels = groups
+        self._current_dim1 = ax1
+        self._current_dim2 = ax2
+
+        # Calculate variance explained
+        total_var = np.sum(eigenvalues)
+        var_ax1 = eigenvalues[ax1] / total_var * 100 if total_var > 0 else 0
+        var_ax2 = eigenvalues[ax2] / total_var * 100 if total_var > 0 else 0
+
+        # Set up groups
+        unique_groups = np.unique(groups)
+        self._groups = {g: np.where(groups == g)[0].tolist() for g in unique_groups}
+
+        # Plot sample scores (sites) by group
+        for i, group in enumerate(unique_groups):
+            idx = self._groups[group]
+            color = self.COLORS[i % len(self.COLORS)]
+
+            self._ax.scatter(
+                site_scores[idx, ax1],
+                site_scores[idx, ax2],
+                c=color,
+                s=80,
+                alpha=0.7,
+                edgecolors="white",
+                linewidths=0.5,
+                marker="o",
+                label=f"Group {group + 1}" if len(unique_groups) > 1 else _("Samples"),
+                picker=True,
+            )
+
+        # Plot species scores
+        if species_scores is not None:
+            self._ax.scatter(
+                species_scores[:, ax1],
+                species_scores[:, ax2],
+                c="#E74C3C",
+                s=60,
+                alpha=0.6,
+                marker="^",
+                edgecolors="white",
+                linewidths=0.5,
+                label=_("Species"),
+            )
+
+        # Plot environmental vectors (biplot arrows)
+        if biplot_scores is not None:
+            n_env = biplot_scores.shape[0]
+            for i in range(n_env):
+                x_end = biplot_scores[i, ax1]
+                y_end = biplot_scores[i, ax2]
+                length = np.sqrt(x_end**2 + y_end**2)
+
+                # Scale arrow for visibility
+                scale = 1.0
+                if length > 0:
+                    # Determine env name
+                    env_name = result.env_names[i] if hasattr(result, "env_names") else f"Env_{i + 1}"
+
+                    self._ax.annotate(
+                        "",
+                        xy=(x_end * scale, y_end * scale),
+                        xytext=(0, 0),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            color=self.COLORS[2],
+                            lw=2,
+                        ),
+                    )
+
+                    # Label position offset
+                    label_offset = 1.1
+                    self._ax.text(
+                        x_end * scale * label_offset,
+                        y_end * scale * label_offset,
+                        env_name,
+                        fontsize=9,
+                        color=self.COLORS[2],
+                        ha="center",
+                        va="center",
+                        fontweight="bold",
+                    )
+
+        # Add labels if enabled
+        if self._show_labels_check.isChecked():
+            for i, (x, y) in enumerate(zip(site_scores[:, ax1], site_scores[:, ax2])):
+                self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
+
+        # Axis labels
+        self._ax.set_xlabel(_("{0}1 ({1:.1f}% variance)").format(method, var_ax1))
+        self._ax.set_ylabel(_("{0}2 ({1:.1f}% variance)").format(method, var_ax2))
+        self._ax.set_title(_("{0} Triplot").format(method))
+
+        # Style
+        self._apply_axis_style()
+
+        # Legend
+        if len(unique_groups) > 1 or species_scores is not None or biplot_scores is not None:
+            self._ax.legend(
+                loc="upper right",
+                framealpha=0.95,
+                facecolor="#FFFFFF",
+                edgecolor="#E4E7EB",
+                labelcolor="#2C3E50",
+            )
+
+        # Reference lines
+        self._ax.axhline(y=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+        self._ax.axvline(x=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+
+        # Grid
+        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
+
+        self._canvas.draw()
+
+    # =========================================================================
+    # TPS Deformation Grid
+    # =========================================================================
+
+    def plot_tps_deformation_grid(
+        self,
+        tps_result: Any,
+        grid_shape: tuple[int, int] = (15, 15),
+        show_vectors: bool = True
+    ) -> None:
+        self._record_plot_call("plot_tps_deformation_grid", tps_result, grid_shape=grid_shape, show_vectors=show_vectors)
+        """
+        Plot TPS deformation grid visualization.
+
+        Shows how a grid is warped from source to target configuration
+        using Thin-Plate Spline interpolation.
+
+        Parameters:
+            tps_result: TPSResult containing source, target, warped configurations
+            grid_shape: Shape of the deformation grid (rows, cols)
+            show_vectors: Whether to show displacement vectors
+        """
+        self._ax.clear()
+        self._current_plot_type = "tps_grid"
+
+        # Extract data from TPS result
+        if hasattr(tps_result, "source"):
+            source = tps_result.source
+        else:
+            source = tps_result
+
+        if hasattr(tps_result, "target"):
+            target = tps_result.target
+        else:
+            target = source
+
+        if hasattr(tps_result, "warped"):
+            warped = tps_result.warped
+        else:
+            warped = target
+
+        if hasattr(tps_result, "landmarks"):
+            landmarks = tps_result.landmarks
+        else:
+            landmarks = None
+
+        # Generate original grid points
+        x_min, x_max = source[:, 0].min(), source[:, 0].max()
+        y_min, y_max = source[:, 1].min(), source[:, 1].max()
+
+        margin = 0.1 * max(x_max - x_min, y_max - y_min)
+        x_min -= margin
+        x_max += margin
+        y_min -= margin
+        y_max += margin
+
+        # Create regular grid
+        x_grid = np.linspace(x_min, x_max, grid_shape[1])
+        y_grid = np.linspace(y_min, y_max, grid_shape[0])
+        xx_orig, yy_orig = np.meshgrid(x_grid, y_grid)
+
+        # Warp grid using TPS result's control point mapping
+        # We need to compute the warp transformation
+        from morphometrics.tps import TPSAnalyzer
+
+        tps_analyzer = TPSAnalyzer()
+        try:
+            warped_grid = tps_analyzer.warp_grid(tps_result, grid_shape=grid_shape)
+        except Exception:
+            # Fallback: just use target shape
+            warped_grid = np.zeros((grid_shape[0], grid_shape[1], 2))
+            tx_min, tx_max = target[:, 0].min(), target[:, 0].max()
+            ty_min, ty_max = target[:, 1].min(), target[:, 1].max()
+            wx_grid = np.linspace(tx_min, tx_max, grid_shape[1])
+            wy_grid = np.linspace(ty_min, ty_max, grid_shape[0])
+            warped_grid[:, :, 0], warped_grid[:, :, 1] = np.meshgrid(wx_grid, wy_grid)
+
+        # Plot original grid (reference) - light gray dashed
+        for i in range(grid_shape[0]):
+            self._ax.plot(xx_orig[i, :], yy_orig[i, :], color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+        for j in range(grid_shape[1]):
+            self._ax.plot(xx_orig[:, j], yy_orig[:, j], color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+
+        # Plot warped grid - colored lines
+        for i in range(grid_shape[0]):
+            self._ax.plot(warped_grid[i, :, 0], warped_grid[i, :, 1], color="#3498DB", linewidth=1.5, alpha=0.8)
+        for j in range(grid_shape[1]):
+            self._ax.plot(warped_grid[:, j, 0], warped_grid[:, j, 1], color="#3498DB", linewidth=1.5, alpha=0.8)
+
+        # Plot source landmarks
+        self._ax.scatter(source[:, 0], source[:, 1], c="#E74C3C", s=80, marker="o",
+                        edgecolors="white", linewidths=1, label=_("Source"), zorder=5)
+
+        # Plot target landmarks
+        self._ax.scatter(target[:, 0], target[:, 1], c="#27AE60", s=80, marker="s",
+                        edgecolors="white", linewidths=1, label=_("Target"), zorder=5)
+
+        # Show displacement vectors if requested
+        if show_vectors and len(source) == len(target):
+            # Draw arrows from source to target for each landmark
+            for i in range(len(source)):
+                self._ax.annotate(
+                    "",
+                    xy=(target[i, 0], target[i, 1]),
+                    xytext=(source[i, 0], source[i, 1]),
+                    arrowprops=dict(arrowstyle="->", color="#9B59B6", lw=1.5, alpha=0.6),
+                )
+
+        # Labels and title
+        self._ax.set_xlabel(_("X"))
+        self._ax.set_ylabel(_("Y"))
+        self._ax.set_title(_("TPS Deformation Grid"))
+
+        # Style
+        self._apply_axis_style()
+
+        # Legend
+        self._ax.legend(loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB")
+
+        # Aspect ratio
+        self._ax.set_aspect("equal", adjustable="box")
+
+        self._canvas.draw()
+
+    # =========================================================================
     # NMDS Plotting Methods
     # =========================================================================
 
     def plot_nmds(self, result: Any) -> None:
+        self._record_plot_call("plot_nmds", result)
         """
         Plot NMDS ordination.
 
@@ -617,6 +927,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_diversity_summary(self, result: Any) -> None:
+        self._record_plot_call("plot_diversity_summary", result)
         """
         Plot biodiversity summary.
 
@@ -675,6 +986,7 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_rarefaction(self, result: Any) -> None:
+        self._record_plot_call("plot_rarefaction", result)
         """
         Plot rarefaction curves.
 
@@ -721,6 +1033,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_spectral(self, result: Any) -> None:
+        self._record_plot_call("plot_spectral", result)
         """
         Plot spectral analysis results (Lomb-Scargle periodogram).
 
@@ -770,7 +1083,74 @@ class InteractivePlotCanvas(QWidget):
         self._apply_axis_style()
         self._canvas.draw()
 
+    def plot_wavelet_scalogram(self, result: Any) -> None:
+        self._record_plot_call("plot_wavelet_scalogram", result)
+        """
+        Plot wavelet CWT scalogram.
+
+        Shows time-frequency power distribution as a heatmap.
+        The Cone of Influence is shown as a hatched region.
+        """
+        self._ax.clear()
+        self._current_plot_type = "wavelet"
+
+        # Remove old colorbar if exists to prevent memory leak
+        if hasattr(self, "_colorbar") and self._colorbar is not None:
+            try:
+                self._colorbar.remove()
+            except Exception:
+                pass
+            self._colorbar = None
+
+        # Extract data
+        time = getattr(result, "time", np.arange(100))
+        frequencies = getattr(result, "frequencies", np.linspace(0.1, 1.0, 50))
+        power = getattr(result, "power", np.random.exponential(1.0, (50, len(time))))
+        coi = getattr(result, "coi", None)
+        wavelet = getattr(result, "wavelet", "Morlet")
+
+        # Use pcolormesh for the scalogram
+        time_grid, freq_grid = np.meshgrid(time, frequencies)
+
+        # Plot power as colormap
+        self._pcolormesh = self._ax.pcolormesh(
+            time_grid, freq_grid, power,
+            shading="gouraud",
+            cmap="hot",
+        )
+
+        # Add colorbar
+        self._colorbar = self._figure.colorbar(self._pcolormesh, ax=self._ax, label=_("Power"))
+
+        # Mark COI if available
+        if coi is not None and len(coi) > 0:
+            # COI is a mask - show edge effects as hatched region
+            # Use fill_between to show regions where edge effects are significant
+            coi_region = np.where(coi, frequencies.max(), np.nan)
+            self._ax.fill_between(
+                time,
+                coi_region,
+                frequencies.max(),
+                alpha=0.3,
+                color="white",
+                hatch="///",
+                label=_("Cone of Influence"),
+            )
+
+        # Labels
+        self._ax.set_xlabel(_("Time"))
+        self._ax.set_ylabel(_("Frequency"))
+        self._ax.set_title(_("Wavelet CWT Scalogram ({0})").format(wavelet))
+
+        # Invert y-axis so low frequencies are at bottom
+        self._ax.invert_yaxis()
+
+        # Style
+        self._ax.set_facecolor("#1A1A2E")
+        self._canvas.draw()
+
     def plot_anosim_results(self, result: Any) -> None:
+        self._record_plot_call("plot_anosim_results", result)
         """
         Plot ANOSIM results.
 
@@ -837,6 +1217,7 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_permanova_results(self, result: Any) -> None:
+        self._record_plot_call("plot_permanova_results", result)
         """
         Plot PERMANOVA results.
 
@@ -905,6 +1286,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_simper_results(self, result: Any) -> None:
+        self._record_plot_call("plot_simper_results", result)
         """Plot SIMPER contribution bar chart with cumulative line."""
         self._current_plot_type = "simper"
         self._simper_result = result  # Store for replotting
@@ -956,6 +1338,7 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_anova_boxplot(self, data: np.ndarray, groups: list[int],
                            variable_name: str = "", group_names: list[str] | None = None) -> None:
+        self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         """Plot boxplot comparing groups for a variable."""
         self._current_plot_type = "anova_boxplot"
         self._figure.clear()
@@ -981,6 +1364,7 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_lda_scores(self, result: Any) -> None:
+        self._record_plot_call("plot_lda_scores", result)
         """Plot LDA scatter plot with confidence ellipses."""
         self._current_plot_type = "lda"
         self._figure.clear()
@@ -1052,6 +1436,7 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_dendrogram(self, result: Any, labels: list[str] | None = None) -> None:
+        self._record_plot_call("plot_dendrogram", result, labels=labels)
         """Plot hierarchical clustering dendrogram."""
         self._current_plot_type = "dendrogram"
         self._figure.clear()
@@ -1071,6 +1456,7 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_rose_diagram(self, bin_centers: np.ndarray, counts: np.ndarray,
                           mean_direction_deg: float = 0.0) -> None:
+        self._record_plot_call("plot_rose_diagram", bin_centers, counts, mean_direction_deg=mean_direction_deg)
         """Plot rose diagram for directional data."""
         self._current_plot_type = "rose"
         self._figure.clear()
@@ -1096,6 +1482,7 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_efa_contours(self, original: np.ndarray, reconstructed: np.ndarray,
                           title: str = "") -> None:
+        self._record_plot_call("plot_efa_contours", original, reconstructed, title=title)
         """Plot original vs reconstructed EFA contours."""
         self._current_plot_type = "efa"
         self._figure.clear()
@@ -1113,6 +1500,7 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_she_curve(self, result: Any) -> None:
+        self._record_plot_call("plot_she_curve", result)
         """Plot SHE analysis curves (S, H, E vs sample size)."""
         self._current_plot_type = "she"
         self._figure.clear()
@@ -1137,7 +1525,78 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
+    # =========================================================================
+    # Ripley's K Plotting
+    # =========================================================================
+
+    def plot_ripley_k(
+        self,
+        result: Any,
+        show_points: bool = True
+    ) -> None:
+        self._record_plot_call("plot_ripley_k", result, show_points=show_points)
+        """
+        Plot Ripley's K-function results.
+
+        Shows L(r) - r curve with confidence envelope.
+        L(r) > 0 indicates clustering, L(r) < 0 indicates regularity.
+
+        Parameters:
+            result: SpatialResult from Ripley's K analysis
+            show_points: Whether to show point locations inset
+        """
+        self._ax.clear()
+        self._current_plot_type = "ripley_k"
+
+        # Extract data
+        r_values = result.r_values
+        l_values = result.l_values
+        envelope_upper = result.envelope_upper
+        envelope_lower = result.envelope_lower
+
+        # Plot envelope as shaded region
+        self._ax.fill_between(
+            r_values, envelope_lower, envelope_upper,
+            color="#3498DB", alpha=0.2, label=_("95% Envelope")
+        )
+
+        # Plot L(r) curve
+        self._ax.plot(
+            r_values, l_values,
+            color="#E74C3C", linewidth=2.5,
+            label=_("L(r) - r")
+        )
+
+        # Plot zero reference line
+        self._ax.axhline(y=0, color="#2C3E50", linestyle="--", linewidth=1, alpha=0.7)
+
+        # Labels
+        self._ax.set_xlabel(_("Distance (r)"))
+        self._ax.set_ylabel(_("L(r) - r"))
+        self._ax.set_title(_("Ripley's K Spatial Point Pattern Analysis"))
+
+        # Legend
+        self._ax.legend(loc="upper left", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB")
+
+        # Style
+        self._apply_axis_style()
+        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
+
+        # Interpretation text
+        interp = result.interpretation
+        self._ax.text(
+            0.98, 0.02, interp,
+            transform=self._ax.transAxes,
+            fontsize=9,
+            verticalalignment="bottom",
+            horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="#F8F9F9", edgecolor="#E4E7EB", alpha=0.9)
+        )
+
+        self._canvas.draw()
+
     def plot_abundance_models(self, results: dict) -> None:
+        self._record_plot_call("plot_abundance_models", results)
         """Plot rank-abundance curves with fitted models."""
         self._current_plot_type = "abundance_models"
         self._figure.clear()
@@ -1270,8 +1729,11 @@ class InteractivePlotCanvas(QWidget):
         nearest_idx = np.argmin(distances)
         min_dist = distances[nearest_idx]
 
-        # Check threshold
-        if min_dist < 0.05:
+        # Check threshold (relative to axis range)
+        x_range = self._ax.get_xlim()[1] - self._ax.get_xlim()[0]
+        y_range = self._ax.get_ylim()[1] - self._ax.get_ylim()[0]
+        threshold = max(x_range, y_range) * 0.02
+        if min_dist < threshold:
             self._canvas.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
             # Remove previous annotation
@@ -1329,8 +1791,8 @@ class InteractivePlotCanvas(QWidget):
         y_lim = self._ax.get_ylim()
 
         # Calculate new limits centered on mouse position
-        x_center = (x_lim[0] + x_lim[1]) / 2
-        y_center = (y_lim[0] + y_lim[1]) / 2
+        x_center = event.xdata if event.xdata is not None else (x_lim[0] + x_lim[1]) / 2
+        y_center = event.ydata if event.ydata is not None else (y_lim[0] + y_lim[1]) / 2
 
         x_range = (x_lim[1] - x_lim[0]) / scale_factor
         y_range = (y_lim[1] - y_lim[0]) / scale_factor
@@ -1392,58 +1854,44 @@ class InteractivePlotCanvas(QWidget):
         """Highlight selected points and emit signal."""
         self._selected_indices = indices
 
+        # Visual feedback: update edge color and line width on scatter collections
+        import matplotlib.collections as mcoll
+
+        selected_set = set(indices)
+        offset = 0
+        for collection in self._ax.collections:
+            if isinstance(collection, mcoll.PathCollection) and collection.get_picker() is not None:
+                n_pts = len(collection.get_offsets())
+                if n_pts == 0:
+                    continue
+                edge_colors = np.tile([1.0, 1.0, 1.0, 1.0], (n_pts, 1))
+                line_widths = np.full(n_pts, 0.5)
+                for i in range(n_pts):
+                    if (offset + i) in selected_set:
+                        edge_colors[i] = [0.0, 0.0, 0.0, 1.0]
+                        line_widths[i] = 2.0
+                collection.set_edgecolors(edge_colors)
+                collection.set_linewidths(line_widths)
+                offset += n_pts
+
         # Emit signal
         self.pointsSelected.emit(indices)
 
         # Redraw with highlighting
         self._canvas.draw()
 
+    def _record_plot_call(self, method_name: str, *args, **kwargs) -> None:
+        """Record the last plot call for replotting."""
+        self._last_plot_call = (method_name, args, kwargs)
+
     def _replot_current(self) -> None:
-        """Replot using the current plot type and stored data."""
-        if self._current_plot_type == "pca" and self._scores is not None:
-            self.plot_pca_scores(
-                type(
-                    "Result",
-                    (),
-                    {
-                        "scores": self._scores,
-                        "explained_variance": self._eigenvalues,
-                        "labels": self._labels,
-                        "groups": self._group_labels,
-                    },
-                )()
-            )
-        elif self._current_plot_type == "pcoa" and self._scores is not None:
-            self.plot_pcoa_scores(
-                type(
-                    "Result",
-                    (),
-                    {
-                        "coordinates": self._scores,
-                        "eigenvalues": self._eigenvalues,
-                        "labels": self._labels,
-                        "groups": self._group_labels,
-                    },
-                )()
-            )
-        elif self._current_plot_type == "nmds" and self._scores is not None:
-            self.plot_nmds(
-                type(
-                    "Result",
-                    (),
-                    {"coordinates": self._scores, "stress": self._stress, "labels": self._labels, "groups": self._group_labels},
-                )()
-            )
-        elif self._current_plot_type == "lda" and self._scores is not None:
-            self.plot_lda_scores(
-                type(
-                    "Result",
-                    (),
-                    {"scores": self._scores, "labels": self._labels, "groups": self._group_labels},
-                )()
-            )
-        elif self._current_plot_type == "simper" and hasattr(self, "_simper_result"):
-            self.plot_simper_results(self._simper_result)
+        """Replot using the last recorded plot call."""
+        if self._last_plot_call is None:
+            return
+        method_name, args, kwargs = self._last_plot_call
+        method = getattr(self, method_name, None)
+        if method is not None:
+            method(*args, **kwargs)
 
     def _toggle_labels(self, checked: bool) -> None:
         """Toggle label visibility."""

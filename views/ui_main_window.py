@@ -68,6 +68,8 @@ from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from models.state_manager import get_state_manager
 from views.ui_dialogs import (
+    BiostratigraphyDialog,
+    CCADialog,
     ClusteringDialog,
     CONISSDialog,
     DirectionalDialog,
@@ -81,7 +83,10 @@ from views.ui_dialogs import (
     PCoADialog,
     RarefactionDialog,
     SimperDialog,
+    SpatialRipleyKDialog,
+    TPSGridDialog,
     UnivariateDialog,
+    WaveletDialog,
 )
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_plot_canvas import InteractivePlotCanvas
@@ -930,9 +935,9 @@ class MainWindow(QMainWindow):
 
         # Edit operations group
         edit_group = home_tab.addGroup(_("Edit"))
-        edit_group.addButton("undo", _("Undo"), _("Undo last action (Ctrl+Z)"))
-        edit_group.addButton("redo", _("Redo"), _("Redo action (Ctrl+Y)"))
-        edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
+        self._btn_undo = edit_group.addButton("undo", _("Undo"), _("Undo last action (Ctrl+Z)"))
+        self._btn_redo = edit_group.addButton("redo", _("Redo"), _("Redo action (Ctrl+Y)"))
+        self._btn_transpose = edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
 
         # Data transformations group
         transform_group = home_tab.addGroup(_("Transform"))
@@ -945,7 +950,7 @@ class MainWindow(QMainWindow):
 
         # View group
         view_group = home_tab.addGroup(_("View"))
-        view_group.addButton("settings", _("Preferences"), _("Application settings"))
+        self._btn_preferences = view_group.addButton("settings", _("Preferences"), _("Application settings"))
 
         # Analysis tab
         analysis_tab = self._ribbon.addTab(_("Analysis"))
@@ -956,6 +961,7 @@ class MainWindow(QMainWindow):
         self._btn_pcoa = multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
         self._btn_nmds = multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
         self._btn_lda = multivar_group.addButton("chart", "LDA", _("Linear Discriminant Analysis"))
+        self._btn_cca = multivar_group.addButton("chart", "CCA", _("Canonical Correspondence Analysis"))
 
         # Univariate group
         univar_group = analysis_tab.addGroup(_("Univariate"))
@@ -977,10 +983,18 @@ class MainWindow(QMainWindow):
         morpho_tab = self._ribbon.addTab(_("Morphometrics"))
 
         morpho_group = morpho_tab.addGroup(_("Landmarks"))
-        morpho_group.addButton("morphometrics", "GPA", _("Generalized Procrustes Analysis"))
+        self._btn_gpa = morpho_group.addButton("morphometrics", "GPA", _("Generalized Procrustes Analysis"))
 
         efa_group = morpho_tab.addGroup(_("Outline"))
         self._btn_efa = efa_group.addButton("morphometrics", "EFA", _("Elliptic Fourier Analysis"))
+
+        tps_group = morpho_tab.addGroup(_("Deformation"))
+        self._btn_tps_grid = tps_group.addButton("morphometrics", _("Grid"), _("TPS Deformation Grid"))
+
+        # Spatial tab
+        spatial_tab = self._ribbon.addTab(_("Spatial"))
+        spatial_group = spatial_tab.addGroup(_("Point Pattern"))
+        self._btn_ripley_k = spatial_group.addButton("chart", _("Ripley K"), _("Ripley's K Spatial Analysis"))
 
         # Stratigraphy tab
         strat_tab = self._ribbon.addTab(_("Stratigraphy"))
@@ -988,6 +1002,10 @@ class MainWindow(QMainWindow):
         strat_group = strat_tab.addGroup(_("Time Series"))
         self._btn_spectral = strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
         self._btn_coniss = strat_group.addButton("stratigraphy", "CONISS", _("CONISS Zonation"))
+        self._btn_wavelet = strat_group.addButton("stratigraphy", _("Wavelet"), _("Wavelet CWT Analysis"))
+
+        bio_group = strat_tab.addGroup(_("Biostratigraphy"))
+        self._btn_biostrat = bio_group.addButton("stratigraphy", _("Biozone"), _("UA/RASC Biostratigraphy"))
 
         markov_group = strat_tab.addGroup(_("Facies"))
         self._btn_markov = markov_group.addButton("stratigraphy", _("Markov"), _("Markov Chain Analysis"))
@@ -1002,6 +1020,17 @@ class MainWindow(QMainWindow):
         self._btn_new.clicked.connect(self._on_new_file)
         self._btn_open.clicked.connect(self._on_open_file)
         self._btn_save.clicked.connect(self._on_save_file)
+
+        # Edit operation buttons
+        self._btn_undo.clicked.connect(self._on_undo)
+        self._btn_redo.clicked.connect(self._on_redo)
+        self._btn_transpose.clicked.connect(self._on_transpose)
+        self._register_data_button(self._btn_undo)
+        self._register_data_button(self._btn_redo)
+        self._register_data_button(self._btn_transpose)
+
+        # View buttons
+        self._btn_preferences.clicked.connect(self._on_preferences)
 
         # Transformation buttons
         self._btn_log_transform.clicked.connect(self._on_transform_log)
@@ -1023,6 +1052,8 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_nmds)
         self._btn_lda.clicked.connect(self._on_run_lda)
         self._register_data_button(self._btn_lda)
+        self._btn_cca.clicked.connect(self._on_run_cca)
+        self._register_data_button(self._btn_cca)
         self._btn_univariate.clicked.connect(self._on_run_univariate)
         self._register_data_button(self._btn_univariate)
         self._btn_simper.clicked.connect(self._on_run_simper)
@@ -1045,8 +1076,18 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_markov)
         self._btn_directional.clicked.connect(self._on_run_directional)
         self._register_data_button(self._btn_directional)
+        self._btn_wavelet.clicked.connect(self._on_run_wavelet)
+        self._register_data_button(self._btn_wavelet)
+        self._btn_biostrat.clicked.connect(self._on_run_biostrat)
+        self._register_data_button(self._btn_biostrat)
         self._btn_efa.clicked.connect(self._on_run_efa)
         self._register_data_button(self._btn_efa)
+        self._btn_tps_grid.clicked.connect(self._on_run_tps_grid)
+        self._register_data_button(self._btn_tps_grid)
+        self._btn_gpa.clicked.connect(self._on_run_gpa)
+        self._register_data_button(self._btn_gpa)
+        self._btn_ripley_k.clicked.connect(self._on_run_ripley_k)
+        self._register_data_button(self._btn_ripley_k)
 
         # Monitor state changes
         self._last_has_data = False
@@ -1333,6 +1374,7 @@ class MainWindow(QMainWindow):
         action_map = {
             _("Import Data"): self._on_import_data,
             _("Export Data"): self._on_export,
+            _("Matrix Operations"): self._on_matrix_operations,
             "PCA": self._on_run_pca,
             "PCoA": self._on_run_pcoa,
             "NMDS": self._on_run_nmds,
@@ -1351,6 +1393,11 @@ class MainWindow(QMainWindow):
             _("Markov"): self._on_run_markov,
             _("Directional"): self._on_run_directional,
             "EFA": self._on_run_efa,
+            _("GPA Alignment"): self._on_run_gpa,
+            _("TPS Deformation"): self._on_run_tps_grid,
+            _("Relative Warps"): self._on_run_efa,  # Uses EFA as backend
+            _("Unitary Associations"): self._on_run_biostrat,
+            _("Biozone"): self._on_run_biostrat,
         }
 
         handler = action_map.get(name)
@@ -1360,6 +1407,14 @@ class MainWindow(QMainWindow):
 
         # For category clicks or un-mapped items, switch to spreadsheet view
         self._workspace.setCurrentIndex(self._spreadsheet_index)
+
+    def _on_matrix_operations(self) -> None:
+        """Switch to spreadsheet view for matrix operations."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._status_bar.setInfo(_("Matrix Operations: edit data in spreadsheet"))
 
     def _on_new_file(self) -> None:
         """Create new empty data matrix."""
@@ -1480,6 +1535,69 @@ class MainWindow(QMainWindow):
     def _on_save_file_as(self) -> None:
         """Save data with new name."""
         self._on_save_file()
+
+    def _on_undo(self) -> None:
+        """Undo last state change and refresh spreadsheet."""
+        if not self._state.has_data:
+            return
+        self._state.undo()
+        matrix = self._state.data_matrix
+        if matrix is not None:
+            self._spreadsheet.load_data(
+                matrix.data,
+                row_labels=matrix.row_labels,
+                col_labels=matrix.col_labels,
+            )
+            self._status_bar.setInfo(_("Undo"))
+
+    def _on_redo(self) -> None:
+        """Redo last undone change and refresh spreadsheet."""
+        if not self._state.has_data:
+            return
+        self._state.redo()
+        matrix = self._state.data_matrix
+        if matrix is not None:
+            self._spreadsheet.load_data(
+                matrix.data,
+                row_labels=matrix.row_labels,
+                col_labels=matrix.col_labels,
+            )
+            self._status_bar.setInfo(_("Redo"))
+
+    def _on_transpose(self) -> None:
+        """Transpose the data matrix."""
+        if not self._state.has_data:
+            return
+        try:
+            matrix = self._state.data_matrix
+            transposed_data = matrix.data.T
+            from models.data_matrix import DataMatrix
+            new_matrix = DataMatrix(
+                transposed_data,
+                row_labels=matrix.col_labels,
+                col_labels=matrix.row_labels,
+            )
+            self._state.set_data_matrix(new_matrix)
+            self._spreadsheet.load_data(
+                transposed_data,
+                row_labels=matrix.col_labels,
+                col_labels=matrix.row_labels,
+            )
+            self._status_bar.setInfo(
+                _("Transposed: {0} samples x {1} variables").format(
+                    new_matrix.n_samples, new_matrix.n_variables
+                )
+            )
+        except Exception as e:
+            QMessageBox.critical(self, _("Transpose Error"), str(e))
+
+    def _on_preferences(self) -> None:
+        """Show application preferences."""
+        QMessageBox.information(
+            self,
+            _("Preferences"),
+            _("Application settings can be configured via the Settings menu."),
+        )
 
     def _on_import_data(self) -> None:
         """Show import data dialog with conflict checking."""
@@ -1605,6 +1723,20 @@ class MainWindow(QMainWindow):
                 self._logger.error(f"Export failed: {e}")
                 QMessageBox.critical(self, _("Export Error"), str(e))
 
+    def _cleanup_plot_widgets(self) -> None:
+        """Remove all plot canvases from the workspace to prevent memory leaks."""
+        stack = self._workspace._stack
+        for i in range(stack.count() - 1, -1, -1):
+            widget = stack.widget(i)
+            if isinstance(widget, InteractivePlotCanvas) and widget is not self._spreadsheet:
+                stack.removeWidget(widget)
+                widget.deleteLater()
+
+    def _add_plot_to_workspace(self, plot: InteractivePlotCanvas, name: str) -> int:
+        """Remove old plots and add a new plot to the workspace."""
+        self._cleanup_plot_widgets()
+        return self._workspace.addWidget(plot, name)
+
     def _on_run_pca(self) -> None:
         """
         Run Principal Component Analysis.
@@ -1653,7 +1785,7 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_pca_scores(result)
 
-                plot_index = self._workspace.addWidget(plot, _("PCA Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("PCA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
                 self._status_bar.setInfo(
@@ -1684,7 +1816,7 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_pcoa_scores(result)
 
-                plot_index = self._workspace.addWidget(plot, _("PCoA Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
@@ -1711,7 +1843,7 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_nmds(result)
 
-                plot_index = self._workspace.addWidget(plot, _("NMDS Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("NMDS Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
                 self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
@@ -1732,12 +1864,16 @@ class MainWindow(QMainWindow):
 
             try:
                 sample_name = params.get("sample_name", "").strip() or "Sample 1"
-                result = self._statistics_controller.analyze_diversity(sample_name=sample_name)
+                result = self._statistics_controller.analyze_diversity(
+                    sample_name=sample_name,
+                    indices=params,
+                    log_base=params.get("log_base", 10),
+                )
 
                 plot = InteractivePlotCanvas()
                 plot.plot_diversity_summary(result)
 
-                plot_index = self._workspace.addWidget(plot, _("Diversity Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("Diversity Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
@@ -1749,19 +1885,26 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
-        dialog = RarefactionDialog(self)
+        sample_names = self._state.data_matrix.row_labels if self._state.data_matrix else []
+        dialog = RarefactionDialog(self, sample_names=sample_names)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
 
             try:
-                sample_name = params.get("samples", ["Sample 1"])[0] if params.get("samples") else "Sample 1"
-                result = self._statistics_controller.analyze_rarefaction(sample_name=sample_name)
+                sample_names = params.get("samples", [])
+                if not sample_names:
+                    sample_names = sample_names or ["Sample 1"]
+                result = self._statistics_controller.analyze_rarefaction(
+                    sample_name=sample_names[0],
+                    max_n=params.get("max_n", 100),
+                    step=params.get("step", 5),
+                )
 
                 plot = InteractivePlotCanvas()
                 plot.plot_rarefaction(result)
 
-                plot_index = self._workspace.addWidget(plot, _("Rarefaction Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("Rarefaction Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
@@ -1780,7 +1923,7 @@ class MainWindow(QMainWindow):
             )
             plot = InteractivePlotCanvas()
             plot.plot_spectral(result)
-            plot_index = self._workspace.addWidget(plot, _("Spectral Analysis"))
+            plot_index = self._add_plot_to_workspace(plot, _("Spectral Analysis"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("Spectral analysis completed"))
         except Exception as e:
@@ -1795,14 +1938,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
+        groups = self._get_groups()
+        if groups is None:
+            QMessageBox.warning(
+                self, _("No Groups"),
+                _("Please define groups in the spreadsheet before running ANOSIM.\n"
+                  "Use the Group column to assign samples to groups.")
+            )
+            return
+
         try:
             self._status_bar.setProgress(0, 0)
             result = self._statistics_controller.analyze_anosim(
-                data=self._state.data_matrix.data
+                data=self._state.data_matrix.data,
+                groups=groups,
             )
             plot = InteractivePlotCanvas()
             plot.plot_anosim_results(result)
-            plot_index = self._workspace.addWidget(plot, _("ANOSIM Results"))
+            plot_index = self._add_plot_to_workspace(plot, _("ANOSIM Results"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("ANOSIM analysis completed"))
         except Exception as e:
@@ -1817,14 +1970,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
+        groups = self._get_groups()
+        if groups is None:
+            QMessageBox.warning(
+                self, _("No Groups"),
+                _("Please define groups in the spreadsheet before running PERMANOVA.\n"
+                  "Use the Group column to assign samples to groups.")
+            )
+            return
+
         try:
             self._status_bar.setProgress(0, 0)
             result = self._statistics_controller.analyze_permanova(
-                data=self._state.data_matrix.data
+                data=self._state.data_matrix.data,
+                groups=groups,
             )
             plot = InteractivePlotCanvas()
             plot.plot_permanova_results(result)
-            plot_index = self._workspace.addWidget(plot, _("PERMANOVA Results"))
+            plot_index = self._add_plot_to_workspace(plot, _("PERMANOVA Results"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("PERMANOVA analysis completed"))
         except Exception as e:
@@ -1851,7 +2014,7 @@ class MainWindow(QMainWindow):
                 )
                 plot = InteractivePlotCanvas()
                 plot.plot_simper_results(result)
-                plot_index = self._workspace.addWidget(plot, "SIMPER")
+                plot_index = self._add_plot_to_workspace(plot, "SIMPER")
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo("SIMPER analysis completed")
             except Exception as e:
@@ -1935,13 +2098,76 @@ class MainWindow(QMainWindow):
                 )
                 plot = InteractivePlotCanvas()
                 plot.plot_lda_scores(result)
-                plot_index = self._workspace.addWidget(plot, "LDA")
+                plot_index = self._add_plot_to_workspace(plot, "LDA")
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(_("LDA analysis completed"))
                 self._logger.info(f"LDA completed: accuracy={result.accuracy:.4f}, {result.n_classes} classes")
             except Exception as e:
                 self._logger.error(f"LDA analysis failed: {e}")
                 QMessageBox.critical(self, _("LDA Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_cca(self) -> None:
+        """Run Canonical Correspondence Analysis (CCA) or Redundancy Analysis (RDA)."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        data = self._state.data_matrix.data
+        col_labels = self._state.data_matrix.col_labels
+
+        # Get environmental columns (user selects from dialog)
+        dialog = CCADialog(self)
+        # Provide column choices: first half as species, second half as env
+        mid = max(1, data.shape[1] // 2)
+        species_cols = col_labels[:mid] if mid < len(col_labels) else col_labels
+        env_cols = col_labels[mid:mid + min(mid, len(col_labels) - mid)] if mid < len(col_labels) else []
+        dialog.set_column_names(species_cols, env_cols)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                # Get selected env column indices
+                selected_env = params.get("env_columns", [])
+                env_indices = [i for i, c in enumerate(col_labels) if c in selected_env]
+
+                if not env_indices:
+                    QMessageBox.warning(self, _("No Selection"), _("Please select at least one environmental variable."))
+                    return
+
+                # Split data into species (Y) and environmental (X) matrices
+                Y = data[:, :mid] if mid < data.shape[1] else data
+                X = data[:, env_indices]
+
+                self._logger.info(
+                    f"Running CCA/RDA: Y.shape={Y.shape}, X.shape={X.shape}, method={params.get('method')}"
+                )
+
+                result = self._statistics_controller.run_cca(
+                    Y=Y, X=X,
+                    n_components=params.get("n_components"),
+                    method=params.get("method"),
+                )
+
+                plot = InteractivePlotCanvas()
+                plot.plot_cca_triplot(result)
+
+                plot_index = self._add_plot_to_workspace(plot, _("{0} Triplot").format(params.get("method", "cca").upper()))
+                self._workspace.setCurrentIndex(plot_index)
+
+                self._status_bar.setInfo(
+                    _("{0}: {1:.1f}% constrained variance").format(
+                        params.get("method", "cca").upper(), result.constrained_variance
+                    )
+                )
+                self._logger.info(f"CCA/RDA completed: constrained_variance={result.constrained_variance:.2f}%")
+
+            except Exception as e:
+                self._logger.error(f"CCA/RDA analysis failed: {e}")
+                QMessageBox.critical(self, _("{0} Error").format(params.get("method", "CCA").upper()), str(e))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -1964,11 +2190,11 @@ class MainWindow(QMainWindow):
                 )
                 plot = InteractivePlotCanvas()
                 plot.plot_dendrogram(result, labels=self._state.data_matrix.row_labels)
-                plot_index = self._workspace.addWidget(plot, _("Clustering"))
+                plot_index = self._add_plot_to_workspace(plot, _("Clustering"))
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(
                     _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(
-                        result.n_clusters, result.cophenetic_correlation
+                        result.n_clusters, result.cophenetic_corr
                     )
                 )
             except Exception as e:
@@ -1987,7 +2213,7 @@ class MainWindow(QMainWindow):
             results = self._statistics_controller.analyze_abundance_models()
             plot = InteractivePlotCanvas()
             plot.plot_abundance_models(results)
-            plot_index = self._workspace.addWidget(plot, _("Abundance Models"))
+            plot_index = self._add_plot_to_workspace(plot, _("Abundance Models"))
             self._workspace.setCurrentIndex(plot_index)
             msg_lines = [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
             self._status_bar.setInfo(_("Abundance models fitted"))
@@ -2007,7 +2233,7 @@ class MainWindow(QMainWindow):
             result = self._statistics_controller.analyze_she()
             plot = InteractivePlotCanvas()
             plot.plot_she_curve(result)
-            plot_index = self._workspace.addWidget(plot, "SHE")
+            plot_index = self._add_plot_to_workspace(plot, "SHE")
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("SHE analysis completed"))
         except Exception as e:
@@ -2078,7 +2304,7 @@ class MainWindow(QMainWindow):
                 )
                 plot = InteractivePlotCanvas()
                 plot.plot_rose_diagram(bin_edges, counts, result.mean_direction_deg)
-                plot_index = self._workspace.addWidget(plot, _("Rose Diagram"))
+                plot_index = self._add_plot_to_workspace(plot, _("Rose Diagram"))
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(
                     _("Directional: mean={0:.1f}°, Rayleigh p={1:.4f}").format(
@@ -2109,13 +2335,234 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_efa_contours(result.original, result.reconstructed,
                                        f"EFA ({result.n_harmonics} harmonics)")
-                plot_index = self._workspace.addWidget(plot, "EFA")
+                plot_index = self._add_plot_to_workspace(plot, "EFA")
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(
                     _("EFA: {0} harmonics, {1} points").format(result.n_harmonics, result.n_points)
                 )
             except Exception as e:
                 QMessageBox.critical(self, "EFA Error", str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_gpa(self) -> None:
+        """Run Generalized Procrustes Analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        try:
+            self._status_bar.setProgress(0, 0)
+            result = self._statistics_controller.analyze_gpa(
+                data=self._state.data_matrix.data,
+            )
+            # Cache TPS result for later use
+            self._statistics_controller.cache_result("tps_result", result)
+
+            plot = InteractivePlotCanvas()
+            # Plot GPA-aligned landmarks
+            if hasattr(result, "aligned_coords"):
+                coords = result.aligned_coords
+                mean_shape = coords.mean(axis=0) if hasattr(coords, 'mean') else coords
+                plot.plot_efa_contours(
+                    coords[0] if len(coords.shape) > 2 else coords,
+                    mean_shape,
+                    title=_("GPA Aligned Landmarks"),
+                )
+
+            plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
+            self._workspace.setCurrentIndex(plot_index)
+            self._status_bar.setInfo(_("GPA analysis completed"))
+        except Exception as e:
+            self._logger.error(f"GPA analysis failed: {e}")
+            QMessageBox.critical(self, _("GPA Error"), str(e))
+        finally:
+            self._status_bar.setProgress(100, 100)
+
+    def _on_run_tps_grid(self) -> None:
+        """Run TPS Deformation Grid visualization."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = TPSGridDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                # Get TPS result from cache or compute
+                tps_result = self._statistics_controller.get_cached_result("tps_result")
+
+                if tps_result is None:
+                    QMessageBox.information(
+                        self, _("No TPS Result"),
+                        _("Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation.")
+                    )
+                    return
+
+                plot = InteractivePlotCanvas()
+                plot.plot_tps_deformation_grid(
+                    tps_result,
+                    grid_shape=(params.get("grid_rows", 15), params.get("grid_cols", 15)),
+                    show_vectors=params.get("show_vectors", True)
+                )
+
+                plot_index = self._add_plot_to_workspace(plot, _("TPS Deformation Grid"))
+                self._workspace.setCurrentIndex(plot_index)
+
+                self._status_bar.setInfo(_("TPS Deformation Grid displayed"))
+                self._logger.info("TPS deformation grid displayed")
+
+            except Exception as e:
+                self._logger.error(f"TPS grid visualization failed: {e}")
+                QMessageBox.critical(self, _("TPS Grid Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_ripley_k(self) -> None:
+        """Run Ripley's K spatial point pattern analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = SpatialRipleyKDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                result = self._statistics_controller.analyze_spatial_ripley_k(
+                    coords=None,  # Will use first 2 columns
+                    r_max=params.get("r_max"),
+                    n_r_values=params.get("n_r_values"),
+                    n_simulations=params.get("n_simulations"),
+                )
+
+                plot = InteractivePlotCanvas()
+                plot.plot_ripley_k(
+                    result,
+                    show_points=params.get("show_points", True)
+                )
+
+                plot_index = self._add_plot_to_workspace(plot, _("Ripley's K"))
+                self._workspace.setCurrentIndex(plot_index)
+
+                self._status_bar.setInfo(result.interpretation)
+                self._logger.info(f"RipleyK completed: {result.interpretation[:50]}")
+
+            except Exception as e:
+                self._logger.error(f"Ripley K analysis failed: {e}")
+                QMessageBox.critical(self, _("Ripley K Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_wavelet(self) -> None:
+        """Run Wavelet CWT analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = WaveletDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                import numpy as np
+                data = self._state.data_matrix.data
+                # Use first column as time, second as values
+                time = data[:, 0]
+                values = data[:, 1] if data.shape[1] > 1 else data[:, 0]
+
+                # Import here to avoid circular imports
+                from stratigraphy.spectral_analysis import SpectralAnalyzer
+
+                analyzer = SpectralAnalyzer()
+                scales = np.arange(params.get("min_scale", 2), params.get("max_scale", 50))
+                result = analyzer.wavelet_transform(
+                    time, values,
+                    wavelet=params.get("wavelet", "morlet"),
+                    scales=scales,
+                )
+
+                plot = InteractivePlotCanvas()
+                plot.plot_wavelet_scalogram(result)
+
+                plot_index = self._add_plot_to_workspace(plot, _("Wavelet CWT"))
+                self._workspace.setCurrentIndex(plot_index)
+
+                self._status_bar.setInfo(
+                    _("{0} wavelet: peak freq = {1:.4f}").format(
+                        result.wavelet, result.peak_frequency
+                    )
+                )
+                self._logger.info(f"Wavelet CWT completed: {result.summary()}")
+
+            except Exception as e:
+                self._logger.error(f"Wavelet analysis failed: {e}")
+                QMessageBox.critical(self, _("Wavelet Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_biostrat(self) -> None:
+        """Run UA/RASC Biostratigraphy analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = BiostratigraphyDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                import numpy as np
+                data = self._state.data_matrix.data
+                col_labels = self._state.data_matrix.col_labels
+
+                # FAD/LAD data: first half of columns are FADs, second half are LADs
+                mid = data.shape[1] // 2
+                if mid < 2:
+                    QMessageBox.warning(self, _("Insufficient Data"),
+                                       _("Need at least 4 columns for FAD/LAD data."))
+                    return
+
+                fad_matrix = data[:, :mid]
+                lad_matrix = data[:, mid:mid*2]
+
+                # Get event names from column labels
+                event_names = col_labels[:mid] if mid < len(col_labels) else None
+
+                method = params.get("method", "ua")
+
+                if method == "ua":
+                    from stratigraphy.biostratigraphy import UAAnalyzer
+                    analyzer = UAAnalyzer()
+                    result = analyzer.analyze(fad_matrix, lad_matrix, event_names=event_names)
+                else:
+                    from stratigraphy.biostratigraphy import RASCAnalyzer
+                    analyzer = RASCAnalyzer()
+                    # RASC needs a distance matrix - compute from FAD/LAD
+                    dist = np.abs(fad_matrix.mean(axis=0) - lad_matrix.mean(axis=0)).reshape(-1, 1)
+                    dist = np.abs(fad_matrix.mean(axis=0)[:, np.newaxis] - lad_matrix.mean(axis=0)[np.newaxis, :])
+                    result = analyzer.analyze(dist, event_names=event_names,
+                                            n_iterations=params.get("rasc_iterations", 100))
+
+                # Show result summary
+                QMessageBox.information(
+                    self, _("Biostratigraphy Complete"),
+                    result.summary()
+                )
+
+                self._status_bar.setInfo(
+                    _("{0}: {1} events").format(method.upper(), len(result.events))
+                )
+                self._logger.info(f"Biostratigraphy completed: {result.summary()}")
+
+            except Exception as e:
+                self._logger.error(f"Biostratigraphy analysis failed: {e}")
+                QMessageBox.critical(self, _("Biostratigraphy Error"), str(e))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2167,7 +2614,7 @@ class MainWindow(QMainWindow):
         if current_has_data != self._last_has_data:
             self._last_has_data = current_has_data
             self._update_ui_state()
-        
+
         if self._state.has_data:
             matrix = self._state.data_matrix
             info = _("Data: {0} samples x {1} variables").format(matrix.n_samples, matrix.n_variables)
@@ -2178,6 +2625,15 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(info)
         else:
             self._status_bar.setInfo(_("No data loaded"))
+
+        # Update memory usage label
+        try:
+            import psutil
+            process = psutil.Process()
+            mem_mb = process.memory_info().rss / (1024 * 1024)
+            self._status_bar._memory_label.setText(_("Memory: {0:.1f} MB").format(mem_mb))
+        except Exception:
+            pass
 
     def _load_settings(self) -> None:
         """Load application settings."""

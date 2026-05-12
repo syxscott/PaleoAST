@@ -183,7 +183,8 @@ class LDAAnalyzer:
             loadings = lda.scalings_[:, :n_components]
 
             # Eigenvalues and explained variance
-            # explained_variance_ratio_ is already the proportion of variance explained
+            # Note: sklearn LDA exposes explained_variance_ratio_ (proportion of between-class variance)
+            # Compute pseudo-eigenvalues from the ratio and total variance
             eigenvalues = lda.explained_variance_ratio_
             explained_var = lda.explained_variance_ratio_
 

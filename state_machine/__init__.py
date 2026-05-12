@@ -7,7 +7,7 @@ PaleoAST Phase 3 - State Machine Framework
 
 有限状态机数学定义:
     FSM = (Q, Σ, δ, q0, F)
-    
+
 其中:
     Q: 状态集合 (States)
     Σ: 输入字母表 (Alphabet)
@@ -19,21 +19,21 @@ PaleoAST Phase 3 - State Machine Framework
 版本: 3.0.0
 """
 
-from .base import StateMachine, State, Transition
-from .tokenizer import Token, TokenType, LexerTokenizer
-from .automaton import FiniteAutomaton, NFA, DFA, RegexCompiler
+from .automaton import DFA, NFA, FiniteAutomaton, RegexCompiler
+from .base import State, StateMachine, Transition
+from .tokenizer import LexerTokenizer, Token, TokenType
 
 __all__ = [
-    'StateMachine',
-    'State',
-    'Transition',
-    'Token',
-    'TokenType',
-    'LexerTokenizer',
-    'FiniteAutomaton',
-    'NFA',
-    'DFA',
-    'RegexCompiler',
+    "DFA",
+    "NFA",
+    "FiniteAutomaton",
+    "LexerTokenizer",
+    "RegexCompiler",
+    "State",
+    "StateMachine",
+    "Token",
+    "TokenType",
+    "Transition",
 ]
 
 # ================================================================================

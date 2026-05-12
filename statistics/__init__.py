@@ -16,24 +16,24 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+from .anosim import ANOSIMAnalyzer, ANOSIMResult
+from .distance_metrics import DistanceMatrixResult, compute_distance_matrix
+from .nmds import NMDSAnalyzer, NMDSResult
 from .pca import PCAAnalyzer, PCAResult
 from .pcoa import PCoAAnalyzer, PCoAResult
-from .nmds import NMDSAnalyzer, NMDSResult
-from .anosim import ANOSIMAnalyzer, ANOSIMResult
 from .permanova import PERMANOVAAnalyzer, PERMANOVAResult
-from .distance_metrics import DistanceMatrix, compute_distance_matrix
 
 __all__ = [
-    'PCAAnalyzer',
-    'PCAResult',
-    'PCoAAnalyzer',
-    'PCoAResult',
-    'NMDSAnalyzer',
-    'NMDSResult',
-    'ANOSIMAnalyzer',
-    'ANOSIMResult',
-    'PERMANOVAAnalyzer',
-    'PERMANOVAResult',
-    'DistanceMatrix',
-    'compute_distance_matrix',
+    "ANOSIMAnalyzer",
+    "ANOSIMResult",
+    "DistanceMatrixResult",
+    "NMDSAnalyzer",
+    "NMDSResult",
+    "PCAAnalyzer",
+    "PCAResult",
+    "PCoAAnalyzer",
+    "PCoAResult",
+    "PERMANOVAAnalyzer",
+    "PERMANOVAResult",
+    "compute_distance_matrix",
 ]

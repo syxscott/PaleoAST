@@ -19,15 +19,20 @@ PaleoAST 3D Morphometrics - Module Initialization
 """
 
 from .gpa3d import GPA3D, GPA3DResult
-from .quaternion import Quaternion, RotationMatrix
-from .tps3d import TPS3D, TPS3DResult
-from .sliding import SemiLandmarkSlider, SlidingResult
 from .mesh import Mesh3D, SurfaceInterpolator
+from .quaternion import Quaternion, RotationMatrix
+from .sliding import SemiLandmarkSlider, SlidingResult
+from .tps3d import TPS3D, TPS3DResult
 
 __all__ = [
-    'GPA3D', 'GPA3DResult',
-    'Quaternion', 'RotationMatrix',
-    'TPS3D', 'TPS3DResult',
-    'SemiLandmarkSlider', 'SlidingResult',
-    'Mesh3D', 'SurfaceInterpolator',
+    "GPA3D",
+    "TPS3D",
+    "GPA3DResult",
+    "Mesh3D",
+    "Quaternion",
+    "RotationMatrix",
+    "SemiLandmarkSlider",
+    "SlidingResult",
+    "SurfaceInterpolator",
+    "TPS3DResult",
 ]

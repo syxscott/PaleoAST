@@ -148,7 +148,7 @@ class CONISSAnalyzer:
                 c2_id = cluster_order[k + 1]
 
                 # ISS increase from merging c1 and c2
-                merged_data = np.vstack([data[clusters[c1_id]], data[c2_id]])
+                merged_data = np.vstack([data[clusters[c1_id]], data[clusters[c2_id]]])
                 merged_mean = merged_data.mean(axis=0)
                 merged_iss = np.sum((merged_data - merged_mean) ** 2)
 

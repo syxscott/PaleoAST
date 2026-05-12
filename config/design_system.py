@@ -13,100 +13,107 @@ Color Palette:
     - Warning: #F39C12 (Golden)
     - Error: #E74C3C (Soft Red)
     - Neutral: #ECF0F1, #BDC3C7, #95A5A6
-    
+
 Spacing: Based on 4px grid system
 Typography: Segoe UI + fallbacks
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 # =============================================================================
 # Color Scheme (Light Theme - Modern)
 # =============================================================================
 
+
 @dataclass
 class ColorPalette:
     """Modern light color palette."""
+
     # Primary colors
-    primary = "#3498DB"           # Professional blue
-    primary_light = "#5DADE2"     # Light blue (hover)
-    primary_dark = "#2980B9"      # Dark blue (active)
-    
+    primary = "#3498DB"  # Professional blue
+    primary_light = "#5DADE2"  # Light blue (hover)
+    primary_dark = "#2980B9"  # Dark blue (active)
+
     # Semantic colors
     success = "#27AE60"
     warning = "#F39C12"
     error = "#E74C3C"
     info = "#16A085"
-    
+
     # Neutral colors
-    bg_primary = "#FFFFFF"        # Main background
-    bg_secondary = "#F8F9FA"      # Secondary surface
-    bg_tertiary = "#F0F2F5"       # Tertiary surface
-    
-    text_primary = "#2C3E50"      # Main text
-    text_secondary = "#7F8C8D"    # Secondary text
-    text_disabled = "#BDC3C7"     # Disabled text
-    
-    border_light = "#E4E7EB"      # Light border
-    border_medium = "#D0D5DD"     # Medium border
-    border_dark = "#BDC3C7"       # Dark border
-    
+    bg_primary = "#FFFFFF"  # Main background
+    bg_secondary = "#F8F9FA"  # Secondary surface
+    bg_tertiary = "#F0F2F5"  # Tertiary surface
+
+    text_primary = "#2C3E50"  # Main text
+    text_secondary = "#7F8C8D"  # Secondary text
+    text_disabled = "#BDC3C7"  # Disabled text
+
+    border_light = "#E4E7EB"  # Light border
+    border_medium = "#D0D5DD"  # Medium border
+    border_dark = "#BDC3C7"  # Dark border
+
     # Hover/Active states
     hover_overlay = "rgba(52, 152, 219, 0.08)"
     active_overlay = "rgba(52, 152, 219, 0.15)"
-    
+
     # Shadows
     shadow_sm = "0 1px 2px rgba(0,0,0,0.05)"
     shadow_md = "0 4px 6px rgba(0,0,0,0.07)"
     shadow_lg = "0 10px 15px rgba(0,0,0,0.10)"
     shadow_xl = "0 20px 25px rgba(0,0,0,0.15)"
 
+
 # =============================================================================
 # Spacing System (4px grid)
 # =============================================================================
 
+
 @dataclass
 class Spacing:
     """Spacing constants (4px base unit)."""
-    xs = 4      # Extra small
-    sm = 8      # Small
-    md = 12     # Medium
-    lg = 16     # Large
-    xl = 24     # Extra large
-    xxl = 32    # Double extra large
-    
+
+    xs = 4  # Extra small
+    sm = 8  # Small
+    md = 12  # Medium
+    lg = 16  # Large
+    xl = 24  # Extra large
+    xxl = 32  # Double extra large
+
     # Combinations for common patterns
     padding_compact = f"{sm}px"
     padding_normal = f"{md}px"
     padding_generous = f"{lg}px"
-    
+
     margin_compact = f"{sm}px"
     margin_normal = f"{lg}px"
     margin_generous = f"{xxl}px"
+
 
 # =============================================================================
 # Typography System
 # =============================================================================
 
+
 @dataclass
 class Typography:
     """Typography scale."""
+
     family_primary = "'Segoe UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif"
     family_monospace = "'Consolas', 'Monaco', 'Courier New', monospace"
-    
+
     # Font sizes
     h1_size = 32
     h2_size = 28
     h3_size = 24
     h4_size = 20
     h5_size = 16
-    
+
     body_lg_size = 16
     body_size = 14
     body_sm_size = 13
     caption_size = 12
-    
+
     # Font weights
     thin = 100
     light = 300
@@ -114,19 +121,22 @@ class Typography:
     medium = 500
     semibold = 600
     bold = 700
-    
+
     # Line heights
     line_height_tight = 1.2
     line_height_normal = 1.5
     line_height_relaxed = 1.75
 
+
 # =============================================================================
 # Radius System
 # =============================================================================
 
+
 @dataclass
 class BorderRadius:
     """Border radius presets."""
+
     none = "0px"
     sm = "2px"
     md = "4px"
@@ -134,9 +144,11 @@ class BorderRadius:
     xl = "8px"
     full = "9999px"
 
+
 # =============================================================================
 # Global StyleSheet Generator
 # =============================================================================
+
 
 def get_modern_stylesheet() -> str:
     """Generate comprehensive modern stylesheet for entire application."""
@@ -144,7 +156,7 @@ def get_modern_stylesheet() -> str:
     spacing = Spacing()
     typo = Typography()
     radius = BorderRadius()
-    
+
     return f"""
 /* =============================================================================
    GLOBAL STYLES
@@ -567,6 +579,7 @@ QLabel[class="label-error"] {{
     color: {colors.error};
 }}
 """
+
 
 # Export instances for convenient access
 colors = ColorPalette()

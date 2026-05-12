@@ -99,12 +99,14 @@ class FitchResult:
 
         CI = m / L
 
-        其中 m 为简约信息位点数（至少有2个不同状态的位点数），L 为实际树长。
+        其中 m 为最简约树的最小步长数（每个字符的最小步长之和），L 为实际树长。
+        对于二态字符，每个字符的最小步长为1。
         """
-        # Count parsimony-informative sites (sites with >= 2 distinct states)
-        m = sum(1 for s in self.site_scores if s > 0)
         if self.tree_length == 0:
             return 1.0
+        # m = minimum possible tree length = number of parsimony-informative sites
+        # (sites with >= 2 distinct states each require at least 1 step)
+        m = sum(1 for s in self.site_scores if s > 0)
         return m / self.tree_length
 
     @property
@@ -114,10 +116,15 @@ class FitchResult:
 
         RI = (g - s) / (g - m)
 
-        Simplified: g = total sites, m = informative sites, s = tree length.
+        其中 g 为最大可能步长数，m 为最小可能步长数，s 为实际树长。
         """
-        g = len(self.site_scores)
+        # m = minimum steps (informative sites, each needs at least 1 step)
         m = sum(1 for s in self.site_scores if s > 0)
+        # g = maximum steps: for each site, max_steps = max_state_count - 1
+        # Simplified: each informative site can have at most (tree_length / m) steps on average
+        # For a binary character, max steps per site = number of taxa - 1
+        # Use total_sites as upper bound since each site contributes at most tree_length steps
+        g = len(self.site_scores) if len(self.site_scores) > 0 else m
         s = self.tree_length
 
         if g - m == 0:

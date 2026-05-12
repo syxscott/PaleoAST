@@ -18,12 +18,12 @@ PaleoAST Macroevolution - Module Initialization
 """
 
 from .cohort import CohortSurvivorshipAnalysis
-from .fbd import FossilizedBirthDeathProcess, GillespieSimulator
 from .diversity import DiversityDynamics
+from .fbd import FossilizedBirthDeathProcess, GillespieSimulator
 
 __all__ = [
-    'CohortSurvivorshipAnalysis',
-    'FossilizedBirthDeathProcess',
-    'GillespieSimulator',
-    'DiversityDynamics',
+    "CohortSurvivorshipAnalysis",
+    "DiversityDynamics",
+    "FossilizedBirthDeathProcess",
+    "GillespieSimulator",
 ]

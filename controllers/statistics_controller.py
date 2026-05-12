@@ -25,11 +25,13 @@ from models.diversity_result import DiversityResult, RarefactionResult
 from models.state_manager import get_state_manager
 from morphometrics.efa import EFAAnalyzer, EFAResult, EigenshapeAnalyzer, EigenshapeResult
 from statistics.anosim import ANOSIMAnalyzer, ANOSIMResult
+from statistics.cca import CCAAnalyzer, CCAResult
 from statistics.clustering import ClusteringAnalyzer, ClusteringResult
-from statistics.distance_metrics import DistanceMatrix, compute_distance_matrix
+from statistics.distance_metrics import DistanceMatrixResult, compute_distance_matrix
 from statistics.lda import LDAAnalyzer, LDAResult
 from statistics.nmds import NMDSAnalyzer, NMDSResult
 from statistics.pca import PCAAnalyzer, PCAResult
+from statistics.spatial import RipleyKAnalyzer, SpatialResult
 from statistics.pcoa import PCoAAnalyzer, PCoAResult
 from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
 from statistics.simper import SimperAnalyzer, SimperResult
@@ -70,6 +72,7 @@ class StatisticsController:
         self._nmds_analyzer = NMDSAnalyzer()
         self._anosim_analyzer = ANOSIMAnalyzer()
         self._permanova_analyzer = PERMANOVAAnalyzer()
+        self._cca_analyzer = CCAAnalyzer()
         self._diversity_analyzer = DiversityAnalyzer()
         self._rarefaction_analyzer = RarefactionAnalyzer()
         self._spectral_analyzer = SpectralAnalyzer()
@@ -84,6 +87,7 @@ class StatisticsController:
         self._directional_analyzer = DirectionalAnalyzer()
         self._efa_analyzer = EFAAnalyzer()
         self._eigenshape_analyzer = EigenshapeAnalyzer()
+        self._spatial_analyzer = RipleyKAnalyzer()
 
         # State manager
         self._state = get_state_manager()
@@ -210,6 +214,7 @@ class StatisticsController:
                 n_restarts=n_restarts,
                 max_iterations=max_iterations,
                 random_seed=random_seed,
+                tolerance=tolerance,
             )
 
             self._state.cache_result("nmds_result", result)
@@ -358,7 +363,7 @@ class StatisticsController:
     # Distance Matrix Operations
     # =========================================================================
 
-    def compute_distances(self, data: npt.NDArray | None = None, metric: str = "bray_curtis") -> DistanceMatrix:
+    def compute_distances(self, data: npt.NDArray | None = None, metric: str = "bray_curtis") -> DistanceMatrixResult:
         """
         Compute distance matrix.
 
@@ -367,7 +372,7 @@ class StatisticsController:
             metric: Distance metric.
 
         Returns:
-            DistanceMatrix: Computed distance matrix
+            DistanceMatrixResult: Computed distance matrix
         """
         with self._lock:
             if data is None:
@@ -636,6 +641,138 @@ class StatisticsController:
             return result
 
     # =========================================================================
+    # CCA / RDA
+    # =========================================================================
+
+    def run_cca(
+        self,
+        Y: npt.NDArray | None = None,
+        X: npt.NDArray | None = None,
+        n_components: int | None = None,
+        method: str = "cca",
+        species_names: list[str] | None = None,
+        env_names: list[str] | None = None,
+    ) -> CCAResult:
+        """
+        Run Canonical Correspondence Analysis (CCA) or Redundancy Analysis (RDA).
+
+        Parameters:
+            Y: Species abundance matrix (n_samples, n_species). If None, uses state data.
+            X: Environmental variable matrix (n_samples, n_env). If None, uses columns
+               from state data not used for Y.
+            n_components: Number of constrained axes to extract.
+            method: 'cca' or 'rda'
+            species_names: Names of species/variables.
+            env_names: Names of environmental variables.
+
+        Returns:
+            CCAResult: CCA/RDA analysis results
+        """
+        with self._lock:
+            if not self._state.has_data:
+                raise ValidationError("No data available. Please load data first.")
+
+            if Y is None:
+                data = self._state.data_matrix.data
+                # Default: first half as species, second half as env
+                mid = max(1, data.shape[1] // 2)
+                Y = data[:, :mid]
+                X = data[:, mid:mid + min(mid, data.shape[1] - mid)]
+
+            if X is None:
+                raise ValidationError("Environmental variables required for CCA/RDA")
+
+            self._logger.info(
+                f"run_cca called with Y.shape={Y.shape}, X.shape={X.shape}, method={method}"
+            )
+
+            result = self._cca_analyzer.analyze(
+                Y, X, n_components=n_components, method=method,
+                species_names=species_names, env_names=env_names
+            )
+
+            self._state.cache_result("cca_result", result)
+            self._state.cache_result("cca_method", method)
+
+            self._logger.info(f"CCA/RDA completed: constrained variance={result.constrained_variance:.2f}%")
+            return result
+
+    def analyze_cca(
+        self,
+        species_data: npt.NDArray | None = None,
+        env_data: npt.NDArray | None = None,
+        n_components: int | None = None,
+        method: str = "cca",
+    ) -> CCAResult:
+        """
+        Run CCA/RDA analysis from raw data matrices.
+
+        This is a wrapper around run_cca that accepts separate species
+        and environmental data.
+        """
+        with self._lock:
+            if species_data is None:
+                if not self._state.has_data:
+                    raise ValidationError("No data available.")
+                data = self._state.data_matrix.data
+                mid = max(1, data.shape[1] // 2)
+                species_data = data[:, :mid]
+                env_data = data[:, mid:mid + min(mid, data.shape[1] - mid)]
+
+            return self.run_cca(
+                Y=species_data, X=env_data,
+                n_components=n_components, method=method
+            )
+
+    # =========================================================================
+    # Spatial Point Pattern Analysis (Ripley's K)
+    # =========================================================================
+
+    def analyze_spatial_ripley_k(
+        self,
+        coords: npt.NDArray | None = None,
+        r_max: float | None = None,
+        n_r_values: int = 50,
+        n_simulations: int = 99,
+    ) -> SpatialResult:
+        """
+        Run Ripley's K spatial point pattern analysis.
+
+        Parameters:
+            coords: Point coordinates (n_points, 2). If None, uses first 2 columns
+                   of state data.
+            r_max: Maximum distance for analysis.
+            n_r_values: Number of distance values.
+            n_simulations: Monte Carlo simulations for envelope.
+
+        Returns:
+            SpatialResult: Ripley's K analysis results
+        """
+        with self._lock:
+            if not self._state.has_data:
+                raise ValidationError("No data available. Please load data first.")
+
+            if coords is None:
+                data = self._state.data_matrix.data
+                coords = data[:, :2]  # Use first 2 columns as x, y
+
+            self._logger.info(
+                f"analyze_spatial_ripley_k called: n_points={coords.shape[0]}, r_max={r_max}"
+            )
+
+            result = self._spatial_analyzer.analyze(
+                coords,
+                r_max=r_max,
+                n_r_values=n_r_values,
+                n_simulations=n_simulations,
+            )
+
+            self._state.cache_result("spatial_result", result)
+
+            self._logger.info(f"RipleyK completed: {result.interpretation[:50]}")
+            return result
+
+    # =========================================================================
     # Data Transformations
     # =========================================================================
 
@@ -653,11 +790,13 @@ class StatisticsController:
                 data = self._state.data_matrix.data.copy()
 
             transforms = {
-                "log": lambda d: log_transform(d, base=kwargs.get("base", np.e)),
+                "log": lambda d: log_transform(d, base=kwargs.get("base", 10)),
                 "sqrt": sqrt_transform,
                 "zscore": zscore_standardize,
                 "hellinger": hellinger_transform,
-                "boxcox": boxcox_transform,
+                "boxcox": lambda d: np.column_stack([
+                    boxcox_transform(d[:, c])[0] for c in range(d.shape[1])
+                ]) if d.ndim == 2 else boxcox_transform(d)[0],
             }
             fn = transforms.get(method)
             if fn is None:

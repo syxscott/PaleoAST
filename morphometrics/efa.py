@@ -142,6 +142,12 @@ class EFAAnalyzer:
         harmonics = []
         coefficients = []
 
+        if T == 0:
+            raise ValueError(
+                "EFA requires non-zero contour length (T=0). "
+                "All contour points may be identical."
+            )
+
         for n in range(1, n_harmonics + 1):
             omega = 2 * np.pi * n / T
 
@@ -279,11 +285,11 @@ class EigenshapeAnalyzer:
         mean_vec = np.mean(vectors, axis=0)
         centered = vectors - mean_vec
 
-        # SVD-based PCA on the coefficient matrix
-        U, S, Vt = np.linalg.svd(centered, full_matrices=False)
-
         if n_specimens < 2:
             raise ValueError("Eigenshape analysis requires at least 2 specimens")
+
+        # SVD-based PCA on the coefficient matrix
+        U, S, Vt = np.linalg.svd(centered, full_matrices=False)
         eigenvalues = S ** 2 / (n_specimens - 1)
         explained = eigenvalues / np.sum(eigenvalues)
         cumulative = np.cumsum(explained)

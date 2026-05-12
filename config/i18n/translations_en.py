@@ -177,6 +177,7 @@ TRANSLATIONS = {
     "SPCS (Specialized)": "SPCS (Specialized)",
     "Similarity Matrix:": "Similarity Matrix:",
     "Components": "Components",
+    "Components (CCA)": "Components (CCA)",
     "Number of components: ": "Number of components: ",
     "Minimum variance: ": "Minimum variance: ",
     "Display Options": "Display Options",

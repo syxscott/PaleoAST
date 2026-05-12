@@ -16,20 +16,20 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 版本: 3.0.0
 """
 
-from .tree import PhyloTree, PhyloNode
+from .distance_methods import UPGMA, NeighborJoining
 from .fitch import FitchAlgorithm
 from .heuristic_search import HeuristicSearch, NNIOperation, TBROperation
 from .strict_consensus import StrictConsensusTree
-from .distance_methods import UPGMA, NeighborJoining
+from .tree import PhyloNode, PhyloTree
 
 __all__ = [
-    'PhyloTree',
-    'PhyloNode',
-    'FitchAlgorithm',
-    'HeuristicSearch',
-    'NNIOperation',
-    'TBROperation',
-    'StrictConsensusTree',
-    'UPGMA',
-    'NeighborJoining',
+    "UPGMA",
+    "FitchAlgorithm",
+    "HeuristicSearch",
+    "NNIOperation",
+    "NeighborJoining",
+    "PhyloNode",
+    "PhyloTree",
+    "StrictConsensusTree",
+    "TBROperation",
 ]

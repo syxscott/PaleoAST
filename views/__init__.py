@@ -12,29 +12,29 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
-from .ui_main_window import MainWindow
-from .ui_spreadsheet import ScientificSpreadsheet, SpreadsheetDelegate
 from .ui_dialogs import (
+    DiversityDialog,
+    ImportDialog,
+    NMDSOptionsDialog,
     PCADialog,
     PCoADialog,
-    NMDSOptionsDialog,
-    DiversityDialog,
     RarefactionDialog,
-    ImportDialog,
 )
-from .ui_plot_canvas import InteractivePlotCanvas
+from .ui_main_window import MainWindow
 from .ui_navigation import NavigationTree
+from .ui_plot_canvas import InteractivePlotCanvas
+from .ui_spreadsheet import ScientificSpreadsheet, SpreadsheetDelegate
 
 __all__ = [
-    'MainWindow',
-    'ScientificSpreadsheet',
-    'SpreadsheetDelegate',
-    'PCADialog',
-    'PCoADialog',
-    'NMDSOptionsDialog',
-    'DiversityDialog',
-    'RarefactionDialog',
-    'ImportDialog',
-    'InteractivePlotCanvas',
-    'NavigationTree',
+    "DiversityDialog",
+    "ImportDialog",
+    "InteractivePlotCanvas",
+    "MainWindow",
+    "NMDSOptionsDialog",
+    "NavigationTree",
+    "PCADialog",
+    "PCoADialog",
+    "RarefactionDialog",
+    "ScientificSpreadsheet",
+    "SpreadsheetDelegate",
 ]

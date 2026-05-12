@@ -89,16 +89,19 @@ class Quaternion:
     z: float
     
     def __post_init__(self):
-        """四元数归一化"""
+        """四元数验证（不自动归一化，避免破坏中间计算）"""
         norm = np.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
         if norm < 1e-10:
-            logger.error("Quaternion magnitude too small for normalization")
+            logger.error("Quaternion magnitude too small")
             raise ValueError("Quaternion magnitude too small")
-        self.w /= norm
-        self.x /= norm
-        self.y /= norm
-        self.z /= norm
-        logger.debug(f"Quaternion normalized: w={self.w:.4f}, x={self.x:.4f}, y={self.y:.4f}, z={self.z:.4f}")
+        logger.debug(f"Quaternion created: w={self.w:.4f}, x={self.x:.4f}, y={self.y:.4f}, z={self.z:.4f}")
+
+    def normalized(self) -> 'Quaternion':
+        """返回归一化后的四元数副本"""
+        norm = np.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
+        if norm < 1e-10:
+            raise ValueError("Quaternion magnitude too small")
+        return Quaternion(self.w / norm, self.x / norm, self.y / norm, self.z / norm)
     
     @property
     def components(self) -> np.ndarray:
@@ -327,8 +330,8 @@ class Quaternion:
         # 纯四元数 [0, v]
         q_v = Quaternion(0.0, v[0], v[1], v[2])
 
-        # q * q_v * q⁻¹
-        result = self * q_v * self.inverse
+        # q * q_v * q⁻¹ (归一化结果以消除数值误差)
+        result = (self * q_v * self.inverse).normalized()
 
         rotated = np.array([result.x, result.y, result.z])
         logger.debug(f"Rotated vector: {rotated}")
@@ -417,9 +420,9 @@ class Quaternion:
             dot = -dot
         
         if dot > 0.9995:
-            # 线性近似
+            # 线性近似（只归一化最终结果）
             q = self + t * (other + (-self))
-            return Quaternion(q.w, q.x, q.y, q.z)
+            return q.normalized()
         
         theta_0 = np.arccos(np.clip(dot, -1, 1))
         theta = theta_0 * t

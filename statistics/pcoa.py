@@ -171,9 +171,9 @@ class PCoAAnalyzer:
             eigenvalues = eigenvalues[:n_components]
 
             # Compute proportion explained
-            total_eigenvalue = np.sum(np.maximum(eigenvalues, 0))
+            total_eigenvalue = np.sum(eigenvalues_positive[:n_components])
             if total_eigenvalue > 0:
-                proportion = eigenvalues / total_eigenvalue * 100
+                proportion = eigenvalues_positive[:n_components] / total_eigenvalue * 100
             else:
                 proportion = np.zeros(n_components)
 

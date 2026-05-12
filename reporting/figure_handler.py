@@ -1,17 +1,11 @@
 """LaTeX figure handling utilities for PaleoAST reports."""
-from typing import Optional
 
 
 class FigureHandler:
     """Manages LaTeX figure inclusions."""
 
     @staticmethod
-    def include_figure(
-        path: str,
-        caption: str = "",
-        label: str = "",
-        width: str = "0.8\\textwidth"
-    ) -> str:
+    def include_figure(path: str, caption: str = "", label: str = "", width: str = "0.8\\textwidth") -> str:
         lines = ["\\begin{figure}[htbp]", "\\centering"]
         lines.append(f"\\includegraphics[width={width}]{{{path}}}")
         if caption:

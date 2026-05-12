@@ -13,7 +13,7 @@ from .process_pool import ProcessPool, Task
 from .task_scheduler import TaskScheduler
 
 __all__ = [
-    'ProcessPool',
-    'Task',
-    'TaskScheduler',
+    "ProcessPool",
+    "Task",
+    "TaskScheduler",
 ]

@@ -9,10 +9,11 @@ PaleoAST Macroevolution - Diversity Dynamics
 """
 
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Callable
-from dataclasses import dataclass
-import numpy as np
+
 import logging
+from dataclasses import dataclass
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DiversityCurve:
     """多样性曲线数据"""
+
     times: np.ndarray
     richness: np.ndarray
     origination_rates: np.ndarray
     extinction_rates: np.ndarray
     turnover_rate: np.ndarray
-    
+
     @property
     def n_intervals(self) -> int:
         """区间数量"""
@@ -35,28 +37,26 @@ class DiversityCurve:
 class DiversityDynamics:
     """
     多样性动态建模
-    
+
     分析和模拟生物多样性随时间的变化。
-    
+
     使用示例:
         >>> dyn = DiversityDynamics()
-        >>> 
+        >>>
         >>> # 从化石记录估计多样性
         >>> records = [(origination, extinction), ...]
         >>> curve = dyn.estimate_diversity(records, intervals)
-        >>> 
+        >>>
         >>> # 拟合随机过程
         >>> params = dyn.fit_geometric_brownian(curve)
     """
-    
+
     def __init__(self):
         """初始化多样性动态分析"""
         self._logger = logging.getLogger(f"{__name__}.DiversityDynamics")
-    
+
     def estimate_diversity(
-        self,
-        fossil_records: List[Tuple[float, float]],
-        intervals: List[Tuple[float, float]]
+        self, fossil_records: list[tuple[float, float]], intervals: list[tuple[float, float]]
     ) -> DiversityCurve:
         """
         从化石记录估计多样性曲线
@@ -68,26 +68,28 @@ class DiversityDynamics:
         返回:
             DiversityCurve
         """
-        self._logger.info(f"Estimating diversity from {len(fossil_records)} fossil records across {len(intervals)} intervals")
+        self._logger.info(
+            f"Estimating diversity from {len(fossil_records)} fossil records across {len(intervals)} intervals"
+        )
         times = []
         richness = []
         origination_rates = []
         extinction_rates = []
 
         records = fossil_records
-        
+
         for i, (t_start, t_end) in enumerate(intervals):
             times.append((t_start + t_end) / 2)
-            
+
             # 计算该区间内存在的物种数
-            count = sum(1 for o, L in records if o >= t_end and L <= t_start)
+            count = sum(1 for o, L in records if o >= t_end and t_start >= L)
             richness.append(count)
-            
+
             # 计算速率
             if i > 0:
-                dt = intervals[i][0] - intervals[i-1][0]
+                dt = t_start - t_end
                 if dt > 0:
-                    dR = count - richness[i-1]
+                    dR = count - richness[i - 1]
                     if dR > 0:
                         orig_rate = dR / dt
                         ext_rate = 0.0
@@ -99,25 +101,21 @@ class DiversityDynamics:
             else:
                 origination_rates.append(0.0)
                 extinction_rates.append(0.0)
-        
-        turnover = np.array(extinction_rates) / (
-            np.array(origination_rates) + np.array(extinction_rates) + 1e-10
+
+        turnover = np.array(extinction_rates) / (np.array(origination_rates) + np.array(extinction_rates) + 1e-10)
+
+        self._logger.info(
+            f"Diversity estimation complete: {len(times)} intervals, max richness = {max(richness) if richness else 0}"
         )
-        
-        self._logger.info(f"Diversity estimation complete: {len(times)} intervals, max richness = {max(richness) if richness else 0}")
         return DiversityCurve(
             times=np.array(times),
             richness=np.array(richness),
             origination_rates=np.array(origination_rates),
             extinction_rates=np.array(extinction_rates),
-            turnover_rate=turnover
+            turnover_rate=turnover,
         )
 
-    def fit_exponential_model(
-        self,
-        times: np.ndarray,
-        richness: np.ndarray
-    ) -> Tuple[float, float]:
+    def fit_exponential_model(self, times: np.ndarray, richness: np.ndarray) -> tuple[float, float]:
         """
         拟合指数增长模型
 
@@ -136,12 +134,8 @@ class DiversityDynamics:
 
         self._logger.info(f"Exponential model fit: r={r:.4f}, N0={N0:.4f}")
         return r, N0
-    
-    def fit_logistic_model(
-        self,
-        times: np.ndarray,
-        richness: np.ndarray
-    ) -> Tuple[float, float, float]:
+
+    def fit_logistic_model(self, times: np.ndarray, richness: np.ndarray) -> tuple[float, float, float]:
         """
         拟合逻辑斯蒂模型
 
@@ -159,25 +153,16 @@ class DiversityDynamics:
 
         try:
             params, _ = curve_fit(
-                logistic,
-                times,
-                richness,
-                p0=[0.1, max(richness) * 2, richness[0]],
-                bounds=([0, 0, 0], [10, 1e6, 1e6])
+                logistic, times, richness, p0=[0.1, max(richness) * 2, richness[0]], bounds=([0, 0, 0], [10, 1e6, 1e6])
             )
             self._logger.info(f"Logistic model fit: r={params[0]:.4f}, K={params[1]:.4f}, N0={params[2]:.4f}")
             return tuple(params)
-        except Exception as e:
-            self._logger.error(f"Logistic model fitting failed: {e}, using fallback values")
-            return 0.0, max(richness), richness[0]
-    
+        except (RuntimeError, ValueError) as e:
+            self._logger.error(f"Logistic model fitting failed: {e}")
+            raise ValueError(f"Logistic model fitting failed: {e}") from e
+
     def simulate_neutral(
-        self,
-        n_taxa: int,
-        duration: float,
-        speciation_rate: float = 0.1,
-        extinction_rate: float = 0.05,
-        dt: float = 0.1
+        self, n_taxa: int, duration: float, speciation_rate: float = 0.1, extinction_rate: float = 0.05, dt: float = 0.1
     ) -> DiversityCurve:
         """
         模拟中性随机过程
@@ -185,31 +170,33 @@ class DiversityDynamics:
         返回:
             模拟的多样性曲线
         """
-        self._logger.info(f"Simulating neutral process: {n_taxa} taxa, duration={duration}, speciation={speciation_rate}, extinction={extinction_rate}")
+        self._logger.info(
+            f"Simulating neutral process: {n_taxa} taxa, duration={duration}, speciation={speciation_rate}, extinction={extinction_rate}"
+        )
         n_steps = int(duration / dt)
-        
+
         times = np.zeros(n_steps)
         richness = np.zeros(n_steps)
         orig_rates = np.zeros(n_steps)
         ext_rates = np.zeros(n_steps)
-        
+
         N = n_taxa
         times[0] = 0
         richness[0] = N
-        
+
         for i in range(1, n_steps):
             times[i] = i * dt
-            
+
             # 随机出生-死亡
             births = np.random.poisson(speciation_rate * N * dt)
             deaths = min(N, np.random.poisson(extinction_rate * N * dt))
-            
+
             N = max(0, N + births - deaths)
             richness[i] = N
-            
+
             orig_rates[i] = births / (N * dt + 1e-10)
             ext_rates[i] = deaths / (N * dt + 1e-10)
-        
+
         turnover = ext_rates / (orig_rates + ext_rates + 1e-10)
 
         self._logger.info(f"Neutral simulation complete: {n_steps} steps, final richness = {int(richness[-1])}")
@@ -218,5 +205,5 @@ class DiversityDynamics:
             richness=richness,
             origination_rates=orig_rates,
             extinction_rates=ext_rates,
-            turnover_rate=turnover
+            turnover_rate=turnover,
         )

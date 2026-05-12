@@ -97,6 +97,7 @@ class NMDSAnalyzer:
         max_iterations: int | None = None,
         n_restarts: int | None = None,
         random_seed: int | None = None,
+        tolerance: float | None = None,
     ) -> NMDSResult:
         """
         Perform Non-metric MDS.
@@ -130,6 +131,8 @@ class NMDSAnalyzer:
                 max_iterations = self._max_iterations
             if n_restarts is None:
                 n_restarts = self._n_restarts
+            if tolerance is not None:
+                self._tolerance = tolerance
 
             # Store best result across all restarts
             best_stress = float("inf")
@@ -180,7 +183,10 @@ class NMDSAnalyzer:
                     f"NMDS poor fit: stress={best_stress:.4f} > 0.20, consider increasing n_restarts or n_dimensions"
                 )
             if not nmds_result.converged:
-                self._logger.info(f"NMDS best stress={best_stress:.6f} (good fit, below 0.05 threshold)")
+                if best_stress < 0.05:
+                    self._logger.info(f"NMDS best stress={best_stress:.6f} (good fit, below 0.05 threshold)")
+                else:
+                    self._logger.warning(f"NMDS did not converge: best stress={best_stress:.6f}")
             return nmds_result
 
     def _smacof(self, D: npt.NDArray, X_init: npt.NDArray, max_iterations: int, restart_id: int) -> dict[str, Any]:
@@ -201,7 +207,7 @@ class NMDSAnalyzer:
             # Compute stress
             numerator = np.sum((D - D_hat) ** 2)
             denominator = np.sum(D**2)
-            stress = np.sqrt(numerator / denominator)
+            stress = np.sqrt(numerator / denominator) if denominator > 0 else 0.0
             stress_history.append(stress)
 
             # Log convergence progress every 50 iterations

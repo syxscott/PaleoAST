@@ -1,5 +1,5 @@
 """Matrix-to-LaTeX conversion utilities for PaleoAST reports."""
-from typing import Any, List, Optional
+
 import numpy as np
 
 
@@ -8,10 +8,7 @@ class MatrixConverter:
 
     @staticmethod
     def to_latex(
-        matrix: np.ndarray,
-        row_labels: Optional[List[str]] = None,
-        col_labels: Optional[List[str]] = None,
-        fmt: str = ".4f"
+        matrix: np.ndarray, row_labels: list[str] | None = None, col_labels: list[str] | None = None, fmt: str = ".4f"
     ) -> str:
         n_rows, n_cols = matrix.shape
         col_spec = "|".join(["c"] * (n_cols + (1 if row_labels else 0)))

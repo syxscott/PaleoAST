@@ -152,10 +152,10 @@ class NavigationDelegate(QStyledItemDelegate):
         # Background painting
         if is_selected:
             # Selected state - blue highlight with rounded background
-            painter.fillRect(option.rect, QBrush(QColor("rgba(52, 152, 219, 0.2)")))
+            painter.fillRect(option.rect, QBrush(QColor(52, 152, 219, 51)))
         elif is_hovered:
             # Hover state - subtle light background
-            painter.fillRect(option.rect, QBrush(QColor("rgba(52, 152, 219, 0.08)")))
+            painter.fillRect(option.rect, QBrush(QColor(52, 152, 219, 20)))
 
         # Determine icon type from item data (UserRole)
         icon_type = index.data(Qt.ItemDataRole.UserRole)
@@ -391,7 +391,7 @@ class NavigationTree(QWidget):
         self._tree.setAnimated(True)
         self._tree.setAlternatingRowColors(False)
         self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
-        self._tree.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._tree.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
         # Set custom delegate
         self._delegate = NavigationDelegate()
@@ -478,17 +478,36 @@ class NavigationTree(QWidget):
             category = self._tree.topLevelItem(i)
             if not text:
                 category.setHidden(False)
-                for j in range(category.childCount()):
-                    category.child(j).setHidden(False)
+                self._show_all_children(category)
                 continue
             any_visible = False
             for j in range(category.childCount()):
                 child = category.child(j)
-                match = text in child.text(0).lower()
-                child.setHidden(not match)
-                if match:
+                child_match = text in child.text(0).lower()
+                # Also check grandchildren
+                grandchild_match = False
+                for k in range(child.childCount()):
+                    grandchild = child.child(k)
+                    gc_match = text in grandchild.text(0).lower()
+                    grandchild.setHidden(not gc_match)
+                    if gc_match:
+                        grandchild_match = True
+                # Show child if it matches or any grandchild matches
+                child_visible = child_match or grandchild_match
+                child.setHidden(not child_visible)
+                if child_visible:
                     any_visible = True
+                    # Auto-expand parent when grandchildren match
+                    if grandchild_match and not child_match:
+                        child.setExpanded(True)
             category.setHidden(not any_visible and text not in category.text(0).lower())
+
+    def _show_all_children(self, item: QTreeWidgetItem) -> None:
+        """Recursively show all children of an item."""
+        for i in range(item.childCount()):
+            child = item.child(i)
+            child.setHidden(False)
+            self._show_all_children(child)
 
     def _build_navigation_tree(self) -> None:
         """
@@ -685,7 +704,7 @@ class NavigationTree(QWidget):
         Handle item double-click.
 
         Double-click on item with children toggles expansion.
-        Double-click on leaf item triggers action.
+        Double-click on leaf item triggers the same action as single-click.
         """
         nav_item = getattr(item, "_nav_item", None)
         if not nav_item:
@@ -695,9 +714,10 @@ class NavigationTree(QWidget):
         if item.childCount() > 0:
             item.setExpanded(not item.isExpanded())
         else:
-            # Trigger action callback if exists
-            if nav_item.action_callback:
-                nav_item.action_callback()
+            # Trigger the same action as single-click
+            self._tree.setCurrentItem(item)
+            self.itemClicked.emit(nav_item)
+            self.sectionChanged.emit(nav_item.section)
 
     def get_current_item(self) -> NavigationItem | None:
         """Get currently selected navigation item."""
@@ -734,11 +754,18 @@ class NavigationTree(QWidget):
         if not category_item:
             return False
 
-        # Find child item
+        # Find child item (including nested grandchildren)
         for i in range(category_item.childCount()):
             child = category_item.child(i)
             if child.text(0) == name:
                 self._tree.setCurrentItem(child)
                 return True
+            # Search grandchildren
+            for j in range(child.childCount()):
+                grandchild = child.child(j)
+                if grandchild.text(0) == name:
+                    child.setExpanded(True)
+                    self._tree.setCurrentItem(grandchild)
+                    return True
 
         return False

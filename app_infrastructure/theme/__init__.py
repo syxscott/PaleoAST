@@ -1,10 +1,10 @@
 """
 ================================================================================
-PaleoAST Phase 5 - Theme Module Initialization
+PaleoAST - Theme Module Initialization
 ================================================================================
 """
 
-from .styles import PaleoASTStyles
 from .manager import ThemeManager
+from .styles import PaleoASTStyles
 
-__all__ = ['PaleoASTStyles', 'ThemeManager']
+__all__ = ["PaleoASTStyles", "ThemeManager"]
