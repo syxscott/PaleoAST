@@ -183,7 +183,8 @@ class LDAAnalyzer:
             loadings = lda.scalings_[:, :n_components]
 
             # Eigenvalues and explained variance
-            eigenvalues = lda.explained_variance_ratio_ * lda.explained_variance_ratio_.sum()
+            # explained_variance_ratio_ is already the proportion of variance explained
+            eigenvalues = lda.explained_variance_ratio_
             explained_var = lda.explained_variance_ratio_
 
             # Class means in LD space

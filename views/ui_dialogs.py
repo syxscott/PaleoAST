@@ -525,7 +525,8 @@ class PCADialog(BaseAnalysisDialog):
         elif method_index == 1:
             method = "covariance"
         else:
-            method = "spcs"
+            # SPCS (Specialized) falls back to covariance PCA
+            method = "covariance"
 
         self._parameters = {
             "n_components": self._n_components_spin.value(),

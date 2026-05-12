@@ -495,18 +495,18 @@ class RotationMatrix:
         R = U @ Vt
         
         # 处理反射情况 (det(R) = -1)
+        # 需要同时否定 U 和 Vt 的最后一列才能正确修正
         if np.linalg.det(R) < 0:
             Vt[-1, :] *= -1
+            U[:, -1] *= -1
             R = U @ Vt
-        
-        # 验证正交性
+
+        # 验证正交性和行列式
         if not np.allclose(R @ R.T, np.eye(3), atol=1e-8):
             raise ValueError("Result is not orthogonal")
-        
-        # 验证行列式
+
         if not np.isclose(np.linalg.det(R), 1.0, atol=1e-8):
-            logger.error("SVD result determinant is not +1")
-            raise ValueError("Result determinant is not +1")
+            raise ValueError(f"SVD result determinant is not +1, got {np.linalg.det(R)}")
 
         logger.info("SVD rotation computation complete, matrix verified orthogonal with det=+1")
         return R
