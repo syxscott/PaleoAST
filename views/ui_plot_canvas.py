@@ -905,10 +905,14 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_simper_results(self, result: Any) -> None:
-        """Plot SIMPER contribution bar chart."""
+        """Plot SIMPER contribution bar chart with cumulative line."""
         self._current_plot_type = "simper"
+        self._simper_result = result  # Store for replotting
         self._figure.clear()
+
+        # Use twiny() for cumulative contribution line on top
         self._ax = self._figure.add_subplot(111)
+        ax_top = self._ax.twiny()
 
         # Get top contributors (flat list from SimperResult)
         all_contribs: dict[str, float] = {}
@@ -920,17 +924,32 @@ class InteractivePlotCanvas(QWidget):
         names = [item[0] for item in sorted_items]
         values = [item[1] for item in sorted_items]
 
+        # Calculate cumulative contributions
+        total = sum(values)
+        cumulative = np.cumsum([v / total * 100 for v in values])
+
         y_pos = np.arange(len(names))
         bars = self._ax.barh(y_pos, values, color=self.COLORS[0], alpha=0.8)
         self._ax.set_yticks(y_pos)
         self._ax.set_yticklabels(names, fontsize=8)
         self._ax.invert_yaxis()
-        self._ax.set_xlabel(_("Average Contribution (%)"))
+        self._ax.set_xlabel(_("Average Contribution (%)"), color=self.COLORS[0])
         self._ax.set_title(_("SIMPER: Top Contributing Variables"))
 
         for bar, val in zip(bars, values):
             self._ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
                          f"{val:.1f}%", va="center", fontsize=8, color="#2C3E50")
+
+        # Cumulative contribution line on top axis
+        ax_top.plot(cumulative, y_pos, color=self.COLORS[3], linewidth=2, marker="o", markersize=4, alpha=0.8)
+        ax_top.set_xlabel(_("Cumulative Contribution (%)"), color=self.COLORS[3])
+        ax_top.tick_params(axis="x", colors=self.COLORS[3])
+        ax_top.set_xlim([0, 100])
+
+        # Style
+        self._ax.set_facecolor("#FAFBFC")
+        self._ax.spines["top"].set_color(self.COLORS[0])
+        ax_top.spines["top"].set_color(self.COLORS[3])
 
         self._figure.tight_layout()
         self._canvas.draw()
@@ -970,18 +989,25 @@ class InteractivePlotCanvas(QWidget):
         scores = result.scores
         n_dims = scores.shape[1]
 
+        # Store data for replotting
+        self._scores = scores
+        self._group_labels = result.groups if hasattr(result, "groups") else np.zeros(len(scores), dtype=int)
+        self._labels = getattr(result, "labels", [f"S{i}" for i in range(len(scores))])
+
         if n_dims >= 2:
             x_data = scores[:, 0]
             y_data = scores[:, 1]
             x_label = "LD1"
             y_label = "LD2"
+            pc1, pc2 = 0, 1
         else:
             x_data = scores[:, 0]
             y_data = np.zeros(len(x_data))
             x_label = "LD1"
             y_label = ""
+            pc1, pc2 = 0, 0
 
-        groups = result.groups if hasattr(result, "groups") else np.zeros(len(x_data), dtype=int)
+        groups = self._group_labels
         unique_groups = np.unique(groups)
 
         for i, g in enumerate(unique_groups):
@@ -990,6 +1016,15 @@ class InteractivePlotCanvas(QWidget):
             self._ax.scatter(x_data[mask], y_data[mask], c=color, s=50, alpha=0.7,
                            edgecolors="white", linewidth=0.5, label=f"Group {g+1}")
 
+        # Add labels if enabled
+        if self._show_labels_check.isChecked():
+            for i, (x, y) in enumerate(zip(x_data, y_data)):
+                self._ax.annotate(self._labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
+
+        # Add ellipses if enabled
+        if self._show_ellipses_check.isChecked() and n_dims >= 2:
+            self._add_confidence_ellipses(scores, groups, pc1, pc2)
+
         if hasattr(result, "explained_variance_ratio") and len(result.explained_variance_ratio) >= 2:
             x_label = f"LD1 ({result.explained_variance_ratio[0]:.1%})"
             y_label = f"LD2 ({result.explained_variance_ratio[1]:.1%})"
@@ -997,7 +1032,22 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_xlabel(x_label)
         self._ax.set_ylabel(y_label)
         self._ax.set_title(_("Linear Discriminant Analysis"))
-        self._ax.legend(fontsize=8)
+
+        # Style
+        self._ax.set_facecolor("#FAFBFC")
+        self._ax.tick_params(colors="#2C3E50")
+        self._ax.xaxis.label.set_color("#2C3E50")
+        self._ax.yaxis.label.set_color("#2C3E50")
+        self._ax.title.set_color("#2C3E50")
+
+        for spine in self._ax.spines.values():
+            spine.set_color("#E4E7EB")
+
+        if len(unique_groups) > 1:
+            self._ax.legend(
+                loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB", labelcolor="#2C3E50"
+            )
+
         self._figure.tight_layout()
         self._canvas.draw()
 
@@ -1384,6 +1434,16 @@ class InteractivePlotCanvas(QWidget):
                     {"coordinates": self._scores, "stress": self._stress, "labels": self._labels, "groups": self._group_labels},
                 )()
             )
+        elif self._current_plot_type == "lda" and self._scores is not None:
+            self.plot_lda_scores(
+                type(
+                    "Result",
+                    (),
+                    {"scores": self._scores, "labels": self._labels, "groups": self._group_labels},
+                )()
+            )
+        elif self._current_plot_type == "simper" and hasattr(self, "_simper_result"):
+            self.plot_simper_results(self._simper_result)
 
     def _toggle_labels(self, checked: bool) -> None:
         """Toggle label visibility."""

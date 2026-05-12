@@ -934,6 +934,15 @@ class MainWindow(QMainWindow):
         edit_group.addButton("redo", _("Redo"), _("Redo action (Ctrl+Y)"))
         edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
 
+        # Data transformations group
+        transform_group = home_tab.addGroup(_("Transform"))
+        self._btn_log_transform = transform_group.addButton("settings", _("Log"), _("Log transformation (base 10)"))
+        self._btn_sqrt_transform = transform_group.addButton("settings", _("Sqrt"), _("Square root transformation"))
+        self._btn_hellinger_transform = transform_group.addButton("settings", _("Hellinger"), _("Hellinger transformation"))
+        self._btn_zscore_transform = transform_group.addButton("settings", _("Z-Score"), _("Z-score standardization"))
+        self._btn_percent_transform = transform_group.addButton("settings", _("% Total"), _("Percentage standardization"))
+        self._btn_wisconsin_transform = transform_group.addButton("settings", _("Wisconsin"), _("Wisconsin double standardization"))
+
         # View group
         view_group = home_tab.addGroup(_("View"))
         view_group.addButton("settings", _("Preferences"), _("Application settings"))
@@ -946,7 +955,7 @@ class MainWindow(QMainWindow):
         self._btn_pca = multivar_group.addButton("pca", "PCA", _("Principal Component Analysis"))
         self._btn_pcoa = multivar_group.addButton("pcoa", "PCoA", _("Principal Coordinate Analysis"))
         self._btn_nmds = multivar_group.addButton("nmds", "NMDS", _("Non-metric MDS"))
-        self._btn_lda = multivar_group.addButton("pca", "LDA", _("Linear Discriminant Analysis"))
+        self._btn_lda = multivar_group.addButton("chart", "LDA", _("Linear Discriminant Analysis"))
 
         # Univariate group
         univar_group = analysis_tab.addGroup(_("Univariate"))
@@ -994,6 +1003,17 @@ class MainWindow(QMainWindow):
         self._btn_open.clicked.connect(self._on_open_file)
         self._btn_save.clicked.connect(self._on_save_file)
 
+        # Transformation buttons
+        self._btn_log_transform.clicked.connect(self._on_transform_log)
+        self._btn_sqrt_transform.clicked.connect(self._on_transform_sqrt)
+        self._btn_hellinger_transform.clicked.connect(self._on_transform_hellinger)
+        self._btn_zscore_transform.clicked.connect(self._on_transform_zscore)
+        self._btn_percent_transform.clicked.connect(self._on_transform_percent)
+        self._btn_wisconsin_transform.clicked.connect(self._on_transform_wisconsin)
+        for btn in [self._btn_log_transform, self._btn_sqrt_transform, self._btn_hellinger_transform,
+                    self._btn_zscore_transform, self._btn_percent_transform, self._btn_wisconsin_transform]:
+            self._register_data_button(btn)
+
         # Analysis buttons (require data)
         self._btn_pca.clicked.connect(self._on_run_pca)
         self._register_data_button(self._btn_pca)
@@ -1031,8 +1051,12 @@ class MainWindow(QMainWindow):
         # Monitor state changes
         self._last_has_data = False
 
-    def _get_groups(self) -> list[str] | None:
-        """Get group labels from row metadata, or None if not available."""
+    def _get_groups(self) -> list[int] | None:
+        """Get group labels from row metadata, converted to integer indices.
+
+        Returns:
+            list[int]: Group indices for each row, or None if no groups are defined.
+        """
         rm = self._state.row_metadata
         if rm is None:
             return None
@@ -1043,8 +1067,30 @@ class MainWindow(QMainWindow):
         values = [groups_dict[i] for i in sorted(groups_dict.keys())]
         if all(v is None for v in values):
             return None
-        # Fill None with a default group
-        return [v if v is not None else "Ungrouped" for v in values]
+
+        # Convert string labels to integer indices
+        # Get unique labels in order of first appearance
+        unique_labels = []
+        label_to_idx = {}
+        for v in values:
+            if v is None:
+                label = "Ungrouped"
+            else:
+                label = v
+            if label not in label_to_idx:
+                label_to_idx[label] = len(unique_labels)
+                unique_labels.append(label)
+
+        # Return integer indices
+        result = []
+        for v in values:
+            if v is None:
+                label = "Ungrouped"
+            else:
+                label = v
+            result.append(label_to_idx[label])
+
+        return result
 
     def _update_ui_state(self) -> None:
         """Update UI element states based on data availability."""
@@ -1474,6 +1520,67 @@ class MainWindow(QMainWindow):
         self._status_bar.setInfo(
             _("Data imported: {0} samples x {1} variables").format(n_samples, n_vars)
         )
+
+    def _apply_transformation(self, transform_func, name: str) -> None:
+        """Apply a transformation to the current data."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        try:
+            data = self._state.data_matrix.data
+            transformed = transform_func(data)
+
+            # Update state
+            from models.data_matrix import DataMatrix
+            matrix = DataMatrix(
+                transformed,
+                row_labels=self._state.data_matrix.row_labels,
+                col_labels=self._state.data_matrix.col_labels
+            )
+            self._state.set_data_matrix(matrix)
+
+            # Update spreadsheet
+            self._spreadsheet.load_data(
+                transformed,
+                row_labels=self._state.data_matrix.row_labels,
+                col_labels=self._state.data_matrix.col_labels
+            )
+
+            self._status_bar.setInfo(_("{0} transformation applied").format(name))
+
+        except Exception as e:
+            QMessageBox.critical(self, _("Transformation Error"), str(e))
+
+    def _on_transform_log(self) -> None:
+        """Apply log10 transformation."""
+        from utils.transformations import log_transform
+        self._apply_transformation(log_transform, "Log")
+
+    def _on_transform_sqrt(self) -> None:
+        """Apply square root transformation."""
+        from utils.transformations import sqrt_transform
+        self._apply_transformation(sqrt_transform, "Sqrt")
+
+    def _on_transform_hellinger(self) -> None:
+        """Apply Hellinger transformation."""
+        from utils.transformations import hellinger_transform
+        self._apply_transformation(hellinger_transform, "Hellinger")
+
+    def _on_transform_zscore(self) -> None:
+        """Apply Z-score standardization."""
+        from utils.transformations import zscore_standardize
+        self._apply_transformation(zscore_standardize, "Z-Score")
+
+    def _on_transform_percent(self) -> None:
+        """Apply percentage standardization."""
+        from utils.transformations import percent_standardize
+        self._apply_transformation(percent_standardize, "% Total")
+
+    def _on_transform_wisconsin(self) -> None:
+        """Apply Wisconsin double standardization."""
+        from utils.transformations import wisconsin_double_standardize
+        self._apply_transformation(wisconsin_double_standardize, "Wisconsin")
 
     def _on_export(self) -> None:
         """Export analysis results and data."""
