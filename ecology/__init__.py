@@ -15,10 +15,13 @@ Version: 1.0.0
 """
 
 from .diversity import DiversityAnalyzer, compute_diversity_indices
+from .dtw import DTWAnalyzer, DTWResult
 from .rarefaction import RarefactionAnalyzer
 
 __all__ = [
     "DiversityAnalyzer",
+    "DTWAnalyzer",
+    "DTWResult",
     "RarefactionAnalyzer",
     "compute_diversity_indices",
 ]

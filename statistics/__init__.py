@@ -18,6 +18,7 @@ Version: 1.0.0
 
 from .anosim import ANOSIMAnalyzer, ANOSIMResult
 from .distance_metrics import DistanceMatrixResult, compute_distance_matrix
+from .geometry import DisparityResult, GeometryAnalyzer, MSTResult
 from .nmds import NMDSAnalyzer, NMDSResult
 from .pca import PCAAnalyzer, PCAResult
 from .pcoa import PCoAAnalyzer, PCoAResult
@@ -27,6 +28,9 @@ __all__ = [
     "ANOSIMAnalyzer",
     "ANOSIMResult",
     "DistanceMatrixResult",
+    "DisparityResult",
+    "GeometryAnalyzer",
+    "MSTResult",
     "NMDSAnalyzer",
     "NMDSResult",
     "PCAAnalyzer",

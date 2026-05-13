@@ -20,10 +20,14 @@ PaleoAST Macroevolution - Module Initialization
 from .cohort import CohortSurvivorshipAnalysis
 from .diversity import DiversityDynamics
 from .fbd import FossilizedBirthDeathProcess, GillespieSimulator
+from .survival import KaplanMeierAnalyzer, LogRankResult, SurvivalResult
 
 __all__ = [
     "CohortSurvivorshipAnalysis",
     "DiversityDynamics",
     "FossilizedBirthDeathProcess",
     "GillespieSimulator",
+    "KaplanMeierAnalyzer",
+    "LogRankResult",
+    "SurvivalResult",
 ]

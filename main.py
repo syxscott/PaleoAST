@@ -25,8 +25,8 @@ from typing import Any
 
 # 防止在导入前就崩溃
 try:
-    import numpy as np
-    import scipy as sp
+    import numpy  # noqa: F401
+    import scipy  # noqa: F401
 except ImportError:
     print("ERROR: Required scientific computing packages not found!")
     print("Please install: numpy scipy")
@@ -252,422 +252,6 @@ def get_light_theme_stylesheet() -> str:
     return get_modern_stylesheet()
 
 
-def get_dark_theme_stylesheet() -> str:
-    """
-    获取深色主题样式表
-
-    返回:
-        QSS样式字符串
-    """
-    return """
-    /* ====================================================================
-       PaleoAST Professional Dark Theme
-       ==================================================================== */
-    
-    /* 全局字体 */
-    * {
-        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-        font-size: 10pt;
-    }
-    
-    /* 主窗口 */
-    QMainWindow {
-        background-color: #1A1A2E;
-        color: #ECF0F1;
-    }
-    
-    /* 中央部件 */
-    QWidget {
-        background-color: #1A1A2E;
-        color: #ECF0F1;
-    }
-    
-    /* 按钮 */
-    QPushButton {
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 #34495E,
-            stop: 1 #2C3E50
-        );
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        border-radius: 6px;
-        padding: 8px 20px;
-        min-height: 28px;
-    }
-    
-    QPushButton:hover {
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 #3D566E,
-            stop: 1 #34495E
-        );
-        border: 1px solid #3498DB;
-    }
-    
-    QPushButton:pressed {
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 #2C3E50,
-            stop: 1 #1A1A2E
-        );
-        border: 1px solid #2980B9;
-    }
-    
-    QPushButton:disabled {
-        background-color: #2C3E50;
-        color: #7F8C8D;
-    }
-    
-    /* 主按钮 */
-    QPushButton[class="primary"] {
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 #3498DB,
-            stop: 1 #2980B9
-        );
-        border: 1px solid #3498DB;
-    }
-    
-    QPushButton[class="primary"]:hover {
-        background-color: qlineargradient(
-            x1: 0, y1: 0, x2: 0, y2: 1,
-            stop: 0 #5DADE2,
-            stop: 1 #3498DB
-        );
-    }
-    
-    /* 输入框 */
-    QLineEdit, QTextEdit, QPlainTextEdit {
-        background-color: #2C3E50;
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        border-radius: 4px;
-        padding: 8px 12px;
-        selection-background-color: #3498DB;
-    }
-    
-    QLineEdit:hover, QTextEdit:hover {
-        border: 1px solid #3498DB;
-    }
-    
-    QLineEdit:focus, QTextEdit:focus {
-        border: 2px solid #3498DB;
-    }
-    
-    /* 组合框 */
-    QComboBox {
-        background-color: #2C3E50;
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        border-radius: 4px;
-        padding: 8px 12px;
-    }
-    
-    QComboBox:hover {
-        border: 1px solid #3498DB;
-    }
-    
-    QComboBox QAbstractItemView {
-        background-color: #2C3E50;
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        selection-background-color: #3498DB;
-    }
-    
-    /* 滚动条 */
-    QScrollBar:vertical {
-        background-color: transparent;
-        width: 10px;
-        margin: 0;
-    }
-    
-    QScrollBar::handle:vertical {
-        background-color: #34495E;
-        min-height: 30px;
-        border-radius: 5px;
-        margin: 2px;
-    }
-    
-    QScrollBar::handle:vertical:hover {
-        background-color: #3D566E;
-        width: 14px;
-    }
-    
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-        height: 0;
-    }
-    
-    QScrollBar:horizontal {
-        background-color: transparent;
-        height: 10px;
-        margin: 0;
-    }
-    
-    QScrollBar::handle:horizontal {
-        background-color: #34495E;
-        min-width: 30px;
-        border-radius: 5px;
-        margin: 2px;
-    }
-    
-    QScrollBar::handle:horizontal:hover {
-        background-color: #3D566E;
-        height: 14px;
-    }
-    
-    /* 表格 */
-    QTableWidget, QTreeWidget, QListWidget {
-        background-color: #2C3E50;
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        border-radius: 4px;
-        gridline-color: #34495E;
-        alternate-background-color: #34495E;
-    }
-    
-    QHeaderView::section {
-        background-color: #34495E;
-        color: #ECF0F1;
-        padding: 8px;
-        border: none;
-        border-bottom: 2px solid #3498DB;
-        font-weight: 600;
-    }
-    
-    /* 菜单 */
-    QMenuBar {
-        background-color: #1A1A2E;
-        color: #ECF0F1;
-        border-bottom: 1px solid #34495E;
-    }
-    
-    QMenuBar::item:selected {
-        background-color: #34495E;
-    }
-    
-    QMenu {
-        background-color: #2C3E50;
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        border-radius: 6px;
-        padding: 4px;
-    }
-    
-    QMenu::item:selected {
-        background-color: #3498DB;
-    }
-    
-    QMenu::separator {
-        height: 1px;
-        background-color: #34495E;
-    }
-    
-    /* 标签页 */
-    QTabWidget::pane {
-        background-color: #2C3E50;
-        border: 1px solid #34495E;
-        border-radius: 4px;
-    }
-    
-    QTabBar::tab {
-        background-color: #34495E;
-        color: #95A5A6;
-        border: 1px solid #34495E;
-        border-bottom: none;
-        border-top-left-radius: 4px;
-        border-top-right-radius: 4px;
-        padding: 10px 20px;
-    }
-    
-    QTabBar::tab:hover {
-        background-color: #3D566E;
-    }
-    
-    QTabBar::tab:selected {
-        background-color: #2C3E50;
-        color: #3498DB;
-        border: 1px solid #3498DB;
-    }
-    
-    /* 工具栏 */
-    QToolBar {
-        background-color: #1A1A2E;
-        border: none;
-        spacing: 4px;
-    }
-    
-    QToolButton {
-        background-color: transparent;
-        color: #ECF0F1;
-        border: none;
-        border-radius: 4px;
-        padding: 6px;
-    }
-    
-    QToolButton:hover {
-        background-color: rgba(52, 152, 219, 0.2);
-    }
-    
-    /* 分组框 */
-    QGroupBox {
-        background-color: transparent;
-        color: #3498DB;
-        border: 1px solid #34495E;
-        border-radius: 6px;
-        margin-top: 12px;
-        padding-top: 16px;
-        font-weight: 600;
-    }
-    
-    QGroupBox::title {
-        subcontrol-origin: margin;
-        subcontrol-position: top left;
-        left: 12px;
-        padding: 0 8px;
-        background-color: #1A1A2E;
-    }
-    
-    /* 进度条 */
-    QProgressBar {
-        background-color: #34495E;
-        border: none;
-        border-radius: 6px;
-        height: 12px;
-        text-align: center;
-        color: #ECF0F1;
-    }
-    
-    QProgressBar::chunk {
-        background: qlineargradient(
-            x1: 0, y1: 0, x2: 1, y2: 0,
-            stop: 0 #3498DB,
-            stop: 0.5 #2ECC71,
-            stop: 1 #27AE60
-        );
-        border-radius: 6px;
-    }
-    
-    /* 标签 */
-    QLabel {
-        color: #ECF0F1;
-        background-color: transparent;
-    }
-    
-    /* 停靠窗口 */
-    QDockWidget {
-        color: #ECF0F1;
-        border: 1px solid #34495E;
-        titlebar-close-icon: url(none);
-        titlebar-normal-icon: url(none);
-    }
-    
-    QDockWidget::title {
-        background-color: #2C3E50;
-        padding: 8px;
-    }
-    
-    /* 分裂器 */
-    QSplitter::handle {
-        background-color: #34495E;
-    }
-    
-    QSplitter::handle:horizontal {
-        width: 2px;
-    }
-    
-    QSplitter::handle:vertical {
-        height: 2px;
-    }
-    
-    QSplitter::handle:hover {
-        background-color: #3498DB;
-    }
-    
-    /* 复选框 */
-    QCheckBox {
-        color: #ECF0F1;
-        spacing: 8px;
-    }
-    
-    QCheckBox::indicator {
-        width: 18px;
-        height: 18px;
-        border: 2px solid #95A5A6;
-        border-radius: 3px;
-        background-color: transparent;
-    }
-    
-    QCheckBox::indicator:checked {
-        background-color: #3498DB;
-        border-color: #3498DB;
-    }
-    
-    /* 单选框 */
-    QRadioButton {
-        color: #ECF0F1;
-        spacing: 8px;
-    }
-    
-    QRadioButton::indicator {
-        width: 18px;
-        height: 18px;
-        border: 2px solid #95A5A6;
-        border-radius: 9px;
-        background-color: transparent;
-    }
-    
-    QRadioButton::indicator:checked {
-        border-color: #3498DB;
-        background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3498DB, stop:0.75 #3498DB, stop:0.76 transparent);
-    }
-    
-    /* 滑块 */
-    QSlider::groove:horizontal {
-        height: 6px;
-        background-color: #34495E;
-        border-radius: 3px;
-    }
-    
-    QSlider::handle:horizontal {
-        background-color: #3498DB;
-        width: 16px;
-        height: 16px;
-        margin: -5px 0;
-        border-radius: 8px;
-    }
-    
-    QSlider::sub-page:horizontal {
-        background-color: #3498DB;
-        border-radius: 3px;
-    }
-    
-    /* 状态栏 */
-    QStatusBar {
-        background-color: #1A1A2E;
-        color: #95A5A6;
-        border-top: 1px solid #34495E;
-    }
-    
-    QStatusBar::item {
-        border: none;
-    }
-    
-    /* 对话框 */
-    QDialog {
-        background-color: #1A1A2E;
-    }
-    
-    /* 消息框 */
-    QMessageBox {
-        background-color: #1A1A2E;
-    }
-    
-    QMessageBox QLabel {
-        color: #ECF0F1;
-    }
-    """
-
 
 # =============================================================================
 # 闪屏窗口
@@ -703,7 +287,17 @@ class SplashScreen:
             # 创建窗口
             self._widget = QWidget(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
             self._widget.setFixedSize(500, 350)
-            self._widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            self._widget.setStyleSheet("""
+                QWidget {
+                    background-color: qlineargradient(
+                        x1: 0, y1: 0, x2: 1, y2: 1,
+                        stop: 0 #1A1A2E,
+                        stop: 0.5 #16213E,
+                        stop: 1 #0F3460
+                    );
+                    border-radius: 12px;
+                }
+            """)
 
             # 居中
             screen = app.primaryScreen()
@@ -720,7 +314,7 @@ class SplashScreen:
             title = QLabel("PaleoAST")
             title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
             title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            title.setStyleSheet("color: #FFFFFF; background: transparent;")
+            title.setStyleSheet("color: #FFFFFF;")
 
             # 副标题
             from config.i18n import _
@@ -728,7 +322,7 @@ class SplashScreen:
             subtitle = QLabel(_("Paleontological Advanced Statistical Toolkit"))
             subtitle.setFont(QFont("Segoe UI", 10))
             subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            subtitle.setStyleSheet("color: #3498DB; background: transparent;")
+            subtitle.setStyleSheet("color: #3498DB;")
 
             # 进度条
             self._progress = QProgressBar()
@@ -756,14 +350,14 @@ class SplashScreen:
             self._status = QLabel(_("Initializing..."))
             self._status.setFont(QFont("Consolas", 9))
             self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._status.setStyleSheet("color: #95A5A6; background: transparent;")
+            self._status.setStyleSheet("color: #95A5A6;")
             self._status.setWordWrap(True)
 
             # 版本
             version = QLabel(_("Version {0}").format(PaleoASTApplication.VERSION))
             version.setFont(QFont("Segoe UI", 8))
             version.setAlignment(Qt.AlignmentFlag.AlignRight)
-            version.setStyleSheet("color: #7F8C8D; background: transparent;")
+            version.setStyleSheet("color: #7F8C8D;")
 
             # 添加到布局
             layout.addStretch(1)
@@ -919,7 +513,6 @@ class PaleoASTApplication:
 
             # 9. 完成
             self._splash.update(100, _("Ready!"))
-            time.sleep(0.5)
 
             # 10. 关闭闪屏并显示主窗口
             self._splash.close()
@@ -1071,9 +664,6 @@ class PaleoASTApplication:
 
                 self._main_window.setCentralWidget(central)
 
-                # 菜单栏
-                self._create_menu_bar()
-
                 # 状态栏
                 status = QStatusBar()
                 status.showMessage("Ready")
@@ -1084,35 +674,6 @@ class PaleoASTApplication:
         except Exception as e:
             self._logger.error(f"Failed to create main window: {e}")
             raise
-
-    def _create_menu_bar(self) -> None:
-        """创建菜单栏"""
-        try:
-            menubar = self._main_window.menuBar()
-
-            # 文件菜单
-            file_menu = menubar.addMenu("&File")
-
-            # 编辑菜单
-            edit_menu = menubar.addMenu("&Edit")
-
-            # 数据菜单
-            data_menu = menubar.addMenu("&Data")
-
-            # 统计菜单
-            stats_menu = menubar.addMenu("&Statistics")
-
-            # 形态测量菜单
-            morph_menu = menubar.addMenu("&Morphometrics")
-
-            # 可视化菜单
-            view_menu = menubar.addMenu("&Visualization")
-
-            # 帮助菜单
-            help_menu = menubar.addMenu("&Help")
-
-        except Exception as e:
-            self._logger.warning(f"Failed to create menu bar: {e}")
 
     def _apply_theme(self) -> None:
         """应用主题"""

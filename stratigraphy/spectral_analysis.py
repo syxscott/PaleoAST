@@ -39,13 +39,84 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-from scipy.signal import cwt, morlet2
+from scipy.signal import fftconvolve
 
 from config.i18n import _
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
+
+
+def _morlet_wavelet(n: int, w0: float = 5.0) -> np.ndarray:
+    """
+    Generate Morlet wavelet of length n.
+
+    Parameters:
+        n: Length of wavelet
+        w0: Central frequency (default 5.0)
+
+    Returns:
+        Complex Morlet wavelet
+    """
+    n = int(n)
+    half_n = n // 2
+    t = np.arange(-half_n, half_n + 1)
+    # Morlet wavelet: pi^{-1/4} * exp(i*w0*t) * exp(-t^2/2)
+    wavelet = np.exp(1j * w0 * t) * np.exp(-t**2 / 2)
+    wavelet *= np.pi**(-0.25)  # Normalization
+    return wavelet
+
+
+def _mexican_hat_wavelet(n: int) -> np.ndarray:
+    """
+    Generate Mexican Hat (Ricker) wavelet of length n.
+
+    Parameters:
+        n: Length of wavelet (should be odd)
+
+    Returns:
+        Mexican hat wavelet
+    """
+    n = int(n)
+    if n % 2 == 0:
+        n += 1
+    half_n = n // 2
+    t = np.arange(-half_n, half_n + 1)
+    # Mexican hat: (1 - t^2) * exp(-t^2/2)
+    wavelet = (1 - t**2) * np.exp(-t**2 / 2)
+    wavelet *= np.pi**(-0.25)  # Normalization
+    return wavelet
+
+
+def _cwt_simple(signal: np.ndarray, wavelet_func, scales: np.ndarray) -> np.ndarray:
+    """
+    Simple Continuous Wavelet Transform using convolution.
+
+    Parameters:
+        signal: Input signal
+        wavelet_func: Function to generate wavelet of given length
+        scales: Wavelet scales
+
+    Returns:
+        CWT matrix of shape (len(scales), len(signal))
+    """
+    n_samples = len(signal)
+    n_scales = len(scales)
+    cwt_matrix = np.zeros((n_scales, n_samples), dtype=complex)
+
+    for i, scale in enumerate(scales):
+        # Wavelet length proportional to scale
+        wavelet_len = max(2 * int(scale) + 1, 7)
+        if wavelet_len % 2 == 0:
+            wavelet_len += 1
+        wavelet = wavelet_func(wavelet_len)
+        # Normalize wavelet by scale
+        wavelet = wavelet / np.sqrt(scale)
+        # Convolve
+        cwt_matrix[i] = fftconvolve(signal, wavelet, mode='same')
+
+    return cwt_matrix
 
 
 @dataclass
@@ -387,15 +458,14 @@ class SpectralAnalyzer:
         # Compute CWT using scipy
         if wavelet == "morlet":
             # Morlet wavelet
-            cwt_matrix = cwt(values, morlet2, scales)
+            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales)
             wavelet_name = "Morlet"
         elif wavelet in ("ricker", "mexican_hat"):
-            from scipy.signal import mexican_hat
-            cwt_matrix = cwt(values, mexican_hat, scales)
+            cwt_matrix = _cwt_simple(values, _mexican_hat_wavelet, scales)
             wavelet_name = "Mexican Hat"
         else:
             # Default to Morlet
-            cwt_matrix = cwt(values, morlet2, scales)
+            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales)
             wavelet_name = "Morlet"
 
         # Power spectrum

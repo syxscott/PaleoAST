@@ -187,7 +187,8 @@ class NavigationDelegate(QStyledItemDelegate):
 
         # Text rendering
         text_left_margin = icon_margin + icon_size + icon_margin + 4
-        text_rect = option.rect.adjusted(text_left_margin, 0, -4, 0)
+        text_right_margin = -28 if has_children else -4
+        text_rect = option.rect.adjusted(text_left_margin, 0, text_right_margin, 0)
 
         # Get display text (fall back to item text if present)
         text = index.data(Qt.ItemDataRole.DisplayRole)
@@ -196,13 +197,15 @@ class NavigationDelegate(QStyledItemDelegate):
                 text = item.text(0)
             except Exception:
                 text = ""
+        if text is None:
+            text = ""
 
         # Draw text
         text_color = "#3498DB" if is_selected else "#2C3E50"
         if is_hovered and not is_selected:
             text_color = "#3498DB"
 
-        font = QFont("Segoe UI", 11)
+        font = QFont("Segoe UI", 10)
         # Top-level if no valid parent index
         if not index.parent().isValid():
             font.setBold(True)
@@ -353,7 +356,7 @@ class NavigationDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:
         """Return size hint for item."""
-        return QSize(250, 28)
+        return QSize(250, 32)
 
 
 class NavigationTree(QWidget):
@@ -406,11 +409,11 @@ class NavigationTree(QWidget):
                 outline: none;
                 color: #2C3E50;
                 font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                font-size: 12px;
+                font-size: 11px;
             }
             QTreeWidget::item {
                 padding: 6px 4px;
-                min-height: 28px;
+                min-height: 32px;
                 border-radius: 4px;
             }
             QTreeWidget::item:hover {

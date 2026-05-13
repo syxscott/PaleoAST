@@ -325,7 +325,6 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_pca_scores(self, result: Any, pc1: int = 0, pc2: int = 1) -> None:
-        self._record_plot_call("plot_pca_scores", result, pc1=pc1, pc2=pc2)
         """
         Plot PCA scores.
 
@@ -342,6 +341,7 @@ class InteractivePlotCanvas(QWidget):
             - Points colored by group
             - Eigenvalue percentages on axes
         """
+        self._record_plot_call("plot_pca_scores", result, pc1=pc1, pc2=pc2)
         self._ax.clear()
         self._current_plot_type = "pca"
 
@@ -443,7 +443,6 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_pcoa_scores(self, result: Any, coord1: int = 0, coord2: int = 1) -> None:
-        self._record_plot_call("plot_pcoa_scores", result, coord1=coord1, coord2=coord2)
         """
         Plot PCoA scores.
 
@@ -454,6 +453,7 @@ class InteractivePlotCanvas(QWidget):
                 U = eigenvector matrix
                 Λ = diagonal eigenvalue matrix
         """
+        self._record_plot_call("plot_pcoa_scores", result, coord1=coord1, coord2=coord2)
         self._ax.clear()
         self._current_plot_type = "pcoa"
 
@@ -536,7 +536,6 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_cca_triplot(self, result: Any, ax1: int = 0, ax2: int = 1) -> None:
-        self._record_plot_call("plot_cca_triplot", result, ax1=ax1, ax2=ax2)
         """
         Plot CCA/RDA triplot showing samples, species, and environmental vectors.
 
@@ -550,6 +549,7 @@ class InteractivePlotCanvas(QWidget):
             Species scores: U * sqrt(Λ)
             Biplot scores: X_centered' @ site_scores
         """
+        self._record_plot_call("plot_cca_triplot", result, ax1=ax1, ax2=ax2)
         self._ax.clear()
         self._current_plot_type = "cca"
 
@@ -723,7 +723,6 @@ class InteractivePlotCanvas(QWidget):
         grid_shape: tuple[int, int] = (15, 15),
         show_vectors: bool = True
     ) -> None:
-        self._record_plot_call("plot_tps_deformation_grid", tps_result, grid_shape=grid_shape, show_vectors=show_vectors)
         """
         Plot TPS deformation grid visualization.
 
@@ -735,6 +734,7 @@ class InteractivePlotCanvas(QWidget):
             grid_shape: Shape of the deformation grid (rows, cols)
             show_vectors: Whether to show displacement vectors
         """
+        self._record_plot_call("plot_tps_deformation_grid", tps_result, grid_shape=grid_shape, show_vectors=show_vectors)
         self._ax.clear()
         self._current_plot_type = "tps_grid"
 
@@ -842,7 +842,6 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_nmds(self, result: Any) -> None:
-        self._record_plot_call("plot_nmds", result)
         """
         Plot NMDS ordination.
 
@@ -855,6 +854,7 @@ class InteractivePlotCanvas(QWidget):
                 d_ij = original dissimilarity
                 d̂_ij = ordination distance
         """
+        self._record_plot_call("plot_nmds", result)
         self._ax.clear()
         self._current_plot_type = "nmds"
 
@@ -927,7 +927,6 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_diversity_summary(self, result: Any) -> None:
-        self._record_plot_call("plot_diversity_summary", result)
         """
         Plot biodiversity summary.
 
@@ -937,6 +936,7 @@ class InteractivePlotCanvas(QWidget):
                 - Simpson: D = 1 - Σ p_i²
                 - Fisher's α: N = α ln(1 + N/α)
         """
+        self._record_plot_call("plot_diversity_summary", result)
         self._ax.clear()
         self._current_plot_type = "diversity"
 
@@ -986,13 +986,13 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_rarefaction(self, result: Any) -> None:
-        self._record_plot_call("plot_rarefaction", result)
         """
         Plot rarefaction curves.
 
         Mathematical Context:
             E(S_n) = Σ[1 - C(N-n_i, n) / C(N, n)]
         """
+        self._record_plot_call("plot_rarefaction", result)
         self._ax.clear()
         self._current_plot_type = "rarefaction"
 
@@ -1033,12 +1033,12 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_spectral(self, result: Any) -> None:
-        self._record_plot_call("plot_spectral", result)
         """
         Plot spectral analysis results (Lomb-Scargle periodogram).
 
         Shows the power spectrum with frequency on x-axis and power on y-axis.
         """
+        self._record_plot_call("plot_spectral", result)
         self._ax.clear()
         self._current_plot_type = "spectral"
 
@@ -1084,13 +1084,13 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_wavelet_scalogram(self, result: Any) -> None:
-        self._record_plot_call("plot_wavelet_scalogram", result)
         """
         Plot wavelet CWT scalogram.
 
         Shows time-frequency power distribution as a heatmap.
         The Cone of Influence is shown as a hatched region.
         """
+        self._record_plot_call("plot_wavelet_scalogram", result)
         self._ax.clear()
         self._current_plot_type = "wavelet"
 
@@ -1150,12 +1150,12 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_anosim_results(self, result: Any) -> None:
-        self._record_plot_call("plot_anosim_results", result)
         """
         Plot ANOSIM results.
 
         Shows a bar chart of the R statistic with significance indicator.
         """
+        self._record_plot_call("plot_anosim_results", result)
         self._ax.clear()
         self._current_plot_type = "anosim"
 
@@ -1217,12 +1217,12 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_permanova_results(self, result: Any) -> None:
-        self._record_plot_call("plot_permanova_results", result)
         """
         Plot PERMANOVA results.
 
         Shows a summary panel with F statistic, p-value, and variance decomposition.
         """
+        self._record_plot_call("plot_permanova_results", result)
         self._ax.clear()
         self._current_plot_type = "permanova"
 
@@ -1286,8 +1286,8 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_simper_results(self, result: Any) -> None:
-        self._record_plot_call("plot_simper_results", result)
         """Plot SIMPER contribution bar chart with cumulative line."""
+        self._record_plot_call("plot_simper_results", result)
         self._current_plot_type = "simper"
         self._simper_result = result  # Store for replotting
         self._figure.clear()
@@ -1338,8 +1338,8 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_anova_boxplot(self, data: np.ndarray, groups: list[int],
                            variable_name: str = "", group_names: list[str] | None = None) -> None:
-        self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         """Plot boxplot comparing groups for a variable."""
+        self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         self._current_plot_type = "anova_boxplot"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
@@ -1364,8 +1364,8 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_lda_scores(self, result: Any) -> None:
-        self._record_plot_call("plot_lda_scores", result)
         """Plot LDA scatter plot with confidence ellipses."""
+        self._record_plot_call("plot_lda_scores", result)
         self._current_plot_type = "lda"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
@@ -1436,8 +1436,8 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_dendrogram(self, result: Any, labels: list[str] | None = None) -> None:
-        self._record_plot_call("plot_dendrogram", result, labels=labels)
         """Plot hierarchical clustering dendrogram."""
+        self._record_plot_call("plot_dendrogram", result, labels=labels)
         self._current_plot_type = "dendrogram"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
@@ -1456,8 +1456,8 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_rose_diagram(self, bin_centers: np.ndarray, counts: np.ndarray,
                           mean_direction_deg: float = 0.0) -> None:
-        self._record_plot_call("plot_rose_diagram", bin_centers, counts, mean_direction_deg=mean_direction_deg)
         """Plot rose diagram for directional data."""
+        self._record_plot_call("plot_rose_diagram", bin_centers, counts, mean_direction_deg=mean_direction_deg)
         self._current_plot_type = "rose"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111, projection="polar")
@@ -1482,8 +1482,8 @@ class InteractivePlotCanvas(QWidget):
 
     def plot_efa_contours(self, original: np.ndarray, reconstructed: np.ndarray,
                           title: str = "") -> None:
-        self._record_plot_call("plot_efa_contours", original, reconstructed, title=title)
         """Plot original vs reconstructed EFA contours."""
+        self._record_plot_call("plot_efa_contours", original, reconstructed, title=title)
         self._current_plot_type = "efa"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
@@ -1500,8 +1500,8 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_she_curve(self, result: Any) -> None:
-        self._record_plot_call("plot_she_curve", result)
         """Plot SHE analysis curves (S, H, E vs sample size)."""
+        self._record_plot_call("plot_she_curve", result)
         self._current_plot_type = "she"
         self._figure.clear()
 
@@ -1534,7 +1534,6 @@ class InteractivePlotCanvas(QWidget):
         result: Any,
         show_points: bool = True
     ) -> None:
-        self._record_plot_call("plot_ripley_k", result, show_points=show_points)
         """
         Plot Ripley's K-function results.
 
@@ -1545,6 +1544,7 @@ class InteractivePlotCanvas(QWidget):
             result: SpatialResult from Ripley's K analysis
             show_points: Whether to show point locations inset
         """
+        self._record_plot_call("plot_ripley_k", result, show_points=show_points)
         self._ax.clear()
         self._current_plot_type = "ripley_k"
 
@@ -1596,8 +1596,8 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_abundance_models(self, results: dict) -> None:
-        self._record_plot_call("plot_abundance_models", results)
         """Plot rank-abundance curves with fitted models."""
+        self._record_plot_call("plot_abundance_models", results)
         self._current_plot_type = "abundance_models"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)

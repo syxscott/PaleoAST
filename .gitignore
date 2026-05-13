@@ -18,6 +18,7 @@ env/
 .vscode/
 *.swp
 *.swo
+.claude/settings.local.json
 
 # Testing
 .pytest_cache/

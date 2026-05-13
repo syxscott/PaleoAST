@@ -55,6 +55,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -440,14 +441,14 @@ class RibbonButton(QPushButton):
             QPushButton {
                 background-color: #F8F9FA;
                 border: 1px solid #E4E7EB;
-                border-radius: 6px;
-                padding: 10px 18px;
+                border-radius: 4px;
+                padding: 4px 10px;
                 color: #2C3E50;
                 font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 500;
-                min-width: 70px;
-                min-height: 32px;
+                min-width: 60px;
+                min-height: 24px;
             }
             QPushButton:hover {
                 background-color: #F0F2F5;
@@ -489,8 +490,8 @@ class RibbonGroup(QWidget):
         self._buttons: list[RibbonButton] = []
 
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(8, 4, 8, 4)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(4, 2, 4, 2)
+        self._layout.setSpacing(2)
 
         # Button container
         self._button_container = QWidget()
@@ -506,9 +507,9 @@ class RibbonGroup(QWidget):
         self._title_label.setStyleSheet("""
             QLabel {
                 color: #3498DB;
-                font-size: 10px;
+                font-size: 9px;
                 font-weight: 600;
-                padding: 3px;
+                padding: 1px;
             }
         """)
         self._layout.addWidget(self._title_label)
@@ -542,8 +543,8 @@ class RibbonTab(QWidget):
         self._groups: list[RibbonGroup] = []
 
         self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(8, 4, 8, 4)
-        self._layout.setSpacing(8)
+        self._layout.setContentsMargins(4, 2, 4, 2)
+        self._layout.setSpacing(4)
         self._layout.addStretch()
 
     def addGroup(self, title: str) -> RibbonGroup:
@@ -578,6 +579,9 @@ class RibbonBar(QWidget):
         self._current_tab_index = 0
         self._is_dark_theme = False
 
+        # Prevent ribbon from expanding vertically
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
         # Main layout
         self._main_layout = QVBoxLayout(self)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
@@ -586,15 +590,15 @@ class RibbonBar(QWidget):
         # Tab bar
         self._tab_bar = QWidget()
         self._tab_bar_layout = QHBoxLayout(self._tab_bar)
-        self._tab_bar_layout.setContentsMargins(4, 4, 4, 4)
-        self._tab_bar_layout.setSpacing(0)
+        self._tab_bar_layout.setContentsMargins(4, 2, 4, 0)
+        self._tab_bar_layout.setSpacing(2)
         self._tab_button_group: list[QPushButton] = []
         self._main_layout.addWidget(self._tab_bar)
 
         # Content area
         self._content_area = QWidget()
-        self._content_area.setMinimumHeight(80)
-        self._content_area.setMaximumHeight(120)
+        self._content_area.setMinimumHeight(68)
+        self._content_area.setMaximumHeight(84)
         self._content_layout = QHBoxLayout(self._content_area)
         self._content_layout.setContentsMargins(8, 4, 8, 4)
         self._content_layout.addStretch()
@@ -626,9 +630,11 @@ class RibbonBar(QWidget):
         self._tab_button_group.append(tab_button)
         self._tab_bar_layout.addWidget(tab_button)
 
-        # Show first tab content
+        # Show first tab content; hide all others
         if len(self._tabs) == 1:
             self._show_tab(0)
+        else:
+            tab.hide()
 
         return tab
 
@@ -666,7 +672,7 @@ class RibbonBar(QWidget):
                 background-color: transparent;
                 border: none;
                 color: #2C3E50;
-                padding: 8px 14px;
+                padding: 4px 10px;
                 font-size: 11px;
                 font-weight: 600;
                 border-radius: 4px;
@@ -677,7 +683,7 @@ class RibbonBar(QWidget):
             }
             QPushButton:checked {
                 background-color: rgba(52, 152, 219, 0.12);
-                border-bottom: 3px solid #3498DB;
+                border-bottom: 2px solid #3498DB;
                 color: #3498DB;
             }
         """)
@@ -1350,14 +1356,46 @@ class MainWindow(QMainWindow):
         help_menu.addAction(doc_action)
 
     def _switch_language(self, lang: str) -> None:
-        """Switch application language."""
+        """Switch application language with restart prompt."""
         from PyQt6.QtCore import QSettings
+        from PyQt6.QtWidgets import QMessageBox
 
-        get_translator().set_language(lang)
-        self._lang_action_en.setChecked(lang == "en")
-        self._lang_action_zh.setChecked(lang == "zh")
+        current_lang = get_translator().get_language()
+        if lang == current_lang:
+            return
+
+        # Save language setting
         settings = QSettings("PaleoAST", "PaleoAST")
         settings.setValue("language", lang)
+        self._lang_action_en.setChecked(lang == "en")
+        self._lang_action_zh.setChecked(lang == "zh")
+
+        # Ask user whether to restart now
+        msg = QMessageBox(self)
+        msg.setWindowTitle(_("Language Changed"))
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText(_("The language has been changed to {0}.").format("中文" if lang == "zh" else "English"))
+        msg.setInformativeText(_("Restart now to apply the change?"))
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.button(QMessageBox.StandardButton.Yes).setText(_("Restart Now"))
+        msg.button(QMessageBox.StandardButton.No).setText(_("Later"))
+
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            self._restart_application()
+
+    def _restart_application(self) -> None:
+        """Restart the application process."""
+        import os
+        import sys
+
+        from PyQt6.QtWidgets import QApplication
+
+        # Save any pending state
+        QApplication.instance().aboutToQuit.emit()
+
+        # Restart using os.execl to replace the current process
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 
     def _on_navigation_clicked(self, item: NavigationItem) -> None:
         """
@@ -1865,9 +1903,8 @@ class MainWindow(QMainWindow):
             try:
                 sample_name = params.get("sample_name", "").strip() or "Sample 1"
                 result = self._statistics_controller.analyze_diversity(
+                    abundances=self._state.data_matrix.data[0],
                     sample_name=sample_name,
-                    indices=params,
-                    log_base=params.get("log_base", 10),
                 )
 
                 plot = InteractivePlotCanvas()
@@ -1892,13 +1929,15 @@ class MainWindow(QMainWindow):
             params = dialog.get_parameters()
 
             try:
-                sample_names = params.get("samples", [])
-                if not sample_names:
-                    sample_names = sample_names or ["Sample 1"]
+                selected_samples = params.get("samples", [])
+                if not selected_samples:
+                    selected_samples = ["Sample 1"]
+                max_n = params.get("max_n", 100)
+                step = params.get("step", 5)
+                n_points = max(10, max_n // step) if step > 0 else 50
                 result = self._statistics_controller.analyze_rarefaction(
-                    sample_name=sample_names[0],
-                    max_n=params.get("max_n", 100),
-                    step=params.get("step", 5),
+                    sample_name=selected_samples[0],
+                    n_points=n_points,
                 )
 
                 plot = InteractivePlotCanvas()
@@ -2002,6 +2041,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
+        groups = self._get_groups()
+        if groups is None:
+            QMessageBox.warning(
+                self, _("No Groups"),
+                _("Please define groups in the spreadsheet before running SIMPER.\n"
+                  "Use the Group column to assign samples to groups.")
+            )
+            return
+
         dialog = SimperDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -2009,7 +2057,7 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(0, 0)
                 result = self._statistics_controller.analyze_simper(
                     data=self._state.data_matrix.data,
-                    groups=self._get_groups(),
+                    groups=groups,
                     metric=params.get("metric", "bray_curtis"),
                 )
                 plot = InteractivePlotCanvas()
@@ -2356,13 +2404,11 @@ class MainWindow(QMainWindow):
             result = self._statistics_controller.analyze_gpa(
                 data=self._state.data_matrix.data,
             )
-            # Cache TPS result for later use
-            self._statistics_controller.cache_result("tps_result", result)
 
             plot = InteractivePlotCanvas()
             # Plot GPA-aligned landmarks
-            if hasattr(result, "aligned_coords"):
-                coords = result.aligned_coords
+            if hasattr(result, "aligned_configurations"):
+                coords = result.aligned_configurations
                 mean_shape = coords.mean(axis=0) if hasattr(coords, 'mean') else coords
                 plot.plot_efa_contours(
                     coords[0] if len(coords.shape) > 2 else coords,
@@ -2391,8 +2437,8 @@ class MainWindow(QMainWindow):
             try:
                 self._status_bar.setProgress(0, 0)
 
-                # Get TPS result from cache or compute
-                tps_result = self._statistics_controller.get_cached_result("tps_result")
+                # Get GPA result from cache for TPS visualization
+                tps_result = self._state.get_cached_result("gpa_result")
 
                 if tps_result is None:
                     QMessageBox.information(

@@ -24,6 +24,7 @@ from ecology.rarefaction import RarefactionAnalyzer
 from models.diversity_result import DiversityResult, RarefactionResult
 from models.state_manager import get_state_manager
 from morphometrics.efa import EFAAnalyzer, EFAResult, EigenshapeAnalyzer, EigenshapeResult
+from morphometrics.gpa import GPAAnalyzer, GPAResult
 from statistics.anosim import ANOSIMAnalyzer, ANOSIMResult
 from statistics.cca import CCAAnalyzer, CCAResult
 from statistics.clustering import ClusteringAnalyzer, ClusteringResult
@@ -87,6 +88,7 @@ class StatisticsController:
         self._directional_analyzer = DirectionalAnalyzer()
         self._efa_analyzer = EFAAnalyzer()
         self._eigenshape_analyzer = EigenshapeAnalyzer()
+        self._gpa_analyzer = GPAAnalyzer()
         self._spatial_analyzer = RipleyKAnalyzer()
 
         # State manager
@@ -979,6 +981,52 @@ class StatisticsController:
                 efa_coefficients_list = cached
             result = self._eigenshape_analyzer.analyze(efa_coefficients_list, n_components=n_components)
             self._state.cache_result("eigenshape_result", result)
+            return result
+
+    # =========================================================================
+    # Morphometrics: GPA
+    # =========================================================================
+
+    def analyze_gpa(
+        self,
+        data: npt.NDArray | None = None,
+        n_iterations: int = 100,
+        tolerance: float = 1e-8,
+    ) -> GPAResult:
+        """
+        Run Generalized Procrustes Analysis.
+
+        Parameters:
+            data: Input data. If None, uses state data.
+                  Expected shape: (n_specimens, n_landmarks, n_dims) for 3D,
+                  or will attempt to reshape 2D data.
+            n_iterations: Maximum iterations.
+            tolerance: Convergence tolerance.
+
+        Returns:
+            GPAResult: GPA analysis results
+        """
+        with self._lock:
+            if data is None:
+                if not self._state.has_data:
+                    raise ValidationError("No data available.")
+                data = self._state.data_matrix.data
+
+            # If data is 2D, try to reshape to 3D (n_specimens, n_landmarks, n_dims)
+            if data.ndim == 2:
+                n_rows, n_cols = data.shape
+                # Assume 2D landmarks: reshape to (n_specimens, n_landmarks, 2)
+                if n_cols % 2 == 0:
+                    n_landmarks = n_cols // 2
+                    data = data.reshape(n_rows, n_landmarks, 2)
+                else:
+                    raise ValidationError(
+                        f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. "
+                        f"Expected even number of columns (x, y pairs)."
+                    )
+
+            result = self._gpa_analyzer.analyze(data, n_iterations=n_iterations, tolerance=tolerance)
+            self._state.cache_result("gpa_result", result)
             return result
 
     # =========================================================================

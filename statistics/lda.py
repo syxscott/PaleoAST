@@ -58,6 +58,7 @@ class LDAResult:
         class_labels: Unique class labels
         means: Class means in LD space
         coef: Raw LDA coefficients
+        groups: Group assignments for each sample
     """
 
     scores: npt.NDArray
@@ -71,6 +72,7 @@ class LDAResult:
     class_labels: list
     means: npt.NDArray
     coef: npt.NDArray
+    groups: npt.NDArray
 
     def summary(self) -> str:
         lines = [
@@ -233,6 +235,7 @@ class LDAAnalyzer:
                 class_labels=unique_classes,
                 means=class_means,
                 coef=lda.coef_,
+                groups=groups_grouped,
             )
 
             self._last_result = result
