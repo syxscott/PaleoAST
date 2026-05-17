@@ -16,12 +16,15 @@ Version: 1.0.0
 
 from .arma import ARMAResult, ARMAAnalyzer, ForecastResult
 from .biostratigraphy import BioeventResult, RASCAnalyzer, UAAnalyzer, Zone
+from .extinction import ExtinctionIntervalAnalyzer, ExtinctionIntervalResult
 from .spectral_analysis import SpectralAnalyzer, SpectralResult, WaveletResult
 
 __all__ = [
     "ARMAResult",
     "ARMAAnalyzer",
     "BioeventResult",
+    "ExtinctionIntervalAnalyzer",
+    "ExtinctionIntervalResult",
     "ForecastResult",
     "RASCAnalyzer",
     "SpectralAnalyzer",

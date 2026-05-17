@@ -32,6 +32,13 @@ from statistics.distance_metrics import DistanceMatrixResult, compute_distance_m
 from statistics.lda import LDAAnalyzer, LDAResult
 from statistics.nmds import NMDSAnalyzer, NMDSResult
 from statistics.pca import PCAAnalyzer, PCAResult
+from statistics.pcm import (
+    AncestralStateResult,
+    ContrastResult,
+    PCMAnalyzer,
+    PhyloANOVAResult,
+    PhylogeneticSignalResult,
+)
 from statistics.spatial import RipleyKAnalyzer, SpatialResult
 from statistics.pcoa import PCoAAnalyzer, PCoAResult
 from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
@@ -90,6 +97,7 @@ class StatisticsController:
         self._eigenshape_analyzer = EigenshapeAnalyzer()
         self._gpa_analyzer = GPAAnalyzer()
         self._spatial_analyzer = RipleyKAnalyzer()
+        self._pcm_analyzer = PCMAnalyzer()
 
         # State manager
         self._state = get_state_manager()
@@ -912,6 +920,110 @@ class StatisticsController:
                     raise ValidationError(f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. Expected even number of columns (x, y pairs).")
             result = self._gpa_analyzer.analyze(data, n_iterations=n_iterations, tolerance=tolerance)
             self._state.cache_result("gpa_result", result)
+            return result
+
+    # =========================================================================
+    # Phylogenetic Comparative Methods (PCM)
+    # =========================================================================
+
+    def analyze_pic(
+        self,
+        tree_newick: str,
+        trait_values: dict[str, float],
+    ) -> ContrastResult:
+        """
+        Compute Phylogenetic Independent Contrasts.
+
+        Parameters:
+            tree_newick: Newick-format phylogenetic tree string
+            trait_values: {taxon_name: trait_value} dictionary
+
+        Returns:
+            ContrastResult with contrasts and standard errors
+        """
+        from phylogenetics.tree import PhyloTree
+        with self._lock:
+            tree = PhyloTree.from_newick(tree_newick)
+            result = self._pcm_analyzer.compute_contrasts(tree, trait_values)
+            self._logger.info(f"PIC computed: {result.n_contrasts} contrasts")
+            return result
+
+    def analyze_ancestral_states(
+        self,
+        tree_newick: str,
+        trait_values: dict[str, float],
+        model: str = "bm",
+    ) -> AncestralStateResult:
+        """
+        Reconstruct ancestral states via weighted squared-change parsimony.
+
+        Parameters:
+            tree_newick: Newick-format phylogenetic tree string
+            trait_values: {taxon_name: trait_value} dictionary
+            model: Evolution model ('bm' or 'ou')
+
+        Returns:
+            AncestralStateResult with reconstructed states
+        """
+        from phylogenetics.tree import PhyloTree
+        with self._lock:
+            tree = PhyloTree.from_newick(tree_newick)
+            result = self._pcm_analyzer.reconstruct_ancestral_states(tree, trait_values, model=model)
+            self._logger.info(f"ASR completed: {len(result.node_states)} internal nodes")
+            return result
+
+    def analyze_phylogenetic_signal(
+        self,
+        tree_newick: str,
+        trait_values: dict[str, float],
+        n_randomizations: int = 999,
+    ) -> PhylogeneticSignalResult:
+        """
+        Measure phylogenetic signal using Blomberg's K.
+
+        Parameters:
+            tree_newick: Newick-format phylogenetic tree string
+            trait_values: {taxon_name: trait_value} dictionary
+            n_randomizations: Permutations for significance test
+
+        Returns:
+            PhylogeneticSignalResult with K, Z-score, p-value
+        """
+        from phylogenetics.tree import PhyloTree
+        with self._lock:
+            tree = PhyloTree.from_newick(tree_newick)
+            result = self._pcm_analyzer.compute_phylogenetic_signal(
+                tree, trait_values, n_randomizations=n_randomizations
+            )
+            self._logger.info(f"Blomberg's K = {result.k:.4f}")
+            return result
+
+    def analyze_phylo_anova(
+        self,
+        tree_newick: str,
+        trait_values: dict[str, float],
+        group_labels: dict[str, str],
+        n_permutations: int = 999,
+    ) -> PhyloANOVAResult:
+        """
+        Phylogenetic ANOVA: test for trait differences between groups.
+
+        Parameters:
+            tree_newick: Newick-format phylogenetic tree string
+            trait_values: {taxon_name: trait_value} dictionary
+            group_labels: {taxon_name: group_name} dictionary
+            n_permutations: Permutations for significance test
+
+        Returns:
+            PhyloANOVAResult with F-statistic and p-value
+        """
+        from phylogenetics.tree import PhyloTree
+        with self._lock:
+            tree = PhyloTree.from_newick(tree_newick)
+            result = self._pcm_analyzer.phylogenetic_anova(
+                tree, trait_values, group_labels, n_permutations=n_permutations
+            )
+            self._logger.info(f"Phylo-ANOVA: F={result.f_statistic:.4f}, p={result.p_value:.4f}")
             return result
 
     # =========================================================================

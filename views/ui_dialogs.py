@@ -1385,6 +1385,12 @@ class UnivariateDialog(BaseAnalysisDialog):
             self._test_group.addButton(rb, idx)
             test_layout.addWidget(rb)
 
+    def set_pre_selected_test(self, test_index: int) -> None:
+        """Pre-select a test type by index."""
+        button = self._test_group.button(test_index)
+        if button:
+            button.setChecked(True)
+
     def get_parameters(self) -> dict[str, Any]:
         self._parameters = {"test_type": self._test_group.checkedId()}
         return self._parameters

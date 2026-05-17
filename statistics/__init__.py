@@ -21,23 +21,35 @@ from .distance_metrics import DistanceMatrixResult, compute_distance_matrix
 from .geometry import DisparityResult, GeometryAnalyzer, MSTResult
 from .nmds import NMDSAnalyzer, NMDSResult
 from .pca import PCAAnalyzer, PCAResult
+from .pcm import (
+    AncestralStateResult,
+    ContrastResult,
+    PCMAnalyzer,
+    PhyloANOVAResult,
+    PhylogeneticSignalResult,
+)
 from .pcoa import PCoAAnalyzer, PCoAResult
 from .permanova import PERMANOVAAnalyzer, PERMANOVAResult
 
 __all__ = [
     "ANOSIMAnalyzer",
     "ANOSIMResult",
+    "AncestralStateResult",
+    "ContrastResult",
     "DistanceMatrixResult",
     "DisparityResult",
     "GeometryAnalyzer",
     "MSTResult",
     "NMDSAnalyzer",
     "NMDSResult",
+    "PCMAnalyzer",
     "PCAAnalyzer",
     "PCAResult",
     "PCoAAnalyzer",
     "PCoAResult",
     "PERMANOVAAnalyzer",
     "PERMANOVAResult",
+    "PhyloANOVAResult",
+    "PhylogeneticSignalResult",
     "compute_distance_matrix",
 ]

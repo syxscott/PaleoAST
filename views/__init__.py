@@ -22,10 +22,15 @@ from .ui_dialogs import (
 )
 from .ui_main_window import MainWindow
 from .ui_navigation import NavigationTree
+from .ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
 from .ui_plot_canvas import InteractivePlotCanvas
 from .ui_spreadsheet import ScientificSpreadsheet, SpreadsheetDelegate
 
+from .ui_allometry_dialogs import AllometryDialog, PLSDialog
+
 __all__ = [
+    "AllometryDialog",
+    "AncestralStateDialog",
     "DiversityDialog",
     "ImportDialog",
     "InteractivePlotCanvas",
@@ -34,6 +39,10 @@ __all__ = [
     "NavigationTree",
     "PCADialog",
     "PCoADialog",
+    "PhyloANOVADialog",
+    "PhyloSignalDialog",
+    "PICDialog",
+    "PLSDialog",
     "RarefactionDialog",
     "ScientificSpreadsheet",
     "SpreadsheetDelegate",

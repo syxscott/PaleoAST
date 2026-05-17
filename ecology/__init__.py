@@ -14,14 +14,22 @@ Author: PaleoAST Development Team
 Version: 1.0.0
 """
 
+from .beta_diversity import BetaDiversityAnalyzer, CoverageRarefactionAnalyzer, BetaDiversityResult, CoverageRarefactionResult
 from .diversity import DiversityAnalyzer, compute_diversity_indices
 from .dtw import DTWAnalyzer, DTWResult
+from .null_models import NullModelAnalyzer, NullModelResult
 from .rarefaction import RarefactionAnalyzer
 
 __all__ = [
+    "BetaDiversityAnalyzer",
+    "BetaDiversityResult",
+    "CoverageRarefactionAnalyzer",
+    "CoverageRarefactionResult",
     "DiversityAnalyzer",
     "DTWAnalyzer",
     "DTWResult",
+    "NullModelAnalyzer",
+    "NullModelResult",
     "RarefactionAnalyzer",
     "compute_diversity_indices",
 ]

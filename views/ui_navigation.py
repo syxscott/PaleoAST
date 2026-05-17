@@ -597,7 +597,11 @@ class NavigationTree(QWidget):
 
         # Univariate children
         univariate_children = [
-            NavigationItem(_("Univariate"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("Summary"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("Normality"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("t-test"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("ANOVA"), NavigationCategory.UNIVARIATE, "chart"),
+            NavigationItem(_("Kruskal-Wallis"), NavigationCategory.UNIVARIATE, "chart"),
         ]
         for child in univariate_children:
             categories[NavigationCategory.UNIVARIATE].children.append(child)

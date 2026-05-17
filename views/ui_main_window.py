@@ -47,12 +47,14 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -93,6 +95,7 @@ from views.ui_dialogs import (
     WaveletDialog,
 )
 from views.ui_navigation import NavigationItem, NavigationTree
+from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_spreadsheet import ScientificSpreadsheet
 
@@ -422,7 +425,7 @@ class RibbonButton(QPushButton):
         # Set button properties
         self.setText(text)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
 
         # Create icon
         if icon_type:
@@ -460,6 +463,9 @@ class RibbonButton(QPushButton):
             "background-color: " + c.bg_tertiary + "; "
             "border: 1px solid " + c.primary + "; "
             "color: " + c.primary + "; "
+            "} "
+            "QPushButton:focus { "
+            "border: 2px solid " + c.primary + "; "
             "} "
             "QPushButton:pressed { "
             "background-color: " + c.primary + "; "
@@ -536,6 +542,56 @@ class RibbonGroup(QWidget):
         self._button_layout.insertWidget(self._button_layout.count() - 1, button)
 
         return button
+
+    def addComboBox(self, items: list[str], tooltip: str = "", on_change=None) -> QComboBox:
+        """Add a combo box (dropdown) to the ribbon group."""
+        combo = QComboBox(self)
+        combo.addItems(items)
+        combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        if tooltip:
+            combo.setToolTip(tooltip)
+
+        c = get_palette(self._is_dark_theme)
+        t = Typography()
+        combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {c.bg_secondary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: 3px;
+                padding: 2px 6px;
+                font-size: {t.body_size}px;
+                min-width: 90px;
+                max-height: 24px;
+            }}
+            QComboBox:hover {{
+                border-color: {c.primary};
+            }}
+            QComboBox::dropDown {{
+                border: none;
+                width: 18px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 3px solid transparent;
+                border-right: 3px solid transparent;
+                border-top: 5px solid {c.text_secondary};
+                margin-right: 2px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                selection-background-color: {c.primary};
+                min-width: 100px;
+            }}
+        """)
+
+        if on_change:
+            combo.currentIndexChanged.connect(on_change)
+
+        self._button_layout.insertWidget(self._button_layout.count() - 1, combo)
+        return combo
 
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme and propagate to all buttons."""
@@ -956,7 +1012,7 @@ class MainWindow(QMainWindow):
         """Create all UI components."""
         # Set window properties
         self.setWindowTitle(_("PaleoAST - Paleontological Advanced Statistical Toolkit"))
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1024, 700)
         self.resize(1400, 900)
 
         # Central widget
@@ -976,7 +1032,8 @@ class MainWindow(QMainWindow):
 
         # Left navigation
         self._navigation = NavigationTree()
-        self._navigation.setMaximumWidth(280)
+        self._navigation.setMinimumWidth(200)
+        self._navigation.setMaximumWidth(350)
         splitter.addWidget(self._navigation)
 
         # Workspace area
@@ -1420,6 +1477,27 @@ class MainWindow(QMainWindow):
         analysis_menu.addAction(spectral_action)
         self._register_data_action(spectral_action)
 
+        # Phylogenetic Comparative Methods submenu
+        analysis_menu.addSeparator()
+        pcm_submenu = QMenu(_("Phylogenetic Comparative Methods"), self)
+        analysis_menu.addMenu(pcm_submenu)
+
+        pic_action = QAction(_("&Independent Contrasts (PIC)..."), self)
+        pic_action.triggered.connect(self._on_run_pic)
+        pcm_submenu.addAction(pic_action)
+
+        asr_action = QAction(_("&Ancestral State Reconstruction..."), self)
+        asr_action.triggered.connect(self._on_run_ancestral_states)
+        pcm_submenu.addAction(asr_action)
+
+        signal_action = QAction(_("&Phylogenetic Signal (Blomberg's K)..."), self)
+        signal_action.triggered.connect(self._on_run_phylogenetic_signal)
+        pcm_submenu.addAction(signal_action)
+
+        pcanova_action = QAction(_("Phylogenetic &ANOVA..."), self)
+        pcanova_action.triggered.connect(self._on_run_phylo_anova)
+        pcm_submenu.addAction(pcanova_action)
+
         # Language menu
         language_menu = menubar.addMenu(_("&Language"))
 
@@ -1515,7 +1593,11 @@ class MainWindow(QMainWindow):
             _("Diversity"): self._on_run_diversity,
             _("Rarefaction"): self._on_run_rarefaction,
             _("Spectral Analysis"): self._on_run_spectral,
-            _("Univariate"): self._on_run_univariate,
+            _("Summary"): lambda: self._on_run_univariate_by_index(0),
+            _("Normality"): lambda: self._on_run_univariate_by_index(1),
+            _("t-test"): lambda: self._on_run_univariate_by_index(2),
+            _("ANOVA"): lambda: self._on_run_univariate_by_index(3),
+            _("Kruskal-Wallis"): lambda: self._on_run_univariate_by_index(4),
             _("Clustering"): self._on_run_clustering,
             _("Abundance Models"): self._on_run_abundance_models,
             "SHE": self._on_run_she,
@@ -2178,13 +2260,103 @@ class MainWindow(QMainWindow):
             finally:
                 self._status_bar.setProgress(100, 100)
 
+    def _on_univariate_selection_changed(self, index: int) -> None:
+        """Handle univariate dropdown selection."""
+        dialog = UnivariateDialog(self)
+        dialog.set_pre_selected_test(index)
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                test_type = params.get("test_type", 0)
+                data = self._state.data_matrix.data
+                col_names = self._state.data_matrix.col_labels
+
+                if test_type == 0:  # Summary
+                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
+                    msg = result.summary()
+                    QMessageBox.information(self, _("Summary Statistics"), msg)
+                elif test_type == 1:  # Normality
+                    results = self._statistics_controller.analyze_normality(data, col_names)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
+                elif test_type == 2:  # t-test
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
+                elif test_type == 3:  # ANOVA
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_anova(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
+                elif test_type == 4:  # Kruskal-Wallis
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
+
+                self._status_bar.setInfo(_("Univariate analysis completed"))
+            except Exception as e:
+                QMessageBox.critical(self, _("Univariate Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
     def _on_run_univariate(self) -> None:
         """Run univariate statistics."""
-        if not self._state.has_data:
-            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
-            return
-
         dialog = UnivariateDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                test_type = params.get("test_type", 0)
+                data = self._state.data_matrix.data
+                col_names = self._state.data_matrix.col_labels
+
+                if test_type == 0:  # Summary
+                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
+                    msg = result.summary()
+                    QMessageBox.information(self, _("Summary Statistics"), msg)
+                elif test_type == 1:  # Normality
+                    results = self._statistics_controller.analyze_normality(data, col_names)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
+                elif test_type == 2:  # t-test
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
+                elif test_type == 3:  # ANOVA
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_anova(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
+                elif test_type == 4:  # Kruskal-Wallis
+                    groups = self._get_groups()
+                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
+                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                             for i, r in enumerate(results)]
+                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
+
+                self._status_bar.setInfo(_("Univariate analysis completed"))
+            except Exception as e:
+                QMessageBox.critical(self, _("Univariate Error"), str(e))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_univariate_by_index(self, index: int) -> None:
+        """Run univariate analysis by test index (0=Summary, 1=Normality, 2=t-test, 3=ANOVA, 4=Kruskal-Wallis)."""
+        dialog = UnivariateDialog(self)
+        dialog.set_pre_selected_test(index)
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -2730,6 +2902,30 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, _("Biostratigraphy Error"), str(e))
             finally:
                 self._status_bar.setProgress(100, 100)
+
+    def _on_run_pic(self) -> None:
+        """Run Phylogenetic Independent Contrasts (PIC) analysis."""
+        dialog = PICDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_ancestral_states(self) -> None:
+        """Run Ancestral State Reconstruction (ASR) analysis."""
+        dialog = AncestralStateDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_phylogenetic_signal(self) -> None:
+        """Run Blomberg's K phylogenetic signal analysis."""
+        dialog = PhyloSignalDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_phylo_anova(self) -> None:
+        """Run Phylogenetic ANOVA analysis."""
+        dialog = PhyloANOVADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
 
     def _show_about(self) -> None:
         """Show about dialog."""
