@@ -632,6 +632,8 @@ class NavigationTree(QWidget):
             NavigationItem(_("TPS Deformation"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Relative Warps"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem("EFA", NavigationCategory.MORPHOMETRICS, "morphometrics"),
+            NavigationItem(_("Allometry"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
+            NavigationItem(_("Evolution Rate"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
         ]
         for child in morpho_children:
             categories[NavigationCategory.MORPHOMETRICS].children.append(child)
@@ -643,6 +645,7 @@ class NavigationTree(QWidget):
             NavigationItem("CONISS", NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Markov"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Directional"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem(_("Extinction Intervals"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
         ]
         for child in strat_children:
             categories[NavigationCategory.STRATIGRAPHY].children.append(child)
@@ -653,6 +656,8 @@ class NavigationTree(QWidget):
             NavigationItem(_("Rarefaction"), NavigationCategory.ECOLOGY, "diversity"),
             NavigationItem(_("Abundance Models"), NavigationCategory.ECOLOGY, "diversity"),
             NavigationItem("SHE", NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Beta Diversity"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Null Models"), NavigationCategory.ECOLOGY, "diversity"),
         ]
         for child in ecology_children:
             categories[NavigationCategory.ECOLOGY].children.append(child)

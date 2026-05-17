@@ -96,6 +96,11 @@ from views.ui_dialogs import (
 )
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
+from views.ui_allometry_dialogs import AllometryDialog, PLSDialog
+from views.ui_evolution_rate_dialogs import EvolutionRateDialog
+from views.ui_beta_diversity_dialogs import BetaDiversityDialog, CoverageRarefactionDialog
+from views.ui_extinction_dialogs import ExtinctionIntervalDialog
+from views.ui_null_model_dialogs import NullModelDialog
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_spreadsheet import ScientificSpreadsheet
 
@@ -1610,6 +1615,11 @@ class MainWindow(QMainWindow):
             _("Relative Warps"): self._on_run_efa,  # Uses EFA as backend
             _("Unitary Associations"): self._on_run_biostrat,
             _("Biozone"): self._on_run_biostrat,
+            _("Allometry"): self._on_run_allometry,
+            _("Evolution Rate"): self._on_run_evolution_rate,
+            _("Extinction Intervals"): self._on_run_extinction_intervals,
+            _("Beta Diversity"): self._on_run_beta_diversity,
+            _("Null Models"): self._on_run_null_models,
         }
 
         handler = action_map.get(name)
@@ -3034,6 +3044,40 @@ class MainWindow(QMainWindow):
         self._status_timer.stop()
 
         event.accept()
+
+    # =========================================================================
+    # New Analysis Handlers
+    # =========================================================================
+
+    def _on_run_allometry(self) -> None:
+        """Run Allometry analysis."""
+        dialog = AllometryDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_evolution_rate(self) -> None:
+        """Run Evolution Rate analysis."""
+        dialog = EvolutionRateDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_extinction_intervals(self) -> None:
+        """Run Extinction Confidence Intervals analysis."""
+        dialog = ExtinctionIntervalDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_beta_diversity(self) -> None:
+        """Run Beta Diversity analysis."""
+        dialog = BetaDiversityDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _on_run_null_models(self) -> None:
+        """Run Null Model analysis."""
+        dialog = NullModelDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
 
 
 def main() -> None:

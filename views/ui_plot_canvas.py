@@ -1006,22 +1006,37 @@ class InteractivePlotCanvas(QWidget):
         self._ax.clear()
         self._current_plot_type = "rarefaction"
 
-        # Extract data
-        if hasattr(result, "curve_data"):
-            curve_data = result.curve_data
-        else:
-            # Generate sample data
-            n_points = 20
+        # Extract data from CoverageRarefactionResult
+        if hasattr(result, "coverage_levels") and hasattr(result, "expected_richness"):
+            coverage_levels = result.coverage_levels
+            expected_richness = result.expected_richness
+            sample_names = getattr(result, "sample_names", [f"Sample {i+1}" for i in range(len(coverage_levels))])
+            ci_lower = getattr(result, "confidence_lower", None)
+            ci_upper = getattr(result, "confidence_upper", None)
+
+            # Build curve_data dict for consistent plotting
             curve_data = {}
-            for sample in ["Sample 1", "Sample 2", "Sample 3"]:
-                n = np.linspace(10, 100, n_points)
-                s = 5 + 3 * np.sqrt(n) + np.random.normal(0, 0.5, n_points)
-                curve_data[sample] = (n, s)
+            for i, name in enumerate(sample_names):
+                curve_data[name] = (coverage_levels, expected_richness)
+        elif hasattr(result, "curve_data"):
+            # Legacy format
+            curve_data = result.curve_data
+            ci_lower = None
+            ci_upper = None
+        else:
+            # No data available
+            self._ax.text(0.5, 0.5, _("No rarefaction data available"),
+                         ha="center", va="center", fontsize=12)
+            self._ax.set_xlim(0, 1)
+            self._ax.set_ylim(0, 1)
+            self._ax.set_title(_("Rarefaction Curves: No Data"), fontsize=12, fontweight="bold")
+            self._canvas.draw()
+            return
 
         # Plot curves
-        for i, (sample, (n, s)) in enumerate(curve_data.items()):
+        for i, (sample, (x, y)) in enumerate(curve_data.items()):
             color = self.COLORS[i % len(self.COLORS)]
-            self._ax.plot(n, s, color=color, linewidth=2, marker="o", markersize=4, alpha=0.7, label=sample)
+            self._ax.plot(x, y, color=color, linewidth=2, marker="o", markersize=4, alpha=0.7, label=sample)
 
         # Labels
         self._ax.set_xlabel(_("Number of Individuals"), color="#2C3E50")
@@ -1057,8 +1072,14 @@ class InteractivePlotCanvas(QWidget):
             frequencies = result.frequencies
             power = result.power
         else:
-            frequencies = np.linspace(0.01, 1.0, 100)
-            power = np.random.exponential(1.0, 100)
+            # No spectral data available
+            self._ax.text(0.5, 0.5, _("No spectral data available"),
+                         ha="center", va="center", fontsize=12)
+            self._ax.set_xlim(0, 1)
+            self._ax.set_ylim(0, 1)
+            self._ax.set_title(_("Spectral Analysis: No Data"), fontsize=12, fontweight="bold")
+            self._canvas.draw()
+            return
 
         peak_frequency = getattr(result, "peak_frequency", None)
         peak_period = getattr(result, "peak_period", None)
@@ -1113,11 +1134,21 @@ class InteractivePlotCanvas(QWidget):
             self._colorbar = None
 
         # Extract data
-        time = getattr(result, "time", np.arange(100))
-        frequencies = getattr(result, "frequencies", np.linspace(0.1, 1.0, 50))
-        power = getattr(result, "power", np.random.exponential(1.0, (50, len(time))))
+        time = getattr(result, "time", None)
+        frequencies = getattr(result, "frequencies", None)
+        power = getattr(result, "power", None)
         coi = getattr(result, "coi", None)
         wavelet = getattr(result, "wavelet", "Morlet")
+
+        # Check if required data is available
+        if time is None or frequencies is None or power is None:
+            self._ax.text(0.5, 0.5, _("No wavelet data available"),
+                         ha="center", va="center", fontsize=12)
+            self._ax.set_xlim(0, 1)
+            self._ax.set_ylim(0, 1)
+            self._ax.set_title(_("Wavelet Scalogram: No Data"), fontsize=12, fontweight="bold")
+            self._canvas.draw()
+            return
 
         # Use pcolormesh for the scalogram
         time_grid, freq_grid = np.meshgrid(time, frequencies)
@@ -1889,6 +1920,266 @@ class InteractivePlotCanvas(QWidget):
 
         # Redraw with highlighting
         self._canvas.draw()
+
+    # =========================================================================
+    # New Analysis Plot Methods
+    # =========================================================================
+
+    def plot_allometry(self, result: Any) -> None:
+        """
+        Plot allometry scatter plot with regression line and confidence bands.
+
+        Parameters:
+            result: AllometryResult with centroid_sizes, log_centroid_sizes,
+                   regression_coefficients, regression_intercept, r_squared, residuals
+        """
+        self._record_plot_call("plot_allometry", result)
+        self._current_plot_type = "allometry"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        log_cs = result.log_centroid_sizes
+        coef = result.regression_coefficients
+        intercept = result.regression_intercept
+        r_squared = result.r_squared
+        residuals = result.residuals
+
+        self._scores = np.column_stack([log_cs, residuals]) if residuals.ndim > 1 else np.column_stack([log_cs, np.zeros_like(log_cs)])
+        self._labels = [f"S{i}" for i in range(len(log_cs))]
+        self._group_labels = np.zeros(len(log_cs), dtype=int)
+
+        # Scatter plot
+        self._ax.scatter(log_cs, residuals if residuals.ndim == 1 else residuals[:, 0], c="#2C3E50", s=80, alpha=0.7, edgecolors="white")
+
+        # Regression line
+        x_range = np.linspace(log_cs.min(), log_cs.max(), 100)
+        y_pred = coef * x_range + intercept if coef.ndim == 0 else coef[0] * x_range + intercept[0]
+        self._ax.plot(x_range, y_pred, "r-", linewidth=2, label="Regression")
+
+        # Confidence band
+        n = len(log_cs)
+        if n > 2:
+            from scipy import stats
+            x_mean = np.mean(log_cs)
+            ss_x = np.sum((log_cs - x_mean) ** 2)
+            mse = np.sum(residuals ** 2) / (n - 2) if residuals.ndim == 1 else np.sum(residuals[:, 0] ** 2) / (n - 2)
+            se = np.sqrt(mse)
+            t_val = stats.t.ppf(0.975, n - 2)
+            se_line = se * np.sqrt(1 / n + (x_range - x_mean) ** 2 / ss_x)
+            ci_lower = y_pred - t_val * se_line
+            ci_upper = y_pred + t_val * se_line
+            self._ax.fill_between(x_range, ci_lower, ci_upper, alpha=0.2, color="red", label="95% CI")
+
+        self._ax.set_xlabel("Log Centroid Size", fontsize=10)
+        self._ax.set_ylabel("Shape Score", fontsize=10)
+        self._ax.set_title(f"Allometry: Size-Shape Relationship (R² = {r_squared:.4f})", fontsize=12, fontweight="bold")
+        self._ax.legend(loc="best")
+        self._ax.grid(True, linestyle="--", alpha=0.3)
+
+    def plot_evolution_rate(self, result: Any) -> None:
+        """
+        Plot evolution rate phenogram showing trait evolution over time.
+
+        Parameters:
+            result: EvolutionRateResult with best_model, rate_estimate,
+                   aic_weights, trait_mean, trait_variance, trait_series
+        """
+        self._record_plot_call("plot_evolution_rate", result)
+        self._current_plot_type = "evolution_rate"
+        self._figure.clear()
+
+        # Main phenogram subplot
+        self._ax = self._figure.add_subplot(211)
+
+        # Use actual trait_series from result if available
+        if result.trait_series is not None and len(result.trait_series) > 0:
+            trait_series = np.asarray(result.trait_series)
+            n_points = len(trait_series)
+        else:
+            # Fallback: show message if no data available
+            self._ax.text(0.5, 0.5, "No trait series data available",
+                         ha="center", va="center", fontsize=12)
+            self._ax.set_xlim(0, 1)
+            self._ax.set_ylim(0, 1)
+            self._ax.set_title("Phenogram: No Data Available", fontsize=12, fontweight="bold")
+            self._figure.tight_layout()
+            return
+
+        time_points = np.arange(n_points)
+
+        self._ax.plot(time_points, trait_series, "b-o", linewidth=2, markersize=8, label="Trait evolution")
+
+        # Confidence band based on rate estimate
+        if result.rate_estimate > 0:
+            variance = result.rate_estimate * time_points
+            std = np.sqrt(variance)
+            self._ax.fill_between(
+                time_points,
+                trait_series - 1.96 * std,
+                trait_series + 1.96 * std,
+                alpha=0.2,
+                color="blue",
+                label="95% CI",
+            )
+
+        # Model info
+        model_label = f"Best model: {result.best_model.upper()}\nRate: {result.rate_estimate:.6f}"
+        self._ax.text(0.02, 0.98, model_label, transform=self._ax.transAxes, fontsize=9,
+                      verticalalignment="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+
+        self._ax.set_xlabel("Stratigraphic Position", fontsize=10)
+        self._ax.set_ylabel("Trait Value", fontsize=10)
+        self._ax.set_title("Phenogram: Morphological Evolution Over Time", fontsize=12, fontweight="bold")
+        self._ax.legend(loc="best")
+        self._ax.grid(True, linestyle="--", alpha=0.3)
+
+        # Model comparison subplot
+        if result.aic_weights:
+            ax2 = self._figure.add_subplot(212)
+            models = list(result.aic_weights.keys())
+            weights = list(result.aic_weights.values())
+            colors = ["#E74C3C" if m == result.best_model else "#3498DB" for m in models]
+            bars = ax2.barh(models, weights, color=colors, alpha=0.7)
+            ax2.set_xlabel("AIC Weight", fontsize=10)
+            ax2.set_title("Model Comparison", fontsize=10)
+            ax2.set_xlim(0, 1)
+            for bar, w in zip(bars, weights):
+                ax2.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{w:.3f}", va="center")
+
+        self._figure.tight_layout()
+
+    def plot_extinction_ranges(self, result: Any) -> None:
+        """
+        Plot stratigraphic range chart with extinction confidence intervals.
+
+        Parameters:
+            result: ExtinctionIntervalResult with lad_positions, ci_lower, ci_upper,
+                   confidence_interval_lower, confidence_interval_upper, method
+        """
+        self._record_plot_call("plot_extinction_ranges", result)
+        self._current_plot_type = "extinction"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        lad_positions = result.lad_positions
+        ci_lower = result.confidence_interval_lower
+        ci_upper = result.confidence_interval_upper
+
+        n_taxa = len(lad_positions)
+        taxon_names = [f"Taxon {i + 1}" for i in range(n_taxa)]
+
+        # Sort by LAD (oldest at top)
+        sorted_indices = np.argsort(lad_positions)[::-1]
+        lad_sorted = lad_positions[sorted_indices]
+        ci_lower_sorted = ci_lower[sorted_indices]
+        ci_upper_sorted = ci_upper[sorted_indices]
+        names_sorted = [taxon_names[i] for i in sorted_indices]
+
+        # Plot ranges
+        for i, (lad, _, ci_u, name) in enumerate(zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted)):
+            # Observed range (solid line from top to LAD)
+            self._ax.plot([0.3, 0.7], [0, lad], "b-", linewidth=3, solid_capstyle="butt")
+            self._ax.plot([0.2, 0.8], [lad, lad], "b-", linewidth=2)
+
+            # CI whiskers (extending upward)
+            self._ax.plot([0.5, 0.5], [ci_u, lad], "r--", linewidth=1.5)
+
+            # CI box
+            from matplotlib.patches import Rectangle
+            rect = Rectangle((0.25, ci_u), 0.5, lad - ci_u, linewidth=1, edgecolor="red",
+                           facecolor="red", alpha=0.2, linestyle="--")
+            self._ax.add_patch(rect)
+
+            # Taxon label
+            self._ax.text(0.85, lad, name, fontsize=9, va="center", ha="left")
+
+        self._ax.set_xlim(0, 1)
+        max_lad = max(lad_sorted) if len(lad_sorted) > 0 else 10
+        self._ax.set_ylim(-1, max_lad + 2)
+        self._ax.invert_yaxis()
+        self._ax.set_xlabel("Taxonomic Range", fontsize=10)
+        self._ax.set_ylabel("Stratigraphic Height (layers from top)", fontsize=10)
+        self._ax.set_title(f"Extinction Confidence Intervals ({result.method.upper()}, {int(result.confidence_level * 100)}% CI)",
+                          fontsize=12, fontweight="bold")
+        self._ax.set_xticks([])
+
+        # Legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], color="blue", linewidth=3, label="Observed LAD"),
+            Line2D([0], [0], color="red", linewidth=1.5, linestyle="--", label=f"{int(result.confidence_level * 100)}% CI"),
+        ]
+        self._ax.legend(handles=legend_elements, loc="lower right", frameon=True)
+        self._ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+    def plot_beta_diversity(self, result: Any) -> None:
+        """
+        Plot beta diversity decomposition heatmap.
+
+        Parameters:
+            result: BetaDiversityResult with total_beta, turnover_component,
+                   nestedness_component, sample_names
+        """
+        self._record_plot_call("plot_beta_diversity", result)
+        self._current_plot_type = "beta_diversity"
+        self._figure.clear()
+        self._ax = self._figure.add_subplot(111)
+
+        # Plot heatmap of total beta diversity
+        matrix = result.total_beta
+        n = result.n_samples
+
+        im = self._ax.imshow(matrix, cmap="YlOrRd", aspect="auto")
+        self._figure.colorbar(im, ax=self._ax, label="Beta Diversity")
+
+        # Labels
+        sample_names = result.sample_names if hasattr(result, "sample_names") else [f"S{i}" for i in range(n)]
+        self._ax.set_xticks(np.arange(n))
+        self._ax.set_yticks(np.arange(n))
+        self._ax.set_xticklabels(sample_names, rotation=45, ha="right")
+        self._ax.set_yticklabels(sample_names)
+
+        # Annotate cells
+        for i in range(n):
+            for j in range(n):
+                self._ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center", color="black", fontsize=8)
+
+        self._ax.set_title(f"Beta Diversity Decomposition ({result.decomposition_type.upper()})", fontsize=12, fontweight="bold")
+
+    def plot_null_model(self, result: Any) -> None:
+        """
+        Plot null model analysis results.
+
+        Parameters:
+            result: NullModelResult with observed_score, simulated_scores,
+                   mean_simulated, standardized_effect_size, p_value
+        """
+        self._record_plot_call("plot_null_model", result)
+        self._current_plot_type = "null_model"
+        self._figure.clear()
+
+        # Histogram of simulated scores
+        self._ax = self._figure.add_subplot(111)
+        simulated = result.simulated_scores
+        self._ax.hist(simulated, bins=50, color="#3498DB", alpha=0.7, edgecolor="black", label="Simulated")
+
+        # Observed score line
+        self._ax.axvline(result.observed_score, color="red", linewidth=2, linestyle="--",
+                        label=f"Observed = {result.observed_score:.4f}")
+        self._ax.axvline(result.mean_simulated, color="green", linewidth=2, linestyle="-",
+                        label=f"Mean = {result.mean_simulated:.4f}")
+
+        # SES annotation
+        sig = "***" if result.p_value < 0.001 else ("**" if result.p_value < 0.01 else ("*" if result.p_value < 0.05 else ""))
+        self._ax.text(0.02, 0.98, f"SES = {result.standardized_effect_size:.2f}\np = {result.p_value:.4f} {sig}",
+                     transform=self._ax.transAxes, fontsize=10, verticalalignment="top",
+                     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+
+        self._ax.set_xlabel(f"{result.metric.upper()} Score", fontsize=10)
+        self._ax.set_ylabel("Frequency", fontsize=10)
+        self._ax.set_title(f"Null Model Analysis ({result.algorithm.upper()}, {result.n_permutations} permutations)",
+                          fontsize=12, fontweight="bold")
+        self._ax.legend(loc="best")
 
     def _record_plot_call(self, method_name: str, *args, **kwargs) -> None:
         """Record the last plot call for replotting."""

@@ -99,6 +99,7 @@ class EvolutionRateResult:
         n_measurements: Number of data points
         trait_mean: Mean trait value
         trait_variance: Trait variance
+        trait_series: Original trait values used for analysis
     """
 
     best_model: str
@@ -116,6 +117,7 @@ class EvolutionRateResult:
     n_measurements: int = 0
     trait_mean: float = 0.0
     trait_variance: float = 0.0
+    trait_series: npt.NDArray[np.float64] | None = None
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -171,6 +173,7 @@ class EvolutionRateResult:
             "n_measurements": self.n_measurements,
             "trait_mean": self.trait_mean,
             "trait_variance": self.trait_variance,
+            "trait_series": self.trait_series.tolist() if self.trait_series is not None else None,
             "summary": self.summary(),
         }
 
@@ -345,6 +348,7 @@ class EvolutionRateAnalyzer:
                 n_measurements=len(trait_series),
                 trait_mean=trait_mean,
                 trait_variance=trait_variance,
+                trait_series=trait_series,
             )
 
             self._last_result = result
