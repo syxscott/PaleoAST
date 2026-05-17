@@ -53,6 +53,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.design_system import get_palette
 from config.i18n import _
 from models.data_matrix import DataMatrix
 from models.state_manager import get_state_manager
@@ -475,6 +476,8 @@ class ScientificSpreadsheet(QWidget):
         self._logger = logging.getLogger(f"{__name__}.ScientificSpreadsheet")
         self._logger.info("ScientificSpreadsheet initialized")
 
+        self._is_dark_theme = False
+
         # State manager reference
         self._state = get_state_manager()
 
@@ -541,86 +544,96 @@ class ScientificSpreadsheet(QWidget):
         v_header.setDefaultSectionSize(28)
         v_header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-        # Style - Modern light theme with alternating rows
-        self._table.setStyleSheet("""
-            QTableWidget {
-                background-color: #FFFFFF;
-                alternate-background-color: #F8F9FA;
-                color: #2C3E50;
-                gridline-color: #E4E7EB;
-                font-family: 'Segoe UI', 'Courier New', monospace;
-                font-size: 12px;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
-            }
-            QTableWidget::item {
-                padding: 6px 8px;
-                border-bottom: 1px solid #E4E7EB;
-            }
-            QTableWidget::item:selected {
-                background-color: rgba(52, 152, 219, 0.15);
-                color: #2C3E50;
-            }
-            QHeaderView {
-                background-color: #F0F2F5;
-                color: #2C3E50;
-            }
-            QHeaderView::section {
-                background-color: #F0F2F5;
-                color: #2C3E50;
-                padding: 8px;
-                border: none;
-                border-right: 1px solid #E4E7EB;
-                border-bottom: 2px solid #3498DB;
-                font-weight: 600;
-            }
-            QHeaderView::section:first {
-                border-left: none;
-            }
-            QScrollBar:vertical {
-                background-color: #F8F9FA;
-                width: 12px;
-                margin: 0px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #C0C4CC;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #909399;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background-color: transparent;
-            }
-            QScrollBar:horizontal {
-                background-color: #F8F9FA;
-                height: 12px;
-                margin: 0px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:horizontal {
-                background-color: #C0C4CC;
-                min-width: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background-color: #909399;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0px;
-            }
-        """)
-
         layout.addWidget(self._table)
+
+        # Apply themed stylesheet
+        self._apply_stylesheet()
 
         # Context menus
         self._col_header_menu = ColumnHeaderMenu(self._table)
         self._row_header_menu = RowHeaderMenu(self._table)
+
+    def _apply_stylesheet(self) -> None:
+        """Apply themed stylesheet."""
+        c = get_palette(self._is_dark_theme)
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {c.bg_primary};
+                alternate-background-color: {c.bg_secondary};
+                color: {c.text_primary};
+                gridline-color: {c.border_light};
+                font-family: 'Segoe UI', 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid {c.border_light};
+                border-radius: 6px;
+            }}
+            QTableWidget::item {{
+                padding: 6px 8px;
+                border-bottom: 1px solid {c.border_light};
+            }}
+            QTableWidget::item:selected {{
+                background-color: {c.selected_overlay};
+                color: {c.primary};
+            }}
+            QHeaderView {{
+                background-color: {c.bg_tertiary};
+                color: {c.text_primary};
+            }}
+            QHeaderView::section {{
+                background-color: {c.bg_tertiary};
+                color: {c.text_primary};
+                padding: 8px;
+                border: none;
+                border-right: 1px solid {c.border_light};
+                border-bottom: 2px solid {c.primary};
+                font-weight: 600;
+            }}
+            QHeaderView::section:first {{
+                border-left: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: {c.bg_secondary};
+                width: 12px;
+                margin: 0px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {c.border_medium};
+                min-height: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {c.text_secondary};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background-color: transparent;
+            }}
+            QScrollBar:horizontal {{
+                background-color: {c.bg_secondary};
+                height: 12px;
+                margin: 0px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background-color: {c.border_medium};
+                min-width: 20px;
+                border-radius: 6px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background-color: {c.text_secondary};
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+        """)
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
 
     def _setup_connections(self) -> None:
         """Setup signal connections."""
@@ -804,8 +817,17 @@ class ScientificSpreadsheet(QWidget):
             self._sort_by_column(col, ascending)
 
         elif action_type == "delete":
-            # Delete column
-            self._delete_column(col)
+            # Delete column - ask for confirmation
+            col_label = self._col_labels[col] if col < len(self._col_labels) else f"Column {col + 1}"
+            reply = QMessageBox.question(
+                self,
+                _("Confirm Delete"),
+                _("Delete column '{0}'? This can be undone.").format(col_label),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._delete_column(col)
 
     def _on_row_menu_action(self, action) -> None:
         """Handle row header menu action."""

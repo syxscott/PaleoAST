@@ -50,6 +50,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.design_system import get_palette
 from config.i18n import _
 
 # Publication quality style settings
@@ -135,6 +136,8 @@ class InteractivePlotCanvas(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+
+        self._is_dark_theme = False
 
         # Data
         self._points: list[PlotPoint] = []
@@ -238,83 +241,90 @@ class InteractivePlotCanvas(QWidget):
         self._toolbar.addWidget(self._show_ellipses_check)
 
     def _apply_stylesheet(self) -> None:
-        """Apply modern light theme stylesheet."""
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #FFFFFF;
-            }
-            QToolBar {
-                background-color: #F8F9FA;
-                border: 1px solid #E4E7EB;
+        """Apply themed stylesheet."""
+        c = get_palette(self._is_dark_theme)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {c.bg_primary};
+            }}
+            QToolBar {{
+                background-color: {c.bg_secondary};
+                border: 1px solid {c.border_light};
                 spacing: 8px;
                 padding: 6px;
-            }
-            QPushButton {
-                background-color: #F0F2F5;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
+            }}
+            QPushButton {{
+                background-color: {c.bg_tertiary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
                 border-radius: 6px;
                 padding: 6px 12px;
                 min-width: 50px;
                 font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #E4E7EB;
-                border: 1px solid #BFC9D4;
-            }
-            QPushButton:pressed {
-                background-color: #D9DFE8;
-            }
-            QComboBox {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
+            }}
+            QPushButton:hover {{
+                background-color: {c.bg_hover};
+                border: 1px solid {c.primary};
+            }}
+            QPushButton:pressed {{
+                background-color: {c.primary};
+                color: white;
+            }}
+            QComboBox {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
                 border-radius: 6px;
                 padding: 6px 8px;
                 min-width: 100px;
-            }
-            QComboBox:hover {
-                border: 1px solid #3498DB;
-            }
-            QComboBox:focus {
-                border: 1px solid #3498DB;
-            }
-            QComboBox::down-arrow {
+            }}
+            QComboBox:hover {{
+                border: 1px solid {c.primary};
+            }}
+            QComboBox:focus {{
+                border: 1px solid {c.primary};
+            }}
+            QComboBox::down-arrow {{
                 border-left: 5px solid transparent;
                 border-right: 5px solid transparent;
-                border-top: 5px solid #3498DB;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                selection-background-color: #3498DB;
-                selection-color: #FFFFFF;
-            }
-            QCheckBox {
-                color: #2C3E50;
+                border-top: 5px solid {c.primary};
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                selection-background-color: {c.primary};
+                selection-color: white;
+            }}
+            QCheckBox {{
+                color: {c.text_primary};
                 spacing: 6px;
-            }
-            QCheckBox::indicator {
+            }}
+            QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
-                border: 2px solid #E4E7EB;
+                border: 2px solid {c.border_medium};
                 border-radius: 3px;
-                background-color: #FFFFFF;
-            }
-            QCheckBox::indicator:hover {
-                border: 2px solid #3498DB;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #3498DB;
-                border-color: #2980B9;
-            }
-            QLabel {
-                color: #2C3E50;
+                background-color: {c.bg_primary};
+            }}
+            QCheckBox::indicator:hover {{
+                border: 2px solid {c.primary};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {c.primary};
+                border-color: {c.primary_dark};
+            }}
+            QLabel {{
+                color: {c.text_primary};
                 padding: 0 4px;
-            }
+            }}
         """)
 
-        self._figure.patch.set_facecolor("#FFFFFF")
+        self._figure.patch.set_facecolor(c.bg_primary)
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
 
     def _setup_connections(self) -> None:
         """Setup signal connections."""

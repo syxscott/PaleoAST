@@ -18,6 +18,7 @@ Version: 1.0.0
 
 import logging
 import threading
+from collections import OrderedDict
 from typing import Any, Optional
 
 from utils.event_bus import get_event_bus
@@ -59,6 +60,7 @@ class StateManager:
 
     _instance: Optional["StateManager"] = None
     _instance_lock = threading.Lock()
+    _MAX_CACHE_SIZE = 100
 
     def __new__(cls) -> "StateManager":
         """
@@ -93,7 +95,7 @@ class StateManager:
         self._data_matrix: DataMatrix | None = None
         self._column_metadata: ColumnMetadataManager | None = None
         self._row_metadata: RowMetadataManager | None = None
-        self._analysis_cache: dict[str, Any] = {}
+        self._analysis_cache: OrderedDict[str, Any] = OrderedDict()
         self._visualization_settings: dict[str, Any] = {}
         self._undo_stack: list[dict[str, Any]] = []
         self._redo_stack: list[dict[str, Any]] = []
@@ -272,7 +274,7 @@ class StateManager:
 
     def cache_result(self, key: str, result: Any) -> None:
         """
-        Cache an analysis result.
+        Cache an analysis result with LRU eviction.
 
         Parameters:
             key: Unique identifier for the result
@@ -280,11 +282,16 @@ class StateManager:
         """
         with self._read_write_lock:
             self._logger.debug(f"cache_result: storing result with key='{key}'")
-            self._analysis_cache[key] = result
+            if key in self._analysis_cache:
+                self._analysis_cache.move_to_end(key)
+            else:
+                if len(self._analysis_cache) >= self._MAX_CACHE_SIZE:
+                    self._analysis_cache.popitem(last=False)
+                self._analysis_cache[key] = result
 
     def get_cached_result(self, key: str) -> Any | None:
         """
-        Retrieve a cached analysis result.
+        Retrieve a cached analysis result (LRU-aware).
 
         Parameters:
             key: Unique identifier for the result
@@ -294,7 +301,10 @@ class StateManager:
         """
         with self._read_write_lock:
             self._logger.debug(f"get_cached_result: retrieving result with key='{key}'")
-            return self._analysis_cache.get(key)
+            if key in self._analysis_cache:
+                self._analysis_cache.move_to_end(key)
+                return self._analysis_cache[key]
+            return None
 
     def clear_cache(self) -> None:
         """Clear the analysis cache."""

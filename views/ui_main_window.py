@@ -65,7 +65,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import ColorPalette, Spacing, Typography, BorderRadius
+from config.design_system import Typography, BorderRadius, get_palette
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
@@ -417,7 +417,7 @@ class RibbonButton(QPushButton):
 
         self._icon_type = icon_type
         self._style = style
-        self._is_dark_theme = True
+        self._is_dark_theme = getattr(parent, '_is_dark_theme', False) if parent else False
 
         # Set button properties
         self.setText(text)
@@ -440,7 +440,7 @@ class RibbonButton(QPushButton):
 
     def _apply_stylesheet(self) -> None:
         """Apply modern themed stylesheet to button with smooth transitions."""
-        c = ColorPalette()
+        c = get_palette(self._is_dark_theme)
         t = Typography()
         r = BorderRadius()
         ss = (
@@ -495,6 +495,7 @@ class RibbonGroup(QWidget):
 
         self._title = title
         self._buttons: list[RibbonButton] = []
+        self._is_dark_theme = False
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(4, 2, 4, 2)
@@ -509,13 +510,12 @@ class RibbonGroup(QWidget):
         self._layout.addWidget(self._button_container)
 
         # Title label
-        c = ColorPalette()
         t = Typography()
         self._title_label = QLabel(title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setStyleSheet(
             "QLabel { "
-            "color: " + c.primary + "; "
+            "color: " + get_palette().primary + "; "
             "font-size: " + str(t.caption_size) + "px; "
             "font-weight: " + str(t.semibold) + "; "
             "padding: 1px; "
@@ -536,6 +536,22 @@ class RibbonGroup(QWidget):
         self._button_layout.insertWidget(self._button_layout.count() - 1, button)
 
         return button
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme and propagate to all buttons."""
+        self._is_dark_theme = is_dark
+        c = get_palette(is_dark)
+        t = Typography()
+        self._title_label.setStyleSheet(
+            "QLabel { "
+            "color: " + c.primary + "; "
+            "font-size: " + str(t.caption_size) + "px; "
+            "font-weight: " + str(t.semibold) + "; "
+            "padding: 1px; "
+            "}"
+        )
+        for button in self._buttons:
+            button.setDarkTheme(is_dark)
 
 
 class RibbonTab(QWidget):
@@ -566,6 +582,13 @@ class RibbonTab(QWidget):
     def title(self) -> str:
         """Get tab title."""
         return self._title
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme and propagate to all groups."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
+        for group in self._groups:
+            group.setDarkTheme(is_dark)
 
 
 class RibbonBar(QWidget):
@@ -616,10 +639,6 @@ class RibbonBar(QWidget):
         # Separator line
         self._separator = QFrame()
         self._separator.setFrameShape(QFrame.Shape.HLine)
-        c = ColorPalette()
-        self._separator.setStyleSheet(
-            "QFrame { background-color: " + c.border_light + "; max-height: 1px; }"
-        )
         self._main_layout.addWidget(self._separator)
 
         self._apply_stylesheet()
@@ -668,9 +687,16 @@ class RibbonBar(QWidget):
             self._content_layout.insertWidget(0, tab)
             tab.show()
 
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme and propagate to all tabs."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
+        for tab in self._tabs:
+            tab.setDarkTheme(is_dark)
+
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
-        c = ColorPalette()
+        c = get_palette(self._is_dark_theme)
         t = Typography()
         r = BorderRadius()
         ss = (
@@ -707,9 +733,33 @@ class StatusBarWidget(QStatusBar):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        c = ColorPalette()
-        t = Typography()
+        self._is_dark_theme = False
+        self._t = Typography()
+        self._r = BorderRadius()
         self.setContentsMargins(8, 2, 8, 2)
+
+        # Data info label (left side)
+        self._info_label = QLabel(_("No data loaded"))
+        self.addWidget(self._info_label)
+
+        # Memory indicator (right side)
+        self._memory_label = QLabel(_("Memory: 0 MB"))
+        self.addPermanentWidget(self._memory_label)
+
+        # Progress bar (right side)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setMaximumWidth(150)
+        self._progress_bar.setMaximumHeight(12)
+        self._progress_bar.setVisible(False)
+        self.addPermanentWidget(self._progress_bar)
+
+        self._apply_stylesheet()
+
+    def _apply_stylesheet(self) -> None:
+        """Apply themed stylesheet."""
+        c = get_palette(self._is_dark_theme)
+        t = self._t
+        r = self._r
         self.setStyleSheet(
             "QStatusBar { "
             "background-color: " + c.bg_secondary + "; "
@@ -717,47 +767,35 @@ class StatusBarWidget(QStatusBar):
             "color: " + c.text_secondary + "; "
             "}"
         )
-
-        # Data info label (left side)
-        self._info_label = QLabel(_("No data loaded"))
         self._info_label.setStyleSheet(
             "QLabel { "
             "color: " + c.text_secondary + "; "
             "font-size: " + str(t.body_sm_size) + "px; "
             "}"
         )
-        self.addWidget(self._info_label)
-
-        # Memory indicator (right side)
-        self._memory_label = QLabel(_("Memory: 0 MB"))
         self._memory_label.setStyleSheet(
             "QLabel { "
             "color: " + c.text_disabled + "; "
             "font-size: " + str(t.caption_size) + "px; "
             "}"
         )
-        self.addPermanentWidget(self._memory_label)
-
-        # Progress bar (right side)
-        c2 = ColorPalette()
-        r2 = BorderRadius()
-        self._progress_bar = QProgressBar()
-        self._progress_bar.setMaximumWidth(150)
-        self._progress_bar.setMaximumHeight(12)
-        self._progress_bar.setVisible(False)
         self._progress_bar.setStyleSheet(
             "QProgressBar { "
-            "border: 1px solid " + c2.border_light + "; "
-            "border-radius: " + r2.md + "; "
+            "border: 1px solid " + c.border_light + "; "
+            "border-radius: " + r.md + "; "
             "text-align: center; "
-            "background-color: " + c2.bg_secondary + "; "
+            "background-color: " + c.bg_secondary + "; "
             "} "
             "QProgressBar::chunk { "
-            "background-color: " + c2.primary + "; "
-            "border-radius: " + r2.sm + "; "
+            "background-color: " + c.primary + "; "
+            "border-radius: " + r.sm + "; "
             "}"
         )
-        self.addPermanentWidget(self._progress_bar)
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
 
     def setInfo(self, text: str) -> None:
         """Set info text."""
@@ -787,6 +825,7 @@ class WorkspaceArea(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._is_dark_theme = False
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
@@ -797,10 +836,23 @@ class WorkspaceArea(QWidget):
         self._layout.addWidget(self._stack)
 
         # Placeholder widget
-        c = ColorPalette()
         t = Typography()
         self._placeholder = QLabel(_("Load data to begin analysis"))
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder.setStyleSheet(
+            "QLabel { "
+            "color: " + get_palette().text_disabled + "; "
+            "font-size: " + str(t.body_lg_size) + "px; "
+            "background-color: " + get_palette().bg_primary + "; "
+            "}"
+        )
+        self._stack.addWidget(self._placeholder)
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme and propagate to current widget."""
+        self._is_dark_theme = is_dark
+        c = get_palette(is_dark)
+        t = Typography()
         self._placeholder.setStyleSheet(
             "QLabel { "
             "color: " + c.text_disabled + "; "
@@ -808,7 +860,9 @@ class WorkspaceArea(QWidget):
             "background-color: " + c.bg_primary + "; "
             "}"
         )
-        self._stack.addWidget(self._placeholder)
+        current = self._stack.currentWidget()
+        if current is not None and current is not self._placeholder:
+            current.setDarkTheme(is_dark)
 
     def addWidget(self, widget: QWidget, name: str = "") -> int:
         """Add a widget to the workspace."""
@@ -1612,6 +1666,16 @@ class MainWindow(QMainWindow):
         """Save data with new name."""
         self._on_save_file()
 
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme and propagate to all child widgets."""
+        self._is_dark_theme = is_dark
+        from config.design_system import get_stylesheet
+        self.setStyleSheet(get_stylesheet(is_dark))
+        self._ribbon.setDarkTheme(is_dark)
+        self._status_bar.setDarkTheme(is_dark)
+        self._workspace.setDarkTheme(is_dark)
+        self._navigation.setDarkTheme(is_dark)
+
     def _on_undo(self) -> None:
         """Undo last state change and refresh spreadsheet."""
         if not self._state.has_data:
@@ -1689,6 +1753,7 @@ class MainWindow(QMainWindow):
                 return
         
         dialog = ImportDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         dialog.dataImported.connect(self._on_data_imported)
         dialog.exec()
 
@@ -1844,6 +1909,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = PCADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -1880,6 +1946,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = PCoADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -1905,6 +1972,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = NMDSOptionsDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -1934,6 +2002,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = DiversityDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
@@ -2089,6 +2158,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = SimperDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2115,6 +2185,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = UnivariateDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2172,6 +2243,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = LDADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2205,6 +2277,7 @@ class MainWindow(QMainWindow):
 
         # Get environmental columns (user selects from dialog)
         dialog = CCADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         # Provide column choices: first half as species, second half as env
         mid = max(1, data.shape[1] // 2)
         species_cols = col_labels[:mid] if mid < len(col_labels) else col_labels
@@ -2264,6 +2337,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = ClusteringDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2334,6 +2408,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = CONISSDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2359,6 +2434,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = MarkovDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             try:
                 self._status_bar.setProgress(0, 0)
@@ -2380,6 +2456,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = DirectionalDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2409,6 +2486,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = EFADialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2470,6 +2548,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = TPSGridDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2511,6 +2590,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = SpatialRipleyKDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -2596,6 +2676,7 @@ class MainWindow(QMainWindow):
             return
 
         dialog = BiostratigraphyDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:

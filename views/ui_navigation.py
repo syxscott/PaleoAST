@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import ColorPalette, Typography, BorderRadius
+from config.design_system import ColorPalette, Typography, BorderRadius, get_palette
 from config.i18n import _
 
 
@@ -384,31 +384,19 @@ class NavigationTree(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
+        self._is_dark_theme = False
         self._setup_ui()
         self._build_navigation_tree()
         self._setup_connections()
 
-    def _setup_ui(self) -> None:
-        """Setup UI components."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
+        self._apply_stylesheet()
 
-        # Tree widget
-        self._tree = QTreeWidget()
-        self._tree.setHeaderHidden(True)
-        self._tree.setIndentation(16)
-        self._tree.setAnimated(True)
-        self._tree.setAlternatingRowColors(False)
-        self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
-        self._tree.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-
-        # Set custom delegate
-        self._delegate = NavigationDelegate()
-        self._tree.setItemDelegate(self._delegate)
-
-        # Style - Modern light theme
-        c = ColorPalette()
+    def _apply_stylesheet(self) -> None:
+        """Apply themed stylesheet."""
+        c = get_palette(self._is_dark_theme)
         t = Typography()
         r = BorderRadius()
         self._tree.setStyleSheet(f"""
@@ -460,16 +448,6 @@ class NavigationTree(QWidget):
                 background-color: transparent;
             }}
         """)
-
-        layout.addWidget(self._tree)
-
-        # Search/filter input
-        c = ColorPalette()
-        t = Typography()
-        r = BorderRadius()
-        self._filter_input = QLineEdit()
-        self._filter_input.setPlaceholderText(_("Filter:") + "...")
-        self._filter_input.setClearButtonEnabled(True)
         self._filter_input.setStyleSheet(f"""
             QLineEdit {{
                 color: {c.text_primary};
@@ -484,8 +462,37 @@ class NavigationTree(QWidget):
                 background-color: {c.bg_primary};
             }}
         """)
-        self._filter_input.textChanged.connect(self._filter_tree)
+
+    def _setup_ui(self) -> None:
+        """Setup UI components."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        # Tree widget
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setIndentation(16)
+        self._tree.setAnimated(True)
+        self._tree.setAlternatingRowColors(False)
+        self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
+        self._tree.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+
+        # Set custom delegate
+        self._delegate = NavigationDelegate()
+        self._tree.setItemDelegate(self._delegate)
+
+        # Search/filter input
+        self._filter_input = QLineEdit()
+        self._filter_input.setPlaceholderText(_("Filter:") + "...")
+        self._filter_input.setClearButtonEnabled(True)
+
+        layout.addWidget(self._tree)
         layout.addWidget(self._filter_input)
+        self._filter_input.textChanged.connect(self._filter_tree)
+
+        # Apply stylesheet
+        self._apply_stylesheet()
 
     def _filter_tree(self, text: str) -> None:
         """Filter tree items by text (case-insensitive)."""

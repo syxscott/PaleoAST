@@ -49,7 +49,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import ColorPalette, Spacing, Typography, BorderRadius
+from config.design_system import Typography, BorderRadius, get_palette
 from config.i18n import _
 
 
@@ -71,6 +71,8 @@ class BaseAnalysisDialog(QDialog):
         self._logger = logging.getLogger(f"{__name__}.BaseAnalysisDialog")
         self._logger.info(f"Dialog opened: '{title}'")
 
+        self._is_dark_theme = False
+
         self.setWindowTitle(title)
         self.setMinimumSize(600, 500)
         self.setModal(True)
@@ -82,6 +84,11 @@ class BaseAnalysisDialog(QDialog):
         self._setup_ui()
 
         # Apply styling
+        self._apply_stylesheet()
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
         self._apply_stylesheet()
 
     def _setup_ui(self) -> None:
@@ -146,8 +153,8 @@ class BaseAnalysisDialog(QDialog):
             )
 
     def _apply_stylesheet(self) -> None:
-        """Apply modern light theme stylesheet."""
-        c = ColorPalette()
+        """Apply themed stylesheet."""
+        c = get_palette(self._is_dark_theme)
         t = Typography()
         r = BorderRadius()
         self.setStyleSheet(f"""
@@ -1121,11 +1128,20 @@ class ImportDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
+        self._is_dark_theme = False
+
         self.setWindowTitle(_("Import Data"))
         self.setMinimumSize(600, 500)
         self.setModal(True)
 
         self._setup_ui()
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        """Set dark/light theme."""
+        self._is_dark_theme = is_dark
+        from config.design_system import get_palette
+        c = get_palette(is_dark)
+        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; }}")
 
     def _setup_ui(self) -> None:
         """Setup import dialog UI."""

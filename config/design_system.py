@@ -69,6 +69,27 @@ class ColorPalette:
     shadow_xl = "0 20px 25px -5px rgba(0,0,0,0.1)"
 
 
+class ColorPaletteDark(ColorPalette):
+    """Dark theme color palette."""
+
+    bg_primary = "#0F172A"
+    bg_secondary = "#1E293B"
+    bg_tertiary = "#334155"
+    bg_hover = "#475569"
+
+    text_primary = "#F1F5F9"
+    text_secondary = "#94A3B8"
+    text_disabled = "#64748B"
+
+    border_light = "#334155"
+    border_medium = "#475569"
+    border_focus = "#60A5FA"
+
+    hover_overlay = "rgba(59, 130, 246, 0.15)"
+    active_overlay = "rgba(59, 130, 246, 0.25)"
+    selected_overlay = "rgba(59, 130, 246, 0.3)"
+
+
 # =============================================================================
 # Spacing System (4px grid)
 # =============================================================================
@@ -155,9 +176,9 @@ class BorderRadius:
 # =============================================================================
 
 
-def get_modern_stylesheet() -> str:
+def get_modern_stylesheet(palette: ColorPalette | None = None) -> str:
     """Generate comprehensive modern stylesheet for entire application."""
-    colors = ColorPalette()
+    colors = palette if palette is not None else ColorPalette()
     spacing = Spacing()
     typo = Typography()
     radius = BorderRadius()
@@ -591,3 +612,13 @@ colors = ColorPalette()
 spacing = Spacing()
 typography = Typography()
 radius = BorderRadius()
+
+
+def get_palette(dark: bool = False) -> ColorPalette:
+    """Get the appropriate color palette for the current theme."""
+    return ColorPaletteDark() if dark else ColorPalette()
+
+
+def get_stylesheet(dark: bool = False) -> str:
+    """Get the complete stylesheet for the current theme."""
+    return get_modern_stylesheet(get_palette(dark))
