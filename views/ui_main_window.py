@@ -26,6 +26,7 @@ Version: 1.0.0
 """
 
 import logging
+import os
 import sys
 from enum import Enum
 
@@ -69,6 +70,7 @@ from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from models.state_manager import get_state_manager
+from utils.event_bus import get_event_bus
 from views.ui_dialogs import (
     BiostratigraphyDialog,
     CCADialog,
@@ -877,6 +879,11 @@ class MainWindow(QMainWindow):
         self._data_actions = []
         self._data_buttons = []
 
+        # Subscribe to EventBus for data-driven updates
+        self._event_bus = get_event_bus()
+        self._event_bus.data_changed.connect(self._on_data_changed)
+        self._event_bus.undo_stack_changed.connect(self._on_undo_stack_changed)
+
         # Create widgets
         self._create_ui()
 
@@ -886,7 +893,7 @@ class MainWindow(QMainWindow):
         # Load settings
         self._load_settings()
 
-        # Status update timer
+        # Status update timer (retained only for memory monitoring)
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
         self._status_timer.start(1000)
@@ -1109,9 +1116,6 @@ class MainWindow(QMainWindow):
         self._btn_ripley_k.clicked.connect(self._on_run_ripley_k)
         self._register_data_button(self._btn_ripley_k)
 
-        # Monitor state changes
-        self._last_has_data = False
-
     def _get_groups(self) -> list[int] | None:
         """Get group labels from row metadata, converted to integer indices.
 
@@ -1176,6 +1180,26 @@ class MainWindow(QMainWindow):
         if button not in self._data_buttons:
             self._data_buttons.append(button)
             button.setEnabled(self._state.has_data)
+
+    def _on_data_changed(self, matrix) -> None:
+        """Handle data_changed event from EventBus."""
+        self._update_ui_state()
+        self._update_data_display()
+
+    def _on_undo_stack_changed(self) -> None:
+        """Handle undo_stack_changed event from EventBus."""
+        self._update_ui_state()
+
+    def _update_data_display(self) -> None:
+        """Update data-dependent display elements."""
+        if self._state.has_data:
+            matrix = self._state.data_matrix
+            info = _("Data: {0} samples x {1} variables").format(matrix.n_samples, matrix.n_variables)
+            if self._state.is_modified:
+                info += _(", modified")
+            self._status_bar.setInfo(info)
+        else:
+            self._status_bar.setInfo(_("No data loaded"))
 
     def _create_menu_bar(self) -> None:
         """Create application menu bar."""
@@ -1560,7 +1584,7 @@ class MainWindow(QMainWindow):
                 # Update UI state now that we have data
                 self._update_ui_state()
 
-                self._status_bar.setInfo(_("Loaded: {0}").format(filepath.split("/")[-1]))
+                self._status_bar.setInfo(_("Loaded: {0}").format(os.path.basename(filepath)))
 
             except Exception as e:
                 self._logger.error(f"Failed to load file '{filepath}': {e}")
@@ -1577,7 +1601,7 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 self._data_controller.export_csv(filepath)
-                self._status_bar.setInfo(_("Saved: {0}").format(filepath.split("/")[-1]))
+                self._status_bar.setInfo(_("Saved: {0}").format(os.path.basename(filepath)))
                 return True
             except Exception as e:
                 QMessageBox.critical(self, _("Save Error"), str(e))
@@ -1768,7 +1792,7 @@ class MainWindow(QMainWindow):
                 self._data_controller.export_csv(filepath)
                 QMessageBox.information(
                     self, _("Export Successful"),
-                    _("Data successfully exported to {0}").format(filepath.split("/")[-1])
+                    _("Data successfully exported to {0}").format(os.path.basename(filepath))
                 )
                 self._logger.info(f"Data exported to {filepath}")
             except Exception as e:
@@ -2668,23 +2692,9 @@ class MainWindow(QMainWindow):
         )
 
     def _update_status(self) -> None:
-        """Update status bar information and monitor data state changes."""
-        # Check if data state changed
-        current_has_data = self._state.has_data
-        if current_has_data != self._last_has_data:
-            self._last_has_data = current_has_data
-            self._update_ui_state()
-
-        if self._state.has_data:
-            matrix = self._state.data_matrix
-            info = _("Data: {0} samples x {1} variables").format(matrix.n_samples, matrix.n_variables)
-
-            if self._state.is_modified:
-                info += _(", modified")
-
-            self._status_bar.setInfo(info)
-        else:
-            self._status_bar.setInfo(_("No data loaded"))
+        """Update status bar information (memory monitoring)."""
+        # Update data display via event-driven approach
+        self._update_data_display()
 
         # Update memory usage label
         try:

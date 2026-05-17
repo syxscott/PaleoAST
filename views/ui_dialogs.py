@@ -1783,7 +1783,7 @@ class CCADialog(BaseAnalysisDialog):
         env_group = self.add_parameter_group(_("Environmental Variables"))
         env_layout = QVBoxLayout(env_group)
         self._env_col_list = QListWidget()
-        self._env_col_list.setSelectionMode(QListWidget.MultiSelection)
+        self._env_col_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self._env_col_list.setMinimumHeight(100)
         env_layout.addWidget(QLabel(_("Select environmental variables:")))
         env_layout.addWidget(self._env_col_list)

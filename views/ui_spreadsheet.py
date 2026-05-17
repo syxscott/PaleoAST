@@ -56,6 +56,7 @@ from PyQt6.QtWidgets import (
 from config.i18n import _
 from models.data_matrix import DataMatrix
 from models.state_manager import get_state_manager
+from utils.event_bus import get_event_bus
 
 
 class MarkerStyle(Enum):
@@ -265,13 +266,14 @@ class SpreadsheetDelegate(QStyledItemDelegate):
             painter.drawPath(path)
 
         elif marker_type == MarkerStyle.STAR.value:
-            # 6-pointed star
-            for i in range(6):
-                angle = i * 60 * 3.14159 / 180
-                px = cx + r * np.cos(angle)
-                py = cy + r * np.sin(angle)
+            # 6-pointed star: alternate between outer and inner radius
+            path = QPainterPath()
+            for i in range(12):
+                angle = i * 30 * 3.14159 / 180
+                radius = r if i % 2 == 0 else r * 0.4
+                px = cx + radius * np.cos(angle)
+                py = cy + radius * np.sin(angle)
                 if i == 0:
-                    path = QPainterPath()
                     path.moveTo(px, py)
                 else:
                     path.lineTo(px, py)
@@ -476,6 +478,14 @@ class ScientificSpreadsheet(QWidget):
         # State manager reference
         self._state = get_state_manager()
 
+        # Subscribe to EventBus
+        self._event_bus = get_event_bus()
+        self._event_bus.data_changed.connect(self._on_data_changed)
+        self._event_bus.metadata_changed.connect(self._on_metadata_changed)
+
+        # Guard flag to prevent re-entrant event loops
+        self._loading_from_event = False
+
         # Data
         self._data: np.ndarray | None = None
         self._row_labels: list[str] = []
@@ -506,7 +516,7 @@ class ScientificSpreadsheet(QWidget):
         layout.setSpacing(0)
 
         # Create table widget
-        self._table = QTableWidget()
+        self._table = QTableWidget(self)
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -628,6 +638,34 @@ class ScientificSpreadsheet(QWidget):
         # Data changes
         self._table.itemChanged.connect(self._on_item_changed)
 
+    # =========================================================================
+    # EventBus Handlers
+    # =========================================================================
+
+    def _on_data_changed(self, matrix) -> None:
+        """Handle data_changed event from EventBus."""
+        if self._loading_from_event:
+            return
+        self._loading_from_event = True
+        try:
+            if matrix is not None:
+                self.load_data(
+                    matrix.data,
+                    row_labels=matrix.row_labels,
+                    col_labels=matrix.col_labels,
+                )
+            else:
+                self.clear_data()
+        finally:
+            self._loading_from_event = False
+
+    def _on_metadata_changed(self, scope: str, index: int, metadata: dict) -> None:
+        """Handle metadata_changed event from EventBus."""
+        if scope == "column" and index in self._col_metadata:
+            self._col_metadata[index].update(metadata)
+        elif scope == "row" and index in self._row_metadata:
+            self._row_metadata[index].update(metadata)
+
     def load_data(
         self, data: np.ndarray, row_labels: list[str] | None = None, col_labels: list[str] | None = None
     ) -> None:
@@ -659,25 +697,22 @@ class ScientificSpreadsheet(QWidget):
 
         # Update table
         self._table.blockSignals(True)
-        self._table.setRowCount(n_rows)
-        self._table.setColumnCount(n_cols)
-
-        # Set row/column labels
-        self._table.setVerticalHeaderLabels(self._row_labels)
-        self._table.setHorizontalHeaderLabels(self._col_labels)
-
-        # Populate cells
-        for i in range(n_rows):
-            for j in range(n_cols):
-                value = self._data[i, j]
-                if np.isnan(value):
-                    item = QTableWidgetItem("")
-                else:
-                    item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(i, j, item)
-
-        self._table.blockSignals(False)
+        try:
+            self._table.setRowCount(n_rows)
+            self._table.setColumnCount(n_cols)
+            self._table.setVerticalHeaderLabels(self._row_labels)
+            self._table.setHorizontalHeaderLabels(self._col_labels)
+            for i in range(n_rows):
+                for j in range(n_cols):
+                    value = self._data[i, j]
+                    if np.isnan(value):
+                        item = QTableWidgetItem("")
+                    else:
+                        item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self._table.setItem(i, j, item)
+        finally:
+            self._table.blockSignals(False)
 
         # Update delegate
         self._delegate.set_data(self._data, self._row_labels, self._col_labels)
@@ -885,15 +920,17 @@ class ScientificSpreadsheet(QWidget):
 
         # Update table (block signals to prevent re-triggering itemChanged)
         self._table.blockSignals(True)
-        for i in range(self._data.shape[0]):
-            value = new_data[i]
-            if np.isnan(value):
-                item = QTableWidgetItem("")
-            else:
-                item = QTableWidgetItem(str(value))
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(i, col, item)
-        self._table.blockSignals(False)
+        try:
+            for i in range(self._data.shape[0]):
+                value = new_data[i]
+                if np.isnan(value):
+                    item = QTableWidgetItem("")
+                else:
+                    item = QTableWidgetItem(str(value))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self._table.setItem(i, col, item)
+        finally:
+            self._table.blockSignals(False)
 
         # Update state
         self._state.set_data_matrix(
@@ -931,21 +968,19 @@ class ScientificSpreadsheet(QWidget):
 
         # Reorder table rows
         self._table.blockSignals(True)
-
-        # Update cell contents to match sorted data
-        for new_row in range(self._data.shape[0]):
-            for col_idx in range(self._data.shape[1]):
-                value = self._data[new_row, col_idx]
-                if np.isnan(value):
-                    item = QTableWidgetItem("")
-                else:
-                    item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(new_row, col_idx, item)
-
-        # Update labels
-        self._table.setVerticalHeaderLabels(self._row_labels)
-        self._table.blockSignals(False)
+        try:
+            for new_row in range(self._data.shape[0]):
+                for col_idx in range(self._data.shape[1]):
+                    value = self._data[new_row, col_idx]
+                    if np.isnan(value):
+                        item = QTableWidgetItem("")
+                    else:
+                        item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self._table.setItem(new_row, col_idx, item)
+            self._table.setVerticalHeaderLabels(self._row_labels)
+        finally:
+            self._table.blockSignals(False)
 
         # Update state
         self._state.set_data_matrix(
@@ -1100,38 +1135,38 @@ class ScientificSpreadsheet(QWidget):
 
         # Block signals to prevent itemChanged from corrupting stacks
         self._table.blockSignals(True)
+        try:
+            if operation[0] == "transform":
+                _, col, transform, old_data = operation
+                self._redo_stack.append(("transform", col, transform))
+                self._data[:, col] = old_data
+                for i in range(self._data.shape[0]):
+                    item = QTableWidgetItem(str(old_data[i]))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self._table.setItem(i, col, item)
 
-        if operation[0] == "transform":
-            _, col, transform, old_data = operation
-            self._redo_stack.append(("transform", col, transform))
-            self._data[:, col] = old_data
-            for i in range(self._data.shape[0]):
-                item = QTableWidgetItem(str(old_data[i]))
+            elif operation[0] == "delete_col":
+                _, col, col_data, label, metadata = operation
+                self._redo_stack.append(("delete_col", col))
+                self._data = np.insert(self._data, col, col_data, axis=1)
+                self._col_labels.insert(col, label)
+                self._col_metadata[col] = metadata
+                self._table.insertColumn(col)
+                self._table.setHorizontalHeaderLabels(self._col_labels)
+                for i in range(self._data.shape[0]):
+                    item = QTableWidgetItem(str(col_data[i]))
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self._table.setItem(i, col, item)
+
+            elif operation[0] == "cell":
+                _, row, col, old_value = operation
+                self._redo_stack.append(("cell", row, col, self._data[row, col]))
+                self._data[row, col] = old_value
+                item = QTableWidgetItem(str(old_value))
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(i, col, item)
-
-        elif operation[0] == "delete_col":
-            _, col, col_data, label, metadata = operation
-            self._redo_stack.append(("delete_col", col))
-            self._data = np.insert(self._data, col, col_data, axis=1)
-            self._col_labels.insert(col, label)
-            self._col_metadata[col] = metadata
-            self._table.insertColumn(col)
-            self._table.setHorizontalHeaderLabels(self._col_labels)
-            for i in range(self._data.shape[0]):
-                item = QTableWidgetItem(str(col_data[i]))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(i, col, item)
-
-        elif operation[0] == "cell":
-            _, row, col, old_value = operation
-            self._redo_stack.append(("cell", row, col, self._data[row, col]))
-            self._data[row, col] = old_value
-            item = QTableWidgetItem(str(old_value))
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(row, col, item)
-
-        self._table.blockSignals(False)
+                self._table.setItem(row, col, item)
+        finally:
+            self._table.blockSignals(False)
 
         self._state.set_data_matrix(
             DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
@@ -1158,10 +1193,12 @@ class ScientificSpreadsheet(QWidget):
             self._undo_stack.append(("cell", row, col, self._data[row, col]))
             self._data[row, col] = new_value
             self._table.blockSignals(True)
-            item = QTableWidgetItem(str(new_value))
-            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(row, col, item)
-            self._table.blockSignals(False)
+            try:
+                item = QTableWidgetItem(str(new_value))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self._table.setItem(row, col, item)
+            finally:
+                self._table.blockSignals(False)
             self._state.set_data_matrix(
                 DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
             )

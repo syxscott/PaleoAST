@@ -97,6 +97,42 @@ class StatisticsController:
         self._logger.info("StatisticsController initialized")
 
     # =========================================================================
+    # Shared Analysis Helpers
+    # =========================================================================
+
+    def _ensure_data(self, data: npt.NDArray | None) -> npt.NDArray:
+        """Get data from state if not provided. Must be called with lock held."""
+        if data is None:
+            if not self._state.has_data:
+                raise ValidationError("No data available.")
+            return self._state.data_matrix.data
+        return data
+
+    def _ensure_distance_matrix(
+        self, distance_matrix: npt.NDArray | None, data: npt.NDArray | None, metric: str
+    ) -> npt.NDArray:
+        """Compute distance matrix if not provided. Must be called with lock held."""
+        if distance_matrix is None:
+            data = self._ensure_data(data)
+            dm = compute_distance_matrix(data, metric=metric)
+            return dm.matrix
+        return distance_matrix
+
+    def _run_with_data(
+        self,
+        analyzer: Any,
+        cache_key: str,
+        data: npt.NDArray | None,
+        analyze_method: str = "analyze",
+        **kwargs,
+    ) -> Any:
+        """Run analyzer with data from state if not provided. Must be called with lock held."""
+        data = self._ensure_data(data)
+        result = getattr(analyzer, analyze_method)(data, **kwargs)
+        self._state.cache_result(cache_key, result)
+        return result
+
+    # =========================================================================
     # PCA Operations
     # =========================================================================
 
@@ -115,20 +151,10 @@ class StatisticsController:
             PCAResult: PCA analysis results
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    self._logger.error("run_pca called with no data available")
-                    raise ValidationError("No data available. Please load data first.")
-                data = self._state.data_matrix.data
-
-            self._logger.info(
-                f"run_pca called with data shape={data.shape}, n_components={n_components}, method='{method}'"
-            )
+            data = self._ensure_data(data)
+            self._logger.info(f"run_pca called with data shape={data.shape}, n_components={n_components}, method='{method}'")
             result = self._pca_analyzer.analyze(data, n_components, method)
-
-            # Cache result
             self._state.cache_result("pca_result", result)
-
             self._logger.info(f"PCA completed: variance explained={result.explained_variance}")
             return result
 
@@ -151,21 +177,11 @@ class StatisticsController:
             PCoAResult: PCoA analysis results
         """
         with self._lock:
-            if distance_matrix is None:
-                if not self._state.has_data:
-                    self._logger.error("run_pcoa called with no data available")
-                    raise ValidationError("No data available.")
-
-                data = self._state.data_matrix.data
-                dm = compute_distance_matrix(data, metric=metric)
-                distance_matrix = dm.matrix
-
-            self._logger.info(f"run_pcoa called with distance matrix shape={distance_matrix.shape}, metric='{metric}'")
+            self._logger.info(f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}'")
+            distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
             result = self._pcoa_analyzer.analyze(distance_matrix, n_components)
-
             self._state.cache_result("pcoa_result", result)
             self._state.cache_result("pcoa_metric", metric)
-
             self._logger.info(f"PCoA completed: {n_components} coordinates extracted")
             return result
 
@@ -197,18 +213,8 @@ class StatisticsController:
             NMDSResult: NMDS analysis results
         """
         with self._lock:
-            if distance_matrix is None:
-                if not self._state.has_data:
-                    self._logger.error("run_nmds called with no data available")
-                    raise ValidationError("No data available.")
-
-                data = self._state.data_matrix.data
-                dm = compute_distance_matrix(data, metric=metric)
-                distance_matrix = dm.matrix
-
-            self._logger.info(
-                f"run_nmds called with distance matrix shape={distance_matrix.shape}, n_dimensions={n_dimensions}, n_restarts={n_restarts}"
-            )
+            self._logger.info(f"run_nmds called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, n_dimensions={n_dimensions}, n_restarts={n_restarts}")
+            distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
             result = self._nmds_analyzer.analyze(
                 distance_matrix,
                 n_dimensions=n_dimensions,
@@ -218,10 +224,8 @@ class StatisticsController:
                 random_seed=random_seed,
                 tolerance=tolerance,
             )
-
             self._state.cache_result("nmds_result", result)
             self._state.cache_result("nmds_metric", metric)
-
             self._logger.info(f"NMDS completed with stress={result.stress:.6f}")
             return result
 
@@ -249,20 +253,9 @@ class StatisticsController:
             ANOSIMResult: ANOSIM analysis results
         """
         with self._lock:
-            if distance_matrix is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-
-                data = self._state.data_matrix.data
-                dm = compute_distance_matrix(data, metric=metric)
-                distance_matrix = dm.matrix
-
-            result = self._anosim_analyzer.analyze(
-                distance_matrix, groups, n_permutations=n_permutations, metric=metric
-            )
-
+            distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
+            result = self._anosim_analyzer.analyze(distance_matrix, groups, n_permutations=n_permutations, metric=metric)
             self._state.cache_result("anosim_result", result)
-
             return result
 
     def run_permanova(
@@ -285,20 +278,9 @@ class StatisticsController:
             PERMANOVAResult: PERMANOVA analysis results
         """
         with self._lock:
-            if distance_matrix is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-
-                data = self._state.data_matrix.data
-                dm = compute_distance_matrix(data, metric=metric)
-                distance_matrix = dm.matrix
-
-            result = self._permanova_analyzer.analyze(
-                distance_matrix, groups, n_permutations=n_permutations, metric=metric
-            )
-
+            distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
+            result = self._permanova_analyzer.analyze(distance_matrix, groups, n_permutations=n_permutations, metric=metric)
             self._state.cache_result("permanova_result", result)
-
             return result
 
     # =========================================================================
@@ -321,16 +303,10 @@ class StatisticsController:
                 if not self._state.has_data:
                     self._logger.error("analyze_diversity called with no data available")
                     raise ValidationError("No data available.")
-
                 abundances = self._state.data_matrix.data[0]
-
-            self._logger.info(
-                f"analyze_diversity called for sample '{sample_name}' with {len(abundances)} abundance values"
-            )
+            self._logger.info(f"analyze_diversity called for sample '{sample_name}' with {len(abundances)} abundance values")
             result = compute_diversity_indices(abundances, sample_name)
-
             self._state.cache_result(f"diversity_{sample_name}", result)
-
             self._logger.info(f"Diversity analysis completed for sample '{sample_name}'")
             return result
 
@@ -352,13 +328,9 @@ class StatisticsController:
             if abundances is None:
                 if not self._state.has_data:
                     raise ValidationError("No data available.")
-
                 abundances = self._state.data_matrix.data[0]
-
             result = self._rarefaction_analyzer.analyze(abundances, sample_name, n_points=n_points)
-
             self._state.cache_result(f"rarefaction_{sample_name}", result)
-
             return result
 
     # =========================================================================
@@ -377,16 +349,10 @@ class StatisticsController:
             DistanceMatrixResult: Computed distance matrix
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
-
+            data = self._ensure_data(data)
             result = compute_distance_matrix(data, metric=metric)
-
             self._state.cache_result("distance_matrix", result)
             self._state.cache_result("distance_metric", metric)
-
             return result
 
     # =========================================================================
@@ -412,28 +378,16 @@ class StatisticsController:
             SpectralResult: Spectral analysis results
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available. Please load data first.")
-                data = self._state.data_matrix.data
-
+            data = self._ensure_data(data)
             self._logger.info(f"analyze_spectral called with data shape={data.shape}")
-
-            # Use first column as time, remaining as values (use first value column)
             if data.ndim == 2:
                 time = data[:, 0]
                 values = data[:, 1] if data.shape[1] > 1 else data[:, 0]
             else:
-                # 1D data: use index as time
                 time = np.arange(len(data), dtype=float)
                 values = data
-
-            result = self._spectral_analyzer.analyze(
-                time, values, frequency_range=frequency_range, n_frequencies=n_frequencies
-            )
-
+            result = self._spectral_analyzer.analyze(time, values, frequency_range=frequency_range, n_frequencies=n_frequencies)
             self._state.cache_result("spectral_result", result)
-
             self._logger.info(f"Spectral analysis completed: peak frequency={result.peak_frequency}")
             return result
 
@@ -461,17 +415,10 @@ class StatisticsController:
             ANOSIMResult: ANOSIM analysis results
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available. Please load data first.")
-                data = self._state.data_matrix.data
-
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
-
-            dm = compute_distance_matrix(data, metric=metric)
-            distance_matrix = dm.matrix
-
+            distance_matrix = self._ensure_distance_matrix(None, data, metric)
             return self.run_anosim(groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations)
 
     def analyze_permanova(
@@ -494,17 +441,10 @@ class StatisticsController:
             PERMANOVAResult: PERMANOVA analysis results
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available. Please load data first.")
-                data = self._state.data_matrix.data
-
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
-
-            dm = compute_distance_matrix(data, metric=metric)
-            distance_matrix = dm.matrix
-
+            distance_matrix = self._ensure_distance_matrix(None, data, metric)
             return self.run_permanova(groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations)
 
     # =========================================================================
@@ -519,10 +459,7 @@ class StatisticsController:
     ) -> SimperResult:
         """Run SIMPER analysis to identify discriminating variables."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
             result = self._simper_analyzer.analyze(data, groups, metric=metric)
@@ -538,12 +475,9 @@ class StatisticsController:
     ) -> SummaryResult:
         """Compute summary statistics for each variable."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
-                if column_names is None:
-                    column_names = self._state.data_matrix.col_labels
+            data = self._ensure_data(data)
+            if column_names is None:
+                column_names = self._state.data_matrix.col_labels
             result = self._univariate_analyzer.summary_statistics(data, column_names)
             self._state.cache_result("univariate_summary", result)
             return result
@@ -553,16 +487,11 @@ class StatisticsController:
     ) -> list[NormalityResult]:
         """Run normality tests on each variable."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
-                if column_names is None:
-                    column_names = self._state.data_matrix.col_labels
+            data = self._ensure_data(data)
+            if column_names is None:
+                column_names = self._state.data_matrix.col_labels
             n_vars = data.shape[1] if data.ndim == 2 else 1
-            results = []
-            for i in range(n_vars):
-                results.append(self._univariate_analyzer.normality_test(data, column=i))
+            results = [self._univariate_analyzer.normality_test(data, column=i) for i in range(n_vars)]
             self._state.cache_result("normality_results", results)
             return results
 
@@ -571,16 +500,11 @@ class StatisticsController:
     ) -> list[TTestResult]:
         """Run t-tests for each variable between two groups."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
             n_vars = data.shape[1] if data.ndim == 2 else 1
-            results = []
-            for i in range(n_vars):
-                results.append(self._univariate_analyzer.t_test(data, column=i, groups=groups, paired=paired))
+            results = [self._univariate_analyzer.t_test(data, column=i, groups=groups, paired=paired) for i in range(n_vars)]
             self._state.cache_result("t_test_results", results)
             return results
 
@@ -589,16 +513,11 @@ class StatisticsController:
     ) -> list[ANOVAResult]:
         """Run one-way ANOVA for each variable."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
             n_vars = data.shape[1] if data.ndim == 2 else 1
-            results = []
-            for i in range(n_vars):
-                results.append(self._univariate_analyzer.one_way_anova(data, groups, column=i))
+            results = [self._univariate_analyzer.one_way_anova(data, groups, column=i) for i in range(n_vars)]
             self._state.cache_result("anova_results", results)
             return results
 
@@ -607,16 +526,11 @@ class StatisticsController:
     ) -> list[KruskalResult]:
         """Run Kruskal-Wallis test for each variable."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
             n_vars = data.shape[1] if data.ndim == 2 else 1
-            results = []
-            for i in range(n_vars):
-                results.append(self._univariate_analyzer.kruskal_wallis(data, groups, column=i))
+            results = [self._univariate_analyzer.kruskal_wallis(data, groups, column=i) for i in range(n_vars)]
             self._state.cache_result("kruskal_results", results)
             return results
 
@@ -632,10 +546,7 @@ class StatisticsController:
     ) -> LDAResult:
         """Run Linear Discriminant Analysis."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
             result = self._lda_analyzer.analyze(data, groups, n_components=n_components)
@@ -790,15 +701,12 @@ class StatisticsController:
                 if not self._state.has_data:
                     raise ValidationError("No data available.")
                 data = self._state.data_matrix.data.copy()
-
             transforms = {
                 "log": lambda d: log_transform(d, base=kwargs.get("base", 10)),
                 "sqrt": sqrt_transform,
                 "zscore": zscore_standardize,
                 "hellinger": hellinger_transform,
-                "boxcox": lambda d: np.column_stack([
-                    boxcox_transform(d[:, c])[0] for c in range(d.shape[1])
-                ]) if d.ndim == 2 else boxcox_transform(d)[0],
+                "boxcox": lambda d: np.column_stack([boxcox_transform(d[:, c])[0] for c in range(d.shape[1])]) if d.ndim == 2 else boxcox_transform(d)[0],
             }
             fn = transforms.get(method)
             if fn is None:
@@ -837,13 +745,8 @@ class StatisticsController:
     ) -> ClusteringResult:
         """Run hierarchical clustering."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
-            result = self._clustering_analyzer.analyze(
-                data, n_clusters=n_clusters, method=method, metric=metric
-            )
+            data = self._ensure_data(data)
+            result = self._clustering_analyzer.analyze(data, n_clusters=n_clusters, method=method, metric=metric)
             self._state.cache_result("clustering_result", result)
             return result
 
@@ -871,10 +774,7 @@ class StatisticsController:
     def analyze_she(self, data: npt.NDArray | None = None) -> SHEResult:
         """Run SHE analysis."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             result = self._she_analyzer.analyze(data)
             self._state.cache_result("she_result", result)
             return result
@@ -891,10 +791,7 @@ class StatisticsController:
     ) -> CONISSResult:
         """Run CONISS constrained clustering."""
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+            data = self._ensure_data(data)
             result = self._coniss_analyzer.analyze(data, n_zones=n_zones, depths=depths)
             self._state.cache_result("coniss_result", result)
             return result
@@ -911,9 +808,7 @@ class StatisticsController:
         """Run Markov chain analysis on a facies sequence."""
         with self._lock:
             if sequence is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
+                data = self._ensure_data(None)
                 sequence = np.argmax(data, axis=1)
             result = self._markov_analyzer.analyze(sequence, facies_names=facies_names)
             self._state.cache_result("markov_result", result)
@@ -1007,24 +902,14 @@ class StatisticsController:
             GPAResult: GPA analysis results
         """
         with self._lock:
-            if data is None:
-                if not self._state.has_data:
-                    raise ValidationError("No data available.")
-                data = self._state.data_matrix.data
-
-            # If data is 2D, try to reshape to 3D (n_specimens, n_landmarks, n_dims)
+            data = self._ensure_data(data)
             if data.ndim == 2:
                 n_rows, n_cols = data.shape
-                # Assume 2D landmarks: reshape to (n_specimens, n_landmarks, 2)
                 if n_cols % 2 == 0:
                     n_landmarks = n_cols // 2
                     data = data.reshape(n_rows, n_landmarks, 2)
                 else:
-                    raise ValidationError(
-                        f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. "
-                        f"Expected even number of columns (x, y pairs)."
-                    )
-
+                    raise ValidationError(f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. Expected even number of columns (x, y pairs).")
             result = self._gpa_analyzer.analyze(data, n_iterations=n_iterations, tolerance=tolerance)
             self._state.cache_result("gpa_result", result)
             return result
@@ -1040,3 +925,80 @@ class StatisticsController:
     def clear_cache(self) -> None:
         """Clear all cached results."""
         self._state.clear_cache()
+
+    # =========================================================================
+    # Plugin System Integration
+    # =========================================================================
+
+    def list_available_analyses(self) -> list[str]:
+        """
+        List all available analyses (built-in + registered plugins).
+
+        Returns:
+            List of analysis names
+        """
+        # Built-in analyses (methods on this controller)
+        builtin = [m.replace("run_", "").replace("analyze_", "") for m in dir(self) if m.startswith("run_") or m.startswith("analyze_")]
+        builtin = [m for m in builtin if not m.startswith("_") and callable(getattr(self, f"run_{m}" if f"run_{m}" in dir(self) else f"analyze_{m}", None))]
+
+        # Registered plugins
+        try:
+            from plugins import get_plugin_registry
+            plugins = get_plugin_registry().list_plugins()
+        except ImportError:
+            plugins = []
+
+        return sorted(set(builtin)) + sorted(plugins)
+
+    def run_plugin(self, plugin_name: str, data: npt.NDArray | None = None, **kwargs: Any) -> Any:
+        """
+        Run a registered analysis plugin.
+
+        Parameters:
+            plugin_name: Name of the plugin to run
+            data: Input data (uses state data if None)
+            **kwargs: Additional parameters for the plugin
+
+        Returns:
+            Plugin-specific result
+
+        Raises:
+            ValidationError: If no data available or plugin not found
+        """
+        with self._lock:
+            data = self._ensure_data(data)
+
+        try:
+            from plugins import get_plugin_registry
+            registry = get_plugin_registry()
+        except ImportError:
+            raise ValidationError(f"Plugin system not available")
+
+        plugin = registry.get(plugin_name)
+        if plugin is None:
+            raise ValidationError(f"Plugin '{plugin_name}' not found. Available: {registry.list_plugins()}")
+
+        result = plugin.analyze(data, **kwargs)
+
+        # Cache if plugin provides a cache key
+        cache_key = plugin.cache_key
+        if cache_key and hasattr(result, 'data'):
+            self._state.cache_result(cache_key, result)
+
+        return result
+
+    def list_plugins(self) -> list[str]:
+        """List all registered plugin names."""
+        try:
+            from plugins import get_plugin_registry
+            return get_plugin_registry().list_plugins()
+        except ImportError:
+            return []
+
+    def list_plugin_categories(self) -> list[str]:
+        """List all unique plugin categories."""
+        try:
+            from plugins import get_plugin_registry
+            return get_plugin_registry().list_categories()
+        except ImportError:
+            return []

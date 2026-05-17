@@ -82,7 +82,7 @@ class DataController:
                 f"load_csv called with filepath={filepath}, delimiter='{delimiter}', has_header={has_header}, has_row_labels={has_row_labels}"
             )
             try:
-                path = Path(filepath)
+                path = Path(filepath).resolve()
 
                 if not path.exists():
                     raise FileOperationError(f"File not found: {filepath}")
@@ -97,8 +97,8 @@ class DataController:
 
                 # Determine data dimensions
                 if has_row_labels:
-                    row_labels = [row[0] for row in rows]
-                    data_rows = [row[1:] for row in rows]
+                    row_labels = [row[0] if row else "" for row in rows]
+                    data_rows = [row[1:] if row else [] for row in rows]
                 else:
                     row_labels = None
                     data_rows = rows
@@ -173,7 +173,7 @@ class DataController:
         with self._lock:
             self._logger.info(f"load_excel called with filepath={filepath}, sheet={sheet_name}")
             try:
-                path = Path(filepath)
+                path = Path(filepath).resolve()
                 if not path.exists():
                     raise FileOperationError(f"File not found: {filepath}")
 
