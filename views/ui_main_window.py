@@ -64,6 +64,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.design_system import ColorPalette, Spacing, Typography, BorderRadius
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
@@ -437,43 +438,47 @@ class RibbonButton(QPushButton):
 
     def _apply_stylesheet(self) -> None:
         """Apply modern themed stylesheet to button with smooth transitions."""
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: #F8F9FA;
-                border: 1px solid #E4E7EB;
-                border-radius: 4px;
-                padding: 4px 10px;
-                color: #2C3E50;
-                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                font-size: 11px;
-                font-weight: 500;
-                min-width: 60px;
-                min-height: 24px;
-            }
-            QPushButton:hover {
-                background-color: #F0F2F5;
-                border: 1px solid #3498DB;
-                color: #3498DB;
-            }
-            QPushButton:pressed {
-                background-color: #3498DB;
-                color: white;
-                border: 1px solid #2980B9;
-            }
-            QPushButton:disabled {
-                background-color: #F8F9FA;
-                color: #95A5A6;
-                border: 1px solid #E4E7EB;
-            }
-            QPushButton[flat="true"] {
-                background-color: transparent;
-                border: none;
-            }
-            QPushButton[flat="true"]:hover {
-                background-color: rgba(52, 152, 219, 0.08);
-                border: none;
-            }
-        """)
+        c = ColorPalette()
+        t = Typography()
+        r = BorderRadius()
+        ss = (
+            "QPushButton {"
+            "background-color: " + c.bg_secondary + "; "
+            "color: " + c.text_primary + "; "
+            "border: 1px solid " + c.border_light + "; "
+            "border-radius: " + r.md + "; "
+            "padding: 4px 10px; "
+            "font-family: " + t.family_primary + "; "
+            "font-size: " + str(t.body_sm_size) + "px; "
+            "font-weight: " + str(t.medium) + "; "
+            "min-width: 60px; "
+            "min-height: 24px; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: " + c.bg_tertiary + "; "
+            "border: 1px solid " + c.primary + "; "
+            "color: " + c.primary + "; "
+            "} "
+            "QPushButton:pressed { "
+            "background-color: " + c.primary + "; "
+            "color: white; "
+            "border: 1px solid " + c.primary_dark + "; "
+            "} "
+            "QPushButton:disabled { "
+            "background-color: " + c.bg_tertiary + "; "
+            "color: " + c.text_disabled + "; "
+            "border: 1px solid " + c.border_light + "; "
+            "} "
+            'QPushButton[flat="true"] { '
+            "background-color: transparent; "
+            "border: none; "
+            "} "
+            'QPushButton[flat="true"]:hover { '
+            "background-color: " + c.hover_overlay + "; "
+            "border: none; "
+            "}"
+        )
+        self.setStyleSheet(ss)
 
 
 class RibbonGroup(QWidget):
@@ -502,16 +507,18 @@ class RibbonGroup(QWidget):
         self._layout.addWidget(self._button_container)
 
         # Title label
+        c = ColorPalette()
+        t = Typography()
         self._title_label = QLabel(title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_label.setStyleSheet("""
-            QLabel {
-                color: #3498DB;
-                font-size: 9px;
-                font-weight: 600;
-                padding: 1px;
-            }
-        """)
+        self._title_label.setStyleSheet(
+            "QLabel { "
+            "color: " + c.primary + "; "
+            "font-size: " + str(t.caption_size) + "px; "
+            "font-weight: " + str(t.semibold) + "; "
+            "padding: 1px; "
+            "}"
+        )
         self._layout.addWidget(self._title_label)
 
     def addButton(
@@ -607,12 +614,10 @@ class RibbonBar(QWidget):
         # Separator line
         self._separator = QFrame()
         self._separator.setFrameShape(QFrame.Shape.HLine)
-        self._separator.setStyleSheet("""
-            QFrame {
-                background-color: #E4E7EB;
-                max-height: 1px;
-            }
-        """)
+        c = ColorPalette()
+        self._separator.setStyleSheet(
+            "QFrame { background-color: " + c.border_light + "; max-height: 1px; }"
+        )
         self._main_layout.addWidget(self._separator)
 
         self._apply_stylesheet()
@@ -663,31 +668,34 @@ class RibbonBar(QWidget):
 
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #FFFFFF;
-                border: none;
-            }
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #2C3E50;
-                padding: 4px 10px;
-                font-size: 11px;
-                font-weight: 600;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: rgba(52, 152, 219, 0.08);
-                color: #3498DB;
-            }
-            QPushButton:checked {
-                background-color: rgba(52, 152, 219, 0.12);
-                border-bottom: 2px solid #3498DB;
-                color: #3498DB;
-            }
-        """)
-        self._separator.setStyleSheet("background-color: #E4E7EB; max-height: 1px;")
+        c = ColorPalette()
+        t = Typography()
+        r = BorderRadius()
+        ss = (
+            "QWidget { background-color: " + c.bg_primary + "; border: none; } "
+            "QPushButton { "
+            "background-color: transparent; "
+            "border: none; "
+            "color: " + c.text_primary + "; "
+            "padding: 4px 10px; "
+            "font-size: " + str(t.body_sm_size) + "px; "
+            "font-weight: " + str(t.semibold) + "; "
+            "border-radius: " + r.md + "; "
+            "} "
+            "QPushButton:hover { "
+            "background-color: " + c.hover_overlay + "; "
+            "color: " + c.primary + "; "
+            "} "
+            "QPushButton:checked { "
+            "background-color: " + c.active_overlay + "; "
+            "border-bottom: 2px solid " + c.primary + "; "
+            "color: " + c.primary + "; "
+            "}"
+        )
+        self.setStyleSheet(ss)
+        self._separator.setStyleSheet(
+            "background-color: " + c.border_light + "; max-height: 1px;"
+        )
 
 
 class StatusBarWidget(QStatusBar):
@@ -697,52 +705,56 @@ class StatusBarWidget(QStatusBar):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        c = ColorPalette()
+        t = Typography()
         self.setContentsMargins(8, 2, 8, 2)
-        self.setStyleSheet("""
-            QStatusBar {
-                background-color: #F8F9FA;
-                border-top: 1px solid #E4E7EB;
-                color: #2C3E50;
-            }
-        """)
+        self.setStyleSheet(
+            "QStatusBar { "
+            "background-color: " + c.bg_secondary + "; "
+            "border-top: 1px solid " + c.border_light + "; "
+            "color: " + c.text_secondary + "; "
+            "}"
+        )
 
         # Data info label (left side)
         self._info_label = QLabel(_("No data loaded"))
-        self._info_label.setStyleSheet("""
-            QLabel {
-                color: #95A5A6;
-                font-size: 11px;
-            }
-        """)
+        self._info_label.setStyleSheet(
+            "QLabel { "
+            "color: " + c.text_secondary + "; "
+            "font-size: " + str(t.body_sm_size) + "px; "
+            "}"
+        )
         self.addWidget(self._info_label)
 
         # Memory indicator (right side)
         self._memory_label = QLabel(_("Memory: 0 MB"))
-        self._memory_label.setStyleSheet("""
-            QLabel {
-                color: #95A5A6;
-                font-size: 10px;
-            }
-        """)
+        self._memory_label.setStyleSheet(
+            "QLabel { "
+            "color: " + c.text_disabled + "; "
+            "font-size: " + str(t.caption_size) + "px; "
+            "}"
+        )
         self.addPermanentWidget(self._memory_label)
 
         # Progress bar (right side)
+        c2 = ColorPalette()
+        r2 = BorderRadius()
         self._progress_bar = QProgressBar()
         self._progress_bar.setMaximumWidth(150)
         self._progress_bar.setMaximumHeight(12)
         self._progress_bar.setVisible(False)
-        self._progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
-                text-align: center;
-                background-color: #F8F9FA;
-            }
-            QProgressBar::chunk {
-                background-color: #3498DB;
-                border-radius: 5px;
-            }
-        """)
+        self._progress_bar.setStyleSheet(
+            "QProgressBar { "
+            "border: 1px solid " + c2.border_light + "; "
+            "border-radius: " + r2.md + "; "
+            "text-align: center; "
+            "background-color: " + c2.bg_secondary + "; "
+            "} "
+            "QProgressBar::chunk { "
+            "background-color: " + c2.primary + "; "
+            "border-radius: " + r2.sm + "; "
+            "}"
+        )
         self.addPermanentWidget(self._progress_bar)
 
     def setInfo(self, text: str) -> None:
@@ -783,15 +795,17 @@ class WorkspaceArea(QWidget):
         self._layout.addWidget(self._stack)
 
         # Placeholder widget
+        c = ColorPalette()
+        t = Typography()
         self._placeholder = QLabel(_("Load data to begin analysis"))
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet("""
-            QLabel {
-                color: #95A5A6;
-                font-size: 14px;
-                background-color: #FFFFFF;
-            }
-        """)
+        self._placeholder.setStyleSheet(
+            "QLabel { "
+            "color: " + c.text_disabled + "; "
+            "font-size: " + str(t.body_lg_size) + "px; "
+            "background-color: " + c.bg_primary + "; "
+            "}"
+        )
         self._stack.addWidget(self._placeholder)
 
     def addWidget(self, widget: QWidget, name: str = "") -> int:

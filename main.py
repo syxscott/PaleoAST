@@ -272,13 +272,14 @@ class SplashScreen:
         self._label: Any | None = None
         self._progress: Any | None = None
         self._status: Any | None = None
+        self._fade_anim: Any | None = None  # Keep animation alive
 
     def show(self) -> None:
         """显示闪屏"""
         try:
-            from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+            from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
             from PyQt6.QtGui import QFont
-            from PyQt6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QProgressBar, QVBoxLayout, QWidget
+            from PyQt6.QtWidgets import QApplication, QLabel, QProgressBar, QVBoxLayout, QWidget
 
             app = QApplication.instance()
             if not app:
@@ -287,17 +288,15 @@ class SplashScreen:
             # 创建窗口
             self._widget = QWidget(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
             self._widget.setFixedSize(500, 350)
+            # Use solid dark background first, then set opacity for fade-in
             self._widget.setStyleSheet("""
                 QWidget {
-                    background-color: qlineargradient(
-                        x1: 0, y1: 0, x2: 1, y2: 1,
-                        stop: 0 #1A1A2E,
-                        stop: 0.5 #16213E,
-                        stop: 1 #0F3460
-                    );
+                    background-color: #1A1A2E;
                     border-radius: 12px;
                 }
             """)
+            # Start fully transparent for fade-in effect
+            self._widget.setWindowOpacity(0.0)
 
             # 居中
             screen = app.primaryScreen()
@@ -369,18 +368,15 @@ class SplashScreen:
             layout.addWidget(self._status, stretch=1)
             layout.addWidget(version)
 
-            # 淡入动画
-            effect = QGraphicsOpacityEffect(self._widget)
-            self._widget.setGraphicsEffect(effect)
-
-            anim = QPropertyAnimation(effect, b"opacity")
-            anim.setDuration(800)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            # 淡入动画 - keep reference to prevent GC
+            self._fade_anim = QPropertyAnimation(self._widget, b"windowOpacity")
+            self._fade_anim.setDuration(800)
+            self._fade_anim.setStartValue(0.0)
+            self._fade_anim.setEndValue(1.0)
+            self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
             self._widget.show()
-            anim.start()
+            self._fade_anim.start()
 
             app.processEvents()
 
@@ -414,25 +410,20 @@ class SplashScreen:
     def close(self) -> None:
         """关闭闪屏"""
         try:
-            from PyQt6.QtCore import QPropertyAnimation
-            from PyQt6.QtWidgets import QApplication, QGraphicsOpacityEffect
+            from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+            from PyQt6.QtWidgets import QApplication
 
             if not self._widget:
                 return
 
-            # 淡出动画
-            effect = QGraphicsOpacityEffect(self._widget)
-            self._widget.setGraphicsEffect(effect)
-
-            anim = QPropertyAnimation(effect, b"opacity", self._widget)
-            anim.setDuration(500)
-            anim.setStartValue(1.0)
-            anim.setEndValue(0.0)
-            from PyQt6.QtCore import QEasingCurve
-
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-            anim.finished.connect(self._widget.close)
-            anim.start()
+            # 淡出动画 - keep reference to prevent GC
+            self._fade_anim = QPropertyAnimation(self._widget, b"windowOpacity")
+            self._fade_anim.setDuration(500)
+            self._fade_anim.setStartValue(1.0)
+            self._fade_anim.setEndValue(0.0)
+            self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._fade_anim.finished.connect(self._widget.close)
+            self._fade_anim.start()
 
             app = QApplication.instance()
             if app:

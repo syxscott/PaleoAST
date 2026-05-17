@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.design_system import ColorPalette, Spacing, Typography, BorderRadius
 from config.i18n import _
 
 
@@ -90,8 +91,9 @@ class BaseAnalysisDialog(QDialog):
         layout.setSpacing(12)
 
         # Title label
+        t = Typography()
         self._title_label = QLabel(self.windowTitle())
-        title_font = QFont("Arial", 14, QFont.Weight.Bold)
+        title_font = QFont(t.family_primary, t.h5_size, QFont.Weight.Bold)
         self._title_label.setFont(title_font)
         layout.addWidget(self._title_label)
 
@@ -145,204 +147,214 @@ class BaseAnalysisDialog(QDialog):
 
     def _apply_stylesheet(self) -> None:
         """Apply modern light theme stylesheet."""
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #FFFFFF;
-            }
-            QLabel {
-                color: #2C3E50;
-                font-size: 12px;
-            }
-            QGroupBox {
-                color: #2C3E50;
-                font-weight: 600;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
-                margin-top: 12px;
-                padding-top: 12px;
-                padding-left: 12px;
-                padding-right: 12px;
-                padding-bottom: 12px;
-                background-color: #F8F9FA;
-            }
-            QGroupBox::title {
+        c = ColorPalette()
+        t = Typography()
+        r = BorderRadius()
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {c.bg_primary};
+            }}
+            QLabel {{
+                color: {c.text_primary};
+                font-size: {t.body_size}px;
+            }}
+            QGroupBox {{
+                color: {c.text_primary};
+                font-weight: {t.medium};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
+                margin-top: {r.lg};
+                padding-top: {r.lg};
+                padding-left: {r.lg};
+                padding-right: {r.lg};
+                padding-bottom: {r.lg};
+                background-color: {c.bg_secondary};
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 6px;
-                background-color: #FFFFFF;
-            }
-            QPushButton {
-                background-color: #F0F2F5;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+                padding: 0 {r.md};
+                background-color: {c.bg_primary};
+            }}
+            QPushButton {{
+                background-color: {c.bg_secondary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 padding: 8px 16px;
                 min-width: 80px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #E4E7EB;
-                border: 1px solid #BFC9D4;
-            }
-            QPushButton:pressed {
-                background-color: #D9DFE8;
-            }
-            QPushButton[default="true"] {
-                background-color: #3498DB;
-                color: #FFFFFF;
-                border: 1px solid #2980B9;
-            }
-            QPushButton[default="true"]:hover {
-                background-color: #2980B9;
-                border: 1px solid #1F618D;
-            }
-            QPushButton[default="true"]:pressed {
-                background-color: #1F618D;
-            }
-            QComboBox {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+                font-weight: {t.medium};
+                font-size: {t.body_size}px;
+            }}
+            QPushButton:hover {{
+                background-color: {c.bg_tertiary};
+                border: 1px solid {c.border_medium};
+            }}
+            QPushButton:pressed {{
+                background-color: {c.bg_hover};
+            }}
+            QPushButton[default="true"] {{
+                background-color: {c.primary};
+                color: white;
+                border: 1px solid {c.primary_dark};
+            }}
+            QPushButton[default="true"]:hover {{
+                background-color: {c.primary_light};
+                border: 1px solid {c.primary};
+            }}
+            QPushButton[default="true"]:pressed {{
+                background-color: {c.primary_dark};
+            }}
+            QComboBox {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 padding: 6px 12px;
                 min-width: 150px;
-            }
-            QComboBox:hover {
-                border: 1px solid #3498DB;
-                background-color: #F8F9FA;
-            }
-            QComboBox:focus {
-                border: 1px solid #3498DB;
-            }
-            QComboBox::drop-down {
+                font-size: {t.body_size}px;
+            }}
+            QComboBox:hover {{
+                border: 1px solid {c.primary};
+                background-color: {c.bg_secondary};
+            }}
+            QComboBox:focus {{
+                border: 1px solid {c.primary};
+            }}
+            QComboBox::drop-down {{
                 border: none;
-            }
-            QComboBox::down-arrow {
+            }}
+            QComboBox::down-arrow {{
                 image: none;
                 border-left: 5px solid transparent;
                 border-right: 5px solid transparent;
-                border-top: 5px solid #3498DB;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                selection-background-color: #3498DB;
-                selection-color: #FFFFFF;
-            }
-            QSpinBox, QDoubleSpinBox {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+                border-top: 5px solid {c.primary};
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                selection-background-color: {c.primary};
+                selection-color: white;
+            }}
+            QSpinBox, QDoubleSpinBox {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 padding: 6px;
                 min-width: 80px;
-            }
-            QSpinBox:hover, QDoubleSpinBox:hover {
-                border: 1px solid #3498DB;
-                background-color: #F8F9FA;
-            }
-            QSpinBox:focus, QDoubleSpinBox:focus {
-                border: 1px solid #3498DB;
-                background-color: #FFFFFF;
-            }
+                font-size: {t.body_size}px;
+            }}
+            QSpinBox:hover, QDoubleSpinBox:hover {{
+                border: 1px solid {c.primary};
+                background-color: {c.bg_secondary};
+            }}
+            QSpinBox:focus, QDoubleSpinBox:focus {{
+                border: 1px solid {c.primary};
+                background-color: {c.bg_primary};
+            }}
             QSpinBox::up-button, QDoubleSpinBox::up-button,
-            QSpinBox::down-button, QDoubleSpinBox::down-button {
+            QSpinBox::down-button, QDoubleSpinBox::down-button {{
                 border: none;
                 background-color: transparent;
-                color: #3498DB;
-            }
-            QCheckBox {
-                color: #2C3E50;
+                color: {c.primary};
+            }}
+            QCheckBox {{
+                color: {c.text_primary};
                 spacing: 8px;
-            }
-            QCheckBox::indicator {
+                font-size: {t.body_size}px;
+            }}
+            QCheckBox::indicator {{
                 width: 18px;
                 height: 18px;
-                border: 2px solid #E4E7EB;
-                border-radius: 3px;
-                background-color: #FFFFFF;
-            }
-            QCheckBox::indicator:hover {
-                border: 2px solid #3498DB;
-                background-color: #F8F9FA;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #3498DB;
-                border-color: #2980B9;
-            }
-            QCheckBox::indicator:checked:hover {
-                background-color: #2980B9;
-            }
-            QRadioButton {
-                color: #2C3E50;
+                border: 2px solid {c.border_medium};
+                border-radius: {r.sm};
+                background-color: {c.bg_primary};
+            }}
+            QCheckBox::indicator:hover {{
+                border: 2px solid {c.primary};
+                background-color: {c.bg_secondary};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {c.primary};
+                border-color: {c.primary_dark};
+            }}
+            QCheckBox::indicator:checked:hover {{
+                background-color: {c.primary_light};
+            }}
+            QRadioButton {{
+                color: {c.text_primary};
                 spacing: 8px;
-            }
-            QRadioButton::indicator {
+                font-size: {t.body_size}px;
+            }}
+            QRadioButton::indicator {{
                 width: 18px;
                 height: 18px;
-                border: 2px solid #E4E7EB;
-                border-radius: 9px;
-                background-color: #FFFFFF;
-            }
-            QRadioButton::indicator:hover {
-                border: 2px solid #3498DB;
-                background-color: #F8F9FA;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #3498DB;
-                border-color: #2980B9;
-            }
-            QTextEdit, QPlainTextEdit {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+                border: 2px solid {c.border_medium};
+                border-radius: 50%;
+                background-color: {c.bg_primary};
+            }}
+            QRadioButton::indicator:hover {{
+                border: 2px solid {c.primary};
+                background-color: {c.bg_secondary};
+            }}
+            QRadioButton::indicator:checked {{
+                background-color: {c.primary};
+                border-color: {c.primary_dark};
+            }}
+            QTextEdit, QPlainTextEdit {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 padding: 8px;
-            }
-            QTextEdit:hover, QPlainTextEdit:hover {
-                border: 1px solid #3498DB;
-            }
-            QTextEdit:focus, QPlainTextEdit:focus {
-                border: 1px solid #3498DB;
-                background-color: #FFFFFF;
-            }
-            QListWidget {
-                background-color: #FFFFFF;
-                color: #2C3E50;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
-            }
-            QListWidget::item {
+                font-size: {t.body_size}px;
+            }}
+            QTextEdit:hover, QPlainTextEdit:hover {{
+                border: 1px solid {c.primary};
+            }}
+            QTextEdit:focus, QPlainTextEdit:focus {{
+                border: 1px solid {c.primary};
+                background-color: {c.bg_primary};
+            }}
+            QListWidget {{
+                background-color: {c.bg_primary};
+                color: {c.text_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
+                font-size: {t.body_size}px;
+            }}
+            QListWidget::item {{
                 padding: 6px 8px;
-            }
-            QListWidget::item:hover {
-                background-color: #F8F9FA;
-            }
-            QListWidget::item:selected {
-                background-color: #E8F4F8;
-                color: #3498DB;
-            }
-            QScrollArea {
+            }}
+            QListWidget::item:hover {{
+                background-color: {c.bg_secondary};
+            }}
+            QListWidget::item:selected {{
+                background-color: {c.selected_overlay};
+                color: {c.primary};
+            }}
+            QScrollArea {{
                 background-color: transparent;
                 border: none;
-            }
-            QSlider::groove:horizontal {
+            }}
+            QSlider::groove:horizontal {{
                 height: 6px;
-                background-color: #E4E7EB;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
+                background-color: {c.border_light};
+                border-radius: {r.sm};
+            }}
+            QSlider::handle:horizontal {{
                 width: 16px;
-                background-color: #3498DB;
-                border-radius: 8px;
+                background-color: {c.primary};
+                border-radius: {r.md};
                 margin: -5px 0;
-            }
-            QSlider::handle:horizontal:hover {
-                background-color: #2980B9;
-            }
-            QSlider::handle:horizontal:pressed {
-                background-color: #1F618D;
-            }
+            }}
+            QSlider::handle:horizontal:hover {{
+                background-color: {c.primary_light};
+            }}
+            QSlider::handle:horizontal:pressed {{
+                background-color: {c.primary_dark};
+            }}
         """)
 
     def _on_run(self) -> None:

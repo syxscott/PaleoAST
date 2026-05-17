@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.design_system import ColorPalette, Typography, BorderRadius
 from config.i18n import _
 
 
@@ -151,11 +152,13 @@ class NavigationDelegate(QStyledItemDelegate):
 
         # Background painting
         if is_selected:
-            # Selected state - blue highlight with rounded background
-            painter.fillRect(option.rect, QBrush(QColor(52, 152, 219, 51)))
+            # Selected state - use primary with 15% alpha
+            selected_color = QColor(59, 130, 246, 38)
+            painter.fillRect(option.rect, QBrush(selected_color))
         elif is_hovered:
-            # Hover state - subtle light background
-            painter.fillRect(option.rect, QBrush(QColor(52, 152, 219, 20)))
+            # Hover state - use primary with 8% alpha
+            hover_color = QColor(30, 64, 175, 20)
+            painter.fillRect(option.rect, QBrush(hover_color))
 
         # Determine icon type from item data (UserRole)
         icon_type = index.data(Qt.ItemDataRole.UserRole)
@@ -201,11 +204,13 @@ class NavigationDelegate(QStyledItemDelegate):
             text = ""
 
         # Draw text
-        text_color = "#3498DB" if is_selected else "#2C3E50"
+        c = ColorPalette()
+        text_color = c.primary if is_selected else c.text_primary
         if is_hovered and not is_selected:
-            text_color = "#3498DB"
+            text_color = c.primary
 
-        font = QFont("Segoe UI", 10)
+        t = Typography()
+        font = QFont(t.family_primary, t.body_sm_size)
         # Top-level if no valid parent index
         if not index.parent().isValid():
             font.setBold(True)
@@ -227,7 +232,8 @@ class NavigationDelegate(QStyledItemDelegate):
 
     def _draw_folder_icon(self, painter: QPainter, x: float, y: float, size: float, is_expanded: bool) -> None:
         """Draw folder icon with optional open state."""
-        color = QColor("#3498DB")
+        c = ColorPalette()
+        color = QColor(c.primary)
         painter.setPen(QPen(color, 1.5))
         painter.setBrush(QBrush(color.lighter(130)))
 
@@ -334,7 +340,8 @@ class NavigationDelegate(QStyledItemDelegate):
         self, painter: QPainter, x: float, y: float, size: float, is_expanded: bool, is_selected: bool
     ) -> None:
         """Draw expand/collapse arrow."""
-        color = "#95A5A6" if not is_selected else "#ECF0F1"
+        c = ColorPalette()
+        color = c.text_disabled if not is_selected else c.bg_primary
         painter.setPen(QPen(QColor(color), 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
@@ -401,75 +408,81 @@ class NavigationTree(QWidget):
         self._tree.setItemDelegate(self._delegate)
 
         # Style - Modern light theme
-        self._tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #FFFFFF;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+        c = ColorPalette()
+        t = Typography()
+        r = BorderRadius()
+        self._tree.setStyleSheet(f"""
+            QTreeWidget {{
+                background-color: {c.bg_primary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 outline: none;
-                color: #2C3E50;
-                font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                font-size: 11px;
-            }
-            QTreeWidget::item {
+                color: {c.text_primary};
+                font-family: {t.family_primary};
+                font-size: {t.body_sm_size}px;
+            }}
+            QTreeWidget::item {{
                 padding: 6px 4px;
                 min-height: 32px;
-                border-radius: 4px;
-            }
-            QTreeWidget::item:hover {
-                background-color: rgba(52, 152, 219, 0.08);
-            }
-            QTreeWidget::item:selected {
-                background-color: rgba(52, 152, 219, 0.15);
-                color: #3498DB;
-            }
-            QTreeWidget::item:selected:active {
-                background-color: rgba(52, 152, 219, 0.25);
-            }
-            QTreeWidget::branch {
+                border-radius: {r.md};
+            }}
+            QTreeWidget::item:hover {{
+                background-color: {c.hover_overlay};
+            }}
+            QTreeWidget::item:selected {{
+                background-color: {c.selected_overlay};
+                color: {c.primary};
+            }}
+            QTreeWidget::item:selected:active {{
+                background-color: {c.active_overlay};
+            }}
+            QTreeWidget::branch {{
                 background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background-color: #F8F9FA;
+            }}
+            QScrollBar:vertical {{
+                background-color: {c.bg_secondary};
                 width: 10px;
                 margin: 0px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #C0C4CC;
+                border-radius: {r.sm};
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {c.border_medium};
                 min-height: 20px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #909399;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border-radius: {r.sm};
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {c.text_secondary};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
                 background-color: transparent;
-            }
+            }}
         """)
 
         layout.addWidget(self._tree)
 
         # Search/filter input
+        c = ColorPalette()
+        t = Typography()
+        r = BorderRadius()
         self._filter_input = QLineEdit()
         self._filter_input.setPlaceholderText(_("Filter:") + "...")
         self._filter_input.setClearButtonEnabled(True)
-        self._filter_input.setStyleSheet("""
-            QLineEdit {
-                color: #2C3E50;
-                background-color: #F8F9FA;
-                border: 1px solid #E4E7EB;
-                border-radius: 6px;
+        self._filter_input.setStyleSheet(f"""
+            QLineEdit {{
+                color: {c.text_primary};
+                background-color: {c.bg_secondary};
+                border: 1px solid {c.border_light};
+                border-radius: {r.lg};
                 padding: 6px 8px;
-                font-size: 12px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #3498DB;
-                background-color: #FFFFFF;
-            }
+                font-size: {t.body_size}px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {c.primary};
+                background-color: {c.bg_primary};
+            }}
         """)
         self._filter_input.textChanged.connect(self._filter_tree)
         layout.addWidget(self._filter_input)

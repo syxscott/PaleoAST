@@ -27,41 +27,46 @@ from dataclasses import dataclass
 
 @dataclass
 class ColorPalette:
-    """Modern light color palette."""
+    """Modern light color palette with professional scientific styling."""
 
-    # Primary colors
-    primary = "#3498DB"  # Professional blue
-    primary_light = "#5DADE2"  # Light blue (hover)
-    primary_dark = "#2980B9"  # Dark blue (active)
+    # Primary colors - Professional deep blue for scientific data
+    primary = "#1E40AF"  # Deep professional blue
+    primary_light = "#3B82F6"  # Lighter blue (hover)
+    primary_dark = "#1E3A8A"  # Darker blue (active)
+
+    # Secondary - Supporting blue tones
+    secondary = "#64748B"  # Slate for secondary elements
 
     # Semantic colors
-    success = "#27AE60"
-    warning = "#F39C12"
-    error = "#E74C3C"
-    info = "#16A085"
+    success = "#059669"  # Emerald green
+    warning = "#D97706"  # Amber
+    error = "#DC2626"  # Red
+    info = "#0891B2"  # Cyan
 
-    # Neutral colors
+    # Neutral colors - Clean grays
     bg_primary = "#FFFFFF"  # Main background
-    bg_secondary = "#F8F9FA"  # Secondary surface
-    bg_tertiary = "#F0F2F5"  # Tertiary surface
+    bg_secondary = "#F8FAFC"  # Secondary surface
+    bg_tertiary = "#F1F5F9"  # Tertiary surface
+    bg_hover = "#E2E8F0"  # Hover background
 
-    text_primary = "#2C3E50"  # Main text
-    text_secondary = "#7F8C8D"  # Secondary text
-    text_disabled = "#BDC3C7"  # Disabled text
+    text_primary = "#0F172A"  # Main text (near black)
+    text_secondary = "#64748B"  # Secondary text (slate)
+    text_disabled = "#94A3B8"  # Disabled text
 
-    border_light = "#E4E7EB"  # Light border
-    border_medium = "#D0D5DD"  # Medium border
-    border_dark = "#BDC3C7"  # Dark border
+    border_light = "#E2E8F0"  # Light border
+    border_medium = "#CBD5E1"  # Medium border
+    border_focus = "#3B82F6"  # Focus border
 
     # Hover/Active states
-    hover_overlay = "rgba(52, 152, 219, 0.08)"
-    active_overlay = "rgba(52, 152, 219, 0.15)"
+    hover_overlay = "rgba(30, 64, 175, 0.08)"
+    active_overlay = "rgba(30, 64, 175, 0.12)"
+    selected_overlay = "rgba(59, 130, 246, 0.15)"
 
-    # Shadows
+    # Shadows - Subtle and modern
     shadow_sm = "0 1px 2px rgba(0,0,0,0.05)"
-    shadow_md = "0 4px 6px rgba(0,0,0,0.07)"
-    shadow_lg = "0 10px 15px rgba(0,0,0,0.10)"
-    shadow_xl = "0 20px 25px rgba(0,0,0,0.15)"
+    shadow_md = "0 4px 6px -1px rgba(0,0,0,0.1)"
+    shadow_lg = "0 10px 15px -3px rgba(0,0,0,0.1)"
+    shadow_xl = "0 20px 25px -5px rgba(0,0,0,0.1)"
 
 
 # =============================================================================
@@ -109,10 +114,10 @@ class Typography:
     h4_size = 20
     h5_size = 16
 
-    body_lg_size = 16
-    body_size = 14
-    body_sm_size = 13
-    caption_size = 12
+    body_lg_size = 15
+    body_size = 13
+    body_sm_size = 12
+    caption_size = 11
 
     # Font weights
     thin = 100
@@ -422,13 +427,13 @@ QScrollBar:vertical {{
 }}
 
 QScrollBar::handle:vertical {{
-    background: {colors.border_dark};
+    background: {colors.border_medium};
     min-height: 20px;
     border-radius: {radius.sm};
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background: {colors.border_medium};
+    background: {colors.text_secondary};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -443,13 +448,13 @@ QScrollBar:horizontal {{
 }}
 
 QScrollBar::handle:horizontal {{
-    background: {colors.border_dark};
+    background: {colors.border_medium};
     min-width: 20px;
     border-radius: {radius.sm};
 }}
 
 QScrollBar::handle:horizontal:hover {{
-    background: {colors.border_medium};
+    background: {colors.text_secondary};
 }}
 
 /* =============================================================================
