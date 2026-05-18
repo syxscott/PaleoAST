@@ -200,7 +200,8 @@ class AllometryDialog(BaseAllometryDialog):
             )
         except Exception as e:
             self._logger.error(f"Allometry failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "异速生长分析"))
 
 
 class PLSDialog(BaseAllometryDialog):

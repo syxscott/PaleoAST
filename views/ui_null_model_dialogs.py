@@ -261,6 +261,7 @@ class NullModelDialog(QDialog):
             QMessageBox.critical(self, _("Error"), _("Required analysis module not available."))
         except Exception as e:
             self._logger.error(f"Null model failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "零模型分析"))
         finally:
             self._run_button.setEnabled(True)

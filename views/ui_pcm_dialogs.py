@@ -257,7 +257,8 @@ class PICDialog(PCMBaseDialog):
             self._logger.info(f"PIC completed: {result.n_contrasts} contrasts")
         except Exception as e:
             self._logger.error(f"PIC failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "PIC"))
 
 
 class AncestralStateDialog(PCMBaseDialog):
@@ -310,7 +311,8 @@ class AncestralStateDialog(PCMBaseDialog):
             self._logger.info(f"ASR completed: {len(result.node_states)} nodes")
         except Exception as e:
             self._logger.error(f"ASR failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "祖先状态重建"))
 
 
 class PhyloSignalDialog(PCMBaseDialog):
@@ -365,7 +367,8 @@ class PhyloSignalDialog(PCMBaseDialog):
             self._logger.info(f"Blomberg's K = {result.k:.4f}")
         except Exception as e:
             self._logger.error(f"Phylogenetic signal failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育信号"))
 
 
 class PhyloANOVADialog(PCMBaseDialog):
@@ -464,4 +467,5 @@ class PhyloANOVADialog(PCMBaseDialog):
             self._logger.info(f"Phylo-ANOVA: F={result.f_statistic:.4f}")
         except Exception as e:
             self._logger.error(f"Phylo-ANOVA failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育方差分析"))

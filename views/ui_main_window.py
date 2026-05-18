@@ -105,6 +105,112 @@ from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_spreadsheet import ScientificSpreadsheet
 
 
+def format_user_error(e: Exception, operation: str = "") -> str:
+    """
+    将技术性异常消息转换为用户友好的中文提示。
+
+    参数:
+        e: 捕获的异常
+        operation: 操作名称（如 "PCA"、"GPA" 等）
+
+    返回:
+        用户友好的错误消息
+    """
+    error_msg = str(e)
+    operation_hint = f"{operation} " if operation else ""
+
+    # 数据类型错误（最常见的中文字符或 "NA" 问题）
+    if isinstance(e, (ValueError, TypeError)):
+        # 检查是否是非法字符问题（更精确的匹配）
+        if any(keyword in error_msg.lower() for keyword in [
+            "could not convert string", "invalid literal for float",
+            "can't convert", "string to float", "could not convert",
+            "无法转换", "invalid choice", "not a valid"
+        ]):
+            return _(
+                f"{operation_hint}失败：数据包含无效字符。\n\n"
+                "请检查以下几点：\n"
+                "• 选中的数据仅包含数值，不含文字或符号\n"
+                "• 不存在缺失值标记（如 NA、NaN、-、空格等）\n"
+                "• 如有中文或特殊字符，请先删除或替换"
+            )
+
+        # 检查是否是数值计算错误（如 log(负数)、sqrt(负数)）
+        if any(keyword in error_msg.lower() for keyword in [
+            "negative value", "invalid value", "math domain error",
+            "不能求", "数值计算"
+        ]):
+            return _(
+                f"{operation_hint}失败：数值计算错误。\n\n"
+                "请检查以下几点：\n"
+                "• 数据中是否存在负数（特别是对数运算前）\n"
+                "• 是否存在零值（某些除法运算前）\n"
+                "• 数值是否在有效范围内"
+            )
+
+        # 检查是否是维度不匹配问题
+        if any(keyword in error_msg.lower() for keyword in [
+            "dimension", "shape", "axes"
+        ]):
+            return _(
+                f"{operation_hint}失败：数据维度不匹配。\n\n"
+                "请检查以下几点：\n"
+                "• 数据的行数和列数符合分析要求\n"
+                "• 不同数据集的样本数量是否一致\n"
+                "• Landmark 数据是否为完整的 x,y 坐标对"
+            )
+
+        # 检查是否是空数据问题
+        if "empty" in error_msg.lower() or "没有数据" in error_msg:
+            return _(
+                f"{operation_hint}失败：数据为空。\n\n"
+                "请确保已选中有效的数据区域。"
+            )
+
+        # 通用数据类型错误
+        return _(
+            f"{operation_hint}失败：数据类型错误。\n\n"
+            "错误信息：{0}\n\n"
+            "请检查选中的数据是否为数值类型，并确保无缺失值。"
+        ).format(error_msg[:100])
+
+    # 验证错误
+    if "ValidationError" in type(e).__name__ or "验证" in error_msg:
+        return _(
+            f"{operation_hint}失败：数据验证未通过。\n\n"
+            "{0}"
+        ).format(error_msg)
+
+    # 收敛错误（迭代算法未收敛）
+    if "ConvergenceError" in type(e).__name__ or "收敛" in error_msg:
+        return _(
+            f"{operation_hint}警告：算法未收敛。\n\n"
+            "这通常是由于数据质量问题或参数设置不当导致。\n"
+            "建议：\n"
+            "• 检查数据中是否存在异常值\n"
+            "• 尝试增加迭代次数\n"
+            "• 尝试使用不同的初始化参数"
+        )
+
+    # 矩阵计算错误
+    if "singular" in error_msg.lower() or "matrix" in error_msg.lower():
+        return _(
+            f"{operation_hint}失败：矩阵计算错误。\n\n"
+            "这通常是由于数据中存在线性相关（多重共线性）导致。\n"
+            "建议：\n"
+            "• 检查并移除高度相关的变量\n"
+            "• 标准化数据后再试\n"
+            "• 减少变量数量"
+        )
+
+    # 默认：显示原始错误消息的前100个字符
+    return _(
+        f"{operation_hint}时发生错误：\n\n"
+        "{0}\n\n"
+        "如果问题持续存在，请检查数据格式是否正确。"
+    ).format(error_msg[:200])
+
+
 class RibbonStyle(Enum):
     """Ribbon button styles."""
 
@@ -2029,7 +2135,7 @@ class MainWindow(QMainWindow):
                 )
 
             except Exception as e:
-                QMessageBox.critical(self, _("PCA Error"), str(e))
+                QMessageBox.critical(self, _("PCA Error"), format_user_error(e, "PCA"))
 
     def _on_run_pcoa(self) -> None:
         """Run Principal Coordinate Analysis."""
@@ -2055,7 +2161,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
-                QMessageBox.critical(self, _("PCoA Error"), str(e))
+                QMessageBox.critical(self, _("PCoA Error"), format_user_error(e, "PCoA"))
 
     def _on_run_nmds(self) -> None:
         """Run Non-metric MDS."""
@@ -2085,7 +2191,7 @@ class MainWindow(QMainWindow):
                 self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
 
             except Exception as e:
-                QMessageBox.critical(self, _("NMDS Error"), str(e))
+                QMessageBox.critical(self, _("NMDS Error"), format_user_error(e, "NMDS"))
 
     def _on_run_diversity(self) -> None:
         """Run diversity analysis."""
@@ -2113,7 +2219,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
-                QMessageBox.critical(self, _("Diversity Error"), str(e))
+                QMessageBox.critical(self, _("Diversity Error"), format_user_error(e, "多样性分析"))
 
     def _on_run_rarefaction(self) -> None:
         """Run rarefaction analysis."""
@@ -2146,7 +2252,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
 
             except Exception as e:
-                QMessageBox.critical(self, _("Rarefaction Error"), str(e))
+                QMessageBox.critical(self, _("Rarefaction Error"), format_user_error(e, "稀疏化分析"))
 
     def _on_run_spectral(self) -> None:
         """Run spectral analysis (power spectrum and periodogram analysis)."""
@@ -2166,7 +2272,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("Spectral analysis completed"))
         except Exception as e:
             self._logger.error(f"Spectral analysis failed: {e}")
-            QMessageBox.critical(self, _("Spectral Analysis Error"), str(e))
+            QMessageBox.critical(self, _("Spectral Analysis Error"), format_user_error(e, "频谱分析"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2198,7 +2304,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("ANOSIM analysis completed"))
         except Exception as e:
             self._logger.error(f"ANOSIM analysis failed: {e}")
-            QMessageBox.critical(self, _("ANOSIM Error"), str(e))
+            QMessageBox.critical(self, _("ANOSIM Error"), format_user_error(e, "ANOSIM"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2230,7 +2336,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("PERMANOVA analysis completed"))
         except Exception as e:
             self._logger.error(f"PERMANOVA analysis failed: {e}")
-            QMessageBox.critical(self, _("PERMANOVA Error"), str(e))
+            QMessageBox.critical(self, _("PERMANOVA Error"), format_user_error(e, "PERMANOVA"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2266,7 +2372,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo("SIMPER analysis completed")
             except Exception as e:
-                QMessageBox.critical(self, "SIMPER Error", str(e))
+                QMessageBox.critical(self, "SIMPER Error", format_user_error(e, "SIMPER"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2313,7 +2419,7 @@ class MainWindow(QMainWindow):
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
             except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), str(e))
+                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2359,7 +2465,7 @@ class MainWindow(QMainWindow):
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
             except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), str(e))
+                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2406,7 +2512,7 @@ class MainWindow(QMainWindow):
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
             except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), str(e))
+                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2444,7 +2550,7 @@ class MainWindow(QMainWindow):
                 self._logger.info(f"LDA completed: accuracy={result.accuracy:.4f}, {result.n_classes} classes")
             except Exception as e:
                 self._logger.error(f"LDA analysis failed: {e}")
-                QMessageBox.critical(self, _("LDA Error"), str(e))
+                QMessageBox.critical(self, _("LDA Error"), format_user_error(e, "LDA"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2508,7 +2614,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"CCA/RDA analysis failed: {e}")
-                QMessageBox.critical(self, _("{0} Error").format(params.get("method", "CCA").upper()), str(e))
+                QMessageBox.critical(self, _("{0} Error").format(params.get("method", "CCA").upper()), format_user_error(e, params.get("method", "CCA").upper()))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2540,7 +2646,7 @@ class MainWindow(QMainWindow):
                     )
                 )
             except Exception as e:
-                QMessageBox.critical(self, _("Clustering Error"), str(e))
+                QMessageBox.critical(self, _("Clustering Error"), format_user_error(e, "聚类分析"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2560,7 +2666,7 @@ class MainWindow(QMainWindow):
             msg_lines = [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
             self._status_bar.setInfo(_("Abundance models fitted"))
         except Exception as e:
-            QMessageBox.critical(self, _("Abundance Models Error"), str(e))
+            QMessageBox.critical(self, _("Abundance Models Error"), format_user_error(e, "丰度模型"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2579,7 +2685,7 @@ class MainWindow(QMainWindow):
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("SHE analysis completed"))
         except Exception as e:
-            QMessageBox.critical(self, "SHE Error", str(e))
+            QMessageBox.critical(self, "SHE Error", format_user_error(e, "SHE分析"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2605,7 +2711,7 @@ class MainWindow(QMainWindow):
                 )
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
             except Exception as e:
-                QMessageBox.critical(self, "CONISS Error", str(e))
+                QMessageBox.critical(self, "CONISS Error", format_user_error(e, "CONISS"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2627,7 +2733,7 @@ class MainWindow(QMainWindow):
                 )
                 self._status_bar.setInfo(_("Markov analysis completed"))
             except Exception as e:
-                QMessageBox.critical(self, _("Markov Error"), str(e))
+                QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "马尔可夫链"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2657,7 +2763,7 @@ class MainWindow(QMainWindow):
                     )
                 )
             except Exception as e:
-                QMessageBox.critical(self, _("Directional Error"), str(e))
+                QMessageBox.critical(self, _("Directional Error"), format_user_error(e, "方向统计"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2687,7 +2793,7 @@ class MainWindow(QMainWindow):
                     _("EFA: {0} harmonics, {1} points").format(result.n_harmonics, result.n_points)
                 )
             except Exception as e:
-                QMessageBox.critical(self, "EFA Error", str(e))
+                QMessageBox.critical(self, "EFA Error", format_user_error(e, "EFA"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2719,7 +2825,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("GPA analysis completed"))
         except Exception as e:
             self._logger.error(f"GPA analysis failed: {e}")
-            QMessageBox.critical(self, _("GPA Error"), str(e))
+            QMessageBox.critical(self, _("GPA Error"), format_user_error(e, "GPA"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -2761,7 +2867,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"TPS grid visualization failed: {e}")
-                QMessageBox.critical(self, _("TPS Grid Error"), str(e))
+                QMessageBox.critical(self, _("TPS Grid Error"), format_user_error(e, "TPS网格"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2799,7 +2905,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"Ripley K analysis failed: {e}")
-                QMessageBox.critical(self, _("Ripley K Error"), str(e))
+                QMessageBox.critical(self, _("Ripley K Error"), format_user_error(e, "Ripley K"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2847,7 +2953,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"Wavelet analysis failed: {e}")
-                QMessageBox.critical(self, _("Wavelet Error"), str(e))
+                QMessageBox.critical(self, _("Wavelet Error"), format_user_error(e, "小波分析"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -2909,7 +3015,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"Biostratigraphy analysis failed: {e}")
-                QMessageBox.critical(self, _("Biostratigraphy Error"), str(e))
+                QMessageBox.critical(self, _("Biostratigraphy Error"), format_user_error(e, "生物地层学"))
             finally:
                 self._status_bar.setProgress(100, 100)
 

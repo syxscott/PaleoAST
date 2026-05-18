@@ -201,4 +201,5 @@ class ExtinctionIntervalDialog(QDialog):
 
         except Exception as e:
             self._logger.error(f"Extinction analysis failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "灭绝置信区间"))

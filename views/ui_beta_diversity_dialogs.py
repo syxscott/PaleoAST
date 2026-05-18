@@ -231,7 +231,8 @@ class CoverageRarefactionDialog(BaseBetaDialog):
             QMessageBox.critical(self, _("Error"), _("Required analysis module not available."))
         except Exception as e:
             self._logger.error(f"Rarefaction failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "稀疏化分析"))
 
 
 class BetaDiversityDialog(BaseBetaDialog):
@@ -315,4 +316,5 @@ class BetaDiversityDialog(BaseBetaDialog):
             QMessageBox.critical(self, _("Error"), _("Required analysis module not available."))
         except Exception as e:
             self._logger.error(f"Beta diversity failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            from views.ui_main_window import format_user_error
+            QMessageBox.critical(self, _("Error"), format_user_error(e, "Beta多样性"))
