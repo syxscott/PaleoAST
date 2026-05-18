@@ -14,6 +14,15 @@
 
 **专业古生物学桌面数据分析平台，集成多元统计、形态测量、生态分析与系统发育功能。**
 
+### User-Friendly Error Handling / 用户友好的错误处理
+
+- **Chinese Error Messages** — All error messages displayed in Chinese with actionable guidance
+  中文错误提示 — 所有错误信息以中文显示，提供可操作的指导
+- **Foolproof Design** — Validates input data before analysis, preventing crashes with helpful suggestions
+  防呆设计 — 在分析前验证输入数据，通过友好建议防止崩溃
+- **Error Classification** — Automatic error type detection (invalid characters, numeric errors, dimension mismatch, empty data)
+  错误分类 — 自动检测错误类型（无效字符、数值错误、维度不匹配、空数据）
+
 [English](#-quick-start) | [中文](#-快速开始)
 
 </div>
@@ -67,6 +76,7 @@
 | **UPGMA / NJ** | 距离法建树 — 基于距离矩阵 |
 | **Fitch Parsimony** | 最简约法 — 祖先状态重建 |
 | **Consensus Trees** | 共识树 — 严格共识拓扑 |
+| **PCM** | 系统发育比较方法 — PIC、ASR、Blomberg's K、Phylo-ANOVA |
 
 ### Macroevolution / 宏观进化
 
@@ -75,6 +85,29 @@
 | **FBD Process** | 化石生灭过程 — Gillespie 随机模拟 |
 | **Cohort Survivorship** | 群组存活曲线 — 灭绝动态建模 |
 | **Diversity Dynamics** | 多样性动态 — 指数/逻辑斯蒂增长模型 |
+| **Extinction Intervals** | 灭绝置信区间 — Marshall & Strauss-Sadler 方法 |
+| **Evolution Rate** | 演化速率分析 — BM/Directional/OU 模型与 AIC 选择 |
+
+### Ecology / 生态分析 (Extended)
+
+| Feature | Description |
+|---------|-------------|
+| **Diversity Indices** | 多样性指数 — Shannon, Simpson, Chao1, Fisher's Alpha |
+| **Rarefaction** | 稀疏化分析 — 标准化采样努力量 |
+| **Spectral Analysis** | 频谱分析 — Lomb-Scargle 周期图 |
+| **Coverage Rarefaction** | 覆盖度稀疏化 — iNEXT 样本覆盖度估计 |
+| **Beta Diversity** | Beta 多样性分解 — Jaccard/Sørensen 拆分为 turnover 与 nestedness |
+| **Null Models** | 零模型共现分析 — C-score 与 Swap 算法 |
+
+### Morphometrics / 形态测量 (Extended)
+
+| Feature | Description |
+|---------|-------------|
+| **2D/3D GPA** | 普氏分析 — 形状对齐与叠加 |
+| **TPS** (Thin-Plate Spline) | 薄板样条 — 形变可视化与弯曲能量 |
+| **RWA** (Relative Warps Analysis) | 相对扭曲分析 — 局部与整体形状变化 |
+| **Allometry** | 异速生长分析 — 尺寸-形状多元回归 |
+| **2B-PLS** | 形态整合分析 — 两块偏最小二乘法 |
 
 ---
 
