@@ -123,7 +123,7 @@ class PCMBaseDialog(QDialog):
               "Pan_troglodytes=3.12\n"
               "Gorilla_gorilla=4.05")
         )
-        trait_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         trait_layout.addWidget(trait_info)
 
         self._trait_input = QTextEdit()
@@ -395,7 +395,7 @@ class PhyloANOVADialog(PCMBaseDialog):
               "Pan_troglodytes=GreatApes\n"
               "Gorilla_gorilla=GreatApes")
         )
-        group_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        group_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         group_layout.addWidget(group_info)
 
         self._group_input = QTextEdit()

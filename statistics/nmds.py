@@ -162,11 +162,14 @@ class NMDSAnalyzer:
                     best_iterations = result["n_iterations"]
                     best_history = result["stress_history"]
 
+            # NMDS convergence threshold: stress < 0.05 is considered converged
+            # stress < 0.10 is acceptable, stress > 0.20 is poor fit
+            CONVERGED_THRESHOLD = 0.05
             nmds_result = NMDSResult(
                 coordinates=best_coordinates,
                 stress=best_stress,
                 n_iterations=best_iterations,
-                converged=best_stress < 0.01,
+                converged=best_stress < CONVERGED_THRESHOLD,
                 distance_matrix=D,
                 stress_history=best_history,
                 metric=metric,
@@ -182,11 +185,8 @@ class NMDSAnalyzer:
                 self._logger.warning(
                     f"NMDS poor fit: stress={best_stress:.4f} > 0.20, consider increasing n_restarts or n_dimensions"
                 )
-            if not nmds_result.converged:
-                if best_stress < 0.05:
-                    self._logger.info(f"NMDS best stress={best_stress:.6f} (good fit, below 0.05 threshold)")
-                else:
-                    self._logger.warning(f"NMDS did not converge: best stress={best_stress:.6f}")
+            elif not nmds_result.converged:
+                self._logger.warning(f"NMDS did not converge: best stress={best_stress:.6f}")
             return nmds_result
 
     def _smacof(self, D: npt.NDArray, X_init: npt.NDArray, max_iterations: int, restart_id: int) -> dict[str, Any]:
@@ -196,7 +196,7 @@ class NMDSAnalyzer:
         The SMACOF algorithm minimizes stress by iteratively
         updating the configuration using the Guttman transform.
         """
-        n, k = X_init.shape
+        n = X_init.shape[0]  # n_samples
         X = X_init.copy()
         stress_history = []
 
@@ -232,8 +232,9 @@ class NMDSAnalyzer:
             row_sums = np.sum(B, axis=1)
             np.fill_diagonal(B, -row_sums)
 
-            # Guttman transform
-            X_new = (B @ X) / n
+            # Guttman transform: divide by row sums (not n)
+            # This is the correct SMACOF formula: X_new = (B @ X) / row_sums
+            X_new = (B @ X) / row_sums[:, np.newaxis]
 
             # Update configuration
             X = X_new
@@ -247,14 +248,18 @@ class NMDSAnalyzer:
 
     def _compute_distances(self, X: npt.NDArray) -> npt.NDArray:
         """
-        Compute pairwise Euclidean distances.
+        Compute pairwise Euclidean distances using scipy for efficiency.
         """
-        n = X.shape[0]
-        D = np.zeros((n, n))
+        from scipy.spatial.distance import cdist
 
-        for i in range(n):
-            diff = X - X[i]
-            D[i] = np.sqrt(np.sum(diff**2, axis=1))
+        n = X.shape[0]
+        if n <= 500:
+            # Use broadcasting for small matrices
+            diff = X[:, None, :] - X[None, :, :]
+            D = np.sqrt(np.sum(diff**2, axis=2))
+        else:
+            # Use cdist for large matrices (more memory efficient)
+            D = cdist(X, X, metric='euclidean')
 
         return D
 

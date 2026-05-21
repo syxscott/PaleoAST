@@ -99,7 +99,7 @@ class EvolutionRateDialog(QDialog):
             _("Enter a phylogenetic tree in Newick format.\n"
               "Tip: Connect to PCM analysis to import a tree.")
         )
-        tree_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        tree_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         tree_layout.addWidget(tree_info)
 
         self._tree_input = QTextEdit()
@@ -117,7 +117,7 @@ class EvolutionRateDialog(QDialog):
             _("Enter trait values for each species (one per line, tab-separated).\n"
               "Format: species_name\\tvalue")
         )
-        trait_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         trait_layout.addWidget(trait_info)
 
         self._trait_input = QTextEdit()

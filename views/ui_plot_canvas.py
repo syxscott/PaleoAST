@@ -322,9 +322,48 @@ class InteractivePlotCanvas(QWidget):
         self._figure.patch.set_facecolor(c.bg_primary)
 
     def setDarkTheme(self, is_dark: bool) -> None:
-        """Set dark/light theme."""
+        """Set dark/light theme and sync with matplotlib."""
         self._is_dark_theme = is_dark
         self._apply_stylesheet()
+
+        # Sync matplotlib theme
+        if is_dark:
+            # Dark theme colors for matplotlib
+            plt.rcParams.update({
+                "axes.facecolor": "#1E1E1E",
+                "figure.facecolor": "#2D2D2D",
+                "axes.edgecolor": "#555555",
+                "axes.labelcolor": "#E0E0E0",
+                "xtick.color": "#E0E0E0",
+                "ytick.color": "#E0E0E0",
+                "text.color": "#E0E0E0",
+                "grid.color": "#444444",
+                "axes.spines.top": False,
+                "axes.spines.right": False,
+            })
+        else:
+            # Light theme colors for matplotlib
+            plt.rcParams.update({
+                "axes.facecolor": "#FAFBFC",
+                "figure.facecolor": "#FFFFFF",
+                "axes.edgecolor": "#E4E7EB",
+                "axes.labelcolor": "#2C3E50",
+                "xtick.color": "#2C3E50",
+                "ytick.color": "#2C3E50",
+                "text.color": "#2C3E50",
+                "grid.color": "#E4E7EB",
+                "axes.edgecolor": "#E4E7EB",
+                "axes.spines.top": False,
+                "axes.spines.right": False,
+            })
+
+        # Update figure background
+        c = get_palette(is_dark)
+        self._figure.patch.set_facecolor(c.bg_primary)
+
+        # Redraw if there's an active plot
+        if self._current_plot_type and self._ax is not None:
+            self._canvas.draw_idle()
 
     def _setup_connections(self) -> None:
         """Setup signal connections."""

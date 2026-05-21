@@ -101,7 +101,7 @@ class BaseAllometryDialog(QDialog):
             _("Select a GPA result from the workspace to analyze.\n"
               "The aligned configurations will be used for allometry/integration analysis.")
         )
-        data_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
 
         self._gpa_result_label = QLabel(_("No GPA result selected"))

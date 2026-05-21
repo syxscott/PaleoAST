@@ -697,6 +697,15 @@ class ScientificSpreadsheet(QWidget):
         n_rows, n_cols = self._data.shape
         self._logger.info(f"load_data called: n_rows={n_rows}, n_cols={n_cols}")
 
+        # Warn for very large datasets that may cause performance issues
+        LARGE_DATASET_THRESHOLD = 50000  # 50k cells triggers optimization
+        total_cells = n_rows * n_cols
+        if total_cells > LARGE_DATASET_THRESHOLD:
+            self._logger.warning(
+                f"Large dataset detected: {n_rows}x{n_cols}={total_cells} cells. "
+                "Loading may be slow. Consider using a subset for visualization."
+            )
+
         # Generate labels if not provided
         if row_labels is None:
             self._row_labels = [f"Sample_{i + 1}" for i in range(n_rows)]
@@ -708,13 +717,16 @@ class ScientificSpreadsheet(QWidget):
         else:
             self._col_labels = list(col_labels)
 
-        # Update table
+        # Update table - optimized for large datasets
         self._table.blockSignals(True)
+        self._table.setUpdatesEnabled(False)
         try:
             self._table.setRowCount(n_rows)
             self._table.setColumnCount(n_cols)
             self._table.setVerticalHeaderLabels(self._row_labels)
             self._table.setHorizontalHeaderLabels(self._col_labels)
+
+            # Use setItem row by row for better performance
             for i in range(n_rows):
                 for j in range(n_cols):
                     value = self._data[i, j]
@@ -725,6 +737,7 @@ class ScientificSpreadsheet(QWidget):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self._table.setItem(i, j, item)
         finally:
+            self._table.setUpdatesEnabled(True)
             self._table.blockSignals(False)
 
         # Update delegate
@@ -736,14 +749,27 @@ class ScientificSpreadsheet(QWidget):
             DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
         )
 
-        # Resize columns to content
-        self._table.resizeColumnsToContents()
+        # Resize columns to content - skip for very wide tables (performance)
+        MAX_COLS_FOR_RESIZE = 100
+        if n_cols <= MAX_COLS_FOR_RESIZE:
+            self._table.resizeColumnsToContents()
+        else:
+            # Just set a reasonable default width for wide tables
+            self._table.horizontalHeader().setDefaultSectionSize(80)
 
         self.dataChanged.emit()
 
-    def get_data(self) -> np.ndarray | None:
-        """Get current data matrix."""
-        return self._data.copy() if self._data is not None else None
+    def get_data(self, copy: bool = True) -> np.ndarray | None:
+        """
+        Get current data matrix.
+
+        Parameters:
+            copy: If True (default), returns a copy. If False, returns internal reference.
+                  Use False only if you won't modify the returned array.
+        """
+        if self._data is None:
+            return None
+        return self._data.copy() if copy else self._data
 
     def get_selected_data(self) -> np.ndarray | None:
         """
@@ -1011,29 +1037,39 @@ class ScientificSpreadsheet(QWidget):
         self.dataChanged.emit()
 
     def _delete_column(self, col: int) -> None:
-        """Delete column from data."""
+        """Delete column from data (optimized)."""
         if self._data is None or col < 0 or col >= self._data.shape[1]:
             return
         self._logger.info(f"Delete column: col={col}")
 
-        # Save for undo
+        # Save for undo - need to save all column metadata since indices shift on delete
+        deleted_metadata = self._col_metadata.get(col, {})
+        all_metadata = {k: v for k, v in self._col_metadata.items()}
         self._undo_stack.append(
-            ("delete_col", col, self._data[:, col].copy(), self._col_labels[col], self._col_metadata.get(col, {}))
+            ("delete_col", col, self._data[:, col].copy(), self._col_labels[col], deleted_metadata, all_metadata)
         )
         self._redo_stack.clear()
 
-        # Remove column
-        self._data = np.delete(self._data, col, axis=1)
+        # Remove column using view when possible (avoids full copy for contiguous memory)
+        if col == self._data.shape[1] - 1:
+            # Last column: can use simple slicing
+            self._data = self._data[:, :-1]
+        elif col == 0:
+            # First column: can use simple slicing
+            self._data = self._data[:, 1:]
+        else:
+            # Middle column: need concatenate
+            self._data = np.delete(self._data, col, axis=1)
+
+        # Remove label
         self._col_labels.pop(col)
 
-        # Update metadata indices
-        new_col_metadata = {}
-        for old_idx, meta in self._col_metadata.items():
-            if old_idx > col:
-                new_col_metadata[old_idx - 1] = meta
-            elif old_idx < col:
-                new_col_metadata[old_idx] = meta
-        self._col_metadata = new_col_metadata
+        # Update metadata indices (optimized with dict comprehension)
+        self._col_metadata = {
+            old_idx - 1 if old_idx > col else old_idx: meta
+            for old_idx, meta in self._col_metadata.items()
+            if old_idx != col
+        }
 
         # Update table
         self._table.removeColumn(col)
@@ -1168,11 +1204,13 @@ class ScientificSpreadsheet(QWidget):
                     self._table.setItem(i, col, item)
 
             elif operation[0] == "delete_col":
-                _, col, col_data, label, metadata = operation
+                _, col, col_data, label, deleted_metadata, all_metadata = operation
                 self._redo_stack.append(("delete_col", col))
                 self._data = np.insert(self._data, col, col_data, axis=1)
                 self._col_labels.insert(col, label)
-                self._col_metadata[col] = metadata
+                # Restore all metadata from before delete (preserves metadata for all columns)
+                self._col_metadata = {k: v for k, v in all_metadata.items()}
+                self._col_metadata[col] = deleted_metadata
                 self._table.insertColumn(col)
                 self._table.setHorizontalHeaderLabels(self._col_labels)
                 for i in range(self._data.shape[0]):

@@ -100,7 +100,7 @@ class NullModelDialog(QDialog):
             _("Enter species occurrence data (presence-absence matrix).\n"
               "Format: rows = species, columns = sites, values = 0/1")
         )
-        data_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
 
         self._data_input = QTextEdit()

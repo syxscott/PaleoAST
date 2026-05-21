@@ -211,12 +211,12 @@ class PCAAnalyzer:
                 f"n_components={n_components}, method={method}"
             )
 
-            # Handle missing values
+            # Handle missing values (vectorized)
             if impute_missing and np.any(np.isnan(X)):
                 col_means = np.nanmean(X, axis=0)
                 nan_mask = np.isnan(X)
-                for j in range(n_variables):
-                    X[nan_mask[:, j], j] = col_means[j]
+                # Vectorized: broadcast col_means to match nan_mask shape
+                X[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
 
             # Determine number of components
             max_components = min(n_samples - 1, n_variables)

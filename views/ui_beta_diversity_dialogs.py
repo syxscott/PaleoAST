@@ -93,7 +93,7 @@ class BaseBetaDialog(QDialog):
             _("Enter species abundances per site (one row per site, tab or comma separated).\n"
               "Rows: sites/samples, Columns: species, Values: abundance counts.")
         )
-        data_info.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
 
         self._data_input = QTextEdit()

@@ -223,10 +223,11 @@ class DiversityAnalyzer:
             if sample_names is None:
                 sample_names = [f"Sample_{i + 1}" for i in range(abundance_matrix.shape[0])]
 
-            results = []
-            for i in range(abundance_matrix.shape[0]):
-                result = compute_diversity_indices(abundance_matrix[i], sample_names[i])
-                results.append(result)
+            # Use list comprehension for slightly better performance
+            results = [
+                compute_diversity_indices(abundance_matrix[i], sample_names[i])
+                for i in range(abundance_matrix.shape[0])
+            ]
 
             return results
 

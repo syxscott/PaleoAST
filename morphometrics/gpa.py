@@ -246,21 +246,18 @@ class GPAAnalyzer:
 
     def _compute_sizes(self, configurations: npt.NDArray) -> npt.NDArray:
         """
-        Compute centroid size for each configuration.
+        Compute centroid size for each configuration (vectorized).
 
         Centroid size = sqrt(trace(X' * X))
 
         where X is the centered configuration matrix.
         """
-        n = configurations.shape[0]
-        sizes = np.zeros(n)
+        # Vectorized: compute mean for all configurations at once
+        means = np.mean(configurations, axis=1, keepdims=True)  # (n, 1, m)
+        centered = configurations - means  # Broadcasting
 
-        for i in range(n):
-            X = configurations[i]
-            # Subtract centroid
-            X_centered = X - np.mean(X, axis=0)
-            # Compute centroid size
-            sizes[i] = np.sqrt(np.sum(X_centered**2))
+        # Compute centroid sizes for all at once
+        sizes = np.sqrt(np.sum(centered**2, axis=(1, 2)))
 
         return sizes
 
@@ -298,14 +295,11 @@ class GPAAnalyzer:
 
     def _compute_distances_to_consensus(self, aligned: npt.NDArray, consensus: npt.NDArray) -> npt.NDArray:
         """
-        Compute Procrustes distances to consensus configuration.
+        Compute Procrustes distances to consensus configuration (vectorized).
         """
-        n = aligned.shape[0]
-        distances = np.zeros(n)
-
-        for i in range(n):
-            diff = aligned[i] - consensus
-            distances[i] = np.sqrt(np.sum(diff**2))
+        # Vectorized: diff[i] = aligned[i] - consensus for all i
+        diff = aligned - consensus  # Broadcasting: (n, k, m) - (k, m) -> (n, k, m)
+        distances = np.sqrt(np.sum(diff**2, axis=(1, 2)))
 
         return distances
 

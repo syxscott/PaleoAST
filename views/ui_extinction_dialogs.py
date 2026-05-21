@@ -134,7 +134,7 @@ class ExtinctionIntervalDialog(QDialog):
             _("Enter LAD positions in the list below (one per line).\n"
               "LAD positions are layer/horizon numbers from top (higher = older).")
         )
-        info_label.setStyleSheet(f"color: {get_palette().text_secondary}; font-size: 11px;")
+        info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         layout.addWidget(info_label)
 
         # LAD input

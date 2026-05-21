@@ -45,6 +45,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
 )
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -66,6 +67,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from views.file_drop_handler import FileDropHandler
+from views.diagnostic_console import DiagnosticConsole
 
 from config.design_system import Typography, BorderRadius, get_palette
 from config.i18n import _, get_translator
@@ -96,6 +100,7 @@ from views.ui_dialogs import (
     UnivariateDialog,
     WaveletDialog,
 )
+from views.ui_imputation_dialog import ImputationDialog
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
 from views.ui_allometry_dialogs import AllometryDialog, PLSDialog
@@ -992,6 +997,9 @@ class WorkspaceArea(QWidget):
     Central workspace area containing spreadsheet and plot views.
     """
 
+    # Signal emitted when current widget changes
+    currentChanged = pyqtSignal(object)  # widget
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._is_dark_theme = False
@@ -1002,6 +1010,7 @@ class WorkspaceArea(QWidget):
 
         # Stacked widget for different views
         self._stack = QStackedWidget()
+        self._stack.currentChanged.connect(self._on_current_changed)
         self._layout.addWidget(self._stack)
 
         # Placeholder widget
@@ -1016,6 +1025,11 @@ class WorkspaceArea(QWidget):
             "}"
         )
         self._stack.addWidget(self._placeholder)
+
+    def _on_current_changed(self, index: int) -> None:
+        """Handle current widget change."""
+        widget = self._stack.widget(index)
+        self.currentChanged.emit(widget)
 
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme and propagate to current widget."""
@@ -1121,6 +1135,99 @@ class MainWindow(QMainWindow):
         self._status_timer.timeout.connect(self._update_status)
         self._status_timer.start(1000)
 
+        # Setup drag and drop
+        self._setup_drag_drop()
+
+    def _setup_drag_drop(self) -> None:
+        """Setup drag and drop for file loading."""
+        self.setAcceptDrops(True)
+        self._drop_handler = FileDropHandler(self)
+        self._drop_handler.file_loaded.connect(self._on_file_dropped)
+        self._drop_handler.load_failed.connect(self._on_file_drop_failed)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Handle drag enter event."""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if self._drop_handler.can_handle(file_path):
+                    event.acceptProposedAction()
+                    return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Handle file drop event."""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if self._drop_handler.can_handle(file_path):
+                    event.acceptProposedAction()
+                    self._status_bar.setInfo(_("Loading file..."))
+                    self._drop_handler.handle_file(file_path)
+                    return
+        super().dropEvent(event)
+
+    def _on_file_dropped(self, data: dict, file_type: str) -> None:
+        """Handle successful file load via drag and drop."""
+        try:
+            from models.data_matrix import DataMatrix
+
+            if data.get('type') == 'tree':
+                QMessageBox.information(
+                    self,
+                    _("File Loaded"),
+                    _("Tree file loaded: {0}\nNote: Tree visualization coming soon.").format(file_type)
+                )
+                return
+
+            matrix_data = data.get('data')
+            if matrix_data is None:
+                raise ValueError("No data in parsed file")
+
+            row_labels = data.get('row_labels')
+            col_labels = data.get('col_labels')
+
+            new_matrix = DataMatrix(
+                matrix_data,
+                row_labels=row_labels,
+                col_labels=col_labels
+            )
+
+            self._state.set_data_matrix(new_matrix)
+            self._spreadsheet.load_data(
+                matrix_data,
+                row_labels=row_labels,
+                col_labels=col_labels
+            )
+
+            self._status_bar.setInfo(
+                _("Loaded: {0} rows x {1} columns").format(
+                    new_matrix.n_samples, new_matrix.n_variables
+                )
+            )
+
+            QMessageBox.information(
+                self,
+                _("File Loaded"),
+                _("Successfully loaded {0}\n{1} rows x {2} columns").format(
+                    file_type, new_matrix.n_samples, new_matrix.n_variables
+                )
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                _("Load Error"),
+                format_user_error(e, "文件加载")
+            )
+
+    def _on_file_drop_failed(self, error_msg: str) -> None:
+        """Handle file load failure."""
+        self._status_bar.setInfo(_("Load failed"))
+        QMessageBox.critical(self, _("Load Error"), error_msg)
+
     def _create_ui(self) -> None:
         """Create all UI components."""
         # Set window properties
@@ -1163,13 +1270,17 @@ class MainWindow(QMainWindow):
         self._status_bar = StatusBarWidget()
         self.setStatusBar(self._status_bar)
 
+        # Diagnostic console (dockable)
+        self._diagnostic_console = DiagnosticConsole(self)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._diagnostic_console)
+
         # Create menu bar
         self._create_menu_bar()
 
         # Create spreadsheet (initially hidden)
         self._spreadsheet = ScientificSpreadsheet()
         self._spreadsheet_index = self._workspace.addWidget(self._spreadsheet, _("Spreadsheet"))
-        
+
         # Initialize UI state based on data availability
         self._update_ui_state()
 
@@ -1189,6 +1300,7 @@ class MainWindow(QMainWindow):
         self._btn_undo = edit_group.addButton("undo", _("Undo"), _("Undo last action (Ctrl+Z)"))
         self._btn_redo = edit_group.addButton("redo", _("Redo"), _("Redo action (Ctrl+Y)"))
         self._btn_transpose = edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
+        self._btn_imputation = edit_group.addButton("imputation", _("NaN"), _("Missing Value Imputation"))
 
         # Data transformations group
         transform_group = home_tab.addGroup(_("Transform"))
@@ -1278,9 +1390,11 @@ class MainWindow(QMainWindow):
         self._btn_undo.clicked.connect(self._on_undo)
         self._btn_redo.clicked.connect(self._on_redo)
         self._btn_transpose.clicked.connect(self._on_transpose)
+        self._btn_imputation.clicked.connect(self._on_run_imputation)
         self._register_data_button(self._btn_undo)
         self._register_data_button(self._btn_redo)
         self._register_data_button(self._btn_transpose)
+        self._register_data_button(self._btn_imputation)
 
         # View buttons
         self._btn_preferences.clicked.connect(self._on_preferences)
@@ -1946,6 +2060,86 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             QMessageBox.critical(self, _("Transpose Error"), str(e))
+
+    def _on_run_imputation(self) -> None:
+        """Open missing value imputation dialog."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        try:
+            import numpy as np
+            from config.imputation import impute, ImputationMethod
+            from models.data_matrix import DataMatrix
+
+            data = self._state.data_matrix.data
+            nan_mask = np.isnan(data)
+            total_nan = int(np.sum(nan_mask))
+
+            if total_nan == 0:
+                QMessageBox.information(
+                    self,
+                    _("No Missing Values"),
+                    _("The current dataset contains no missing values.")
+                )
+                return
+
+            # Analyze missing values
+            rows_with_nan = int(np.any(nan_mask, axis=1).sum())
+            cols_with_nan = int(np.any(nan_mask, axis=0).sum())
+            nan_by_row = np.sum(nan_mask, axis=1)
+            nan_by_col = np.sum(nan_mask, axis=0)
+
+            # Show dialog
+            dialog = ImputationDialog(
+                self,
+                nan_count=total_nan,
+                rows_with_nan=rows_with_nan,
+                cols_with_nan=cols_with_nan,
+                nan_by_row=nan_by_row,
+                nan_by_col=nan_by_col,
+                n_rows=data.shape[0],
+                n_cols=data.shape[1],
+                nan_proportion=total_nan / data.size
+            )
+            dialog.setDarkTheme(self._is_dark_theme)
+
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                params = dialog.get_parameters()
+                method_map = {
+                    "mean": ImputationMethod.MEAN,
+                    "median": ImputationMethod.MEDIAN,
+                    "knn": ImputationMethod.KNN,
+                    "remove_rows": ImputationMethod.REMOVE_ROWS,
+                    "remove_columns": ImputationMethod.REMOVE_COLUMNS,
+                }
+                method = method_map.get(params.get("method", "mean"), ImputationMethod.MEAN)
+                k = params.get("k", 5)
+
+                # Apply imputation
+                result = impute(data, method, k=k)
+
+                # Update state
+                row_labels = self._state.data_matrix.row_labels
+                col_labels = self._state.data_matrix.col_labels
+
+                new_matrix = DataMatrix(
+                    result.data,
+                    row_labels=row_labels,
+                    col_labels=col_labels,
+                )
+                self._state.set_data_matrix(new_matrix)
+                self._spreadsheet.load_data(
+                    result.data,
+                    row_labels=row_labels,
+                    col_labels=col_labels,
+                )
+
+                self._status_bar.setInfo(result.summary)
+                QMessageBox.information(self, _("Imputation Complete"), result.summary)
+
+        except Exception as e:
+            QMessageBox.critical(self, _("Imputation Error"), format_user_error(e, "缺失值处理"))
 
     def _on_preferences(self) -> None:
         """Show application preferences."""

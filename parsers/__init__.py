@@ -19,9 +19,11 @@ PaleoAST Phase 3 - Custom I/O Parsing Engine
 """
 
 from .binary_cache import BinaryCache, BinaryCacheHeader, ChunkType
+from .dat_parser import DATParser, PASTData, parse_dat_file
 from .lexer import BaseLexer, LexerError, Token
 from .newick_parser import NewickParser, NewickTree, TreeNode
 from .nexus_lexer import NexusLexer, NexusTokenType
+from .tps_parser import TPSFile, TPSParser, TPSSpecimen, parse_tps_file
 
 __all__ = [
     # 基础词法分析
@@ -35,6 +37,15 @@ __all__ = [
     "NewickParser",
     "NewickTree",
     "TreeNode",
+    # TPS格式 (形态测量学)
+    "TPSParser",
+    "TPSFile",
+    "TPSSpecimen",
+    "parse_tps_file",
+    # PAST .dat格式
+    "DATParser",
+    "PASTData",
+    "parse_dat_file",
     # 二进制缓存
     "BinaryCache",
     "BinaryCacheHeader",

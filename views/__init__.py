@@ -22,6 +22,9 @@ from .ui_dialogs import (
     RarefactionDialog,
     StratigraphicCorrelationDialog,
 )
+from .diagnostic_console import ConsoleLogHandler, DiagnosticConsole
+from .floating_toolbar import FloatingToolBar
+from .ui_imputation_dialog import ImputationDialog
 from .ui_main_window import MainWindow
 from .ui_navigation import NavigationTree
 from .ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
@@ -38,10 +41,14 @@ __all__ = [
     "AllometryDialog",
     "AncestralStateDialog",
     "BetaDiversityDialog",
+    "ConsoleLogHandler",
     "CoverageRarefactionDialog",
+    "DiagnosticConsole",
     "DiversityDialog",
     "EvolutionRateDialog",
     "ExtinctionIntervalDialog",
+    "FloatingToolBar",
+    "ImputationDialog",
     "ImportDialog",
     "InteractivePlotCanvas",
     "IsotopeAnalysisDialog",
