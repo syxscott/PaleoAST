@@ -1833,3 +1833,144 @@ class CCADialog(BaseAnalysisDialog):
 
     def _get_help_text(self) -> str:
         return _("CCA relates species composition to environmental variables using chi-square distance. RDA uses Euclidean distance and is suitable for continuous data. Both are constrained ordination methods.")
+
+
+class IsotopeAnalysisDialog(BaseAnalysisDialog):
+    """
+    Isotope Time Series Analysis Configuration Dialog.
+
+    Provides tools for analyzing isotope (δ13C, δ18O, 87Sr/86Sr, εNd) time series
+    including trend extraction, excursion detection, spectral analysis, and
+    correlation analysis.
+
+    Parameters:
+        detect_excursions: Whether to detect isotope excursions
+        excursion_threshold: Z-score threshold for excursion detection
+        excursion_min_duration: Minimum points for excursion
+        compute_correlations: Whether to compute isotope correlations
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Isotope Time Series Analysis"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        # Excursion detection group
+        exc_group = self.add_parameter_group(_("Excursion Detection"))
+        exc_layout = QVBoxLayout(exc_group)
+
+        self._detect_excursions = QCheckBox(_("Detect isotope excursions"))
+        self._detect_excursions.setChecked(True)
+        exc_layout.addWidget(self._detect_excursions)
+
+        threshold_layout = QHBoxLayout()
+        threshold_layout.addWidget(QLabel(_("Threshold (σ):")))
+        self._threshold_spin = QDoubleSpinBox()
+        self._threshold_spin.setRange(1.0, 5.0)
+        self._threshold_spin.setValue(2.0)
+        self._threshold_spin.setSingleStep(0.1)
+        threshold_layout.addWidget(self._threshold_spin)
+        exc_layout.addLayout(threshold_layout)
+
+        duration_layout = QHBoxLayout()
+        duration_layout.addWidget(QLabel(_("Min duration (points):")))
+        self._duration_spin = QSpinBox()
+        self._duration_spin.setRange(1, 10)
+        self._duration_spin.setValue(2)
+        duration_layout.addWidget(self._duration_spin)
+        exc_layout.addLayout(duration_layout)
+
+        # Correlation group
+        corr_group = self.add_parameter_group(_("Correlation"))
+        corr_layout = QVBoxLayout(corr_group)
+        self._compute_correlations = QCheckBox(_("Compute isotope correlations"))
+        self._compute_correlations.setChecked(True)
+        corr_layout.addWidget(self._compute_correlations)
+
+        # Data info
+        info_group = self.add_parameter_group(_("Data Requirements"))
+        info_layout = QVBoxLayout(info_group)
+        info_label = QLabel(
+            _("Data should contain depth, age, and isotope columns (δ13C, δ18O, etc.)\n"
+              "First column: depth, Second column: age, Subsequent columns: isotope values")
+        )
+        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        info_layout.addWidget(info_label)
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "detect_excursions": self._detect_excursions.isChecked(),
+            "excursion_threshold": self._threshold_spin.value(),
+            "excursion_min_duration": self._duration_spin.value(),
+            "compute_correlations": self._compute_correlations.isChecked(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("""
+<h2>Isotope Time Series Analysis</h2>
+<p>Analyzes isotope data (δ13C, δ18O, etc.) for trends, excursions, and correlations.</p>
+<h3>Excursion Detection</h3>
+<p>Excursions are periods where isotope values significantly deviate from the background.
+Threshold is the number of standard deviations (σ) from the mean.</p>
+<h3>Correlation Analysis</h3>
+<p>Computes Pearson correlation coefficients between isotope pairs.</p>
+        """)
+
+
+class StratigraphicCorrelationDialog(BaseAnalysisDialog):
+    """
+    Stratigraphic Correlation Configuration Dialog.
+
+    Provides tools for correlating stratigraphic sections using
+    Dynamic Time Warping (DTW) or Euclidean distance methods.
+
+    Parameters:
+        method: Correlation method (DTW or Euclidean)
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Stratigraphic Correlation"), parent)
+        self._setup_parameters()
+
+    def _setup_parameters(self) -> None:
+        # Method group
+        method_group = self.add_parameter_group(_("Correlation Method"))
+        method_layout = QVBoxLayout(method_group)
+
+        self._method_group = QButtonGroup()
+        dtw_radio = QRadioButton(_("Dynamic Time Warping (DTW)"))
+        dtw_radio.setChecked(True)
+        euclidean_radio = QRadioButton(_("Euclidean Distance"))
+        self._method_group.addButton(dtw_radio, 0)
+        self._method_group.addButton(euclidean_radio, 1)
+        method_layout.addWidget(dtw_radio)
+        method_layout.addWidget(euclidean_radio)
+
+        # Data info
+        info_group = self.add_parameter_group(_("Data Requirements"))
+        info_layout = QVBoxLayout(info_group)
+        info_label = QLabel(
+            _("Select sections with height/thickness data for correlation analysis.")
+        )
+        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        info_layout.addWidget(info_label)
+
+    def get_parameters(self) -> dict[str, Any]:
+        method_map = {0: 'dtw', 1: 'euclidean'}
+
+        self._parameters = {
+            "correlation_method": method_map[self._method_group.checkedId()],
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _("""
+<h2>Stratigraphic Correlation</h2>
+<p>Correlates stratigraphic sections using pattern matching algorithms.</p>
+<h3>Correlation Methods</h3>
+<ul>
+<li><b>DTW:</b> Dynamic Time Warping - aligns sections by minimizing warping distance</li>
+<li><b>Euclidean:</b> Simple distance-based correlation</li>
+</ul>
+        """)

@@ -15,10 +15,12 @@ Version: 1.0.0
 from .ui_dialogs import (
     DiversityDialog,
     ImportDialog,
+    IsotopeAnalysisDialog,
     NMDSOptionsDialog,
     PCADialog,
     PCoADialog,
     RarefactionDialog,
+    StratigraphicCorrelationDialog,
 )
 from .ui_main_window import MainWindow
 from .ui_navigation import NavigationTree
@@ -42,6 +44,7 @@ __all__ = [
     "ExtinctionIntervalDialog",
     "ImportDialog",
     "InteractivePlotCanvas",
+    "IsotopeAnalysisDialog",
     "MainWindow",
     "NMDSOptionsDialog",
     "NavigationTree",
@@ -55,4 +58,5 @@ __all__ = [
     "RarefactionDialog",
     "ScientificSpreadsheet",
     "SpreadsheetDelegate",
+    "StratigraphicCorrelationDialog",
 ]

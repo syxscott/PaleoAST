@@ -82,6 +82,7 @@ from views.ui_dialogs import (
     DiversityDialog,
     EFADialog,
     ImportDialog,
+    IsotopeAnalysisDialog,
     LDADialog,
     MarkovDialog,
     NMDSOptionsDialog,
@@ -90,6 +91,7 @@ from views.ui_dialogs import (
     RarefactionDialog,
     SimperDialog,
     SpatialRipleyKDialog,
+    StratigraphicCorrelationDialog,
     TPSGridDialog,
     UnivariateDialog,
     WaveletDialog,
@@ -1252,6 +1254,8 @@ class MainWindow(QMainWindow):
         self._btn_spectral = strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
         self._btn_coniss = strat_group.addButton("stratigraphy", "CONISS", _("CONISS Zonation"))
         self._btn_wavelet = strat_group.addButton("stratigraphy", _("Wavelet"), _("Wavelet CWT Analysis"))
+        self._btn_isotope = strat_group.addButton("stratigraphy", _("Isotope"), _("Isotope Time Series"))
+        self._btn_strat_corr = strat_group.addButton("stratigraphy", _("Correlation"), _("Stratigraphic Correlation"))
 
         bio_group = strat_tab.addGroup(_("Biostratigraphy"))
         self._btn_biostrat = bio_group.addButton("stratigraphy", _("Biozone"), _("UA/RASC Biostratigraphy"))
@@ -1321,6 +1325,10 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_spectral)
         self._btn_coniss.clicked.connect(self._on_run_coniss)
         self._register_data_button(self._btn_coniss)
+        self._btn_isotope.clicked.connect(self._on_run_isotope)
+        self._register_data_button(self._btn_isotope)
+        self._btn_strat_corr.clicked.connect(self._on_run_stratigraphic)
+        self._register_data_button(self._btn_strat_corr)
         self._btn_markov.clicked.connect(self._on_run_markov)
         self._register_data_button(self._btn_markov)
         self._btn_directional.clicked.connect(self._on_run_directional)
@@ -1587,6 +1595,16 @@ class MainWindow(QMainWindow):
         spectral_action.triggered.connect(self._on_run_spectral)
         analysis_menu.addAction(spectral_action)
         self._register_data_action(spectral_action)
+
+        isotope_action = QAction(_("&Isotope Time Series..."), self)
+        isotope_action.triggered.connect(self._on_run_isotope)
+        analysis_menu.addAction(isotope_action)
+        self._register_data_action(isotope_action)
+
+        strat_action = QAction(_("&Stratigraphic Correlation..."), self)
+        strat_action.triggered.connect(self._on_run_stratigraphic)
+        analysis_menu.addAction(strat_action)
+        self._register_data_action(strat_action)
 
         # Phylogenetic Comparative Methods submenu
         analysis_menu.addSeparator()
@@ -2794,6 +2812,155 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 QMessageBox.critical(self, "EFA Error", format_user_error(e, "EFA"))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_isotope(self) -> None:
+        """Run Isotope Time Series Analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = IsotopeAnalysisDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+                import numpy as np
+                from stratigraphy.isotope_analysis import IsotopeData, IsotopeAnalyzer
+
+                # Create IsotopeData from loaded data
+                data = self._state.data_matrix.data
+                if data.shape[1] < 3:
+                    QMessageBox.warning(self, _("Insufficient Data"),
+                        _("Need at least 3 columns: depth, age, and isotope values"))
+                    return
+
+                # Build IsotopeData from loaded data
+                # Column 0: depth, Column 1: age, Column 2+: isotope values
+                iso_kwargs = {
+                    'depth': data[:, 0],
+                    'age': data[:, 1],
+                }
+
+                # Map additional columns to isotope types (only if column has valid data)
+                isotope_names = ['d13C', 'd18O', 'sr', 'nd']
+                for i, name in enumerate(isotope_names):
+                    col_idx = i + 2
+                    if col_idx < data.shape[1]:
+                        col_data = data[:, col_idx]
+                        # Only include if column has at least some non-NaN values
+                        if not np.all(np.isnan(col_data)):
+                            iso_kwargs[name] = col_data
+
+                # Check we have at least one isotope
+                if len(iso_kwargs) <= 2:
+                    QMessageBox.warning(self, _("Insufficient Data"),
+                        _("Need at least one isotope column with valid data"))
+                    return
+
+                iso_data = IsotopeData(**iso_kwargs)
+
+                analyzer = IsotopeAnalyzer()
+                result = analyzer.analyze(
+                    iso_data,
+                    detect_excursions=params.get("detect_excursions", True),
+                    excursion_threshold=params.get("excursion_threshold", 2.0),
+                    excursion_min_duration=params.get("excursion_min_duration", 2),
+                    compute_correlations=params.get("compute_correlations", True),
+                )
+
+                # Show summary
+                self._status_bar.setInfo(
+                    _("Isotope: {0} excursions detected").format(len(result.excursions))
+                )
+                QMessageBox.information(self, _("Analysis Complete"),
+                    result.summary())
+
+            except Exception as e:
+                QMessageBox.critical(self, "Isotope Error", format_user_error(e, "同位素分析"))
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_stratigraphic(self) -> None:
+        """Run Stratigraphic Correlation Analysis."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = StratigraphicCorrelationDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                from stratigraphy.correlation import StratigraphicSection, StratigraphicCorrelationAnalyzer
+                import numpy as np
+
+                # Create sections from loaded data
+                data = self._state.data_matrix.data
+                n_rows = len(data)
+
+                if data.shape[1] < 2:
+                    QMessageBox.warning(self, _("Insufficient Data"),
+                        _("Need at least 2 columns: height and thickness"))
+                    return
+
+                # Extract heights (first column) and compute thicknesses
+                heights = data[:, 0]
+                thicknesses = np.diff(heights)
+                thicknesses = np.append(thicknesses, thicknesses[-1] if len(thicknesses) > 0 else 1.0)
+
+                # If we have multiple section-like column pairs, create multiple sections
+                # Otherwise, create a single section with computed thicknesses
+                sections = []
+                if data.shape[1] >= 4:
+                    # Assume columns are: height1, thick1, height2, thick2, ...
+                    section_count = (data.shape[1]) // 2
+                    for i in range(section_count):
+                        h_col = i * 2
+                        t_col = i * 2 + 1
+                        if t_col < data.shape[1]:
+                            h = data[:, h_col]
+                            t = data[:, t_col]
+                            t_diff = np.diff(t)
+                            t_diff = np.append(t_diff, t_diff[-1] if len(t_diff) > 0 else 1.0)
+                            sections.append(StratigraphicSection(
+                                name=_("Section {0}").format(i + 1),
+                                heights=h,
+                                thicknesses=t_diff,
+                                lithologies=["layer"] * len(h)
+                            ))
+                else:
+                    # Single section with computed thicknesses
+                    sections.append(StratigraphicSection(
+                        name=_("Section 1"),
+                        heights=heights,
+                        thicknesses=thicknesses,
+                        lithologies=["layer"] * n_rows
+                    ))
+
+                if len(sections) < 2:
+                    QMessageBox.warning(self, _("Insufficient Data"),
+                        _("Need at least 2 sections for correlation. Please prepare data with multiple section columns."))
+                    return
+
+                analyzer = StratigraphicCorrelationAnalyzer()
+                result = analyzer.analyze(
+                    sections,
+                    method=params.get("correlation_method", "dtw")
+                )
+
+                self._status_bar.setInfo(
+                    _("Stratigraphic Correlation: complete")
+                )
+                QMessageBox.information(self, _("Analysis Complete"),
+                    result.summary())
+
+            except Exception as e:
+                QMessageBox.critical(self, "Correlation Error", format_user_error(e, "地层相关性"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
