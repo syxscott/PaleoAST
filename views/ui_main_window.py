@@ -22,7 +22,7 @@ Signals emitted:
     - navigationChanged: Emitted when navigation item selected
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -493,6 +493,55 @@ class VectorIconEngine:
                 box2_x + box_width // 2,
                 size - margin,
             )
+
+        elif icon_type == "pcoa":
+            # 2D scatter with convex hull representing a metric space
+            center = (size // 2, size // 2)
+            points = [
+                QPoint(center[0] - inner_size // 3, center[1] - inner_size // 4),
+                QPoint(center[0] + inner_size // 4, center[1] - inner_size // 3),
+                QPoint(center[0] + inner_size // 3, center[1] + inner_size // 4),
+                QPoint(center[0] - inner_size // 4, center[1] + inner_size // 3),
+                QPoint(center[0] - inner_size // 3, center[1] - inner_size // 4),
+            ]
+            painter.setPen(QPen(QColor("#8E44AD"), max(2, size // 16)))
+            painter.setBrush(QBrush(QColor("#8E44AD")))
+            for pt in points:
+                painter.drawEllipse(pt, size // 18, size // 18)
+            painter.drawPolyline(points[:-1])
+
+        elif icon_type == "chart":
+            # Generic bar chart (used by LDA, CCA, stats, etc.)
+            bar_count = 4
+            bar_width = inner_size // (bar_count * 2)
+            bar_colors = ["#3498DB", "#E74C3C", "#27AE60", "#F39C12"]
+            for i in range(bar_count):
+                height_factor = 0.4 + 0.6 * (1 - abs(i - 1.5) / 2)
+                bar_height = int(inner_size * height_factor)
+                x = margin + i * (inner_size // bar_count) + bar_width // 2
+                y = margin + inner_size - bar_height
+                painter.setBrush(QBrush(QColor(bar_colors[i])))
+                painter.drawRect(QRect(x, y, bar_width, bar_height))
+
+        elif icon_type == "imputation":
+            # Grid of cells with one cell highlighted to suggest "filling in"
+            painter.setPen(QPen(QColor("#7F8C8D"), max(1, size // 32)))
+            cell_size = inner_size // 3
+            grid_origin_x = margin + (inner_size - 3 * cell_size) // 2
+            grid_origin_y = margin + (inner_size - 3 * cell_size) // 2
+            for r in range(3):
+                for c in range(3):
+                    rect = QRect(
+                        grid_origin_x + c * cell_size,
+                        grid_origin_y + r * cell_size,
+                        cell_size,
+                        cell_size,
+                    )
+                    if (r, c) == (1, 1):
+                        painter.setBrush(QBrush(QColor("#27AE60")))
+                    else:
+                        painter.setBrush(QBrush(QColor("#ECF0F1")))
+                    painter.drawRect(rect)
 
         else:
             # Default circle icon
@@ -1380,6 +1429,14 @@ class MainWindow(QMainWindow):
         """Setup signal-slot connections."""
         # Navigation signals
         self._navigation.itemClicked.connect(self._on_navigation_clicked)
+        # self.navigationChanged is a public signal exposed for plugins
+        # and external observers; make sure the default internal
+        # observer is connected so an early emit does not get lost.
+        try:
+            self.navigationChanged.connect(self._on_navigation_changed_external)
+        except TypeError:
+            # Slot may already be connected or signal is unavailable.
+            pass
 
         # File operation buttons (always enabled)
         self._btn_new.clicked.connect(self._on_new_file)
@@ -1797,18 +1854,43 @@ class MainWindow(QMainWindow):
             self._restart_application()
 
     def _restart_application(self) -> None:
-        """Restart the application process."""
+        """Restart the application process.
+
+        Uses :func:`os.execv` to replace the current process with a
+        fresh interpreter invocation. ``QApplication.quit`` is called
+        first so that Qt's internal cleanup runs before the exec swap;
+        otherwise the new process can occasionally fail to bind to
+        the same display on some platforms.
+        """
         import os
         import sys
 
         from PyQt6.QtWidgets import QApplication
 
-        # Save any pending state
-        QApplication.instance().aboutToQuit.emit()
+        # Save any pending state (settings, undo/redo) before the swap.
+        try:
+            QApplication.instance().aboutToQuit.emit()
+        except Exception:
+            pass
 
-        # Restart using os.execl to replace the current process
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
+        # Stop the event loop explicitly. ``os.execv`` does not run
+        # atexit handlers, so we are responsible for flushing state.
+        try:
+            self._save_settings()
+        except Exception:
+            pass
+
+        QApplication.quit()
+
+        # Replace the current process with a fresh interpreter.
+        # ``os.execv`` is preferred over ``os.execl`` because it accepts
+        # the full argument list as a single sequence.
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except OSError:
+            # If exec fails (e.g. the binary is gone) fall back to a
+            # plain exit and let the user restart manually.
+            sys.exit(0)
 
     def _on_navigation_clicked(self, item: NavigationItem) -> None:
         """
@@ -1867,6 +1949,17 @@ class MainWindow(QMainWindow):
 
         # For category clicks or un-mapped items, switch to spreadsheet view
         self._workspace.setCurrentIndex(self._spreadsheet_index)
+
+    def _on_navigation_changed_external(self, section: str) -> None:
+        """Default internal observer for ``navigationChanged``.
+
+        Plugins may emit ``navigationChanged`` programmatically. To keep
+        the in-app status bar consistent we surface the section name
+        there as well.
+        """
+        if not section:
+            return
+        self._status_bar.setInfo(_("Section: {0}").format(section))
 
     def _on_matrix_operations(self) -> None:
         """Switch to spreadsheet view for matrix operations."""
@@ -2178,7 +2271,17 @@ class MainWindow(QMainWindow):
         # Update state manager
         self._state.set_data_matrix(matrix)
 
-        self._spreadsheet.load_data(data, **metadata)
+        # ``ScientificSpreadsheet.load_data`` only accepts the explicit
+        # ``row_labels`` / ``col_labels`` parameters, not arbitrary
+        # kwargs, so pass them positionally here. The previous
+        # implementation used ``**metadata`` which worked only by
+        # accident and would have broken the moment a new key was
+        # added to ``metadata``.
+        self._spreadsheet.load_data(
+            data,
+            row_labels=row_labels,
+            col_labels=col_labels,
+        )
         self._workspace.setCurrentIndex(self._spreadsheet_index)
 
         # Update UI state now that we have data
@@ -2419,8 +2522,20 @@ class MainWindow(QMainWindow):
 
             try:
                 sample_name = params.get("sample_name", "").strip() or "Sample 1"
+                # Resolve the sample-name to a row index. Previously the
+                # controller always used ``data[0]`` and only the
+                # ``sample_name`` field was used as a label, which gave
+                # misleading results when the user typed any other name.
+                matrix = self._state.data_matrix
+                sample_index = self._resolve_sample_index(sample_name, matrix)
+                if sample_index is None:
+                    QMessageBox.warning(
+                        self, _("Sample Not Found"),
+                        _("No sample named '{0}' is loaded.").format(sample_name),
+                    )
+                    return
                 result = self._statistics_controller.analyze_diversity(
-                    abundances=self._state.data_matrix.data[0],
+                    abundances=matrix.data[sample_index],
                     sample_name=sample_name,
                 )
 
@@ -2448,11 +2563,26 @@ class MainWindow(QMainWindow):
             try:
                 selected_samples = params.get("samples", [])
                 if not selected_samples:
-                    selected_samples = ["Sample 1"]
+                    QMessageBox.information(
+                        self, _("No Selection"),
+                        _("Please select at least one sample to rarefy."),
+                    )
+                    return
                 max_n = params.get("max_n", 100)
                 step = params.get("step", 5)
                 n_points = max(10, max_n // step) if step > 0 else 50
+                # Resolve the first selected sample to its row so the
+                # analysis actually reflects the user's choice.
+                matrix = self._state.data_matrix
+                sample_index = self._resolve_sample_index(selected_samples[0], matrix)
+                if sample_index is None:
+                    QMessageBox.warning(
+                        self, _("Sample Not Found"),
+                        _("No sample named '{0}' is loaded.").format(selected_samples[0]),
+                    )
+                    return
                 result = self._statistics_controller.analyze_rarefaction(
+                    abundances=matrix.data[sample_index],
                     sample_name=selected_samples[0],
                     n_points=n_points,
                 )
@@ -2465,6 +2595,38 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 QMessageBox.critical(self, _("Rarefaction Error"), format_user_error(e, "稀疏化分析"))
+
+    @staticmethod
+    def _resolve_sample_index(name: str, matrix) -> int | None:
+        """Resolve a sample identifier (label, 1-based, or 0-based index).
+
+        The Diversity / Rarefaction dialogs let the user type an
+        arbitrary sample label, but the controller historically only
+        used ``data[0]``. This helper makes the dispatch explicit:
+
+            1. If ``name`` is a row label, return its index.
+            2. If ``name`` parses as an integer, return that index
+               (1-based indices like "1", "2" are accepted for
+               ergonomic reasons).
+            3. Otherwise fall back to row 0 to keep the analysis
+               runnable rather than silently failing.
+
+        Returns ``None`` only when the matrix is empty.
+        """
+        if matrix is None or matrix.n_samples == 0:
+            return None
+        labels = list(matrix.row_labels)
+        if name in labels:
+            return labels.index(name)
+        try:
+            idx = int(name)
+            if 1 <= idx <= matrix.n_samples:
+                return idx - 1
+            if 0 <= idx < matrix.n_samples:
+                return idx
+        except (ValueError, TypeError):
+            pass
+        return 0
 
     def _on_run_spectral(self) -> None:
         """Run spectral analysis (power spectrum and periodogram analysis)."""
@@ -2637,6 +2799,9 @@ class MainWindow(QMainWindow):
 
     def _on_run_univariate(self) -> None:
         """Run univariate statistics."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
         dialog = UnivariateDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -3019,16 +3184,18 @@ class MainWindow(QMainWindow):
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
+            self._status_bar.setProgress(0, 0)
             try:
-                self._status_bar.setProgress(0, 0)
                 import numpy as np
                 from stratigraphy.isotope_analysis import IsotopeData, IsotopeAnalyzer
 
                 # Create IsotopeData from loaded data
                 data = self._state.data_matrix.data
                 if data.shape[1] < 3:
-                    QMessageBox.warning(self, _("Insufficient Data"),
-                        _("Need at least 3 columns: depth, age, and isotope values"))
+                    QMessageBox.warning(
+                        self, _("Insufficient Data"),
+                        _("Need at least 3 columns: depth, age, and isotope values"),
+                    )
                     return
 
                 # Build IsotopeData from loaded data
@@ -3050,8 +3217,10 @@ class MainWindow(QMainWindow):
 
                 # Check we have at least one isotope
                 if len(iso_kwargs) <= 2:
-                    QMessageBox.warning(self, _("Insufficient Data"),
-                        _("Need at least one isotope column with valid data"))
+                    QMessageBox.warning(
+                        self, _("Insufficient Data"),
+                        _("Need at least one isotope column with valid data"),
+                    )
                     return
 
                 iso_data = IsotopeData(**iso_kwargs)
@@ -3069,12 +3238,21 @@ class MainWindow(QMainWindow):
                 self._status_bar.setInfo(
                     _("Isotope: {0} excursions detected").format(len(result.excursions))
                 )
-                QMessageBox.information(self, _("Analysis Complete"),
-                    result.summary())
+                QMessageBox.information(
+                    self, _("Analysis Complete"),
+                    result.summary(),
+                )
 
             except Exception as e:
-                QMessageBox.critical(self, "Isotope Error", format_user_error(e, "同位素分析"))
+                QMessageBox.critical(
+                    self, "Isotope Error",
+                    format_user_error(e, "同位素分析"),
+                )
             finally:
+                # ``setProgress(100, 100)`` is intentionally inside the
+                # ``finally`` so that an early ``return`` (e.g. the
+                # ``Insufficient Data`` warning above) does not leave
+                # the progress bar stuck at 0.
                 self._status_bar.setProgress(100, 100)
 
     def _on_run_stratigraphic(self) -> None:
@@ -3381,7 +3559,14 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(100, 100)
 
     def _on_run_pic(self) -> None:
-        """Run Phylogenetic Independent Contrasts (PIC) analysis."""
+        """Run Phylogenetic Independent Contrasts (PIC) analysis.
+
+        Note: PIC requires a tree and trait values. The dialog itself
+        accepts the Newick string and trait dict, so we do not block
+        on ``has_data`` here (the data matrix is not the required
+        input). However, the dialog still benefits from the dark
+        theme and a consistent UX.
+        """
         dialog = PICDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
         dialog.exec()
@@ -3427,7 +3612,7 @@ class MainWindow(QMainWindow):
             </ul>
             """.format(
                 _("Paleontological Advanced Statistical Toolkit"),
-                _("Version 1.0.0"),
+                _("Version 1.0.1"),
                 _("A comprehensive tool for paleontological data analysis including:"),
                 _("Multivariate Statistics (PCA, PCoA, NMDS, LDA)"),
                 _("Group Comparison Tests (ANOSIM, PERMANOVA, SIMPER)"),

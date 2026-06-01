@@ -490,18 +490,18 @@ class RotationMatrix:
         logger.info(f"Computing optimal rotation via SVD for {X.shape[0]} point pairs")
         # 计算协方差矩阵
         H = Y.T @ X
-        
+
         # SVD分解
         U, S, Vt = np.linalg.svd(H)
-        
+
         # 计算R
         R = U @ Vt
-        
-        # 处理反射情况 (det(R) = -1)
-        # 需要同时否定 U 和 Vt 的最后一列才能正确修正
+
+        # 处理反射情况 (det(R) = -1)。
+        # 关键点:只能翻转 U 的最后一列 *或* Vt 的最后一行,不能同时翻转两者,
+        # 否则 det(R) 会被翻两次重新变回 -1。这是经典的 SVD 反射修正陷阱。
         if np.linalg.det(R) < 0:
             Vt[-1, :] *= -1
-            U[:, -1] *= -1
             R = U @ Vt
 
         # 验证正交性和行列式

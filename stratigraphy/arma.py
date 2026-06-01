@@ -28,7 +28,7 @@ Model Selection:
 where L is likelihood and k is number of parameters.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -229,15 +229,24 @@ class ARMAAnalyzer:
         q: int,
         include_intercept: bool,
     ) -> dict[str, Any]:
-        """Fit using statsmodels ARIMA."""
+        """Fit using statsmodels ARIMA.
+
+        statsmodels ARIMA parameter ordering depends on whether an
+        intercept is included:
+            - With intercept:    [intercept, ar.L1, ..., ar.Lp, ma.L1, ..., ma.Lq, sigma2]
+            - Without intercept: [ar.L1, ..., ar.Lp, ma.L1, ..., ma.Lq, sigma2]
+        We therefore offset the slice by 1 when ``include_intercept``.
+        """
         from statsmodels.tsa.arima.model import ARIMA
 
         model = ARIMA(y, order=(p, 0, q))
         fit = model.fit()
 
+        offset = 1 if include_intercept else 0
+        params = fit.params.values
         return {
-            "ar_params": fit.params[:p].values if include_intercept else fit.params[:p].values,
-            "ma_params": fit.params[p : p + q].values,
+            "ar_params": params[offset : offset + p],
+            "ma_params": params[offset + p : offset + p + q],
             "predicted": fit.fittedvalues,
             "residuals": fit.resid,
             "n_params": p + q + (1 if include_intercept else 0),

@@ -9,7 +9,7 @@ PaleoAST - 3D Morphometrics & Macroevolution Tests
 - 端到端集成测试
 
 作者: PaleoAST Development Team
-版本: 1.0.0
+版本: 1.0.1
 """
 
 from . import tests

@@ -8,7 +8,7 @@ Provides descriptive statistics, normality tests, t-tests, ANOVA,
 and non-parametric alternatives for paleontological data exploration.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -474,7 +474,16 @@ class UnivariateAnalyzer:
                         "significant": p_adj < 0.05,
                     })
         except (AttributeError, TypeError):
-            # Fallback for older scipy without tukey_hsd
+            # Fallback for older scipy without tukey_hsd.
+            # The previous implementation multiplied the raw two-sided t p-value
+            # by the number of comparisons (Bonferroni). That is a
+            # conservative correction that is *not* the same as Tukey's HSD
+            # and routinely over-corrects.
+            #
+            # Here we use the Studentized range (q) distribution directly.
+            # This is the same statistic scipy.stats.tukey_hsd uses internally,
+            # so the resulting p-values agree to numerical precision when
+            # sp_stats.studentized_range is available (scipy >= 1.7).
             all_vals = np.concatenate(group_data)
             n_total = len(all_vals)
             df_within = n_total - n_groups
@@ -485,13 +494,22 @@ class UnivariateAnalyzer:
                     ni = len(group_data[i])
                     nj = len(group_data[j])
                     mean_diff = np.mean(group_data[i]) - np.mean(group_data[j])
-                    se = np.sqrt(ms_within * (1 / ni + 1 / nj))
+                    # scipy's tukey_hsd uses stand_err = sqrt(MSE * (1/ni + 1/nj) / 2)
+                    # and the statistic is |mean_diff| / stand_err. We use
+                    # exactly the same formula here so the fallback agrees
+                    # with sp_stats.tukey_hsd to numerical precision.
+                    se = np.sqrt(ms_within * (1.0 / ni + 1.0 / nj) / 2.0)
                     q_stat = abs(mean_diff) / se if se > 0 else 0.0
                     try:
-                        t_stat = q_stat / np.sqrt(2)
-                        p_raw = 2 * (1 - sp_stats.t.cdf(abs(t_stat), df=max(df_within, 1)))
-                        n_comparisons = n_groups * (n_groups - 1) / 2
-                        p_adj = min(p_raw * n_comparisons, 1.0)
+                        if hasattr(sp_stats, "studentized_range"):
+                            p_adj = float(sp_stats.studentized_range.sf(q_stat, n_groups, df_within))
+                        else:
+                            # Old scipy without studentized_range. We fall
+                            # back to the t-distribution as a coarse
+                            # approximation; this is closer to Tukey HSD than
+                            # Bonferroni was, but still only approximate.
+                            p_raw = 2.0 * (1.0 - sp_stats.t.cdf(q_stat, df=max(df_within, 1)))
+                            p_adj = float(min(max(p_raw, 0.0), 1.0))
                     except Exception:
                         p_adj = 1.0
 
@@ -500,7 +518,7 @@ class UnivariateAnalyzer:
                         "group_b": group_labels[j],
                         "diff": float(mean_diff),
                         "q_stat": float(q_stat),
-                        "p_value": float(p_adj),
+                        "p_value": p_adj,
                         "significant": p_adj < 0.05,
                     })
 

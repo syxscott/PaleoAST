@@ -9,7 +9,7 @@ Provides dialogs for:
     - Two-Block PLS analysis (morphological integration)
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

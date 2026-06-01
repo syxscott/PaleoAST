@@ -8,7 +8,7 @@ This controller coordinates all statistical analyses including PCA, PCoA,
 NMDS, ANOSIM, PERMANOVA, and diversity analyses.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -125,20 +125,6 @@ class StatisticsController:
             dm = compute_distance_matrix(data, metric=metric)
             return dm.matrix
         return distance_matrix
-
-    def _run_with_data(
-        self,
-        analyzer: Any,
-        cache_key: str,
-        data: npt.NDArray | None,
-        analyze_method: str = "analyze",
-        **kwargs,
-    ) -> Any:
-        """Run analyzer with data from state if not provided. Must be called with lock held."""
-        data = self._ensure_data(data)
-        result = getattr(analyzer, analyze_method)(data, **kwargs)
-        self._state.cache_result(cache_key, result)
-        return result
 
     # =========================================================================
     # PCA Operations
@@ -827,27 +813,58 @@ class StatisticsController:
     # =========================================================================
 
     def analyze_directional(
-        self, angles_deg: npt.NDArray | None = None
+        self,
+        angles_deg: npt.NDArray | None = None,
+        column_index: int = 0,
     ) -> DirectionalResult:
-        """Run directional (circular) statistics."""
+        """Run directional (circular) statistics.
+
+        Parameters:
+            angles_deg: Optional pre-extracted angle array. If None,
+                the column at ``column_index`` of the state data is
+                used.
+            column_index: Zero-based column of the state data matrix
+                to read angles from when ``angles_deg`` is None.
+        """
         with self._lock:
             if angles_deg is None:
                 if not self._state.has_data:
                     raise ValidationError("No data available.")
-                angles_deg = self._state.data_matrix.data[:, 0]
+                data = self._state.data_matrix.data
+                if column_index < 0 or column_index >= data.shape[1]:
+                    raise ValidationError(
+                        f"column_index {column_index} out of range for data with {data.shape[1]} columns."
+                    )
+                angles_deg = data[:, column_index]
             result = self._directional_analyzer.analyze(angles_deg)
             self._state.cache_result("directional_result", result)
             return result
 
     def bin_rose_diagram(
-        self, angles_deg: npt.NDArray | None = None, n_bins: int = 12
+        self,
+        angles_deg: npt.NDArray | None = None,
+        n_bins: int = 12,
+        column_index: int = 0,
     ) -> tuple[npt.NDArray, npt.NDArray]:
-        """Bin angles for rose diagram."""
+        """Bin angles for rose diagram.
+
+        Parameters:
+            angles_deg: Optional pre-extracted angle array. If None,
+                the column at ``column_index`` of the state data is
+                used.
+            column_index: Zero-based column of the state data matrix
+                to read angles from when ``angles_deg`` is None.
+        """
         with self._lock:
             if angles_deg is None:
                 if not self._state.has_data:
                     raise ValidationError("No data available.")
-                angles_deg = self._state.data_matrix.data[:, 0]
+                data = self._state.data_matrix.data
+                if column_index < 0 or column_index >= data.shape[1]:
+                    raise ValidationError(
+                        f"column_index {column_index} out of range for data with {data.shape[1]} columns."
+                    )
+                angles_deg = data[:, column_index]
             return self._directional_analyzer.bin_for_rose(angles_deg, n_bins=n_bins)
 
     # =========================================================================

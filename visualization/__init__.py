@@ -15,7 +15,7 @@ Modules:
     - stratigraphy_plot: Stratigraphic range and extinction interval plots
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from .allometry_plot import AllometryPlotter

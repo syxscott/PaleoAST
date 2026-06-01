@@ -11,7 +11,7 @@ PaleoAST - Paleontological Advanced Statistical Toolkit
 - 主题样式注入
 - 模块懒加载
 
-版本: 1.0.0
+版本: 1.0.1
 作者: PaleoAST Development Team
 许可证: MIT
 """
@@ -447,7 +447,7 @@ class PaleoASTApplication:
     管理应用程序的完整生命周期。
     """
 
-    VERSION = "1.0.0"
+    VERSION = "1.0.1"
     APP_NAME = "PaleoAST"
 
     def __init__(self):

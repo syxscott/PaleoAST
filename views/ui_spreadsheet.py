@@ -27,7 +27,7 @@ Mathematical Context:
         - Scale: x' = x / σ
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -668,7 +668,22 @@ class ScientificSpreadsheet(QWidget):
                     col_labels=matrix.col_labels,
                 )
             else:
-                self.clear_data()
+                # ``clear_data`` was previously referenced here but
+                # the method did not exist on the spreadsheet. Implement
+                # the behaviour here directly so the EventBus signal
+                # is honoured when data is cleared.
+                self._table.blockSignals(True)
+                try:
+                    self._table.setRowCount(0)
+                    self._table.setColumnCount(0)
+                finally:
+                    self._table.blockSignals(False)
+                self._data = None
+                self._row_labels = []
+                self._col_labels = []
+                self._col_metadata = {}
+                self._row_metadata = {}
+                self.dataChanged.emit()
         finally:
             self._loading_from_event = False
 
@@ -899,7 +914,7 @@ class ScientificSpreadsheet(QWidget):
             for i in range(self._table.rowCount()):
                 self._table.showRow(i)
 
-    def _apply_column_transform(self, col: int, transform: str) -> None:
+    def _apply_column_transform(self, col: int, transform: str, _record_undo: bool = True) -> None:
         """
         Apply mathematical transformation to column.
 
@@ -927,9 +942,10 @@ class ScientificSpreadsheet(QWidget):
             return
 
         self._logger.info(f"Column transform: col={col}, transform='{transform}'")
-        # Save for undo
-        self._undo_stack.append(("transform", col, transform, self._data[:, col].copy()))
-        self._redo_stack.clear()
+        # Save for undo (skip when called from redo to avoid double-pushing)
+        if _record_undo:
+            self._undo_stack.append(("transform", col, transform, self._data[:, col].copy()))
+            self._redo_stack.clear()
 
         col_data = self._data[:, col]
 
@@ -997,9 +1013,15 @@ class ScientificSpreadsheet(QWidget):
 
         # Get sort indices
         sort_data = self._data[:, col]
-        # Handle NaN values
+        # Handle NaN values: substitute +/-inf so they always end up at
+        # the *end* of the sorted output regardless of the direction.
+        # For ascending, NaNs become +inf (largest); for descending,
+        # they become -inf (smallest) and the final ``[::-1]`` flips
+        # them to the back. NaN is therefore never mixed into the
+        # non-NaN ordering.
         nan_mask = np.isnan(sort_data)
-        sort_indices = np.argsort(np.where(nan_mask, np.inf if ascending else -np.inf, sort_data))
+        sentinel = np.inf if ascending else -np.inf
+        sort_indices = np.argsort(np.where(nan_mask, sentinel, sort_data), kind="stable")
         if not ascending:
             sort_indices = sort_indices[::-1]
 
@@ -1036,7 +1058,7 @@ class ScientificSpreadsheet(QWidget):
         )
         self.dataChanged.emit()
 
-    def _delete_column(self, col: int) -> None:
+    def _delete_column(self, col: int, _record_undo: bool = True) -> None:
         """Delete column from data (optimized)."""
         if self._data is None or col < 0 or col >= self._data.shape[1]:
             return
@@ -1045,10 +1067,11 @@ class ScientificSpreadsheet(QWidget):
         # Save for undo - need to save all column metadata since indices shift on delete
         deleted_metadata = self._col_metadata.get(col, {})
         all_metadata = {k: v for k, v in self._col_metadata.items()}
-        self._undo_stack.append(
-            ("delete_col", col, self._data[:, col].copy(), self._col_labels[col], deleted_metadata, all_metadata)
-        )
-        self._redo_stack.clear()
+        if _record_undo:
+            self._undo_stack.append(
+                ("delete_col", col, self._data[:, col].copy(), self._col_labels[col], deleted_metadata, all_metadata)
+            )
+            self._redo_stack.clear()
 
         # Remove column using view when possible (avoids full copy for contiguous memory)
         if col == self._data.shape[1] - 1:
@@ -1106,32 +1129,37 @@ class ScientificSpreadsheet(QWidget):
 
         try:
             value = float(item.text())
-            old_value = self._data[row, col]
-            self._data[row, col] = value
-
-            # Save for undo
-            self._undo_stack.append(("cell", row, col, old_value))
-            self._redo_stack.clear()
-
-            # Update state
-            self._state.set_data_matrix(
-                DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
-            )
-            self.dataChanged.emit()
-
         except ValueError:
-            # Revert to old value
+            # Revert to old value. Use blockSignals to prevent this
+            # setText from re-triggering _on_item_changed and creating
+            # a recursion loop.
             if not np.isnan(self._data[row, col]):
-                item.setText(str(self._data[row, col]))
+                self._table.blockSignals(True)
+                try:
+                    item.setText(str(self._data[row, col]))
+                finally:
+                    self._table.blockSignals(False)
+            return
 
-    def _on_state_data_changed(self) -> None:
-        """Handle data change from state manager."""
-        # Reload data from state
-        data = self._state.data_matrix
-        if data is not None:
-            self._data = data.data
-            self._row_labels = data.row_labels
-            self._col_labels = data.col_labels
+        old_value = self._data[row, col]
+        if old_value == value:
+            return
+        self._data[row, col] = value
+
+        # Save for undo
+        self._undo_stack.append(("cell", row, col, old_value))
+        self._redo_stack.clear()
+
+        # Update state. We pass ``_record_undo=False`` because the
+        # spreadsheet already has its own undo entry, and
+        # ``_reset_metadata=False`` because a single cell edit must
+        # not discard the column / row metadata the user has set.
+        self._state.set_data_matrix(
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+            _record_undo=False,
+            _reset_metadata=False,
+        )
+        self.dataChanged.emit()
 
     def export_to_clipboard(self) -> None:
         """Export selected data to clipboard."""
@@ -1169,20 +1197,42 @@ class ScientificSpreadsheet(QWidget):
                     try:
                         row.append(float(v))
                     except ValueError:
+                        # Treat unparseable values as missing data
+                        # (NaN) instead of failing the whole import.
                         row.append(np.nan)
                 data.append(row)
                 max_cols = max(max_cols, len(row))
+
+            if not data:
+                QMessageBox.warning(
+                    self, _("Import Error"),
+                    _("Clipboard contains no tabular data to import.")
+                )
+                return
 
             # Pad rows to equal length
             for row in data:
                 while len(row) < max_cols:
                     row.append(np.nan)
 
-            data = np.array(data)
+            # np.array(..., dtype=object) would let ragged rows survive
+            # but downstream callers expect a 2D float array. Use
+            # ``dtype=float`` after padding so the shape is consistent.
+            data = np.array(data, dtype=float)
             self.load_data(data)
 
         except Exception as e:
             QMessageBox.critical(self, "Import Error", f"Failed to import data:\n{e!s}")
+
+    @staticmethod
+    def _make_display_item(value) -> QTableWidgetItem:
+        """Build a QTableWidgetItem that correctly renders NaN as empty."""
+        if np.isnan(value):
+            item = QTableWidgetItem("")
+        else:
+            item = QTableWidgetItem(str(value))
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        return item
 
     def undo(self) -> None:
         """Undo last operation."""
@@ -1199,13 +1249,11 @@ class ScientificSpreadsheet(QWidget):
                 self._redo_stack.append(("transform", col, transform))
                 self._data[:, col] = old_data
                 for i in range(self._data.shape[0]):
-                    item = QTableWidgetItem(str(old_data[i]))
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self._table.setItem(i, col, item)
+                    self._table.setItem(i, col, self._make_display_item(old_data[i]))
 
             elif operation[0] == "delete_col":
                 _, col, col_data, label, deleted_metadata, all_metadata = operation
-                self._redo_stack.append(("delete_col", col))
+                self._redo_stack.append(("delete_col", col, col_data, label, deleted_metadata, all_metadata))
                 self._data = np.insert(self._data, col, col_data, axis=1)
                 self._col_labels.insert(col, label)
                 # Restore all metadata from before delete (preserves metadata for all columns)
@@ -1214,17 +1262,13 @@ class ScientificSpreadsheet(QWidget):
                 self._table.insertColumn(col)
                 self._table.setHorizontalHeaderLabels(self._col_labels)
                 for i in range(self._data.shape[0]):
-                    item = QTableWidgetItem(str(col_data[i]))
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self._table.setItem(i, col, item)
+                    self._table.setItem(i, col, self._make_display_item(col_data[i]))
 
             elif operation[0] == "cell":
                 _, row, col, old_value = operation
                 self._redo_stack.append(("cell", row, col, self._data[row, col]))
                 self._data[row, col] = old_value
-                item = QTableWidgetItem(str(old_value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(row, col, item)
+                self._table.setItem(row, col, self._make_display_item(old_value))
         finally:
             self._table.blockSignals(False)
 
@@ -1242,11 +1286,18 @@ class ScientificSpreadsheet(QWidget):
 
         if operation[0] == "transform":
             _, col, transform = operation
-            self._apply_column_transform(col, transform)
+            # Bypass the push-once guard in _apply_column_transform so
+            # redo does not double-add to the undo stack.
+            self._apply_column_transform(col, transform, _record_undo=False)
 
         elif operation[0] == "delete_col":
+            # The redo entry already contains the column data and
+            # metadata, so re-running the deletion with the guard
+            # disabled is enough. We must *not* push anything onto
+            # the undo stack (we just popped this from the redo
+            # stack and the user expects a single logical action).
             _, col = operation
-            self._delete_column(col)
+            self._delete_column(col, _record_undo=False)
 
         elif operation[0] == "cell":
             _, row, col, new_value = operation
@@ -1254,9 +1305,7 @@ class ScientificSpreadsheet(QWidget):
             self._data[row, col] = new_value
             self._table.blockSignals(True)
             try:
-                item = QTableWidgetItem(str(new_value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(row, col, item)
+                self._table.setItem(row, col, self._make_display_item(new_value))
             finally:
                 self._table.blockSignals(False)
             self._state.set_data_matrix(

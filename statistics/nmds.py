@@ -23,7 +23,7 @@ The SMACOF algorithm (Scaling by MAjorizing a COmplicated Function)
 is used for iterative optimization.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -232,9 +232,10 @@ class NMDSAnalyzer:
             row_sums = np.sum(B, axis=1)
             np.fill_diagonal(B, -row_sums)
 
-            # Guttman transform: divide by row sums (not n)
-            # This is the correct SMACOF formula: X_new = (B @ X) / row_sums
-            X_new = (B @ X) / row_sums[:, np.newaxis]
+            # Guttman transform: X_new = (1/n) * B @ X
+            # B is doubly centered (row sums = 0), so dividing by row_sums
+            # would be 0/0. The standard SMACOF formula divides by n.
+            X_new = (B @ X) / n
 
             # Update configuration
             X = X_new

@@ -10,7 +10,7 @@ data transformations, plus KNN-based missing value imputation.
 All functions accept and return numpy arrays without side effects.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

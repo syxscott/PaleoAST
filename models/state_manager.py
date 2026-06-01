@@ -13,7 +13,7 @@ Architecture:
     Supports concurrent read access and exclusive write access.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -183,28 +183,55 @@ class StateManager:
         with self._read_write_lock:
             return self._data_matrix is not None
 
-    def set_data_matrix(self, matrix: DataMatrix) -> None:
+    def set_data_matrix(
+        self,
+        matrix: DataMatrix,
+        _record_undo: bool = True,
+        _reset_metadata: bool = True,
+    ) -> None:
         """
         Set the current data matrix.
 
         Parameters:
             matrix: New DataMatrix to set
+            _record_undo: When False, the previous state is *not*
+                pushed onto the undo stack. Programmatic loads (e.g.
+                the spreadsheet rebuilding itself from the EventBus)
+                should pass ``False`` to avoid polluting the user's
+                undo history with synthetic entries.
+            _reset_metadata: When True (the default) the per-column
+                and per-row metadata managers are recreated from the
+                new matrix's labels. Callers that want to preserve
+                existing metadata (e.g. a simple value edit) should
+                pass ``False``.
         """
         with self._read_write_lock:
-            self._push_undo()
+            if _record_undo:
+                self._push_undo()
             self._data_matrix = matrix
             self._logger.info(f"set_data_matrix: shape=({matrix.n_samples} x {matrix.n_variables})")
-            self._column_metadata = ColumnMetadataManager(n_columns=matrix.n_variables, column_labels=matrix.col_labels)
-            self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
+            if _reset_metadata:
+                self._column_metadata = ColumnMetadataManager(
+                    n_columns=matrix.n_variables, column_labels=matrix.col_labels
+                )
+                self._row_metadata = RowMetadataManager(
+                    n_rows=matrix.n_samples, row_labels=matrix.row_labels
+                )
             self._analysis_cache.clear()
             self._modified = True
         get_event_bus().emit_data_changed(matrix)
 
-    def clear_data(self) -> None:
-        """Clear the current data matrix."""
+    def clear_data(self, _record_undo: bool = True) -> None:
+        """Clear the current data matrix.
+
+        Parameters:
+            _record_undo: When False, the previous state is *not*
+                pushed onto the undo stack.
+        """
         with self._read_write_lock:
             self._logger.info("clear_data: clearing current data matrix and analysis cache")
-            self._push_undo()
+            if _record_undo:
+                self._push_undo()
             self._data_matrix = None
             self._column_metadata = None
             self._row_metadata = None

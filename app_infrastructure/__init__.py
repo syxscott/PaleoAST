@@ -10,7 +10,7 @@ PaleoAST - Application Infrastructure
 - 巨型QSS样式引擎 (theme)
 
 作者: PaleoAST Development Team
-版本: 1.0.0
+版本: 1.0.1
 """
 
 from . import audit, startup, theme

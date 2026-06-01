@@ -33,7 +33,7 @@ Procrustes Distance:
     d_P(X, Y) = sqrt(||X - Y||² / size(X))
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -163,6 +163,13 @@ class GPAAnalyzer:
                 for i in range(n_specimens):
                     rotation = self._find_rotation(consensus, aligned[i])
                     iter_rotations.append(rotation)
+                    # _find_rotation(consensus, target) returns the Kabsch
+                    # rotation R such that ``R @ target ≈ consensus`` (the
+                    # standard left-multiplication convention). Because the
+                    # rotation is applied on the *left* but our specimens
+                    # are stored with landmarks on the rows (k x m), the
+                    # equivalent operation is ``target @ R.T``. Verified
+                    # empirically with a 2D rotation round-trip.
                     new_aligned[i] = aligned[i] @ rotation.T
 
                 aligned = new_aligned

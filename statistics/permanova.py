@@ -24,7 +24,7 @@ SS_B and SS_W are computed from distance matrices:
     SS_W = SS_T - SS_B
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

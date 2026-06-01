@@ -15,7 +15,7 @@ Mathematical Context:
     Each element x_ij represents the value of variable j for sample i.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -531,15 +531,23 @@ class DataMatrix:
         Remove rows with excessive missing values.
 
         Parameters:
-            threshold: Fraction of columns that can be missing (0 to 1).
-                      Default 1.0 means remove only rows that are entirely NaN.
+            threshold: Fraction of columns that can be missing (0 to 1, exclusive).
+                      A row is dropped if its NaN count is strictly greater
+                      than ``threshold * n_variables``.
+                      - 0.0 keeps only fully complete rows.
+                      - 1.0 (default) keeps rows with at most ``n_variables - 1``
+                        NaN values, i.e. drops only rows that are entirely NaN.
 
         Returns:
             DataMatrix: Matrix without rows exceeding threshold
         """
         with self._lock:
             nan_counts = np.sum(np.isnan(self._data), axis=1)
+            # Cap threshold below 1.0 so threshold == 1.0 means "drop rows that
+            # are entirely NaN" (matching the documented behaviour).
             max_allowed_nan = int(threshold * self.n_variables)
+            if threshold >= 1.0:
+                max_allowed_nan = self.n_variables - 1
 
             valid_mask = nan_counts <= max_allowed_nan
             valid_indices = np.where(valid_mask)[0]
@@ -620,6 +628,17 @@ class DataMatrix:
             missing_count = int(np.sum(nan_mask))
             self._logger.info(f"impute_mean: imputing {missing_count} missing values with column means")
 
+            # Handle all-NaN columns explicitly: nanmean returns NaN for them
+            # (with a RuntimeWarning), which would leave the column untouched.
+            # Fall back to 0 for those columns.
+            all_nan_cols = np.all(nan_mask, axis=0)
+            if np.any(all_nan_cols):
+                self._logger.warning(
+                    f"impute_mean: {int(np.sum(all_nan_cols))} all-NaN column(s) "
+                    f"detected, falling back to 0"
+                )
+                col_means = np.where(all_nan_cols, 0.0, col_means)
+
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_means[j]
 
@@ -647,6 +666,15 @@ class DataMatrix:
             nan_mask = np.isnan(result)
             missing_count = int(np.sum(nan_mask))
             self._logger.info(f"impute_median: imputing {missing_count} missing values with column medians")
+
+            # Handle all-NaN columns: nanmedian returns NaN for them.
+            all_nan_cols = np.all(nan_mask, axis=0)
+            if np.any(all_nan_cols):
+                self._logger.warning(
+                    f"impute_median: {int(np.sum(all_nan_cols))} all-NaN column(s) "
+                    f"detected, falling back to 0"
+                )
+                col_medians = np.where(all_nan_cols, 0.0, col_medians)
 
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_medians[j]

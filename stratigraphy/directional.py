@@ -25,7 +25,7 @@ Reference: Mardia & Jupp (2000) "Directional Statistics."
 Wiley, Chichester.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

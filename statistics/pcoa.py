@@ -19,7 +19,7 @@ Given a distance/dissimilarity matrix D ∈ ℝ^(n×n):
 4. Coordinates: PCoA_i = sqrt(max(λ_i, 0)) * U_i
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

@@ -35,7 +35,7 @@ Reference:
     Processing, 26(1), 43-49.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -165,6 +165,9 @@ class DTWAnalyzer:
             for i in range(1, n1):
                 for j in range(1, n2):
                     if window is not None and abs(i - j) > window:
+                        # Cell is outside the Sakoe-Chiba band. The cumulative
+                        # distance remains inf so the backtrack below will
+                        # not choose it.
                         continue
 
                     cum_dist[i, j] = dist_mat[i, j] + min(
@@ -172,6 +175,14 @@ class DTWAnalyzer:
                         cum_dist[i, j - 1],  # deletion
                         cum_dist[i - 1, j - 1],  # match
                     )
+
+            # Sanity check: the corner cell must be reachable.
+            if not np.isfinite(cum_dist[n1 - 1, n2 - 1]):
+                raise ComputationError(
+                    "DTW: no valid warping path under the given window constraint. "
+                    "Increase the window radius or remove it.",
+                    details={"n1": n1, "n2": n2, "window": window},
+                )
 
             # Backtrack to find optimal path
             path = []
@@ -189,7 +200,14 @@ class DTWAnalyzer:
                         (cum_dist[i - 1, j], i - 1, j),
                         (cum_dist[i, j - 1], i, j - 1),
                     ]
-                    _, i, j = min(candidates, key=lambda x: x[0])
+                    # Only consider finite candidates to guarantee progress.
+                    finite_candidates = [c for c in candidates if np.isfinite(c[0])]
+                    if not finite_candidates:
+                        # Should not happen because the corner cell was
+                        # verified to be finite above, but guard against
+                        # numerical pathologies.
+                        break
+                    _, i, j = min(finite_candidates, key=lambda x: x[0])
 
                 path.append((i, j))
 
@@ -249,10 +267,11 @@ class DTWAnalyzer:
                 dist_mat[j, i] = result.distance
 
                 if i == 0:
-                    warped.append(result.warped_seq1)
-
-            if i == 0:
-                warped.append(result.warped_seq2 if len(warped) == 0 else warped[0])
+                    # Warp every sequence against the first one; the first
+                    # sequence itself is its own trivial warp.
+                    warped.append(result.warped_seq1 if j == i + 1 else warped[j - 1])
+                    if j == i + 1:
+                        warped.append(result.warped_seq2)
 
         return dist_mat, warped
 

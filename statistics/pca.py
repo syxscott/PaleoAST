@@ -25,7 +25,7 @@ Variance Explained:
     Cumulative: R_k² = Σᵢ₌₁ᵏ λ_i / Σλ_i
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -204,6 +204,9 @@ class PCAAnalyzer:
         with self._lock:
             # Validate and prepare data
             X = validate_data_array(data, allow_nan=True, name="PCA_input")
+            # Work on a local copy so the caller's array is never mutated
+            # by in-place NaN imputation below.
+            X = X.copy()
 
             n_samples, n_variables = X.shape
             self._logger.info(
@@ -211,7 +214,8 @@ class PCAAnalyzer:
                 f"n_components={n_components}, method={method}"
             )
 
-            # Handle missing values (vectorized)
+            # Handle missing values (vectorized). Use .copy() above so this
+            # in-place write does not modify the caller's data.
             if impute_missing and np.any(np.isnan(X)):
                 col_means = np.nanmean(X, axis=0)
                 nan_mask = np.isnan(X)

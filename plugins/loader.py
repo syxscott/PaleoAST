@@ -7,7 +7,7 @@ Plugin Loader for PaleoAST
 Utilities for discovering and loading analysis plugins.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import importlib

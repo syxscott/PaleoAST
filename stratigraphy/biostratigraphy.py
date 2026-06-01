@@ -20,7 +20,7 @@ RASC (Ranking and Scaling):
     - Iterative refinement
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -335,11 +335,17 @@ class RASCAnalyzer:
                     ranking[i], ranking[i + 1] = ranking[i + 1], ranking[i]
                     new_score = self._compute_ranking_score(ranking, dist)
 
-                    if new_score >= current_score:
-                        # Revert if not improved
-                        ranking[i], ranking[i + 1] = ranking[i + 1], ranking[i]
-                    else:
+                    # The score is a *cost* (lower is better), so we
+                    # accept a swap only if it *decreases* the score.
+                    # The previous code used ``new_score >= current_score``
+                    # to revert, which would never accept any swap
+                    # (since the initial ordering was already chosen
+                    # and the score could only grow or stay the same).
+                    if new_score < current_score:
                         improved = True
+                    else:
+                        # Revert the swap
+                        ranking[i], ranking[i + 1] = ranking[i + 1], ranking[i]
 
                 if not improved:
                     break

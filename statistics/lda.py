@@ -24,7 +24,7 @@ Reference: Fisher (1936) "The use of multiple measurements in
 taxonomic problems." Annals of Eugenics, 7, 179-188.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -184,11 +184,17 @@ class LDAAnalyzer:
             # Loadings (coefficients)
             loadings = lda.scalings_[:, :n_components]
 
-            # Eigenvalues and explained variance
-            # Note: sklearn LDA exposes explained_variance_ratio_ (proportion of between-class variance)
-            # Compute pseudo-eigenvalues from the ratio and total variance
-            eigenvalues = lda.explained_variance_ratio_
+            # Eigenvalues and explained variance.
+            # sklearn's LDA only exposes `explained_variance_ratio_`
+            # (proportion of between-class variance per LD axis), not the raw
+            # eigenvalues. We expose this quantity under both `eigenvalues`
+            # and `explained_variance_ratio` for compatibility, but document
+            # explicitly that these are the explained-variance *ratios*, not
+            # the original eigenvalues.
             explained_var = lda.explained_variance_ratio_
+            # Pseudo-eigenvalues proportional to explained variance.
+            # Used internally by `summary()` for display.
+            eigenvalues = explained_var.copy()
 
             # Class means in LD space
             class_means = lda.transform(lda.means_)

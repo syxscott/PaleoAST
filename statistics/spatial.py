@@ -30,7 +30,7 @@ Envelope simulation:
     confidence envelopes under CSR hypothesis.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -210,8 +210,14 @@ class RipleyKAnalyzer:
         """
         Compute Ripley's K-function for given points.
 
-        Uses the count-based estimator:
-        K(r) = (A / n²) * ΣΣ I(d_ij < r)
+        Uses the standard estimator (Diggle 2003):
+            K(r) = (A / n²) * Σ_{i ≠ j} I(d_ij < r)
+
+        Note: the previous implementation divided by ``n * (n - 1)``
+        instead of ``n²``, which slightly under-estimates K for small n.
+        The current formula is internally consistent with the Monte
+        Carlo envelope (which is built with the same expression), so
+        the interpretation of the test against CSR is unchanged.
         """
         n = points.shape[0]
         k_values = np.zeros(len(r_values))
@@ -234,8 +240,15 @@ class RipleyKAnalyzer:
                     if neighbor > j:
                         count += 1
 
-            # K(r) = A * 2 * count / (n * (n - 1))  (factor 2 for ordered pairs)
-            k_values[i] = (area * 2 * count) / (n * (n - 1)) if n > 1 else 0.0
+            # Number of ordered pairs (i != j) is n * (n - 1).
+            # ``count`` already counts each unordered pair once, so
+            # 2*count is the total number of (i, j) ordered pairs with
+            # i != j and d_ij < r. Dividing by n^2 gives the standard
+            # K estimator.
+            if n > 1:
+                k_values[i] = (area * 2.0 * count) / (n * n)
+            else:
+                k_values[i] = 0.0
 
         return k_values
 

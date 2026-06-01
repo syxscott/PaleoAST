@@ -32,7 +32,7 @@ Significance:
     p-value = proportion of simulated >= observed
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from __future__ import annotations

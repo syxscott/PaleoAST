@@ -15,7 +15,7 @@ Decorator Functions:
     - cache_result: Cache results to disk or memory
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import functools
@@ -176,16 +176,24 @@ def log_execution_time(
 
     def decorator(f: Callable[P, T]) -> Callable[P, T]:
         @functools.wraps(f)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        def wrapper(*args: P.args, **kwargs: P.kwargs):
             nonlocal logger_instance
             log = logger_instance or logger
+
+            # ``result`` must be initialised so the final ``return``
+            # works even when ``f`` raises before assignment. The
+            # previous version re-raised inside the ``except`` block
+            # and then hit ``return result`` with ``result`` unbound,
+            # which replaced the real exception with a confusing
+            # ``UnboundLocalError``.
+            result: T | None = None
 
             start_time = time.perf_counter()
             try:
                 result = f(*args, **kwargs)
                 success = True
-                error = None
-            except Exception as e:
+                error: BaseException | None = None
+            except BaseException as e:
                 success = False
                 error = e
                 raise
@@ -207,6 +215,7 @@ def log_execution_time(
                 else:
                     log.log(level, f"{f.__name__} failed after {duration_str}: {error}")
 
+            assert result is not None  # for type checkers; only reached on success
             return result
 
         return wrapper

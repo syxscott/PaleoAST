@@ -106,7 +106,7 @@ TRANSLATIONS = {
     "Spectral analysis: select time and value columns first.": "Spectral analysis: select time and value columns first.",
     # About dialog
     "About PaleoAST": "About PaleoAST",
-    "Version 1.0.0": "Version 1.0.0",
+    "Version 1.0.1": "Version 1.0.1",
     "Copyright (c) 2024 PaleoAST Development Team": "Copyright (c) 2024 PaleoAST Development Team",
     "A comprehensive tool for paleontological data analysis including:": "A comprehensive tool for paleontological data analysis including:",
     "Multivariate Statistics (PCA, PCoA, NMDS)": "Multivariate Statistics (PCA, PCoA, NMDS)",

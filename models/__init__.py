@@ -9,7 +9,7 @@ including the core DataMatrix class, column/row metadata, diversity results,
 and the thread-safe StateManager.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from .column_metadata import ColumnMetadata, ColumnMetadataManager

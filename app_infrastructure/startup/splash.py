@@ -248,7 +248,7 @@ class SplashScreen(QWidget):
         self._status_label.setWordWrap(True)
 
         # 版本标签
-        self._version_label = QLabel("Version 1.0.0", self)
+        self._version_label = QLabel("Version 1.0.1", self)
         self._version_label.setFont(version_font)
         self._version_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         self._version_label.setStyleSheet("color: #7F8C8D; background: transparent;")

@@ -43,7 +43,7 @@ Blomberg's K:
     K ≈ 1 under BM; K > 1 strong phylogenetic signal
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from __future__ import annotations
@@ -150,8 +150,11 @@ class PhylogeneticSignalResult:
         z: Z-score for K (standardized by randomizations)
         p_value: P-value from permutation test
         n_randomizations: Number of permutations used
-        lambda: Pagel's lambda (ML-estimated)
-        lambda_se: Standard error of lambda
+        lambda_: Pagel's lambda (ML-estimated). The trailing underscore
+                 is required because ``lambda`` is a Python keyword and
+                 cannot be used as a dataclass field name; access the
+                 value via ``result.lambda_``.
+        lambda_se: Standard error of Pagel's lambda
         vcv_matrix: Phylogenetic variance-covariance matrix
         tip_names: Names of taxa (rows/cols of VCV matrix)
     """

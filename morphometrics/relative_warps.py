@@ -28,7 +28,7 @@ Relative warps are analogous to principal components in traditional PCA
 but applied to shape space.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

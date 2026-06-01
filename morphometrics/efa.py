@@ -27,7 +27,7 @@ Reference: Kuhl & Giardina (1982) "Elliptic Fourier features of a
 closed contour." Computer Graphics and Image Processing, 18, 236-258.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

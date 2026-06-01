@@ -11,7 +11,7 @@ PAST .dat format is a simple tab or space-separated format with:
 - May include group information in comments
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

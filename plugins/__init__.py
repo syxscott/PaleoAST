@@ -8,7 +8,7 @@ This package provides a plugin architecture for extensible statistical analyses.
 Plugins can register themselves to be discovered and executed by the StatisticsController.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from .base import AnalysisPlugin, AnalysisResult

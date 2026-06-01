@@ -4,7 +4,7 @@
 
 ### Paleontological Advanced Statistical Toolkit / 古生物学高级统计分析工具包
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-green)
 ![GUI](https://img.shields.io/badge/GUI-PyQt6-orange)
 ![License](https://img.shields.io/badge/license-MIT-yellow)

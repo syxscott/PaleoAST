@@ -9,7 +9,7 @@ user interface, including main window, spreadsheet, dialogs, and
 interactive visualization canvas.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from .ui_dialogs import (

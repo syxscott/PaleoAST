@@ -32,7 +32,7 @@ Mathematical Functions:
    D_ij = ||x_i - x_j||_2 = sqrt(Σ_k (x_ik - x_jk)^2)
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

@@ -43,7 +43,7 @@ Model Selection:
     AIC_weights = exp(-0.5 * delta_AIC) / sum(exp(-0.5 * delta_AIC))
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from __future__ import annotations
@@ -518,10 +518,15 @@ class EvolutionRateAnalyzer:
 
         rates = []
         for _ in range(n_bootstrap):
-            # Resample residuals
+            # Resample increments with replacement to build a bootstrap
+            # surrogate of the trait series. We use the raw first-differences
+            # (``dx - mean(dx)``) as the empirical residual distribution.
+            # Note: this is a generic residualisation that is appropriate for
+            # the random-walk model; for the directional/stasis models the
+            # residuals should be model-specific. We keep the generic version
+            # here for simplicity and consistency with the original code.
             dx = np.diff(trait_series)
             residuals = dx - np.mean(dx)
-            np.random.seed(None)  # Use random seed for each bootstrap
             boot_residuals = np.random.choice(residuals, size=len(residuals), replace=True)
 
             # Reconstruct bootstrap trait series

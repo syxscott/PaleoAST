@@ -25,7 +25,7 @@ where:
     rᵢ = sqrt((x-xᵢ)² + (y-yᵢ)²) is the distance to landmark i
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -227,35 +227,6 @@ class TPSAnalyzer:
             raise MorphometricsError("Configuration must be 1D (flat) or 2D (n_landmarks, n_dims)")
 
         return config.astype(float)
-
-    def _build_p_matrix(self, landmarks: npt.NDArray) -> npt.NDArray:
-        """
-        Build TPS P matrix.
-
-        P = [P_affine; P_kernel]
-
-        where:
-        P_affine = [1, x, y] (for 2D) or [1, x, y, z] (for 3D)
-        P_kernel[i,j] = U(||landmark_i - landmark_j||)
-        """
-        n = landmarks.shape[0]
-        n_dims = landmarks.shape[1]
-
-        # Affine part
-        if n_dims == 2:
-            P_affine = np.column_stack([np.ones(n), landmarks[:, 0], landmarks[:, 1]])
-        else:
-            P_affine = np.column_stack([np.ones(n), landmarks[:, 0], landmarks[:, 1], landmarks[:, 2]])
-
-        # Kernel part
-        K = self._build_kernel_matrix(landmarks)
-
-        # Combine
-        P = np.zeros((n, P_affine.shape[1] + n))
-        P[:, : P_affine.shape[1]] = P_affine
-        P[:, P_affine.shape[1] :] = K
-
-        return P
 
     def _build_kernel_matrix(self, landmarks: npt.NDArray) -> npt.NDArray:
         """

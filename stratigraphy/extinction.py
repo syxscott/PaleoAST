@@ -28,7 +28,7 @@ Two Models:
        CI based on order statistics
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from __future__ import annotations
@@ -325,16 +325,23 @@ class ExtinctionIntervalAnalyzer:
             # Effective sample size considering detection probability
             n_eff = k / detection_prob
 
-            # Lower CI (older than LAD)
-            # Based on the Poisson survival function
-            if n_eff > 0:
-                ci_lower[i] = lad_sorted[i] - math.log(q) / n_eff
-            else:
-                ci_lower[i] = lad_sorted[i]
+            # Marshall (1990) confidence interval construction:
+            # The true extinction can only be older than the LAD (no younger
+            # side, so the lower bound collapses to the LAD itself).
+            # The upper bound (older) is determined by the inverse of the
+            # Poisson survival function, scaled by the effective sample size.
+            #
+            #   upper_offset = -ln(q) / n_eff
+            #
+            # The previous implementation used math.log(q) which is negative
+            # (q in (0,1)), producing ci_lower > lad_sorted and making the
+            # interval degenerate (ci_lower == ci_upper).
+            ci_lower[i] = lad_sorted[i]
 
-            # Upper CI (younger than LAD)
-            # The extinction could be up to this many layers younger
-            ci_upper[i] = lad_sorted[i] + math.log(1.0 / q) / n_eff
+            if n_eff > 0:
+                ci_upper[i] = lad_sorted[i] - math.log(q) / n_eff
+            else:
+                ci_upper[i] = lad_sorted[i]
 
             # Point estimate for true extinction (MLE)
             true_extinction[i] = lad_sorted[i]

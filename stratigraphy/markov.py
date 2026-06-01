@@ -30,7 +30,7 @@ embedded Markov chains to describe vertical changes in rock columns."
 Mathematical Geology, 14, 121-136.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -111,7 +111,12 @@ class MarkovAnalyzer:
         sequence = np.array(sequence)
         if len(sequence) < 2:
             raise ValueError("Sequence must have at least 2 elements for Markov chain analysis")
-        n_states = int(np.max(sequence)) + 1
+        # Use the number of *unique* facies codes, not max+1. The
+        # previous formula ``int(np.max(sequence)) + 1`` would create
+        # empty rows in the transition matrix whenever the facies
+        # codes are not contiguous (e.g. {0, 2, 5} would allocate
+        # 6 states, three of which are unused).
+        n_states = int(len(np.unique(sequence)))
 
         if facies_names is None:
             facies_names = [f"Facies_{i}" for i in range(n_states)]

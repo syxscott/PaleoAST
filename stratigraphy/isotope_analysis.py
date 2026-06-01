@@ -7,7 +7,7 @@ including trend extraction, excursion detection, spectral analysis, and
 correlation analysis.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -161,7 +161,8 @@ def detect_excursions_from_values(
     values: np.ndarray,
     threshold: float = 2.0,
     min_duration: int = 2,
-    background: str = 'mean'
+    background: str = 'mean',
+    age: Optional[np.ndarray] = None,
 ) -> List[Excursion]:
     """
     检测 isotope excursion (异常偏移)
@@ -171,11 +172,20 @@ def detect_excursions_from_values(
         threshold: 阈值 (标准差倍数)
         min_duration: 最小持续点数
         background: 背景估计方法 ('mean', 'median')
+        age: 可选的年龄序列。如果提供，Excursion 的 ``start_age`` 和
+             ``end_age`` 字段会使用 ``age[start_idx]`` / ``age[end_idx]``；
+             否则回退为索引值 (与旧实现保持兼容)。
 
     返回:
         Excursion 列表
     """
     values = np.asarray(values)
+    if age is not None:
+        age = np.asarray(age)
+        if len(age) != len(values):
+            raise ValueError(
+                f"age length ({len(age)}) must match values length ({len(values)})"
+            )
 
     # 估计背景和标准差
     if background == 'mean':
@@ -201,6 +211,10 @@ def detect_excursions_from_values(
     in_excursion = False
     start_idx = 0
 
+    def _age_at(idx: int) -> float:
+        """Map an array index to its age, falling back to the index itself."""
+        return float(age[idx]) if age is not None else float(idx)
+
     for i, exc in enumerate(is_excursion):
         if exc and not in_excursion:
             in_excursion = True
@@ -217,8 +231,8 @@ def detect_excursions_from_values(
                 excursions.append(Excursion(
                     start_idx=start_idx,
                     end_idx=end_idx,
-                    start_age=float(start_idx),
-                    end_age=float(end_idx),
+                    start_age=_age_at(start_idx),
+                    end_age=_age_at(end_idx),
                     peak_idx=peak_idx,
                     peak_value=peak_value,
                     magnitude=(peak_value - bg) / std
@@ -236,8 +250,8 @@ def detect_excursions_from_values(
             excursions.append(Excursion(
                 start_idx=start_idx,
                 end_idx=end_idx,
-                start_age=float(start_idx),
-                end_age=float(end_idx),
+                start_age=_age_at(start_idx),
+                end_age=_age_at(end_idx),
                 peak_idx=peak_idx,
                 peak_value=peak_value,
                 magnitude=(peak_value - bg) / std
@@ -447,12 +461,11 @@ class IsotopeAnalyzer:
                     excs = detect_excursions_from_values(
                         values,
                         threshold=excursion_threshold,
-                        min_duration=excursion_min_duration
+                        min_duration=excursion_min_duration,
+                        age=data.age,
                     )
                     for e in excs:
                         e.isotope = name
-                        e.start_age = data.age[e.start_idx] if e.start_idx < len(data.age) else float(e.start_idx)
-                        e.end_age = data.age[e.end_idx] if e.end_idx < len(data.age) else float(e.end_idx)
                     excursions.extend(excs)
 
         # 计算相关性

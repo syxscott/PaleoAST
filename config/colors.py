@@ -13,7 +13,7 @@ Color Theory Notes:
 - Colorblind-friendly palette follows the Okabe-Ito color scheme
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from typing import Final

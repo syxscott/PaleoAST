@@ -7,7 +7,7 @@ Plugin Registry for PaleoAST
 Singleton registry that tracks all registered analysis plugins.
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging

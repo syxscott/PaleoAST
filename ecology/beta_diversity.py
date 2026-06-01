@@ -47,7 +47,7 @@ Coverage: C = 1 - (f1/N) * qD_1
 where f1 = singletons, N = total individuals, qD_1 = Hill number of order 1
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 from __future__ import annotations

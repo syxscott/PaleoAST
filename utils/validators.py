@@ -17,7 +17,7 @@ Validation Functions:
     - check_constant_columns: Check for constant/variance-zero columns
 
 Author: PaleoAST Development Team
-Version: 1.0.0
+version: 1.0.1
 """
 
 import logging
@@ -102,10 +102,11 @@ def validate_data_array(
 
     # Check dtype if specified
     if dtype is not None:
-        if not np.issubdtype(arr.dtype, np.dtype(dtype).dtype):
+        target_dtype = np.dtype(dtype)
+        if not np.issubdtype(arr.dtype, target_dtype):
             # Try to convert if numeric
             try:
-                arr = arr.astype(dtype)
+                arr = arr.astype(target_dtype)
             except (ValueError, TypeError):
                 raise DataValidationError(
                     f"{name} dtype mismatch: expected {dtype}, got {arr.dtype}",
