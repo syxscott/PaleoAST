@@ -11,9 +11,10 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
+import contextlib
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -26,7 +27,6 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -67,12 +67,14 @@ class ExtinctionIntervalDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QListWidget {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QListWidget {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -94,10 +96,12 @@ class ExtinctionIntervalDialog(QDialog):
         method_layout.addWidget(QLabel(_("Select confidence interval method:")))
 
         self._method_combo = QComboBox()
-        self._method_combo.addItems([
-            _("Marshall (1990) - Poisson model"),
-            _("Strauss-Sadler (1989) - Order statistics"),
-        ])
+        self._method_combo.addItems(
+            [
+                _("Marshall (1990) - Poisson model"),
+                _("Strauss-Sadler (1989) - Order statistics"),
+            ]
+        )
         method_layout.addWidget(self._method_combo)
 
         layout.addWidget(method_group)
@@ -131,8 +135,10 @@ class ExtinctionIntervalDialog(QDialog):
 
         # Info
         info_label = QLabel(
-            _("Enter LAD positions in the list below (one per line).\n"
-              "LAD positions are layer/horizon numbers from top (higher = older).")
+            _(
+                "Enter LAD positions in the list below (one per line).\n"
+                "LAD positions are layer/horizon numbers from top (higher = older)."
+            )
         )
         info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         layout.addWidget(info_label)
@@ -167,19 +173,18 @@ class ExtinctionIntervalDialog(QDialog):
                 return
 
             lad_positions = []
-            for line in lad_text.split('\n'):
+            for line in lad_text.split("\n"):
                 line = line.strip()
                 if line:
-                    try:
+                    with contextlib.suppress(ValueError):
                         lad_positions.append(float(line))
-                    except ValueError:
-                        pass
 
             if len(lad_positions) < 2:
                 QMessageBox.warning(self, _("Input Error"), _("Need at least 2 LAD positions."))
                 return
 
             import numpy as np
+
             from stratigraphy.extinction import ExtinctionIntervalAnalyzer
 
             analyzer = ExtinctionIntervalAnalyzer()
@@ -202,4 +207,5 @@ class ExtinctionIntervalDialog(QDialog):
         except Exception as e:
             self._logger.error(f"Extinction analysis failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "灭绝置信区间"))

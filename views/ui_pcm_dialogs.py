@@ -16,19 +16,15 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
-    QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -37,7 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import Typography, BorderRadius, get_palette
+from config.design_system import Typography, get_palette
 from config.i18n import _
 
 logger = logging.getLogger(__name__)
@@ -76,13 +72,15 @@ class PCMBaseDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; "
-                           f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; "
+            f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup common UI structure."""
@@ -117,11 +115,13 @@ class PCMBaseDialog(QDialog):
         trait_layout = QVBoxLayout(trait_group)
 
         trait_info = QLabel(
-            _("Enter one trait value per line: TaxonName=TraitValue\n"
-              "Example:\n"
-              "Homo_sapiens=2.45\n"
-              "Pan_troglodytes=3.12\n"
-              "Gorilla_gorilla=4.05")
+            _(
+                "Enter one trait value per line: TaxonName=TraitValue\n"
+                "Example:\n"
+                "Homo_sapiens=2.45\n"
+                "Pan_troglodytes=3.12\n"
+                "Gorilla_gorilla=4.05"
+            )
         )
         trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         trait_layout.addWidget(trait_info)
@@ -135,7 +135,7 @@ class PCMBaseDialog(QDialog):
 
         # Method-specific content (subclasses override)
         self._method_widget = QWidget()
-        method_layout = QVBoxLayout(self._method_widget)
+        QVBoxLayout(self._method_widget)
         layout.addWidget(self._method_widget, 1)
 
         # Results
@@ -166,13 +166,13 @@ class PCMBaseDialog(QDialog):
     def _load_tree_file(self) -> None:
         """Load Newick tree from file."""
         from PyQt6.QtWidgets import QFileDialog
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, _("Open Newick Tree"),
-            "", _("Newick Files (*.tre *.tree *.nwck *.newick);;All Files (*)")
+
+        filepath, _filter = QFileDialog.getOpenFileName(
+            self, _("Open Newick Tree"), "", _("Newick Files (*.tre *.tree *.nwck *.newick);;All Files (*)")
         )
         if filepath:
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     content = f.read().strip()
                 self._tree_input.setText(content)
                 self._logger.info(f"Loaded tree from {filepath}")
@@ -251,6 +251,7 @@ class PICDialog(PCMBaseDialog):
 
         try:
             from controllers.statistics_controller import StatisticsController
+
             ctrl = StatisticsController()
             result = ctrl.analyze_pic(tree_text, trait_values)
             self._results_text.setPlainText(result.summary())
@@ -258,6 +259,7 @@ class PICDialog(PCMBaseDialog):
         except Exception as e:
             self._logger.error(f"PIC failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "PIC"))
 
 
@@ -300,6 +302,7 @@ class AncestralStateDialog(PCMBaseDialog):
 
         try:
             from controllers.statistics_controller import StatisticsController
+
             ctrl = StatisticsController()
             result = ctrl.analyze_ancestral_states(tree_text, trait_values, model=model)
 
@@ -312,6 +315,7 @@ class AncestralStateDialog(PCMBaseDialog):
         except Exception as e:
             self._logger.error(f"ASR failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "祖先状态重建"))
 
 
@@ -358,16 +362,17 @@ class PhyloSignalDialog(PCMBaseDialog):
 
         try:
             from controllers.statistics_controller import StatisticsController
+
             ctrl = StatisticsController()
             result = ctrl.analyze_phylogenetic_signal(
-                tree_text, trait_values,
-                n_randomizations=self._n_perm_spin.value()
+                tree_text, trait_values, n_randomizations=self._n_perm_spin.value()
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Blomberg's K = {result.k:.4f}")
         except Exception as e:
             self._logger.error(f"Phylogenetic signal failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育信号"))
 
 
@@ -389,11 +394,13 @@ class PhyloANOVADialog(PCMBaseDialog):
         group_layout = QVBoxLayout(group_group)
 
         group_info = QLabel(
-            _("Enter group assignments (one per line): TaxonName=GroupName\n"
-              "Example:\n"
-              "Homo_sapiens=Human\n"
-              "Pan_troglodytes=GreatApes\n"
-              "Gorilla_gorilla=GreatApes")
+            _(
+                "Enter group assignments (one per line): TaxonName=GroupName\n"
+                "Example:\n"
+                "Homo_sapiens=Human\n"
+                "Pan_troglodytes=GreatApes\n"
+                "Gorilla_gorilla=GreatApes"
+            )
         )
         group_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         group_layout.addWidget(group_info)
@@ -451,21 +458,23 @@ class PhyloANOVADialog(PCMBaseDialog):
         missing_groups = set(trait_values.keys()) - set(group_labels.keys())
         if missing_groups:
             QMessageBox.warning(
-                self, _("Input Error"),
-                _("Missing group assignments for: {0}").format(", ".join(sorted(missing_groups)))
+                self,
+                _("Input Error"),
+                _("Missing group assignments for: {0}").format(", ".join(sorted(missing_groups))),
             )
             return
 
         try:
             from controllers.statistics_controller import StatisticsController
+
             ctrl = StatisticsController()
             result = ctrl.analyze_phylo_anova(
-                tree_text, trait_values, group_labels,
-                n_permutations=self._n_perm_spin.value()
+                tree_text, trait_values, group_labels, n_permutations=self._n_perm_spin.value()
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Phylo-ANOVA: F={result.f_statistic:.4f}")
         except Exception as e:
             self._logger.error(f"Phylo-ANOVA failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育方差分析"))

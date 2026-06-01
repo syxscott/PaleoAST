@@ -91,7 +91,7 @@ class CONISSAnalyzer:
         Returns:
             CONISSResult
         """
-        n_levels, n_vars = data.shape
+        n_levels, _n_vars = data.shape
 
         if n_levels < 2:
             raise ComputationError("CONISS requires at least 2 stratigraphic levels")
@@ -101,6 +101,7 @@ class CONISSAnalyzer:
 
         # Extract zones by cutting the dendrogram
         from scipy.cluster.hierarchy import fcluster
+
         labels = fcluster(linkage_matrix, n_zones, criterion="maxclust")
 
         # Compute ISS per zone
@@ -178,7 +179,7 @@ class CONISSAnalyzer:
             linkage[step] = [c1_id, c2_id, best_increase, n1 + n2]
 
             # Update cluster order
-            cluster_order = cluster_order[:k] + [new_id] + cluster_order[k + 2:]
+            cluster_order = [*cluster_order[:k], new_id, *cluster_order[k + 2 :]]
 
             current_iss += best_increase
 

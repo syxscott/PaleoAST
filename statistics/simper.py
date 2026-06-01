@@ -35,7 +35,7 @@ version: 1.0.1
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
@@ -139,9 +139,7 @@ class SimperAnalyzer:
             n_samples, n_vars = data.shape
 
             if len(groups) != n_samples:
-                raise ComputationError(
-                    f"Group length ({len(groups)}) must match number of samples ({n_samples})"
-                )
+                raise ComputationError(f"Group length ({len(groups)}) must match number of samples ({n_samples})")
 
             if variable_names is None:
                 variable_names = [f"Var_{i + 1}" for i in range(n_vars)]
@@ -152,9 +150,7 @@ class SimperAnalyzer:
             if n_groups < 2:
                 raise ComputationError("SIMPER requires at least 2 groups")
 
-            self._logger.info(
-                f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups"
-            )
+            self._logger.info(f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups")
 
             # Build group pair list
             group_pairs = []
@@ -185,14 +181,16 @@ class SimperAnalyzer:
                 avg_k = np.mean(pair_vals)
                 std_k = np.std(pair_vals, ddof=1) if len(pair_vals) > 1 else 0.0
 
-                contrib_list.append({
-                    "index": k,
-                    "average": avg_k,
-                    "std": std_k,
-                    "ratio": avg_k / std_k if std_k > 0 else float("inf"),
-                    "mean_a": np.mean(means_a),
-                    "mean_b": np.mean(means_b),
-                })
+                contrib_list.append(
+                    {
+                        "index": k,
+                        "average": avg_k,
+                        "std": std_k,
+                        "ratio": avg_k / std_k if std_k > 0 else float("inf"),
+                        "mean_a": np.mean(means_a),
+                        "mean_b": np.mean(means_b),
+                    }
+                )
 
             # Sort by average contribution descending
             contrib_list.sort(key=lambda x: x["average"], reverse=True)
@@ -245,12 +243,10 @@ class SimperAnalyzer:
                 if total > 0:
                     contributions += num / total
 
-        contributions /= (n_a * n_b)
+        contributions /= n_a * n_b
         return contributions
 
-    def _single_variable_contribution(
-        self, data_a: npt.NDArray, data_b: npt.NDArray, var_idx: int
-    ) -> float:
+    def _single_variable_contribution(self, data_a: npt.NDArray, data_b: npt.NDArray, var_idx: int) -> float:
         """Compute average contribution of a single variable for one group pair."""
         n_a = data_a.shape[0]
         n_b = data_b.shape[0]

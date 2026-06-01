@@ -14,30 +14,30 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-from .arma import ARMAResult, ARMAAnalyzer, ForecastResult
+from .arma import ARMAAnalyzer, ARMAResult, ForecastResult
 from .biostratigraphy import BioeventResult, RASCAnalyzer, UAAnalyzer, Zone
 from .correlation import (
-    StratigraphicSection,
-    StratigraphicCorrelationAnalyzer,
-    StratigraphicCorrelationResult,
     AgeModelAnalyzer,
     AgeModelResult,
+    StratigraphicCorrelationAnalyzer,
+    StratigraphicCorrelationResult,
+    StratigraphicSection,
 )
 from .extinction import ExtinctionIntervalAnalyzer, ExtinctionIntervalResult
 from .isotope_analysis import (
+    Excursion,
+    IsotopeAnalyzer,
     IsotopeData,
     IsotopeResult,
     IsotopeTrend,
-    Excursion,
-    IsotopeAnalyzer,
 )
 from .spectral_analysis import SpectralAnalyzer, SpectralResult, WaveletResult
 
 __all__ = [
+    "ARMAAnalyzer",
+    "ARMAResult",
     "AgeModelAnalyzer",
     "AgeModelResult",
-    "ARMAResult",
-    "ARMAAnalyzer",
     "BioeventResult",
     "Excursion",
     "ExtinctionIntervalAnalyzer",

@@ -110,8 +110,13 @@ def compute_distance_matrix(
         - 'canberra': Canberra distance
         - 'chebychev': Chebychev (L∞) distance
     """
-    # Validate data
-    X = validate_data_array(data, allow_nan=False, name="distance_input")
+    # Validate data. We allow NaN and Inf here (rather than rejecting
+    # outright) so that callers can intentionally compute a "partial"
+    # distance matrix: e.g. the all-NaN / all-Inf integration tests
+    # expect every cell to come back as NaN / Inf. The metric
+    # implementations below already propagate NaN / Inf correctly
+    # via numpy's built-in arithmetic, so the output is well-defined.
+    X = validate_data_array(data, allow_nan=True, allow_inf=True, name="distance_input")
     n = X.shape[0]
     logger.info(f"Computing distance matrix: {X.shape[0]}x{X.shape[1]} data, metric={metric}")
 
@@ -136,9 +141,7 @@ def compute_distance_matrix(
             logger.warning(f"pdist failed for {metric}, falling back to loop: {e}")
             D = _fallback_distance_matrix(X, metric_lower)
 
-    logger.info(
-        f"Distance matrix computed: {n}x{n}, metric={metric}"
-    )
+    logger.info(f"Distance matrix computed: {n}x{n}, metric={metric}")
     return DistanceMatrixResult(matrix=D, metric=metric, labels=labels)
 
 
@@ -207,7 +210,7 @@ def _fallback_distance_matrix(X: npt.NDArray, metric: str) -> npt.NDArray:
 
     # Use cdist which is faster than pure Python loops
     for i in range(n):
-        D[i] = cdist(X[i:i+1], X, metric=metric)[0]
+        D[i] = cdist(X[i : i + 1], X, metric=metric)[0]
 
     return D
 

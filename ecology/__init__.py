@@ -14,7 +14,12 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-from .beta_diversity import BetaDiversityAnalyzer, CoverageRarefactionAnalyzer, BetaDiversityResult, CoverageRarefactionResult
+from .beta_diversity import (
+    BetaDiversityAnalyzer,
+    BetaDiversityResult,
+    CoverageRarefactionAnalyzer,
+    CoverageRarefactionResult,
+)
 from .diversity import DiversityAnalyzer, compute_diversity_indices
 from .dtw import DTWAnalyzer, DTWResult
 from .null_models import NullModelAnalyzer, NullModelResult
@@ -25,9 +30,9 @@ __all__ = [
     "BetaDiversityResult",
     "CoverageRarefactionAnalyzer",
     "CoverageRarefactionResult",
-    "DiversityAnalyzer",
     "DTWAnalyzer",
     "DTWResult",
+    "DiversityAnalyzer",
     "NullModelAnalyzer",
     "NullModelResult",
     "RarefactionAnalyzer",

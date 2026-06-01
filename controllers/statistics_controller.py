@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from ecology.advanced import AbundanceModelFitter, AbundanceModelFit, SHEAnalyzer, SHEResult
+from ecology.advanced import AbundanceModelFit, AbundanceModelFitter, SHEAnalyzer, SHEResult
 from ecology.diversity import DiversityAnalyzer, compute_diversity_indices
 from ecology.rarefaction import RarefactionAnalyzer
 from models.diversity_result import DiversityResult, RarefactionResult
@@ -39,23 +39,30 @@ from statistics.pcm import (
     PhyloANOVAResult,
     PhylogeneticSignalResult,
 )
-from statistics.spatial import RipleyKAnalyzer, SpatialResult
 from statistics.pcoa import PCoAAnalyzer, PCoAResult
 from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
 from statistics.simper import SimperAnalyzer, SimperResult
-from statistics.univariate import UnivariateAnalyzer, SummaryResult, ANOVAResult, KruskalResult, TTestResult, NormalityResult
+from statistics.spatial import RipleyKAnalyzer, SpatialResult
+from statistics.univariate import (
+    ANOVAResult,
+    KruskalResult,
+    NormalityResult,
+    SummaryResult,
+    TTestResult,
+    UnivariateAnalyzer,
+)
 from stratigraphy.coniss import CONISSAnalyzer, CONISSResult
 from stratigraphy.directional import DirectionalAnalyzer, DirectionalResult
 from stratigraphy.markov import MarkovAnalyzer, MarkovResult
 from stratigraphy.spectral_analysis import SpectralAnalyzer, SpectralResult
 from utils.exceptions import ValidationError
 from utils.transformations import (
+    boxcox_transform,
     hellinger_transform,
+    impute_knn,
     log_transform,
     sqrt_transform,
     zscore_standardize,
-    boxcox_transform,
-    impute_knn,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +153,9 @@ class StatisticsController:
         """
         with self._lock:
             data = self._ensure_data(data)
-            self._logger.info(f"run_pca called with data shape={data.shape}, n_components={n_components}, method='{method}'")
+            self._logger.info(
+                f"run_pca called with data shape={data.shape}, n_components={n_components}, method='{method}'"
+            )
             result = self._pca_analyzer.analyze(data, n_components, method)
             self._state.cache_result("pca_result", result)
             self._logger.info(f"PCA completed: variance explained={result.explained_variance}")
@@ -171,7 +180,9 @@ class StatisticsController:
             PCoAResult: PCoA analysis results
         """
         with self._lock:
-            self._logger.info(f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}'")
+            self._logger.info(
+                f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}'"
+            )
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
             result = self._pcoa_analyzer.analyze(distance_matrix, n_components)
             self._state.cache_result("pcoa_result", result)
@@ -207,7 +218,9 @@ class StatisticsController:
             NMDSResult: NMDS analysis results
         """
         with self._lock:
-            self._logger.info(f"run_nmds called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, n_dimensions={n_dimensions}, n_restarts={n_restarts}")
+            self._logger.info(
+                f"run_nmds called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, n_dimensions={n_dimensions}, n_restarts={n_restarts}"
+            )
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
             result = self._nmds_analyzer.analyze(
                 distance_matrix,
@@ -248,7 +261,9 @@ class StatisticsController:
         """
         with self._lock:
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
-            result = self._anosim_analyzer.analyze(distance_matrix, groups, n_permutations=n_permutations, metric=metric)
+            result = self._anosim_analyzer.analyze(
+                distance_matrix, groups, n_permutations=n_permutations, metric=metric
+            )
             self._state.cache_result("anosim_result", result)
             return result
 
@@ -273,7 +288,9 @@ class StatisticsController:
         """
         with self._lock:
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
-            result = self._permanova_analyzer.analyze(distance_matrix, groups, n_permutations=n_permutations, metric=metric)
+            result = self._permanova_analyzer.analyze(
+                distance_matrix, groups, n_permutations=n_permutations, metric=metric
+            )
             self._state.cache_result("permanova_result", result)
             return result
 
@@ -298,7 +315,9 @@ class StatisticsController:
                     self._logger.error("analyze_diversity called with no data available")
                     raise ValidationError("No data available.")
                 abundances = self._state.data_matrix.data[0]
-            self._logger.info(f"analyze_diversity called for sample '{sample_name}' with {len(abundances)} abundance values")
+            self._logger.info(
+                f"analyze_diversity called for sample '{sample_name}' with {len(abundances)} abundance values"
+            )
             result = compute_diversity_indices(abundances, sample_name)
             self._state.cache_result(f"diversity_{sample_name}", result)
             self._logger.info(f"Diversity analysis completed for sample '{sample_name}'")
@@ -380,7 +399,9 @@ class StatisticsController:
             else:
                 time = np.arange(len(data), dtype=float)
                 values = data
-            result = self._spectral_analyzer.analyze(time, values, frequency_range=frequency_range, n_frequencies=n_frequencies)
+            result = self._spectral_analyzer.analyze(
+                time, values, frequency_range=frequency_range, n_frequencies=n_frequencies
+            )
             self._state.cache_result("spectral_result", result)
             self._logger.info(f"Spectral analysis completed: peak frequency={result.peak_frequency}")
             return result
@@ -413,7 +434,9 @@ class StatisticsController:
             if groups is None:
                 groups = [0] * data.shape[0]
             distance_matrix = self._ensure_distance_matrix(None, data, metric)
-            return self.run_anosim(groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations)
+            return self.run_anosim(
+                groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations
+            )
 
     def analyze_permanova(
         self,
@@ -439,7 +462,9 @@ class StatisticsController:
             if groups is None:
                 groups = [0] * data.shape[0]
             distance_matrix = self._ensure_distance_matrix(None, data, metric)
-            return self.run_permanova(groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations)
+            return self.run_permanova(
+                groups=groups, distance_matrix=distance_matrix, metric=metric, n_permutations=n_permutations
+            )
 
     # =========================================================================
     # SIMPER Analysis
@@ -498,13 +523,13 @@ class StatisticsController:
             if groups is None:
                 groups = [0] * data.shape[0]
             n_vars = data.shape[1] if data.ndim == 2 else 1
-            results = [self._univariate_analyzer.t_test(data, column=i, groups=groups, paired=paired) for i in range(n_vars)]
+            results = [
+                self._univariate_analyzer.t_test(data, column=i, groups=groups, paired=paired) for i in range(n_vars)
+            ]
             self._state.cache_result("t_test_results", results)
             return results
 
-    def analyze_anova(
-        self, data: npt.NDArray | None = None, groups: list[int] | None = None
-    ) -> list[ANOVAResult]:
+    def analyze_anova(self, data: npt.NDArray | None = None, groups: list[int] | None = None) -> list[ANOVAResult]:
         """Run one-way ANOVA for each variable."""
         with self._lock:
             data = self._ensure_data(data)
@@ -584,18 +609,15 @@ class StatisticsController:
                 # Default: first half as species, second half as env
                 mid = max(1, data.shape[1] // 2)
                 Y = data[:, :mid]
-                X = data[:, mid:mid + min(mid, data.shape[1] - mid)]
+                X = data[:, mid : mid + min(mid, data.shape[1] - mid)]
 
             if X is None:
                 raise ValidationError("Environmental variables required for CCA/RDA")
 
-            self._logger.info(
-                f"run_cca called with Y.shape={Y.shape}, X.shape={X.shape}, method={method}"
-            )
+            self._logger.info(f"run_cca called with Y.shape={Y.shape}, X.shape={X.shape}, method={method}")
 
             result = self._cca_analyzer.analyze(
-                Y, X, n_components=n_components, method=method,
-                species_names=species_names, env_names=env_names
+                Y, X, n_components=n_components, method=method, species_names=species_names, env_names=env_names
             )
 
             self._state.cache_result("cca_result", result)
@@ -624,12 +646,9 @@ class StatisticsController:
                 data = self._state.data_matrix.data
                 mid = max(1, data.shape[1] // 2)
                 species_data = data[:, :mid]
-                env_data = data[:, mid:mid + min(mid, data.shape[1] - mid)]
+                env_data = data[:, mid : mid + min(mid, data.shape[1] - mid)]
 
-            return self.run_cca(
-                Y=species_data, X=env_data,
-                n_components=n_components, method=method
-            )
+            return self.run_cca(Y=species_data, X=env_data, n_components=n_components, method=method)
 
     # =========================================================================
     # Spatial Point Pattern Analysis (Ripley's K)
@@ -663,9 +682,7 @@ class StatisticsController:
                 data = self._state.data_matrix.data
                 coords = data[:, :2]  # Use first 2 columns as x, y
 
-            self._logger.info(
-                f"analyze_spatial_ripley_k called: n_points={coords.shape[0]}, r_max={r_max}"
-            )
+            self._logger.info(f"analyze_spatial_ripley_k called: n_points={coords.shape[0]}, r_max={r_max}")
 
             result = self._spatial_analyzer.analyze(
                 coords,
@@ -700,7 +717,11 @@ class StatisticsController:
                 "sqrt": sqrt_transform,
                 "zscore": zscore_standardize,
                 "hellinger": hellinger_transform,
-                "boxcox": lambda d: np.column_stack([boxcox_transform(d[:, c])[0] for c in range(d.shape[1])]) if d.ndim == 2 else boxcox_transform(d)[0],
+                "boxcox": lambda d: (
+                    np.column_stack([boxcox_transform(d[:, c])[0] for c in range(d.shape[1])])
+                    if d.ndim == 2
+                    else boxcox_transform(d)[0]
+                ),
             }
             fn = transforms.get(method)
             if fn is None:
@@ -709,9 +730,7 @@ class StatisticsController:
             self._state.cache_result("transformed_data", result)
             return result
 
-    def impute_missing(
-        self, data: npt.NDArray | None = None, method: str = "knn", **kwargs
-    ) -> npt.NDArray:
+    def impute_missing(self, data: npt.NDArray | None = None, method: str = "knn", **kwargs) -> npt.NDArray:
         """Impute missing values."""
         with self._lock:
             if data is None:
@@ -722,6 +741,7 @@ class StatisticsController:
                 result = impute_knn(data, k=kwargs.get("k", 5))
             else:
                 from utils.transformations import impute_column_mean
+
                 result = impute_column_mean(data)
             self._state.cache_result("imputed_data", result)
             return result
@@ -748,9 +768,7 @@ class StatisticsController:
     # Abundance Distribution Models
     # =========================================================================
 
-    def analyze_abundance_models(
-        self, abundances: npt.NDArray | None = None
-    ) -> dict[str, AbundanceModelFit]:
+    def analyze_abundance_models(self, abundances: npt.NDArray | None = None) -> dict[str, AbundanceModelFit]:
         """Fit species-abundance distribution models."""
         with self._lock:
             if abundances is None:
@@ -934,7 +952,9 @@ class StatisticsController:
                     n_landmarks = n_cols // 2
                     data = data.reshape(n_rows, n_landmarks, 2)
                 else:
-                    raise ValidationError(f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. Expected even number of columns (x, y pairs).")
+                    raise ValidationError(
+                        f"Cannot reshape 2D data with {n_cols} columns into landmark configurations. Expected even number of columns (x, y pairs)."
+                    )
             result = self._gpa_analyzer.analyze(data, n_iterations=n_iterations, tolerance=tolerance)
             self._state.cache_result("gpa_result", result)
             return result
@@ -959,6 +979,7 @@ class StatisticsController:
             ContrastResult with contrasts and standard errors
         """
         from phylogenetics.tree import PhyloTree
+
         with self._lock:
             tree = PhyloTree.from_newick(tree_newick)
             result = self._pcm_analyzer.compute_contrasts(tree, trait_values)
@@ -983,6 +1004,7 @@ class StatisticsController:
             AncestralStateResult with reconstructed states
         """
         from phylogenetics.tree import PhyloTree
+
         with self._lock:
             tree = PhyloTree.from_newick(tree_newick)
             result = self._pcm_analyzer.reconstruct_ancestral_states(tree, trait_values, model=model)
@@ -1007,6 +1029,7 @@ class StatisticsController:
             PhylogeneticSignalResult with K, Z-score, p-value
         """
         from phylogenetics.tree import PhyloTree
+
         with self._lock:
             tree = PhyloTree.from_newick(tree_newick)
             result = self._pcm_analyzer.compute_phylogenetic_signal(
@@ -1035,6 +1058,7 @@ class StatisticsController:
             PhyloANOVAResult with F-statistic and p-value
         """
         from phylogenetics.tree import PhyloTree
+
         with self._lock:
             tree = PhyloTree.from_newick(tree_newick)
             result = self._pcm_analyzer.phylogenetic_anova(
@@ -1067,12 +1091,22 @@ class StatisticsController:
             List of analysis names
         """
         # Built-in analyses (methods on this controller)
-        builtin = [m.replace("run_", "").replace("analyze_", "") for m in dir(self) if m.startswith("run_") or m.startswith("analyze_")]
-        builtin = [m for m in builtin if not m.startswith("_") and callable(getattr(self, f"run_{m}" if f"run_{m}" in dir(self) else f"analyze_{m}", None))]
+        builtin = [
+            m.replace("run_", "").replace("analyze_", "")
+            for m in dir(self)
+            if m.startswith("run_") or m.startswith("analyze_")
+        ]
+        builtin = [
+            m
+            for m in builtin
+            if not m.startswith("_")
+            and callable(getattr(self, f"run_{m}" if f"run_{m}" in dir(self) else f"analyze_{m}", None))
+        ]
 
         # Registered plugins
         try:
             from plugins import get_plugin_registry
+
             plugins = get_plugin_registry().list_plugins()
         except ImportError:
             plugins = []
@@ -1099,9 +1133,10 @@ class StatisticsController:
 
         try:
             from plugins import get_plugin_registry
+
             registry = get_plugin_registry()
         except ImportError:
-            raise ValidationError(f"Plugin system not available")
+            raise ValidationError("Plugin system not available")
 
         plugin = registry.get(plugin_name)
         if plugin is None:
@@ -1111,7 +1146,7 @@ class StatisticsController:
 
         # Cache if plugin provides a cache key
         cache_key = plugin.cache_key
-        if cache_key and hasattr(result, 'data'):
+        if cache_key and hasattr(result, "data"):
             self._state.cache_result(cache_key, result)
 
         return result
@@ -1120,6 +1155,7 @@ class StatisticsController:
         """List all registered plugin names."""
         try:
             from plugins import get_plugin_registry
+
             return get_plugin_registry().list_plugins()
         except ImportError:
             return []
@@ -1128,6 +1164,7 @@ class StatisticsController:
         """List all unique plugin categories."""
         try:
             from plugins import get_plugin_registry
+
             return get_plugin_registry().list_categories()
         except ImportError:
             return []

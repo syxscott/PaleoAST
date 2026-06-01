@@ -49,7 +49,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import Typography, BorderRadius, get_palette
+from config.design_system import BorderRadius, Typography, get_palette
 from config.i18n import _
 
 
@@ -135,22 +135,16 @@ class BaseAnalysisDialog(QDialog):
         button_layout.addWidget(self._run_button)
 
         layout.addLayout(button_layout)
-    
+
     def _on_run_validated(self) -> None:
         """Validate parameters before running."""
         try:
             if not self._validate_parameters():
-                QMessageBox.warning(
-                    self, _("Invalid Parameters"),
-                    _("Please check your parameters and try again.")
-                )
+                QMessageBox.warning(self, _("Invalid Parameters"), _("Please check your parameters and try again."))
                 return
             self._on_run()
         except Exception as e:
-            QMessageBox.critical(
-                self, _("Error"),
-                _("An error occurred: {0}").format(str(e))
-            )
+            QMessageBox.critical(self, _("Error"), _("An error occurred: {0}").format(str(e)))
 
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
@@ -408,7 +402,7 @@ class BaseAnalysisDialog(QDialog):
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        for label, widget in zip(labels, widgets):
+        for label, widget in zip(labels, widgets, strict=False):
             layout.addRow(label, widget)
 
         group.setLayout(layout)
@@ -1140,6 +1134,7 @@ class ImportDialog(QDialog):
         """Set dark/light theme."""
         self._is_dark_theme = is_dark
         from config.design_system import get_palette
+
         c = get_palette(is_dark)
         self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; }}")
 
@@ -1357,7 +1352,9 @@ class SimperDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("SIMPER decomposes Bray-Curtis dissimilarity to identify which variables contribute most to between-group differences.")
+        return _(
+            "SIMPER decomposes Bray-Curtis dissimilarity to identify which variables contribute most to between-group differences."
+        )
 
 
 class UnivariateDialog(BaseAnalysisDialog):
@@ -1429,7 +1426,9 @@ class LDADialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("LDA finds linear combinations that best separate known groups. CVA is equivalent to LDA when applied to MANOVA results.")
+        return _(
+            "LDA finds linear combinations that best separate known groups. CVA is equivalent to LDA when applied to MANOVA results."
+        )
 
 
 class ClusteringDialog(BaseAnalysisDialog):
@@ -1481,7 +1480,9 @@ class ClusteringDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Hierarchical clustering groups similar samples together using agglomerative merging. Ward's method minimizes within-cluster variance.")
+        return _(
+            "Hierarchical clustering groups similar samples together using agglomerative merging. Ward's method minimizes within-cluster variance."
+        )
 
 
 class CONISSDialog(BaseAnalysisDialog):
@@ -1505,7 +1506,9 @@ class CONISSDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("CONISS performs constrained hierarchical clustering for stratigraphic data. Only adjacent levels can be merged, preserving stratigraphic order.")
+        return _(
+            "CONISS performs constrained hierarchical clustering for stratigraphic data. Only adjacent levels can be merged, preserving stratigraphic order."
+        )
 
 
 class MarkovDialog(BaseAnalysisDialog):
@@ -1518,14 +1521,18 @@ class MarkovDialog(BaseAnalysisDialog):
     def _setup_parameters(self) -> None:
         info_group = self.add_parameter_group(_("Input"))
         info_layout = QVBoxLayout(info_group)
-        info_layout.addWidget(QLabel(_("The analysis uses the first column of data as facies codes (integers starting from 0).")))
+        info_layout.addWidget(
+            QLabel(_("The analysis uses the first column of data as facies codes (integers starting from 0)."))
+        )
 
     def get_parameters(self) -> dict[str, Any]:
         self._parameters = {}
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Tests whether vertical facies transitions follow a random sequence or exhibit first-order Markov dependency.")
+        return _(
+            "Tests whether vertical facies transitions follow a random sequence or exhibit first-order Markov dependency."
+        )
 
 
 class DirectionalDialog(BaseAnalysisDialog):
@@ -1549,7 +1556,9 @@ class DirectionalDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Computes circular statistics (mean direction, resultant length, Rayleigh test) and generates rose diagrams for directional data.")
+        return _(
+            "Computes circular statistics (mean direction, resultant length, Rayleigh test) and generates rose diagrams for directional data."
+        )
 
 
 class EFADialog(BaseAnalysisDialog):
@@ -1584,7 +1593,9 @@ class EFADialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("EFA decomposes closed contours into elliptic Fourier functions. Each harmonic adds 4 coefficients (a, b, c, d). Use first 2 columns as (x, y) coordinates.")
+        return _(
+            "EFA decomposes closed contours into elliptic Fourier functions. Each harmonic adds 4 coefficients (a, b, c, d). Use first 2 columns as (x, y) coordinates."
+        )
 
 
 class TPSGridDialog(BaseAnalysisDialog):
@@ -1627,7 +1638,9 @@ class TPSGridDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Visualize Thin-Plate Spline deformation grid. The grid shows how landmark configurations are warped from source to target. Arrows show displacement vectors if enabled.")
+        return _(
+            "Visualize Thin-Plate Spline deformation grid. The grid shows how landmark configurations are warped from source to target. Arrows show displacement vectors if enabled."
+        )
 
 
 class SpatialRipleyKDialog(BaseAnalysisDialog):
@@ -1684,7 +1697,9 @@ class SpatialRipleyKDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Ripley's K function analyzes spatial point patterns. L(r) > 0 indicates clustering, L(r) < 0 indicates regularity/dispersion. The envelope is from 95% Monte Carlo simulations under complete spatial randomness.")
+        return _(
+            "Ripley's K function analyzes spatial point patterns. L(r) > 0 indicates clustering, L(r) < 0 indicates regularity/dispersion. The envelope is from 95% Monte Carlo simulations under complete spatial randomness."
+        )
 
 
 class BiostratigraphyDialog(BaseAnalysisDialog):
@@ -1728,7 +1743,9 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy.")
+        return _(
+            "UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy."
+        )
 
 
 class WaveletDialog(BaseAnalysisDialog):
@@ -1775,7 +1792,9 @@ class WaveletDialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("Wavelet CWT provides time-frequency analysis for non-stationary signals. Morlet wavelet is good for oscillatory signals. Ricker (Mexican Hat) is better for sharp transitions.")
+        return _(
+            "Wavelet CWT provides time-frequency analysis for non-stationary signals. Morlet wavelet is good for oscillatory signals. Ricker (Mexican Hat) is better for sharp transitions."
+        )
 
 
 class CCADialog(BaseAnalysisDialog):
@@ -1832,7 +1851,9 @@ class CCADialog(BaseAnalysisDialog):
         return self._parameters
 
     def _get_help_text(self) -> str:
-        return _("CCA relates species composition to environmental variables using chi-square distance. RDA uses Euclidean distance and is suitable for continuous data. Both are constrained ordination methods.")
+        return _(
+            "CCA relates species composition to environmental variables using chi-square distance. RDA uses Euclidean distance and is suitable for continuous data. Both are constrained ordination methods."
+        )
 
 
 class IsotopeAnalysisDialog(BaseAnalysisDialog):
@@ -1891,8 +1912,10 @@ class IsotopeAnalysisDialog(BaseAnalysisDialog):
         info_group = self.add_parameter_group(_("Data Requirements"))
         info_layout = QVBoxLayout(info_group)
         info_label = QLabel(
-            _("Data should contain depth, age, and isotope columns (δ13C, δ18O, etc.)\n"
-              "First column: depth, Second column: age, Subsequent columns: isotope values")
+            _(
+                "Data should contain depth, age, and isotope columns (δ13C, δ18O, etc.)\n"
+                "First column: depth, Second column: age, Subsequent columns: isotope values"
+            )
         )
         info_label.setStyleSheet("color: #666; font-size: 11px;")
         info_layout.addWidget(info_label)
@@ -1950,14 +1973,12 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
         # Data info
         info_group = self.add_parameter_group(_("Data Requirements"))
         info_layout = QVBoxLayout(info_group)
-        info_label = QLabel(
-            _("Select sections with height/thickness data for correlation analysis.")
-        )
+        info_label = QLabel(_("Select sections with height/thickness data for correlation analysis."))
         info_label.setStyleSheet("color: #666; font-size: 11px;")
         info_layout.addWidget(info_label)
 
     def get_parameters(self) -> dict[str, Any]:
-        method_map = {0: 'dtw', 1: 'euclidean'}
+        method_map = {0: "dtw", 1: "euclidean"}
 
         self._parameters = {
             "correlation_method": method_map[self._method_group.checkedId()],

@@ -12,10 +12,8 @@ version: 1.0.1
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
 
 import numpy as np
-import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +21,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class IsotopeData:
     """同位素时间序列数据"""
-    depth: np.ndarray           # 深度序列
-    age: np.ndarray            # 年龄序列
-    d13C: Optional[np.ndarray] = None   # δ13C 值
-    d18O: Optional[np.ndarray] = None   # δ18O 值
-    sr: Optional[np.ndarray] = None      # 锶同位素 87Sr/86Sr
-    nd: Optional[np.ndarray] = None      # 钕同位素 εNd
-    other: Optional[dict] = None         # 其他同位素数据
+
+    depth: np.ndarray  # 深度序列
+    age: np.ndarray  # 年龄序列
+    d13C: np.ndarray | None = None  # δ13C 值
+    d18O: np.ndarray | None = None  # δ18O 值
+    sr: np.ndarray | None = None  # 锶同位素 87Sr/86Sr
+    nd: np.ndarray | None = None  # 钕同位素 εNd
+    other: dict | None = None  # 其他同位素数据
 
     def __post_init__(self):
         """验证长度一致性"""
@@ -46,30 +45,30 @@ class IsotopeData:
         if len(set(lengths)) > 1:
             raise ValueError("All isotope arrays must have same length as depth/age")
 
-    def get_isotope_names(self) -> List[str]:
+    def get_isotope_names(self) -> list[str]:
         """获取所有可用的同位素名称"""
         names = []
         if self.d13C is not None:
-            names.append('d13C')
+            names.append("d13C")
         if self.d18O is not None:
-            names.append('d18O')
+            names.append("d18O")
         if self.sr is not None:
-            names.append('sr')
+            names.append("sr")
         if self.nd is not None:
-            names.append('nd')
+            names.append("nd")
         if self.other:
             names.extend(self.other.keys())
         return names
 
-    def get_isotope_array(self, name: str) -> Optional[np.ndarray]:
+    def get_isotope_array(self, name: str) -> np.ndarray | None:
         """按名称获取同位素数组"""
-        if name == 'd13C':
+        if name == "d13C":
             return self.d13C
-        elif name == 'd18O':
+        elif name == "d18O":
             return self.d18O
-        elif name == 'sr':
+        elif name == "sr":
             return self.sr
-        elif name == 'nd':
+        elif name == "nd":
             return self.nd
         elif self.other and name in self.other:
             return self.other[name]
@@ -79,6 +78,7 @@ class IsotopeData:
 @dataclass
 class Excursion:
     """Excursion 事件"""
+
     start_idx: int
     end_idx: int
     start_age: float
@@ -86,12 +86,13 @@ class Excursion:
     peak_idx: int
     peak_value: float
     magnitude: float  # 偏离背景的程度
-    isotope: str = ''  # 同位素名称
+    isotope: str = ""  # 同位素名称
 
 
 @dataclass
 class IsotopeTrend:
     """趋势分析结果"""
+
     method: str  # 'moving_average', 'polynomial', 'lowess'
     fitted_values: np.ndarray
     params: dict
@@ -100,11 +101,12 @@ class IsotopeTrend:
 @dataclass
 class IsotopeResult:
     """同位素分析结果"""
+
     data: IsotopeData
-    trends: dict = field(default_factory=dict)           # {isotope_name: IsotopeTrend}
-    excursions: List[Excursion] = field(default_factory=list)  # 检测到的 excursion
-    spectral_peaks: dict = field(default_factory=dict)    # {isotope_name: [(period, power), ...]}
-    correlations: dict = field(default_factory=dict)     # {(name1, name2): (r, p)}
+    trends: dict = field(default_factory=dict)  # {isotope_name: IsotopeTrend}
+    excursions: list[Excursion] = field(default_factory=list)  # 检测到的 excursion
+    spectral_peaks: dict = field(default_factory=dict)  # {isotope_name: [(period, power), ...]}
+    correlations: dict = field(default_factory=dict)  # {(name1, name2): (r, p)}
 
     def summary(self) -> str:
         lines = [
@@ -122,11 +124,7 @@ class IsotopeResult:
         return "\n".join(lines)
 
 
-def compute_moving_average(
-    values: np.ndarray,
-    window: int = 5,
-    mode: str = 'center'
-) -> np.ndarray:
+def compute_moving_average(values: np.ndarray, window: int = 5, mode: str = "center") -> np.ndarray:
     """
     计算移动平均
 
@@ -144,15 +142,15 @@ def compute_moving_average(
     if window % 2 == 0:
         window += 1  # 必须奇数
 
-    if mode == 'center':
+    if mode == "center":
         # 中心移动平均
-        smoothed = np.convolve(values, np.ones(window) / window, mode='same')
+        smoothed = np.convolve(values, np.ones(window) / window, mode="same")
     else:
         # 右对齐
         smoothed = np.zeros_like(values)
         for i in range(len(values)):
             start = max(0, i - window + 1)
-            smoothed[i] = np.mean(values[start:i + 1])
+            smoothed[i] = np.mean(values[start : i + 1])
 
     return smoothed
 
@@ -161,9 +159,9 @@ def detect_excursions_from_values(
     values: np.ndarray,
     threshold: float = 2.0,
     min_duration: int = 2,
-    background: str = 'mean',
-    age: Optional[np.ndarray] = None,
-) -> List[Excursion]:
+    background: str = "mean",
+    age: np.ndarray | None = None,
+) -> list[Excursion]:
     """
     检测 isotope excursion (异常偏移)
 
@@ -183,12 +181,10 @@ def detect_excursions_from_values(
     if age is not None:
         age = np.asarray(age)
         if len(age) != len(values):
-            raise ValueError(
-                f"age length ({len(age)}) must match values length ({len(values)})"
-            )
+            raise ValueError(f"age length ({len(age)}) must match values length ({len(values)})")
 
     # 估计背景和标准差
-    if background == 'mean':
+    if background == "mean":
         bg = np.mean(values)
         std = np.std(values)
     else:
@@ -225,18 +221,20 @@ def detect_excursions_from_values(
             duration = end_idx - start_idx + 1
 
             if duration >= min_duration:
-                peak_idx = start_idx + np.argmax(np.abs(values[start_idx:end_idx + 1] - bg))
+                peak_idx = start_idx + np.argmax(np.abs(values[start_idx : end_idx + 1] - bg))
                 peak_value = values[peak_idx]
 
-                excursions.append(Excursion(
-                    start_idx=start_idx,
-                    end_idx=end_idx,
-                    start_age=_age_at(start_idx),
-                    end_age=_age_at(end_idx),
-                    peak_idx=peak_idx,
-                    peak_value=peak_value,
-                    magnitude=(peak_value - bg) / std
-                ))
+                excursions.append(
+                    Excursion(
+                        start_idx=start_idx,
+                        end_idx=end_idx,
+                        start_age=_age_at(start_idx),
+                        end_age=_age_at(end_idx),
+                        peak_idx=peak_idx,
+                        peak_value=peak_value,
+                        magnitude=(peak_value - bg) / std,
+                    )
+                )
 
     # 处理结尾的 excursion
     if in_excursion:
@@ -244,27 +242,25 @@ def detect_excursions_from_values(
         duration = end_idx - start_idx + 1
 
         if duration >= min_duration:
-            peak_idx = start_idx + np.argmax(np.abs(values[start_idx:end_idx + 1] - bg))
+            peak_idx = start_idx + np.argmax(np.abs(values[start_idx : end_idx + 1] - bg))
             peak_value = values[peak_idx]
 
-            excursions.append(Excursion(
-                start_idx=start_idx,
-                end_idx=end_idx,
-                start_age=_age_at(start_idx),
-                end_age=_age_at(end_idx),
-                peak_idx=peak_idx,
-                peak_value=peak_value,
-                magnitude=(peak_value - bg) / std
-            ))
+            excursions.append(
+                Excursion(
+                    start_idx=start_idx,
+                    end_idx=end_idx,
+                    start_age=_age_at(start_idx),
+                    end_age=_age_at(end_idx),
+                    peak_idx=peak_idx,
+                    peak_value=peak_value,
+                    magnitude=(peak_value - bg) / std,
+                )
+            )
 
     return excursions
 
 
-def compute_correlation(
-    x: np.ndarray,
-    y: np.ndarray,
-    method: str = 'pearson'
-) -> Tuple[float, float]:
+def compute_correlation(x: np.ndarray, y: np.ndarray, method: str = "pearson") -> tuple[float, float]:
     """
     计算两组数据的相关系数
 
@@ -288,7 +284,7 @@ def compute_correlation(
     if len(x) < 3:
         return np.nan, np.nan
 
-    if method == 'pearson':
+    if method == "pearson":
         r, p = stats.pearsonr(x, y)
     else:
         r, p = stats.spearmanr(x, y)
@@ -296,11 +292,7 @@ def compute_correlation(
     return r, p
 
 
-def fit_polynomial_trend(
-    age: np.ndarray,
-    values: np.ndarray,
-    degree: int = 2
-) -> Tuple[np.ndarray, np.ndarray, dict]:
+def fit_polynomial_trend(age: np.ndarray, values: np.ndarray, degree: int = 2) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     多项式趋势拟合
 
@@ -340,21 +332,12 @@ def fit_polynomial_trend(
         f_stat = 0.0
         p_value = 1.0
 
-    stats_dict = {
-        'r2': r2,
-        'f_stat': f_stat,
-        'p_value': p_value,
-        'coefficients': coeffs
-    }
+    stats_dict = {"r2": r2, "f_stat": f_stat, "p_value": p_value, "coefficients": coeffs}
 
     return fitted, coeffs, stats_dict
 
 
-def lowess_smooth(
-    age: np.ndarray,
-    values: np.ndarray,
-    span: float = 0.3
-) -> np.ndarray:
+def lowess_smooth(age: np.ndarray, values: np.ndarray, span: float = 0.3) -> np.ndarray:
     """
     LOWESS (Locally Weighted Scatterplot Smoothing)
 
@@ -385,11 +368,7 @@ def lowess_smooth(
     return smoothed
 
 
-def remove_outliers(
-    values: np.ndarray,
-    method: str = 'iqr',
-    threshold: float = 1.5
-) -> Tuple[np.ndarray, np.ndarray]:
+def remove_outliers(values: np.ndarray, method: str = "iqr", threshold: float = 1.5) -> tuple[np.ndarray, np.ndarray]:
     """
     移除异常值
 
@@ -404,7 +383,7 @@ def remove_outliers(
     values = np.asarray(values)
     mask = np.ones(len(values), dtype=bool)
 
-    if method == 'iqr':
+    if method == "iqr":
         q1 = np.percentile(values, 25)
         q3 = np.percentile(values, 75)
         iqr = q3 - q1
@@ -412,7 +391,7 @@ def remove_outliers(
         upper = q3 + threshold * iqr
         mask = (values >= lower) & (values <= upper)
 
-    elif method == 'zscore':
+    elif method == "zscore":
         z = np.abs((values - np.mean(values)) / np.std(values))
         mask = z < threshold
 
@@ -472,18 +451,14 @@ class IsotopeAnalyzer:
         if compute_correlations:
             isotope_names = data.get_isotope_names()
             for i, name1 in enumerate(isotope_names):
-                for name2 in isotope_names[i + 1:]:
+                for name2 in isotope_names[i + 1 :]:
                     arr1 = data.get_isotope_array(name1)
                     arr2 = data.get_isotope_array(name2)
                     if arr1 is not None and arr2 is not None:
                         r, p = compute_correlation(arr1, arr2)
                         correlations[(name1, name2)] = (r, p)
 
-        result = IsotopeResult(
-            data=data,
-            excursions=excursions,
-            correlations=correlations
-        )
+        result = IsotopeResult(data=data, excursions=excursions, correlations=correlations)
 
         self._last_result = result
         self._logger.info(f"Isotope analysis complete: {len(excursions)} excursions, {len(correlations)} correlations")

@@ -85,7 +85,7 @@ class LDAResult:
             "-" * 50,
         ]
         cum = 0.0
-        for i, (ev, vr) in enumerate(zip(self.eigenvalues, self.explained_variance_ratio)):
+        for i, (ev, vr) in enumerate(zip(self.eigenvalues, self.explained_variance_ratio, strict=False)):
             cum += vr
             lines.append(f"LD{i + 1:<4} {ev:>12.4f} {vr:>14.2%} {cum:>11.2%}")
 
@@ -132,11 +132,9 @@ class LDAAnalyzer:
         with self._lock:
             try:
                 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-                from sklearn.model_selection import cross_val_score, cross_val_predict
+                from sklearn.model_selection import cross_val_predict, cross_val_score
             except ImportError:
-                raise ComputationError(
-                    "scikit-learn is required for LDA. Install with: pip install scikit-learn"
-                )
+                raise ComputationError("scikit-learn is required for LDA. Install with: pip install scikit-learn")
 
             data = validate_data_array(data, name="data")
             if data.ndim == 1:
@@ -146,15 +144,13 @@ class LDAAnalyzer:
             groups = np.array(groups)
 
             if len(groups) != n_samples:
-                raise ComputationError(
-                    f"Group length ({len(groups)}) must match n_samples ({n_samples})"
-                )
+                raise ComputationError(f"Group length ({len(groups)}) must match n_samples ({n_samples})")
 
             # Filter out samples with NaN
             valid_mask = ~np.isnan(data).any(axis=1)
             data_clean = data[valid_mask]
             groups_clean = groups[valid_mask]
-            n_samples_clean = data_clean.shape[0]
+            data_clean.shape[0]
 
             # Filter out ungrouped samples (if any sentinel value like -1)
             grouped_mask = groups_clean >= 0
@@ -173,8 +169,7 @@ class LDAAnalyzer:
             n_components = min(n_components, n_classes - 1, n_vars)
 
             self._logger.info(
-                f"LDA: {data_grouped.shape[0]} samples, {n_vars} vars, "
-                f"{n_classes} classes, {n_components} components"
+                f"LDA: {data_grouped.shape[0]} samples, {n_vars} vars, {n_classes} classes, {n_components} components"
             )
 
             # Fit LDA
@@ -226,7 +221,7 @@ class LDAAnalyzer:
                 predictions = lda_full.predict(data_grouped)
             cm = np.zeros((n_classes, n_classes), dtype=int)
             class_to_idx = {c: i for i, c in enumerate(unique_classes)}
-            for true, pred in zip(groups_grouped, predictions):
+            for true, pred in zip(groups_grouped, predictions, strict=False):
                 cm[class_to_idx[true], class_to_idx[pred]] += 1
 
             result = LDAResult(

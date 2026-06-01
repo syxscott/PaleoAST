@@ -44,7 +44,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -163,18 +162,14 @@ class GeometryAnalyzer:
             pts = validate_data_array(points, allow_nan=False, name="points")
 
             if pts.ndim != 2:
-                raise ComputationError(
-                    "Points must be 2D array (n_points, n_dims)"
-                )
+                raise ComputationError("Points must be 2D array (n_points, n_dims)")
 
             n = pts.shape[0]
 
             if labels is None:
                 labels = [f"P{i}" for i in range(n)]
             elif len(labels) != n:
-                raise ComputationError(
-                    f"Labels length ({len(labels)}) must match n_points ({n})"
-                )
+                raise ComputationError(f"Labels length ({len(labels)}) must match n_points ({n})")
 
             self._logger.info(f"Computing MST for {n} points in {pts.shape[1]}D")
 
@@ -240,16 +235,13 @@ class GeometryAnalyzer:
         pts = validate_data_array(points, allow_nan=False, name="points")
 
         if pts.ndim != 2:
-            raise ComputationError(
-                "Points must be 2D array (n_points, n_dims)"
-            )
+            raise ComputationError("Points must be 2D array (n_points, n_dims)")
 
         n, dim = pts.shape
 
         if n <= dim:
             self._logger.warning(
-                f"Cannot compute convex hull: {n} points in {dim}D "
-                f"(need n > dims for non-degenerate hull)"
+                f"Cannot compute convex hull: {n} points in {dim}D (need n > dims for non-degenerate hull)"
             )
             return np.inf
 
@@ -294,9 +286,7 @@ class GeometryAnalyzer:
             Science, 260, 971-974.
         """
         with self._lock:
-            coords = validate_data_array(
-                procrustes_coords, allow_nan=False, name="procrustes_coords"
-            )
+            coords = validate_data_array(procrustes_coords, allow_nan=False, name="procrustes_coords")
 
             # Handle flattened input
             if coords.ndim == 1:
@@ -309,13 +299,9 @@ class GeometryAnalyzer:
             dim = coords.shape[1]
 
             if n < 2:
-                raise ComputationError(
-                    f"Need at least 2 specimens for disparity, got {n}"
-                )
+                raise ComputationError(f"Need at least 2 specimens for disparity, got {n}")
 
-            self._logger.info(
-                f"Computing morphospace disparity for {n} specimens in {dim}D"
-            )
+            self._logger.info(f"Computing morphospace disparity for {n} specimens in {dim}D")
 
             # Compute pairwise distance matrix
             dist_mat = distance_matrix(coords, coords)
@@ -340,9 +326,7 @@ class GeometryAnalyzer:
             )
 
             self._last_disparity_result = result
-            self._logger.info(
-                f"Disparity computed: dispersion={dispersion:.4f}, range={range_val:.4f}"
-            )
+            self._logger.info(f"Disparity computed: dispersion={dispersion:.4f}, range={range_val:.4f}")
             return result
 
     def pairwise_distances(
@@ -363,13 +347,9 @@ class GeometryAnalyzer:
         pts = validate_data_array(points, allow_nan=False, name="points")
 
         if pts.ndim != 2:
-            raise ComputationError(
-                "Points must be 2D array (n_points, n_dims)"
-            )
+            raise ComputationError("Points must be 2D array (n_points, n_dims)")
 
-        self._logger.info(
-            f"Computing {metric} pairwise distances for {pts.shape[0]} points"
-        )
+        self._logger.info(f"Computing {metric} pairwise distances for {pts.shape[0]} points")
 
         from scipy.spatial.distance import cdist
 

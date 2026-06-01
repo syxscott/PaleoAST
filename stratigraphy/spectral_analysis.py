@@ -35,7 +35,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -63,8 +62,8 @@ def _morlet_wavelet(n: int, w0: float = 5.0) -> np.ndarray:
     half_n = n // 2
     t = np.arange(-half_n, half_n + 1)
     # Morlet wavelet: pi^{-1/4} * exp(i*w0*t) * exp(-t^2/2)
-    wavelet = np.exp(1j * w0 * t) * np.exp(-t**2 / 2)
-    wavelet *= np.pi**(-0.25)  # Normalization
+    wavelet = np.exp(1j * w0 * t) * np.exp(-(t**2) / 2)
+    wavelet *= np.pi ** (-0.25)  # Normalization
     return wavelet
 
 
@@ -84,8 +83,8 @@ def _mexican_hat_wavelet(n: int) -> np.ndarray:
     half_n = n // 2
     t = np.arange(-half_n, half_n + 1)
     # Mexican hat: (1 - t^2) * exp(-t^2/2)
-    wavelet = (1 - t**2) * np.exp(-t**2 / 2)
-    wavelet *= np.pi**(-0.25)  # Normalization
+    wavelet = (1 - t**2) * np.exp(-(t**2) / 2)
+    wavelet *= np.pi ** (-0.25)  # Normalization
     return wavelet
 
 
@@ -114,7 +113,7 @@ def _cwt_simple(signal: np.ndarray, wavelet_func, scales: np.ndarray) -> np.ndar
         # Normalize wavelet by scale
         wavelet = wavelet / np.sqrt(scale)
         # Convolve
-        cwt_matrix[i] = fftconvolve(signal, wavelet, mode='same')
+        cwt_matrix[i] = fftconvolve(signal, wavelet, mode="same")
 
     return cwt_matrix
 
@@ -303,7 +302,7 @@ class SpectralAnalyzer:
         Returns:
             npt.NDArray: Power at each frequency
         """
-        n = len(time)
+        len(time)
         power = np.zeros(len(frequencies))
 
         # Precompute mean and variance
@@ -505,10 +504,7 @@ class SpectralAnalyzer:
         )
 
         self._last_result = result
-        logger.info(
-            f"Wavelet CWT complete: peak_frequency={peak_frequency:.4f}, "
-            f"peak_scale={peak_scale:.2f}"
-        )
+        logger.info(f"Wavelet CWT complete: peak_frequency={peak_frequency:.4f}, peak_scale={peak_scale:.2f}")
         return result
 
     @property

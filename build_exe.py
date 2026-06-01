@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 PaleoAST Build Script
 
@@ -13,9 +12,9 @@ PaleoAST Build Script
 """
 
 import os
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -32,11 +31,7 @@ def get_conda_python():
 def check_pyinstaller():
     """检查 pyinstaller 是否安装"""
     python = get_conda_python()
-    result = subprocess.run(
-        [str(python), "-m", "pip", "show", "pyinstaller"],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run([str(python), "-m", "pip", "show", "pyinstaller"], capture_output=True, text=True)
     if result.returncode != 0:
         print("正在安装 PyInstaller...")
         subprocess.run([str(python), "-m", "pip", "install", "pyinstaller"], check=True)
@@ -73,10 +68,11 @@ def run_pyinstaller():
     # 构建命令
     cmd = [
         str(python),
-        "-m", "PyInstaller",
-        "--onedir",           # 文件夹模式
-        "--clean",            # 清理缓存
-        "--noconfirm",        # 不询问确认
+        "-m",
+        "PyInstaller",
+        "--onedir",  # 文件夹模式
+        "--clean",  # 清理缓存
+        "--noconfirm",  # 不询问确认
         f"--distpath={project_root / 'dist'}",
         f"--workpath={project_root / 'build'}",
         str(project_root / "PaleoAST.spec"),
@@ -113,8 +109,8 @@ PaleoAST.exe
     # 创建桌面快捷方式 (Windows)
     if sys.platform == "win32":
         try:
-            import win32com.client
             import pythoncom
+            import win32com.client
 
             pythoncom.CoInitialize()
 
@@ -149,7 +145,7 @@ def print_summary():
 
     print("\n使用方法:")
     print(f"  1. 进入目录: cd {dist_dir}")
-    print(f"  2. 运行程序: PaleoAST.exe")
+    print("  2. 运行程序: PaleoAST.exe")
     print("\n或者双击运行:")
     print(f"  {project_root / 'dist' / 'PaleoAST.bat'}")
     print("=" * 60)

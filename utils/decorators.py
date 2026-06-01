@@ -287,11 +287,8 @@ def validate_inputs(**validators: dict) -> Callable[[Callable[P, T]], Callable[P
                         raise TypeError(f"Parameter '{param_name}' must be {expected_type}, got {type(value)}")
 
                 # Array dimension validation
-                if "ndim" in rules and isinstance(value, (np.ndarray,)):
-                    if value.ndim != rules["ndim"]:
-                        raise ValueError(
-                            f"Parameter '{param_name}' must have {rules['ndim']} dimensions, got {value.ndim}"
-                        )
+                if "ndim" in rules and isinstance(value, (np.ndarray,)) and value.ndim != rules["ndim"]:
+                    raise ValueError(f"Parameter '{param_name}' must have {rules['ndim']} dimensions, got {value.ndim}")
 
                 # Array shape validation
                 if "shape" in rules and isinstance(value, np.ndarray):
@@ -301,22 +298,19 @@ def validate_inputs(**validators: dict) -> Callable[[Callable[P, T]], Callable[P
                             f"Parameter '{param_name}' shape mismatch: "
                             f"expected {len(expected_shape)}D, got {value.ndim}D"
                         )
-                    for i, (exp, actual) in enumerate(zip(expected_shape, value.shape)):
+                    for i, (exp, actual) in enumerate(zip(expected_shape, value.shape, strict=False)):
                         if exp is not None and exp != actual:
                             raise ValueError(f"Parameter '{param_name}' dimension {i}: expected {exp}, got {actual}")
 
                 # Numeric range validation
-                if "min" in rules:
-                    if value < rules["min"]:
-                        raise ValueError(f"Parameter '{param_name}' must be >= {rules['min']}, got {value}")
-                if "max" in rules:
-                    if value > rules["max"]:
-                        raise ValueError(f"Parameter '{param_name}' must be <= {rules['max']}, got {value}")
+                if "min" in rules and value < rules["min"]:
+                    raise ValueError(f"Parameter '{param_name}' must be >= {rules['min']}, got {value}")
+                if "max" in rules and value > rules["max"]:
+                    raise ValueError(f"Parameter '{param_name}' must be <= {rules['max']}, got {value}")
 
                 # Choice validation
-                if "choices" in rules:
-                    if value not in rules["choices"]:
-                        raise ValueError(f"Parameter '{param_name}' must be one of {rules['choices']}, got {value}")
+                if "choices" in rules and value not in rules["choices"]:
+                    raise ValueError(f"Parameter '{param_name}' must be one of {rules['choices']}, got {value}")
 
                 # Custom validation function
                 if "custom" in rules:

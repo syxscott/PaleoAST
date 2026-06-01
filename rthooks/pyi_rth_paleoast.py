@@ -5,12 +5,12 @@ This hook is executed after PyInstaller creates the executable but before
 the main application runs. It ensures Python can find all bundled packages.
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 # 获取 _internal 目录路径
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     # 运行在打包后的环境中
     bundle_dir = Path(sys.executable).parent
     _internal = bundle_dir / "_internal"

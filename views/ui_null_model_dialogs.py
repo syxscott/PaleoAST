@@ -14,12 +14,11 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -69,15 +68,17 @@ class NullModelDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; "
-                           f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
-                           f"QProgressBar {{ border: 1px solid {c.border_light}; "
-                           f"border-radius: 4px; text-align: center; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; "
+            f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
+            f"QProgressBar {{ border: 1px solid {c.border_light}; "
+            f"border-radius: 4px; text-align: center; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -97,8 +98,10 @@ class NullModelDialog(QDialog):
         data_layout = QVBoxLayout(data_group)
 
         data_info = QLabel(
-            _("Enter species occurrence data (presence-absence matrix).\n"
-              "Format: rows = species, columns = sites, values = 0/1")
+            _(
+                "Enter species occurrence data (presence-absence matrix).\n"
+                "Format: rows = species, columns = sites, values = 0/1"
+            )
         )
         data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
@@ -115,18 +118,22 @@ class NullModelDialog(QDialog):
         method_layout = QFormLayout(method_group)
 
         self._metric_combo = QComboBox()
-        self._metric_combo.addItems([
-            _("C-score (Stone & Roberts)"),
-            _("C-score (standardized)"),
-        ])
+        self._metric_combo.addItems(
+            [
+                _("C-score (Stone & Roberts)"),
+                _("C-score (standardized)"),
+            ]
+        )
         method_layout.addRow(_("Statistic:"), self._metric_combo)
 
         self._algorithm_combo = QComboBox()
-        self._algorithm_combo.addItems([
-            _("Swap (Gotelli)"),
-            _("RRS (row-randomized)"),
-            _("RCS (column-randomized)"),
-        ])
+        self._algorithm_combo.addItems(
+            [
+                _("Swap (Gotelli)"),
+                _("RRS (row-randomized)"),
+                _("RCS (column-randomized)"),
+            ]
+        )
         method_layout.addRow(_("Algorithm:"), self._algorithm_combo)
 
         self._n_sim_spin = QSpinBox()
@@ -181,11 +188,12 @@ class NullModelDialog(QDialog):
 
         try:
             import numpy as np
-            lines = text.strip().split('\n')
+
+            lines = text.strip().split("\n")
             matrix = []
 
             for line in lines:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 row = []
                 for p in parts[1:]:  # Skip species name
                     row.append(int(float(p.strip())))
@@ -203,16 +211,12 @@ class NullModelDialog(QDialog):
             matrix = self._parse_occurrence_data()
             if matrix is None or matrix.size < 4:
                 QMessageBox.warning(
-                    self, _("Input Error"),
-                    _("Please enter a valid occurrence matrix (at least 2 species x 2 sites).")
+                    self, _("Input Error"), _("Please enter a valid occurrence matrix (at least 2 species x 2 sites).")
                 )
                 return
 
             if matrix.shape[0] < 2 or matrix.shape[1] < 2:
-                QMessageBox.warning(
-                    self, _("Input Error"),
-                    _("Matrix must have at least 2 species and 2 sites.")
-                )
+                QMessageBox.warning(self, _("Input Error"), _("Matrix must have at least 2 species and 2 sites."))
                 return
 
             self._run_button.setEnabled(False)
@@ -252,8 +256,7 @@ class NullModelDialog(QDialog):
             self.resultsReady.emit(result.to_dict())
 
             QMessageBox.information(
-                self, _("Results"),
-                _("Analysis complete. Observed vs. expected pattern displayed above.")
+                self, _("Results"), _("Analysis complete. Observed vs. expected pattern displayed above.")
             )
 
         except ImportError as e:
@@ -262,6 +265,7 @@ class NullModelDialog(QDialog):
         except Exception as e:
             self._logger.error(f"Null model failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "零模型分析"))
         finally:
             self._run_button.setEnabled(True)

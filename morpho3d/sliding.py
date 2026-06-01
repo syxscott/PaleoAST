@@ -231,7 +231,7 @@ class SemiLandmarkSlider:
             raise ValueError("Must call set_landmarks() first")
 
         n_samples = len(configs)
-        n_landmarks = configs[0].shape[0]
+        configs[0].shape[0]
         n_semi = len(self._semi_indices)
 
         self._logger.info(
@@ -438,10 +438,10 @@ class SemiLandmarkSlider:
         n_semi = len(points)
         tangents = np.zeros((n_semi, 3))
 
-        for i, (pos, point) in enumerate(zip(positions, points)):
+        for i, (pos, point) in enumerate(zip(positions, points, strict=False)):
             # 获取前后邻居
-            prev_pos = pos - 1 if pos > 0 else pos + 1
-            next_pos = pos + 1 if pos < n_total - 1 else pos - 1
+            pos - 1 if pos > 0 else pos + 1
+            pos + 1 if pos < n_total - 1 else pos - 1
 
             # 需要获取完整曲线上的邻居
             # 这里简化为使用半标志点内部的邻居

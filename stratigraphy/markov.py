@@ -40,7 +40,6 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ class MarkovAnalyzer:
         # empty rows in the transition matrix whenever the facies
         # codes are not contiguous (e.g. {0, 2, 5} would allocate
         # 6 states, three of which are unused).
-        n_states = int(len(np.unique(sequence)))
+        n_states = len(np.unique(sequence))
 
         if facies_names is None:
             facies_names = [f"Facies_{i}" for i in range(n_states)]
@@ -144,6 +143,7 @@ class MarkovAnalyzer:
         df = (n_states - 1) ** 2
 
         from scipy.stats import chi2 as chi2_dist
+
         p_value = 1 - chi2_dist.cdf(chi2, df) if df > 0 else 1.0
 
         return MarkovResult(

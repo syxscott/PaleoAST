@@ -10,7 +10,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
 
 from .base import AnalysisPlugin
 from .registry import get_plugin_registry
@@ -55,6 +55,7 @@ def register_analysis(
             def analyze(self, data, **kwargs) -> AnalysisResult:
                 ...
     """
+
     def decorator(cls: type) -> type:
         if not issubclass(cls, AnalysisPlugin):
             raise TypeError(f"{cls.__name__} must inherit from AnalysisPlugin")

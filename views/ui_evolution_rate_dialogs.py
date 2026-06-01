@@ -14,19 +14,17 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -70,13 +68,15 @@ class EvolutionRateDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; "
-                           f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; "
+            f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -96,8 +96,7 @@ class EvolutionRateDialog(QDialog):
         tree_layout = QVBoxLayout(tree_group)
 
         tree_info = QLabel(
-            _("Enter a phylogenetic tree in Newick format.\n"
-              "Tip: Connect to PCM analysis to import a tree.")
+            _("Enter a phylogenetic tree in Newick format.\nTip: Connect to PCM analysis to import a tree.")
         )
         tree_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         tree_layout.addWidget(tree_info)
@@ -114,8 +113,7 @@ class EvolutionRateDialog(QDialog):
         trait_layout = QVBoxLayout(trait_group)
 
         trait_info = QLabel(
-            _("Enter trait values for each species (one per line, tab-separated).\n"
-              "Format: species_name\\tvalue")
+            _("Enter trait values for each species (one per line, tab-separated).\nFormat: species_name\\tvalue")
         )
         trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         trait_layout.addWidget(trait_info)
@@ -132,19 +130,23 @@ class EvolutionRateDialog(QDialog):
         model_layout = QFormLayout(model_group)
 
         self._models_combo = QComboBox()
-        self._models_combo.addItems([
-            _("All models (BM, Directional, OU)"),
-            _("Brownian Motion only"),
-            _("Directional only"),
-            _("Ornstein-Uhlenbeck only"),
-        ])
+        self._models_combo.addItems(
+            [
+                _("All models (BM, Directional, OU)"),
+                _("Brownian Motion only"),
+                _("Directional only"),
+                _("Ornstein-Uhlenbeck only"),
+            ]
+        )
         model_layout.addRow(_("Models to fit:"), self._models_combo)
 
         self._aic_weight_check = QComboBox()
-        self._aic_weight_check.addItems([
-            _("No (compare AIC directly)"),
-            _("Yes (compute AICc weights)"),
-        ])
+        self._aic_weight_check.addItems(
+            [
+                _("No (compare AIC directly)"),
+                _("Yes (compute AICc weights)"),
+            ]
+        )
         model_layout.addRow(_("Compute AICc weights:"), self._aic_weight_check)
 
         layout.addWidget(model_group)
@@ -187,12 +189,13 @@ class EvolutionRateDialog(QDialog):
 
         try:
             import numpy as np
-            lines = text.strip().split('\n')
+
+            lines = text.strip().split("\n")
             names = []
             values = []
 
             for line in lines:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 if len(parts) >= 2:
                     names.append(parts[0])
                     values.append(float(parts[1]))
@@ -207,10 +210,7 @@ class EvolutionRateDialog(QDialog):
         try:
             names, traits = self._parse_traits()
             if names is None or len(names) < 3:
-                QMessageBox.warning(
-                    self, _("Input Error"),
-                    _("Please enter trait values for at least 3 species.")
-                )
+                QMessageBox.warning(self, _("Input Error"), _("Please enter trait values for at least 3 species."))
                 return
 
             from morphometrics.evolution_rate import EvolutionRateAnalyzer
@@ -224,8 +224,6 @@ class EvolutionRateDialog(QDialog):
             }
             models = model_map.get(self._models_combo.currentIndex(), ["random_walk", "directional", "stasis"])
 
-            compute_weights = self._aic_weight_check.currentIndex() == 1
-
             analyzer = EvolutionRateAnalyzer()
 
             # Note: Phylogenetic tree analysis requires separate implementation
@@ -233,9 +231,12 @@ class EvolutionRateDialog(QDialog):
             tree_newick = self._parse_tree()
             if tree_newick:
                 QMessageBox.information(
-                    self, _("Information"),
-                    _("Phylogenetic tree analysis will be available in a future update.\n"
-                      "Running trait time-series analysis instead.")
+                    self,
+                    _("Information"),
+                    _(
+                        "Phylogenetic tree analysis will be available in a future update.\n"
+                        "Running trait time-series analysis instead."
+                    ),
                 )
 
             # Trait-only analysis (time series)
@@ -257,4 +258,5 @@ class EvolutionRateDialog(QDialog):
         except Exception as e:
             self._logger.error(f"Evolution rate failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "演化速率分析"))

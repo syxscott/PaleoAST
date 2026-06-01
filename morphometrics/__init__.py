@@ -16,7 +16,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-from .allometry import AllometryAnalyzer, IntegrationAnalyzer, AllometryResult, PLSResult
+from .allometry import AllometryAnalyzer, AllometryResult, IntegrationAnalyzer, PLSResult
 from .evolution_rate import EvolutionRateAnalyzer, EvolutionRateResult
 from .gpa import GPAAnalyzer, GPAResult
 from .relative_warps import RelativeWarpsAnalyzer, RelativeWarpsResult

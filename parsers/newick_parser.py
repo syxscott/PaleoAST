@@ -31,7 +31,7 @@ Newick格式由以下递归文法定义:
 
 示例:
     (A:0.1,B:0.2)C:0.3;
-    
+
     表示树:
             C
            / \
@@ -210,12 +210,16 @@ class TreeNode:
         """重新路由树结构，使new_root成为新的根节点"""
         # 如果new_root就是当前根，直接返回拷贝
         if new_root is self:
+
             def copy_subtree(node: TreeNode, parent: TreeNode | None) -> TreeNode:
-                new_node = TreeNode(name=node.name, branch_length=node.branch_length, parent=parent, support=node.support)
+                new_node = TreeNode(
+                    name=node.name, branch_length=node.branch_length, parent=parent, support=node.support
+                )
                 for child in node.children:
                     new_child = copy_subtree(child, new_node)
                     new_node.children.append(new_child)
                 return new_node
+
             return copy_subtree(self, None)
 
         # 找到从self到new_root的路径
@@ -813,7 +817,7 @@ class TreeComparator:
         leaves1 = node.children[0].get_leaves() if node.children else []
         leaves2 = node.children[1].get_leaves() if len(node.children) > 1 else []
 
-        all_leaves = set(node.get_leaves())
+        set(node.get_leaves())
         group1 = frozenset(leaf.name for leaf in leaves1)
         group2 = frozenset(leaf.name for leaf in leaves2)
 

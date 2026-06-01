@@ -111,7 +111,7 @@ class EventBus(QObject):
 
     def emit_data_changed(self, matrix: Any) -> None:
         """Emit data_changed event."""
-        self._logger.debug(f"Event: data_changed")
+        self._logger.debug("Event: data_changed")
         self.data_changed.emit(matrix)
 
     def emit_metadata_changed(self, scope: str, index: int, metadata: dict[str, Any]) -> None:

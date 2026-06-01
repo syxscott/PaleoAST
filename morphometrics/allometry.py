@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -56,7 +56,7 @@ import numpy.typing as npt
 from scipy import stats
 
 from config.i18n import _
-from utils.exceptions import ComputationError, ValidationError
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -188,9 +188,7 @@ class PLSResult:
 
         lines.append("")
         lines.append(f"{_('Covariance explained:')}")
-        for i, (cov, cum) in enumerate(
-            zip(self.covariance_explained, self.cumulative_covariance)
-        ):
+        for i, (cov, cum) in enumerate(zip(self.covariance_explained, self.cumulative_covariance, strict=False)):
             lines.append(f"  {i + 1}: {cov:.2f}% (cumulative: {cum:.2f}%)")
 
         return "\n".join(lines)
@@ -267,15 +265,11 @@ class AllometryAnalyzer:
             ValidationError: If input data is invalid
         """
         with self._lock:
-            self._logger.info(
-                f"Analyzing allometry for shape {aligned_configurations.shape}"
-            )
+            self._logger.info(f"Analyzing allometry for shape {aligned_configurations.shape}")
 
             # Validate input
             if aligned_configurations.ndim != 3:
-                raise ValidationError(
-                    _("Aligned configurations must be 3D array (specimens, landmarks, dims)")
-                )
+                raise ValidationError(_("Aligned configurations must be 3D array (specimens, landmarks, dims)"))
 
             n_specimens, n_landmarks, n_dims = aligned_configurations.shape
 
@@ -311,9 +305,7 @@ class AllometryAnalyzer:
 
             # Solve least squares: β = (X'X)^(-1) X'y
             # Using numpy lstsq for numerical stability
-            beta, residuals_mat, rank, s = np.linalg.lstsq(
-                X, shape_reduced, rcond=None
-            )
+            beta, _residuals_mat, _rank, _s = np.linalg.lstsq(X, shape_reduced, rcond=None)
 
             intercept = beta[0]
             coefficients = beta[1]
@@ -368,14 +360,10 @@ class AllometryAnalyzer:
             )
 
             self._last_result = result
-            self._logger.info(
-                f"Allometry: R²={r_squared:.4f}, F={f_statistic:.4f}, p={isometry_pvalue:.4f}"
-            )
+            self._logger.info(f"Allometry: R²={r_squared:.4f}, F={f_statistic:.4f}, p={isometry_pvalue:.4f}")
             return result
 
-    def _compute_centroid_sizes(
-        self, configurations: npt.NDArray
-    ) -> npt.NDArray[np.float64]:
+    def _compute_centroid_sizes(self, configurations: npt.NDArray) -> npt.NDArray[np.float64]:
         """
         Compute centroid size for each specimen.
 
@@ -448,9 +436,7 @@ class IntegrationAnalyzer:
             ValidationError: If input data is invalid
         """
         with self._lock:
-            self._logger.info(
-                f"PLS analysis: block_a {block_a.shape}, block_b {block_b.shape}"
-            )
+            self._logger.info(f"PLS analysis: block_a {block_a.shape}, block_b {block_b.shape}")
 
             # Validate inputs
             if block_a.ndim != 2 or block_b.ndim != 2:
@@ -460,9 +446,7 @@ class IntegrationAnalyzer:
             n_specimens_b, n_vars_b = block_b.shape
 
             if n_specimens_a != n_specimens_b:
-                raise ValidationError(
-                    _("Both blocks must have same number of specimens")
-                )
+                raise ValidationError(_("Both blocks must have same number of specimens"))
 
             if n_specimens_a < 3:
                 raise ValidationError(_("Need at least 3 specimens for PLS analysis"))
@@ -491,9 +475,7 @@ class IntegrationAnalyzer:
             rv_coefficients = np.zeros(n_components)
             for i in range(n_components):
                 if np.std(pls_scores_left[:, i]) > 0 and np.std(pls_scores_right[:, i]) > 0:
-                    rv_coefficients[i] = np.corrcoef(
-                        pls_scores_left[:, i], pls_scores_right[:, i]
-                    )[0, 1]
+                    rv_coefficients[i] = np.corrcoef(pls_scores_left[:, i], pls_scores_right[:, i])[0, 1]
                 else:
                     rv_coefficients[i] = 0.0
 
@@ -549,9 +531,7 @@ class IntegrationAnalyzer:
             ValidationError: If division method is invalid
         """
         if aligned_configurations.ndim != 3:
-            raise ValidationError(
-                _("Aligned configurations must be 3D array")
-            )
+            raise ValidationError(_("Aligned configurations must be 3D array"))
 
         n_specimens, n_landmarks, n_dims = aligned_configurations.shape
         flattened = aligned_configurations.reshape(n_specimens, n_landmarks * n_dims)
@@ -588,8 +568,6 @@ class IntegrationAnalyzer:
             block_b = flattened[:, np.sort(block_b_cols)]
 
         else:
-            raise ValidationError(
-                _("Unknown division method: {0}").format(division)
-            )
+            raise ValidationError(_("Unknown division method: {0}").format(division))
 
         return block_a, block_b

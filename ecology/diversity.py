@@ -184,7 +184,7 @@ def _compute_frequency_counts(abundances: npt.NDArray) -> dict[int, int]:
     and values are counts of taxa with that abundance.
     """
     unique, counts = np.unique(abundances, return_counts=True)
-    return dict(zip(unique.astype(int), counts))
+    return dict(zip(unique.astype(int), counts, strict=False))
 
 
 class DiversityAnalyzer:

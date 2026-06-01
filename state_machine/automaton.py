@@ -211,7 +211,7 @@ class NFA(FiniteAutomaton):
 
         # 初始状态: ε-Closure({q0})
         initial = self._epsilon_closure({self._initial_state})
-        initial_state = dfa.add_state(
+        dfa.add_state(
             name=self._state_set_to_string(initial),
             is_initial=True,
             is_accepting=bool(initial & self._accepting_states),
@@ -474,7 +474,7 @@ class DFA(FiniteAutomaton):
             is_accepting = any(s.is_accepting for s in partition)
 
             # 使用分区中第一个状态的名称
-            first_state = next(iter(partition))
+            next(iter(partition))
             new_state = minimized_dfa.add_state(
                 name=f"p{len(partition_map)}", is_initial=is_initial, is_accepting=is_accepting
             )

@@ -421,9 +421,7 @@ class FitchAlgorithm:
         search = HeuristicSearch(algorithm="parsimony", max_iterations=500, random_seed=42)
         result = search.search(leaf_names, sequences)
 
-        self._logger.info(
-            f"Found {len(result.all_trees)} most parsimonious trees with score {result.best_score}"
-        )
+        self._logger.info(f"Found {len(result.all_trees)} most parsimonious trees with score {result.best_score}")
         return result.all_trees[:max_trees]
 
     @staticmethod

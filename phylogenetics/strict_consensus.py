@@ -76,9 +76,8 @@ class Split:
         """确保set1 < set2 (保持唯一性)"""
         # Use min element comparison for canonical ordering
         # (frozenset > means superset, not ordering)
-        if self.set1 and self.set2:
-            if min(self.set1) > min(self.set2):
-                self.set1, self.set2 = self.set2, self.set1
+        if self.set1 and self.set2 and min(self.set1) > min(self.set2):
+            self.set1, self.set2 = self.set2, self.set1
 
     @property
     def is_trivial(self) -> bool:
@@ -110,11 +109,7 @@ class Split:
         intersections = [self.set1 & other.set1, self.set1 & other.set2, self.set2 & other.set1, self.set2 & other.set2]
 
         # 如果有交集为空，则兼容
-        for inter in intersections:
-            if not inter:
-                return True
-
-        return False
+        return any(not inter for inter in intersections)
 
     def __hash__(self) -> int:
         return hash((self.set1, self.set2))
@@ -342,7 +337,7 @@ class StrictConsensusTree:
             return self._build_star_tree(all_taxa)
 
         # 选择最小的
-        smallest = min(non_trivial, key=lambda s: len(s.set1))
+        min(non_trivial, key=lambda s: len(s.set1))
 
         # 递归构建
         return self._build_recursive(splits, all_taxa)
@@ -361,7 +356,7 @@ class StrictConsensusTree:
         if len(taxa) <= 1:
             if not taxa:
                 return PhyloTree()
-            node = PhyloNode(name=list(taxa)[0], node_type=NodeType.LEAF)
+            node = PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF)
             return PhyloTree(root=node)
 
         # 找覆盖taxa的分割
@@ -410,7 +405,7 @@ class StrictConsensusTree:
             return PhyloTree()
 
         if len(taxa) == 1:
-            root = PhyloNode(name=list(taxa)[0], node_type=NodeType.LEAF)
+            root = PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF)
             return PhyloTree(root=root)
 
         root = PhyloNode(name="consensus", node_type=NodeType.INTERNAL)

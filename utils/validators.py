@@ -122,7 +122,10 @@ def validate_data_array(
         logger.warning(f"'{name}' contains {nan_count} NaN value(s) but allow_nan=False")
         raise DataValidationError(
             f"{name} contains {nan_count} NaN value(s)",
-            details={"nan_count": int(nan_count), "positions": list(zip(nan_positions[0][:5], nan_positions[1][:5]))},
+            details={
+                "nan_count": int(nan_count),
+                "positions": list(zip(nan_positions[0][:5], nan_positions[1][:5], strict=False)),
+            },
         )
 
     # Check for infinite values
@@ -134,7 +137,10 @@ def validate_data_array(
         logger.warning(f"'{name}' contains {inf_count} infinite value(s) but allow_inf=False")
         raise DataValidationError(
             f"{name} contains {inf_count} infinite value(s)",
-            details={"inf_count": int(inf_count), "positions": list(zip(inf_positions[0][:5], inf_positions[1][:5]))},
+            details={
+                "inf_count": int(inf_count),
+                "positions": list(zip(inf_positions[0][:5], inf_positions[1][:5], strict=False)),
+            },
         )
 
     # Check minimum values requirement
@@ -427,7 +433,9 @@ def check_missing_values(
     # Position reporting
     if report_positions and total_nan > 0:
         nan_positions = np.where(nan_mask)
-        positions = list(zip(nan_positions[0].tolist()[:max_positions], nan_positions[1].tolist()[:max_positions]))
+        positions = list(
+            zip(nan_positions[0].tolist()[:max_positions], nan_positions[1].tolist()[:max_positions], strict=False)
+        )
         result["positions"] = positions
         if total_nan > max_positions:
             result["positions_truncated"] = True
@@ -473,7 +481,7 @@ def check_infinite_values(matrix: npt.NDArray) -> dict[str, Any]:
 
     if total_inf > 0:
         positions = np.where(inf_mask)
-        result["positions"] = list(zip(positions[0].tolist()[:10], positions[1].tolist()[:10]))
+        result["positions"] = list(zip(positions[0].tolist()[:10], positions[1].tolist()[:10], strict=False))
 
     return result
 

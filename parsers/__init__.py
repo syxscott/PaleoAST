@@ -28,26 +28,26 @@ from .tps_parser import TPSFile, TPSParser, TPSSpecimen, parse_tps_file
 __all__ = [
     # 基础词法分析
     "BaseLexer",
-    "LexerError",
-    "Token",
-    # NEXUS格式
-    "NexusLexer",
-    "NexusTokenType",
-    # Newick格式
-    "NewickParser",
-    "NewickTree",
-    "TreeNode",
-    # TPS格式 (形态测量学)
-    "TPSParser",
-    "TPSFile",
-    "TPSSpecimen",
-    "parse_tps_file",
-    # PAST .dat格式
-    "DATParser",
-    "PASTData",
-    "parse_dat_file",
     # 二进制缓存
     "BinaryCache",
     "BinaryCacheHeader",
     "ChunkType",
+    # PAST .dat格式
+    "DATParser",
+    "LexerError",
+    # Newick格式
+    "NewickParser",
+    "NewickTree",
+    # NEXUS格式
+    "NexusLexer",
+    "NexusTokenType",
+    "PASTData",
+    "TPSFile",
+    # TPS格式 (形态测量学)
+    "TPSParser",
+    "TPSSpecimen",
+    "Token",
+    "TreeNode",
+    "parse_dat_file",
+    "parse_tps_file",
 ]

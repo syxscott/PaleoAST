@@ -228,7 +228,7 @@ class PERMANOVAAnalyzer:
         if df_res > 0 and df_g > 0:
             MS_between = ss_between / df_g
             MS_within = ss_within / df_res
-            F = MS_between / MS_within if MS_within > 0 else float('inf')
+            F = MS_between / MS_within if MS_within > 0 else float("inf")
         else:
             F = 0.0
 

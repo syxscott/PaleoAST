@@ -26,7 +26,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -138,9 +137,7 @@ class UAAnalyzer:
 
             n_sections, n_events = fad.shape
 
-            self._logger.info(
-                f"UA analyze started: {n_sections} sections, {n_events} events"
-            )
+            self._logger.info(f"UA analyze started: {n_sections} sections, {n_events} events")
 
             # Default names
             if section_names is None:
@@ -174,9 +171,7 @@ class UAAnalyzer:
             self._logger.info(f"UA completed: found {len(zones)} zones")
             return result
 
-    def _build_overlap_graph(
-        self, fad: npt.NDArray, lad: npt.NDArray
-    ) -> dict[int, set[int]]:
+    def _build_overlap_graph(self, fad: npt.NDArray, lad: npt.NDArray) -> dict[int, set[int]]:
         """Build overlap graph from FAD/LAD matrices."""
         n_sections, n_events = fad.shape
         graph: dict[int, set[int]] = {i: set() for i in range(n_events)}
@@ -201,9 +196,7 @@ class UAAnalyzer:
         """
         cliques: list[set[int]] = []
 
-        def backtrack(
-            r: set[int], p: set[int], x: set[int]
-        ) -> None:
+        def backtrack(r: set[int], p: set[int], x: set[int]) -> None:
             if not p and not x:
                 # R is a maximal clique
                 cliques.append(r.copy())
@@ -368,9 +361,7 @@ class RASCAnalyzer:
             self._logger.info(f"RASC completed: ranking with {n_events} events")
             return result
 
-    def _compute_ranking_score(
-        self, ranking: list[int], dist: npt.NDArray
-    ) -> float:
+    def _compute_ranking_score(self, ranking: list[int], dist: npt.NDArray) -> float:
         """Compute score for a given ranking (lower is better)."""
         score = 0.0
         for i in range(len(ranking) - 1):

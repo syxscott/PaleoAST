@@ -183,8 +183,8 @@ class TPSAnalyzer:
             raise ComputationError("No TPS result available. Run analyze() first.")
 
         source = result.source
-        n_landmarks = source.shape[0]
-        n_dims = source.shape[1]
+        source.shape[0]
+        source.shape[1]
 
         # Generate grid points spanning the source configuration
         x_min, x_max = source[:, 0].min(), source[:, 0].max()
@@ -253,7 +253,7 @@ class TPSAnalyzer:
         Warp arbitrary points using TPS coefficients.
         """
         source = result.source
-        n_landmarks = source.shape[0]
+        source.shape[0]
         n_dims = source.shape[1]
         coeffs = result.warp_coefficients["full_coefficients"]
 

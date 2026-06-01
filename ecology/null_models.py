@@ -38,16 +38,15 @@ version: 1.0.1
 from __future__ import annotations
 
 import logging
-import math
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError, ValidationError
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -200,28 +199,20 @@ class NullModelAnalyzer:
             ValidationError: If input data is invalid
         """
         with self._lock:
-            self._logger.info(
-                f"Null model analysis: metric={metric}, n_perm={n_permutations}"
-            )
+            self._logger.info(f"Null model analysis: metric={metric}, n_perm={n_permutations}")
 
             # Validate input
             presence_matrix = np.asarray(presence_matrix, dtype=np.int32)
             if presence_matrix.ndim != 2:
-                raise ValidationError(
-                    _("Presence matrix must be 2D (species x sites)")
-                )
+                raise ValidationError(_("Presence matrix must be 2D (species x sites)"))
 
             n_species, n_sites = presence_matrix.shape
 
             if n_species < 2:
-                raise ValidationError(
-                    _("Need at least 2 species for null model analysis")
-                )
+                raise ValidationError(_("Need at least 2 species for null model analysis"))
 
             if n_sites < 2:
-                raise ValidationError(
-                    _("Need at least 2 sites for null model analysis")
-                )
+                raise ValidationError(_("Need at least 2 sites for null model analysis"))
 
             # Compute observed score
             if metric == "c_score":
@@ -240,13 +231,9 @@ class NullModelAnalyzer:
                 np.random.seed(random_seed)
 
             if n_workers is not None and n_workers > 1:
-                simulated = self._run_parallel(
-                    presence_matrix, n_permutations, algorithm, n_workers
-                )
+                simulated = self._run_parallel(presence_matrix, n_permutations, algorithm, n_workers)
             else:
-                simulated = self._run_sequential(
-                    presence_matrix, n_permutations, algorithm
-                )
+                simulated = self._run_sequential(presence_matrix, n_permutations, algorithm)
 
             # Compute statistics
             mean_sim = float(np.mean(simulated))
@@ -269,9 +256,7 @@ class NullModelAnalyzer:
             )
 
             self._last_result = result
-            self._logger.info(
-                f"Null model: observed={observed:.4f}, SES={ses:.4f}, p={p_value:.4f}"
-            )
+            self._logger.info(f"Null model: observed={observed:.4f}, SES={ses:.4f}, p={p_value:.4f}")
             return result
 
     def _run_sequential(
@@ -304,8 +289,7 @@ class NullModelAnalyzer:
 
             chunk_size = max(1, n_permutations // n_workers)
             args_list = [
-                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm)
-                for i in range(n_workers)
+                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm) for i in range(n_workers)
             ]
 
             with Pool(n_workers) as pool:
@@ -387,7 +371,7 @@ class NullModelAnalyzer:
 
         Average C-score = mean of all pairwise species combinations
         """
-        n_species, n_sites = matrix.shape
+        n_species, _n_sites = matrix.shape
         row_sums = np.sum(matrix, axis=1)
 
         c_scores = []
@@ -413,11 +397,9 @@ class NullModelAnalyzer:
                 for k in range(n_sites):
                     for l in range(k + 1, n_sites):
                         # Check for checkerboard pattern
-                        if (matrix[i, k] == 1 and matrix[i, l] == 0 and
-                            matrix[j, k] == 0 and matrix[j, l] == 1):
-                            checkerboards += 1
-                        elif (matrix[i, k] == 0 and matrix[i, l] == 1 and
-                              matrix[j, k] == 1 and matrix[j, l] == 0):
+                        if (matrix[i, k] == 1 and matrix[i, l] == 0 and matrix[j, k] == 0 and matrix[j, l] == 1) or (
+                            matrix[i, k] == 0 and matrix[i, l] == 1 and matrix[j, k] == 1 and matrix[j, l] == 0
+                        ):
                             checkerboards += 1
 
         return float(checkerboards)

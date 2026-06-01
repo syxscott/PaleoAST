@@ -2,11 +2,12 @@
 """Tests for stratigraphy correlation module."""
 
 import numpy as np
+
 from stratigraphy.correlation import (
-    StratigraphicSection,
-    StratigraphicCorrelationAnalyzer,
     AgeModelAnalyzer,
     SedimentationRateAnalyzer,
+    StratigraphicCorrelationAnalyzer,
+    StratigraphicSection,
 )
 
 

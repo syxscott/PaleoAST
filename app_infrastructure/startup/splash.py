@@ -423,7 +423,7 @@ class SplashScreenManager:
         self._total_steps: int = 0
         self._logger = logging.getLogger(f"{__name__}.SplashManager")
 
-    def add_phase(self, name: str, weight: int = 1, steps: list[str] = None) -> int:
+    def add_phase(self, name: str, weight: int = 1, steps: list[str] | None = None) -> int:
         """
         添加阶段
 

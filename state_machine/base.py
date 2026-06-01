@@ -755,7 +755,7 @@ class StateMachine(ABC):
             return set()
 
         # 构建反向图
-        reverse_graph: dict[str, set[str]] = {sid: set() for sid in self._states.keys()}
+        reverse_graph: dict[str, set[str]] = {sid: set() for sid in self._states}
 
         for state_id, transitions in self._transitions.items():
             for trans in transitions:

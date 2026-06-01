@@ -182,7 +182,7 @@ class ASTAuditor:
     # 循环import检测
     DETECT_IMPORT_CYCLES = True
 
-    def __init__(self, project_root: str = None):
+    def __init__(self, project_root: str | None = None):
         """
         初始化审计器
 
@@ -211,7 +211,7 @@ class ASTAuditor:
 
         self._logger = logging.getLogger(f"{__name__}.ASTAuditor")
 
-    def audit_directory(self, extensions: list[str] = None, recursive: bool = True) -> AuditReport:
+    def audit_directory(self, extensions: list[str] | None = None, recursive: bool = True) -> AuditReport:
         """
         审计整个目录
 
@@ -329,9 +329,8 @@ class ASTAuditor:
                 for alias in node.names:
                     self._import_graph[file_path].add(alias.name)
 
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    self._import_graph[file_path].add(node.module)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                self._import_graph[file_path].add(node.module)
 
     def _check_functions(self, tree: ast.AST, file_path: str, content: str) -> None:
         """检查函数定义"""
@@ -340,13 +339,12 @@ class ASTAuditor:
                 # 确定类名
                 class_name = None
                 for parent in ast.walk(tree):
-                    if isinstance(parent, ast.ClassDef):
-                        if any(
-                            isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child is node
-                            for child in parent.body
-                        ):
-                            class_name = parent.name
-                            break
+                    if isinstance(parent, ast.ClassDef) and any(
+                        isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child is node
+                        for child in parent.body
+                    ):
+                        class_name = parent.name
+                        break
 
                 # 提取docstring
                 docstring = ast.get_docstring(node)
@@ -476,12 +474,12 @@ class ASTAuditor:
                 elif neighbor in rec_stack:
                     # 发现循环
                     cycle_start = path.index(neighbor)
-                    cycle = path[cycle_start:] + [neighbor]
+                    cycle = [*path[cycle_start:], neighbor]
                     cycles.append(cycle)
 
             rec_stack.remove(node)
 
-        for node in self._import_graph.keys():
+        for node in self._import_graph:
             if node not in visited:
                 dfs(node, [])
 
@@ -498,7 +496,7 @@ class ASTAuditor:
             )
 
 
-def audit_paleoast(project_root: str = None) -> AuditReport:
+def audit_paleoast(project_root: str | None = None) -> AuditReport:
     """
     便捷函数：审计PaleoAST源码
 

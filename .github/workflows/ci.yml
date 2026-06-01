@@ -56,18 +56,21 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -e ".[dev,full]"
 
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
+        # The morpho3d / quaternion / regression suites are pure-numpy
+        # and don't need a display. ``xvfb-run`` is still installed in
+        # case any future test requires Qt.
         run: |
-          xvfb-run pytest tests_morpho3d_macroevolution/ -v --tb=short --cov --cov-report=xml
+          pytest tests_morpho3d_macroevolution/ tests/ --tb=short --cov --cov-report=xml
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: |
-          pytest tests_morpho3d_macroevolution/ -v --tb=short --cov --cov-report=xml
+          pytest tests_morpho3d_macroevolution/ tests/ --tb=short --cov --cov-report=xml
 
       - name: Upload coverage
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'

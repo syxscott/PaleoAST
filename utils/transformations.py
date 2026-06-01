@@ -218,7 +218,7 @@ def boxcox_transform(data: npt.NDArray, column: int = 0, lambda_val: float | Non
         if abs(lambda_val) < 1e-10:
             transformed = np.log(valid_data)
         else:
-            transformed = (valid_data ** lambda_val - 1) / lambda_val
+            transformed = (valid_data**lambda_val - 1) / lambda_val
         lambda_opt = lambda_val
 
     result = col.copy()
@@ -241,7 +241,7 @@ def impute_knn(data: npt.NDArray, k: int = 5) -> npt.NDArray:
         Imputed data matrix
     """
     result = data.astype(float).copy()
-    n_samples, n_vars = result.shape
+    n_samples, _n_vars = result.shape
 
     for i in range(n_samples):
         missing_mask = np.isnan(result[i])
@@ -267,7 +267,7 @@ def impute_knn(data: npt.NDArray, k: int = 5) -> npt.NDArray:
                 distances[other] = np.inf
                 continue
             diff = result[i, both_observed] - result[other, both_observed]
-            distances[other] = np.sqrt(np.sum(diff ** 2))
+            distances[other] = np.sqrt(np.sum(diff**2))
 
         # Find K nearest neighbors
         neighbor_idx = np.argsort(distances)[:k]

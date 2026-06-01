@@ -13,7 +13,7 @@ version: 1.0.1
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
@@ -124,8 +124,7 @@ class ANOVAResult:
             for r in self.tukey_results:
                 sig_mark = "**" if r["p_adj"] < 0.01 else ("*" if r["p_adj"] < 0.05 else "ns")
                 lines.append(
-                    f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} "
-                    f"{r['p_adj']:>10.4f} {sig_mark:>5}"
+                    f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} {r['p_adj']:>10.4f} {sig_mark:>5}"
                 )
         return "\n".join(lines)
 
@@ -178,12 +177,22 @@ class UnivariateAnalyzer:
                 valid = col[~np.isnan(col)]
                 n = len(valid)
                 if n < 2:
-                    results.append(ColumnStats(
-                        name=column_names[idx], n=n, mean=np.nan, std=np.nan,
-                        variance=np.nan, min_val=np.nan, max_val=np.nan,
-                        median=np.nan, skewness=np.nan, kurtosis=np.nan,
-                        se=np.nan, ci_95=(np.nan, np.nan),
-                    ))
+                    results.append(
+                        ColumnStats(
+                            name=column_names[idx],
+                            n=n,
+                            mean=np.nan,
+                            std=np.nan,
+                            variance=np.nan,
+                            min_val=np.nan,
+                            max_val=np.nan,
+                            median=np.nan,
+                            skewness=np.nan,
+                            kurtosis=np.nan,
+                            se=np.nan,
+                            ci_95=(np.nan, np.nan),
+                        )
+                    )
                     continue
 
                 m = np.mean(valid)
@@ -191,20 +200,22 @@ class UnivariateAnalyzer:
                 se = s / np.sqrt(n)
                 t_crit = sp_stats.t.ppf(0.975, df=n - 1)
 
-                results.append(ColumnStats(
-                    name=column_names[idx],
-                    n=n,
-                    mean=m,
-                    std=s,
-                    variance=np.var(valid, ddof=1),
-                    min_val=np.min(valid),
-                    max_val=np.max(valid),
-                    median=np.median(valid),
-                    skewness=float(sp_stats.skew(valid)),
-                    kurtosis=float(sp_stats.kurtosis(valid)),
-                    se=se,
-                    ci_95=(m - t_crit * se, m + t_crit * se),
-                ))
+                results.append(
+                    ColumnStats(
+                        name=column_names[idx],
+                        n=n,
+                        mean=m,
+                        std=s,
+                        variance=np.var(valid, ddof=1),
+                        min_val=np.min(valid),
+                        max_val=np.max(valid),
+                        median=np.median(valid),
+                        skewness=float(sp_stats.skew(valid)),
+                        kurtosis=float(sp_stats.kurtosis(valid)),
+                        se=se,
+                        ci_95=(m - t_crit * se, m + t_crit * se),
+                    )
+                )
 
             self._logger.info(f"Summary statistics computed for {len(results)} columns")
             return SummaryResult(columns=results)
@@ -239,7 +250,7 @@ class UnivariateAnalyzer:
             # Anderson-Darling
             ad_result = sp_stats.anderson(valid, dist="norm")
             ad_stat = ad_result.statistic
-            ad_critical = dict(zip(ad_result.significance_level, ad_result.critical_values))
+            ad_critical = dict(zip(ad_result.significance_level, ad_result.critical_values, strict=False))
 
             # Check at 5% level
             is_normal_sw = sw_p > 0.05
@@ -313,9 +324,7 @@ class UnivariateAnalyzer:
                 significant=p_val < 0.05,
             )
 
-    def one_way_anova(
-        self, data: npt.NDArray, groups: list[int], column: int = 0, tukey: bool = True
-    ) -> ANOVAResult:
+    def one_way_anova(self, data: npt.NDArray, groups: list[int], column: int = 0, tukey: bool = True) -> ANOVAResult:
         """
         Perform one-way ANOVA with optional Tukey HSD post-hoc.
 
@@ -465,14 +474,16 @@ class UnivariateAnalyzer:
                     se = np.sqrt(ms_within * (1 / len(group_data[i]) + 1 / len(group_data[j])))
                     q_stat = abs(mean_diff) / se if se > 0 else 0.0
 
-                    results.append({
-                        "group_a": group_labels[i],
-                        "group_b": group_labels[j],
-                        "diff": mean_diff,
-                        "q_stat": float(q_stat),
-                        "p_value": p_adj,
-                        "significant": p_adj < 0.05,
-                    })
+                    results.append(
+                        {
+                            "group_a": group_labels[i],
+                            "group_b": group_labels[j],
+                            "diff": mean_diff,
+                            "q_stat": float(q_stat),
+                            "p_value": p_adj,
+                            "significant": p_adj < 0.05,
+                        }
+                    )
         except (AttributeError, TypeError):
             # Fallback for older scipy without tukey_hsd.
             # The previous implementation multiplied the raw two-sided t p-value
@@ -513,14 +524,16 @@ class UnivariateAnalyzer:
                     except Exception:
                         p_adj = 1.0
 
-                    results.append({
-                        "group_a": group_labels[i],
-                        "group_b": group_labels[j],
-                        "diff": float(mean_diff),
-                        "q_stat": float(q_stat),
-                        "p_value": p_adj,
-                        "significant": p_adj < 0.05,
-                    })
+                    results.append(
+                        {
+                            "group_a": group_labels[i],
+                            "group_b": group_labels[j],
+                            "diff": float(mean_diff),
+                            "q_stat": float(q_stat),
+                            "p_value": p_adj,
+                            "significant": p_adj < 0.05,
+                        }
+                    )
 
         return results
 

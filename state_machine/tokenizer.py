@@ -307,7 +307,6 @@ class LexerTokenizer:
         # 构建分支模式
         branches = []
         for rule in sorted_rules:
-            flags = 0 if self._case_sensitive else re.IGNORECASE
             pattern_str = rule.pattern.pattern
             branches.append(f"(?P<{rule.token_type.name}>{pattern_str})")
 
@@ -401,7 +400,7 @@ class LexerTokenizer:
 
                 if token_type is None:
                     # 回退：使用第一个非None组
-                    for gname, gvalue in zip(match.group().split(), [match.group()]):
+                    for gname, gvalue in zip(match.group().split(), [match.group()], strict=False):
                         if gvalue is not None:
                             token_type = TokenType.UNKNOWN
                             break

@@ -37,9 +37,7 @@ version: 1.0.1
 """
 
 import logging
-import math
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -83,11 +81,7 @@ class SurvivalResult:
 
     def summary(self) -> str:
         """Generate summary text."""
-        median_str = (
-            f"{self.median_survival:.4f}"
-            if self.median_survival is not None
-            else "Not reached"
-        )
+        median_str = f"{self.median_survival:.4f}" if self.median_survival is not None else "Not reached"
         return (
             f"{_('Kaplan-Meier Survival Analysis')}\n"
             f"{'=' * 50}\n"
@@ -177,9 +171,7 @@ class KaplanMeierAnalyzer:
         e = np.asarray(e).ravel()
 
         if t.shape != e.shape:
-            raise ComputationError(
-                f"Times and events must have same shape: {t.shape} vs {e.shape}"
-            )
+            raise ComputationError(f"Times and events must have same shape: {t.shape} vs {e.shape}")
 
         if np.any(t < 0):
             raise ComputationError("Times must be non-negative")
@@ -228,16 +220,14 @@ class KaplanMeierAnalyzer:
                 if n_at_risk[i] > 0:
                     # Kaplan-Meier product limit estimator
                     survival_prob[i] = survival_prob[i - 1] if i > 0 else 1.0
-                    survival_prob[i] *= (1 - n_events[i] / n_at_risk[i])
+                    survival_prob[i] *= 1 - n_events[i] / n_at_risk[i]
 
                     # Greenwood's formula
                     if n_at_risk[i] > n_events[i]:
                         denom = n_at_risk[i] * (n_at_risk[i] - n_events[i])
-                        std_error[i] = (
-                            std_error[i - 1] ** 2
-                            if i > 0
-                            else survival_prob[i] ** 2
-                        ) * (n_events[i] / denom)
+                        std_error[i] = (std_error[i - 1] ** 2 if i > 0 else survival_prob[i] ** 2) * (
+                            n_events[i] / denom
+                        )
                     else:
                         std_error[i] = std_error[i - 1] ** 2 if i > 0 else 0
                 else:
@@ -282,10 +272,7 @@ class KaplanMeierAnalyzer:
         )
 
         self._last_result = result
-        self._logger.info(
-            f"Kaplan-Meier complete: median survival = {median_survival}, "
-            f"n_events = {np.sum(e)}"
-        )
+        self._logger.info(f"Kaplan-Meier complete: median survival = {median_survival}, n_events = {np.sum(e)}")
         return result
 
     @property
@@ -329,9 +316,9 @@ def log_rank_test(
     e2 = validate_data_array(events2, allow_nan=False, name="events2")
 
     if t1.shape != e1.shape:
-        raise ComputationError(f"Group 1 times and events shape mismatch")
+        raise ComputationError("Group 1 times and events shape mismatch")
     if t2.shape != e2.shape:
-        raise ComputationError(f"Group 2 times and events shape mismatch")
+        raise ComputationError("Group 2 times and events shape mismatch")
 
     e1 = (e1 > 0).astype(int)
     e2 = (e2 > 0).astype(int)
@@ -560,7 +547,8 @@ def cox_ph(
     to scipy optimization.
     """
     try:
-        from lifelines import CoxPHFitter
+        import lifelines  # noqa: F401  # availability check
+
         return _cox_ph_lifelines(durations, events, covariates)
     except ImportError:
         logger.info("lifelines not available, using scipy optimization")
@@ -574,7 +562,6 @@ def _cox_ph_lifelines(
 ) -> CoxPHResult:
     """Cox PH using lifelines library."""
     from lifelines import CoxPHFitter
-    from scipy import stats
 
     t = validate_data_array(durations, allow_nan=False, name="durations")
     e = validate_data_array(events, allow_nan=False, name="events").astype(int)
@@ -583,10 +570,11 @@ def _cox_ph_lifelines(
     if X.ndim == 1:
         X = X.reshape(-1, 1)
 
-    n, p = X.shape
+    _n, p = X.shape
 
     # Create DataFrame for lifelines
     import pandas as pd
+
     df = pd.DataFrame(X, columns=[f"x{i}" for i in range(p)])
     df["duration"] = t
     df["event"] = e
@@ -612,9 +600,7 @@ def _cox_ph_lifelines(
     # AIC
     aic = cph.AIC_partial_
 
-    logger.info(
-        f"Cox PH (lifelines) complete: {p} covariates, C-index={concordance:.4f}"
-    )
+    logger.info(f"Cox PH (lifelines) complete: {p} covariates, C-index={concordance:.4f}")
 
     return CoxPHResult(
         beta=beta,
@@ -647,9 +633,7 @@ def _cox_ph_scipy(
     n, p = X.shape
 
     if len(t) != n or len(e) != n:
-        raise ComputationError(
-            f"Shape mismatch: durations={len(t)}, events={len(e)}, covariates={X.shape}"
-        )
+        raise ComputationError(f"Shape mismatch: durations={len(t)}, events={len(e)}, covariates={X.shape}")
 
     if np.any(t < 0):
         raise ComputationError("Durations must be non-negative")
@@ -697,25 +681,6 @@ def _cox_ph_scipy(
     beta_init = np.zeros(p)
     for j in range(p):
         try:
-            # Simple univariate estimate as starting point
-            x_j = X_scaled[:, j]
-            # Sort by time
-            sort_idx = np.argsort(t)
-            t_sorted = t[sort_idx]
-            e_sorted = e[sort_idx]
-            x_sorted = x_j[sort_idx]
-
-            # Breslow estimator for single covariate
-            risk_scores = np.exp(x_sorted * 0.5)  # Initial guess
-            for k in range(len(unique_times)):
-                t_k = unique_times[k]
-                at_risk = t_sorted >= t_k
-                if np.any(at_risk):
-                    denom = np.sum(risk_scores[at_risk])
-                    events_at_t = (t_sorted == t_k) & (e_sorted == 1)
-                    if np.any(events_at_t) and denom > 0:
-                        for idx in np.where(events_at_t)[0]:
-                            log_lik += np.log(risk_scores[idx] / denom)
             # Use 0.1 * sign of correlation as rough initial guess
             if len(t) > 2:
                 corr = np.corrcoef(t[event_mask], X_scaled[event_mask, j])[0, 1]
@@ -741,8 +706,7 @@ def _cox_ph_scipy(
             beta_ij = beta.copy()
             beta_ij[i] += eps
             beta_ij[j] += eps
-            hessian[i, j] = (neg_partial_log_likelihood(beta_ij) -
-                             neg_partial_log_likelihood(beta)) / eps
+            hessian[i, j] = (neg_partial_log_likelihood(beta_ij) - neg_partial_log_likelihood(beta)) / eps
             hessian[j, i] = hessian[i, j]
 
     try:

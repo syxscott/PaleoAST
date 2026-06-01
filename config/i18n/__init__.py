@@ -22,7 +22,6 @@ Author: PaleoAST Development Team
 from __future__ import annotations
 
 import threading
-from typing import Dict, Optional
 
 # PyQt6 imports - must be available (i18n initialized after QApplication)
 try:

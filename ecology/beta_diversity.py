@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -61,7 +62,7 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError, ValidationError
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -239,24 +240,20 @@ class BetaDiversityAnalyzer:
         if abundance_matrix.ndim != 2:
             raise ValidationError(_("Abundance matrix must be 2D"))
 
-        n_samples, n_species = abundance_matrix.shape
+        n_samples, _n_species = abundance_matrix.shape
 
         if sample_names is None:
             sample_names = [f"Sample_{i + 1}" for i in range(n_samples)]
         elif len(sample_names) != n_samples:
             raise ValidationError(
-                _("Number of sample names ({0}) must match matrix rows ({1})").format(
-                    len(sample_names), n_samples
-                )
+                _("Number of sample names ({0}) must match matrix rows ({1})").format(len(sample_names), n_samples)
             )
 
         if metric not in ("jaccard", "sorensen"):
-            raise ValidationError(
-                _("Metric must be 'jaccard' or 'sorensen', got '{0}'").format(metric)
-            )
+            raise ValidationError(_("Metric must be 'jaccard' or 'sorensen', got '{0}'").format(metric))
 
         # Convert to presence-absence (boolean for bitwise operations)
-        presence = (abundance_matrix > 0)
+        presence = abundance_matrix > 0
 
         # Initialize matrices
         total_beta = np.zeros((n_samples, n_samples))
@@ -298,16 +295,18 @@ class BetaDiversityAnalyzer:
                 turnover[i, j] = turnover[j, i] = turn_val
                 nestedness[i, j] = nestedness[j, i] = nest_val
 
-                pairwise_results.append({
-                    "sample_i": sample_names[i],
-                    "sample_j": sample_names[j],
-                    "shared_species": int(a),
-                    "only_i": int(b),
-                    "only_j": int(c),
-                    "total_beta": float(total_val),
-                    "turnover": float(turn_val),
-                    "nestedness": float(nest_val),
-                })
+                pairwise_results.append(
+                    {
+                        "sample_i": sample_names[i],
+                        "sample_j": sample_names[j],
+                        "shared_species": int(a),
+                        "only_i": int(b),
+                        "only_j": int(c),
+                        "total_beta": float(total_val),
+                        "turnover": float(turn_val),
+                        "nestedness": float(nest_val),
+                    }
+                )
 
         result = BetaDiversityResult(
             sample_names=sample_names,
@@ -387,9 +386,7 @@ class CoverageRarefactionAnalyzer:
             sample_names = [f"Sample_{i + 1}" for i in range(n_samples)]
         elif len(sample_names) != n_samples:
             raise ValidationError(
-                _("Number of sample names ({0}) must match matrix rows ({1})").format(
-                    len(sample_names), n_samples
-                )
+                _("Number of sample names ({0}) must match matrix rows ({1})").format(len(sample_names), n_samples)
             )
 
         # Compute coverage for each sample
@@ -421,9 +418,7 @@ class CoverageRarefactionAnalyzer:
 
             # Coverage estimate (Chao et al. 2014)
             if f1 > 0 and total_n > 0:
-                coverage_i = 1.0 - (f1 / total_n) * (
-                    (total_n - 1) / (total_n - f1 + 1)
-                )
+                coverage_i = 1.0 - (f1 / total_n) * ((total_n - 1) / (total_n - f1 + 1))
             else:
                 coverage_i = 1.0 - f1 / total_n if total_n > 0 else 0.0
 
@@ -523,7 +518,8 @@ class CoverageRarefactionAnalyzer:
 
         # Use log gamma for numerical stability
         import math
-        log_comb = (math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1))
+
+        log_comb = math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
         return math.exp(log_comb)
 
     def _hypergeometric_prob(self, k: int, N: int, n: int) -> float:
@@ -532,6 +528,7 @@ class CoverageRarefactionAnalyzer:
             return 0.0
 
         import math
+
         log_prob = (
             math.lgamma(k + 1)
             + math.lgamma(N - k + 1)

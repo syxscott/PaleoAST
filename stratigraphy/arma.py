@@ -39,7 +39,6 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from config.i18n import _
 from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
 
@@ -159,19 +158,12 @@ class ARMAAnalyzer:
             y = validate_data_array(values, allow_nan=False, name="values")
 
             if t.shape != y.shape:
-                raise ComputationError(
-                    f"Times and values must have same shape: "
-                    f"{t.shape} vs {y.shape}"
-                )
+                raise ComputationError(f"Times and values must have same shape: {t.shape} vs {y.shape}")
 
             if len(t) < max(p, q) * 3:
-                raise ComputationError(
-                    f"Need at least {max(p, q) * 3} observations, got {len(t)}"
-                )
+                raise ComputationError(f"Need at least {max(p, q) * 3} observations, got {len(t)}")
 
-            self._logger.info(
-                f"Fitting ARMA({p},{q}) model to {len(t)} observations"
-            )
+            self._logger.info(f"Fitting ARMA({p},{q}) model to {len(t)} observations")
 
             # Apply differencing if needed
             if d > 0:
@@ -217,9 +209,7 @@ class ARMAAnalyzer:
             )
 
             self._last_result = armaresult
-            self._logger.info(
-                f"ARMA({p},{q}) fit complete: AIC={aic:.4f}, BIC={bic:.4f}"
-            )
+            self._logger.info(f"ARMA({p},{q}) fit complete: AIC={aic:.4f}, BIC={bic:.4f}")
             return armaresult
 
     def _fit_statsmodels(
@@ -311,9 +301,7 @@ class ARMAAnalyzer:
             result = np.diff(result)
         return result
 
-    def _inverse_difference(
-        self, original: npt.NDArray, differenced: npt.NDArray, d: int
-    ) -> npt.NDArray:
+    def _inverse_difference(self, original: npt.NDArray, differenced: npt.NDArray, d: int) -> npt.NDArray:
         """Reverse differencing for predictions."""
         result = differenced.copy()
         for _ in range(d):
@@ -406,7 +394,6 @@ class ARMAAnalyzer:
             Dict with best_order, aic_table, bic_table
         """
         best_aic = np.inf
-        best_bic = np.inf
         best_order = (2, 2)
 
         aic_table = {}

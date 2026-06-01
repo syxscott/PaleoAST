@@ -54,11 +54,11 @@ class EFAHarmonic:
 
     @property
     def amplitude_x(self) -> float:
-        return np.sqrt(self.a ** 2 + self.b ** 2)
+        return np.sqrt(self.a**2 + self.b**2)
 
     @property
     def amplitude_y(self) -> float:
-        return np.sqrt(self.c ** 2 + self.d ** 2)
+        return np.sqrt(self.c**2 + self.d**2)
 
 
 @dataclass
@@ -85,9 +85,7 @@ class EFAResult:
             "-" * 55,
         ]
         for h in self.harmonics:
-            lines.append(
-                f"{h.n:<10} {h.a:>10.4f} {h.b:>10.4f} {h.c:>10.4f} {h.d:>10.4f}"
-            )
+            lines.append(f"{h.n:<10} {h.a:>10.4f} {h.b:>10.4f} {h.c:>10.4f} {h.d:>10.4f}")
         return "\n".join(lines)
 
 
@@ -130,7 +128,7 @@ class EFAAnalyzer:
         # Compute cumulative chord length parameter
         dx = np.diff(x)
         dy = np.diff(y)
-        chord_lengths = np.sqrt(dx ** 2 + dy ** 2)
+        chord_lengths = np.sqrt(dx**2 + dy**2)
         t = np.zeros(n_points)
         t[1:] = np.cumsum(chord_lengths)
         T = t[-1]
@@ -143,10 +141,7 @@ class EFAAnalyzer:
         coefficients = []
 
         if T == 0:
-            raise ValueError(
-                "EFA requires non-zero contour length (T=0). "
-                "All contour points may be identical."
-            )
+            raise ValueError("EFA requires non-zero contour length (T=0). All contour points may be identical.")
 
         for n in range(1, n_harmonics + 1):
             omega = 2 * np.pi * n / T
@@ -202,7 +197,7 @@ class EFAAnalyzer:
         # Compute cumulative arc length
         dx = np.diff(contour[:, 0])
         dy = np.diff(contour[:, 1])
-        arc_lengths = np.sqrt(dx ** 2 + dy ** 2)
+        arc_lengths = np.sqrt(dx**2 + dy**2)
         cum_arc = np.zeros(len(contour))
         cum_arc[1:] = np.cumsum(arc_lengths)
         total_length = cum_arc[-1]
@@ -212,6 +207,7 @@ class EFAAnalyzer:
 
         # Interpolate x and y
         from numpy import interp
+
         x_new = interp(new_arc, cum_arc, contour[:, 0])
         y_new = interp(new_arc, cum_arc, contour[:, 1])
 
@@ -289,8 +285,8 @@ class EigenshapeAnalyzer:
             raise ValueError("Eigenshape analysis requires at least 2 specimens")
 
         # SVD-based PCA on the coefficient matrix
-        U, S, Vt = np.linalg.svd(centered, full_matrices=False)
-        eigenvalues = S ** 2 / (n_specimens - 1)
+        _U, S, Vt = np.linalg.svd(centered, full_matrices=False)
+        eigenvalues = S**2 / (n_specimens - 1)
         explained = eigenvalues / np.sum(eigenvalues)
         cumulative = np.cumsum(explained)
 

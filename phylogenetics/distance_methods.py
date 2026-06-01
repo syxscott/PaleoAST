@@ -185,7 +185,7 @@ class DistanceMatrix:
                     raise ValueError(f"Sequence lengths mismatch: {t1}={len(seq1)}, {t2}={len(seq2)}")
 
                 # 计算p距离
-                diffs = sum(1 for a, b in zip(seq1, seq2) if a != b)
+                diffs = sum(1 for a, b in zip(seq1, seq2, strict=False) if a != b)
                 p_dist = diffs / len(seq1)
 
                 # 简单转换 (可扩展更多模型)
@@ -321,7 +321,7 @@ class UPGMA:
         if not active_taxa:
             return PhyloTree()
 
-        root_name = list(active_taxa)[0]
+        root_name = next(iter(active_taxa))
         root_node = clusters[root_name]["node"]
 
         self._logger.info(f"UPGMA tree built with {n} taxa")

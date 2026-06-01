@@ -17,11 +17,8 @@ version: 1.0.1
 import logging
 import os
 import threading
-from typing import Optional
 
-import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +37,13 @@ class FileDropHandler(QObject):
 
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {
-        '.csv': 'csv',
-        '.xlsx': 'excel',
-        '.xls': 'excel',
-        '.tps': 'tps',
-        '.dat': 'dat',
-        '.nwk': 'newick',
-        '.tree': 'newick',
+        ".csv": "csv",
+        ".xlsx": "excel",
+        ".xls": "excel",
+        ".tps": "tps",
+        ".dat": "dat",
+        ".nwk": "newick",
+        ".tree": "newick",
     }
 
     def __init__(self, parent=None):
@@ -77,9 +74,9 @@ class FileDropHandler(QObject):
             File type string (csv, excel, tps, dat, newick)
         """
         ext = os.path.splitext(file_path)[1].lower()
-        return self.SUPPORTED_EXTENSIONS.get(ext, 'unknown')
+        return self.SUPPORTED_EXTENSIONS.get(ext, "unknown")
 
-    def handle_file(self, file_path: str) -> Optional[object]:
+    def handle_file(self, file_path: str) -> object | None:
         """
         Handle a dropped file and parse it.
 
@@ -99,15 +96,15 @@ class FileDropHandler(QObject):
         self._logger.info(f"Handling dropped file: {file_path} (type: {file_type})")
 
         try:
-            if file_type == 'csv':
+            if file_type == "csv":
                 data = self._parse_csv(file_path)
-            elif file_type == 'excel':
+            elif file_type == "excel":
                 data = self._parse_excel(file_path)
-            elif file_type == 'tps':
+            elif file_type == "tps":
                 data = self._parse_tps(file_path)
-            elif file_type == 'dat':
+            elif file_type == "dat":
                 data = self._parse_dat(file_path)
-            elif file_type == 'newick':
+            elif file_type == "newick":
                 data = self._parse_newick(file_path)
             else:
                 error_msg = f"Unsupported file type: {file_type}"
@@ -120,7 +117,7 @@ class FileDropHandler(QObject):
             return data
 
         except Exception as e:
-            error_msg = f"Error parsing {file_type} file: {str(e)}"
+            error_msg = f"Error parsing {file_type} file: {e!s}"
             self._logger.error(error_msg)
             self.load_failed.emit(error_msg)
             return None
@@ -131,10 +128,10 @@ class FileDropHandler(QObject):
 
         df = pd.read_csv(file_path)
         return {
-            'type': 'matrix',
-            'data': df.values,
-            'row_labels': df.index.tolist() if df.index.name else None,
-            'col_labels': df.columns.tolist(),
+            "type": "matrix",
+            "data": df.values,
+            "row_labels": df.index.tolist() if df.index.name else None,
+            "col_labels": df.columns.tolist(),
         }
 
     def _parse_excel(self, file_path: str) -> dict:
@@ -148,16 +145,16 @@ class FileDropHandler(QObject):
         for sheet_name in xl.sheet_names:
             df = pd.read_excel(file_path, sheet_name=sheet_name)
             sheets[sheet_name] = {
-                'data': df.values,
-                'row_labels': df.index.tolist() if df.index.name else None,
-                'col_labels': df.columns.tolist(),
+                "data": df.values,
+                "row_labels": df.index.tolist() if df.index.name else None,
+                "col_labels": df.columns.tolist(),
             }
 
         if len(sheets) == 1:
             # Single sheet, return just that data
-            return list(sheets.values())[0]
+            return next(iter(sheets.values()))
 
-        return {'type': 'multi_sheet', 'sheets': sheets}
+        return {"type": "multi_sheet", "sheets": sheets}
 
     def _parse_tps(self, file_path: str) -> dict:
         """Parse a TPS file."""
@@ -169,12 +166,12 @@ class FileDropHandler(QObject):
         matrix = tps_data.to_matrix()
 
         return {
-            'type': 'tps',
-            'data': matrix,
-            'specimens': [s.id for s in tps_data.specimens],
-            'n_landmarks': tps_data.n_landmarks,
-            'n_dimensions': tps_data.n_dimensions,
-            'raw_data': tps_data,
+            "type": "tps",
+            "data": matrix,
+            "specimens": [s.id for s in tps_data.specimens],
+            "n_landmarks": tps_data.n_landmarks,
+            "n_dimensions": tps_data.n_dimensions,
+            "raw_data": tps_data,
         }
 
     def _parse_dat(self, file_path: str) -> dict:
@@ -184,27 +181,27 @@ class FileDropHandler(QObject):
         dat_data = parse_dat_file(file_path)
 
         return {
-            'type': 'matrix',
-            'data': dat_data.data,
-            'row_labels': dat_data.row_labels,
-            'col_labels': dat_data.col_labels,
-            'groups': dat_data.groups,
+            "type": "matrix",
+            "data": dat_data.data,
+            "row_labels": dat_data.row_labels,
+            "col_labels": dat_data.col_labels,
+            "groups": dat_data.groups,
         }
 
     def _parse_newick(self, file_path: str) -> dict:
         """Parse a Newick tree file."""
         from parsers.newick_parser import NewickParser
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             newick_string = f.read().strip()
 
         parser = NewickParser()
         tree = parser.parse(newick_string)
 
         return {
-            'type': 'tree',
-            'tree': tree,
-            'newick_string': newick_string,
+            "type": "tree",
+            "tree": tree,
+            "newick_string": newick_string,
         }
 
 
@@ -222,9 +219,9 @@ def get_file_drop_handler(parent=None) -> FileDropHandler:
     Returns:
         FileDropHandler instance
     """
-    if not hasattr(FileDropHandler, '_instance'):
+    if not hasattr(FileDropHandler, "_instance"):
         with _file_drop_handler_lock:
             # Double-check locking pattern
-            if not hasattr(FileDropHandler, '_instance'):
+            if not hasattr(FileDropHandler, "_instance"):
                 FileDropHandler._instance = FileDropHandler(parent)
     return FileDropHandler._instance

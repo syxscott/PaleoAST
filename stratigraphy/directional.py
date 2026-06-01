@@ -96,7 +96,7 @@ class DirectionalAnalyzer:
         S = np.sum(np.sin(angles_rad))
 
         # Resultant length
-        R = np.sqrt(C ** 2 + S ** 2)
+        R = np.sqrt(C**2 + S**2)
         R_bar = R / n
 
         # Mean direction
@@ -109,9 +109,9 @@ class DirectionalAnalyzer:
         circ_std = np.sqrt(-2 * np.log(R_bar)) if R_bar > 0 else np.inf
 
         # Rayleigh test
-        Z = n * R_bar ** 2
+        Z = n * R_bar**2
         # Approximate p-value (valid for moderate to large n)
-        p = np.exp(-Z) * (1 + (2 * Z - Z ** 2) / (4 * n) - (24 * Z - 132 * Z ** 2 + 76 * Z ** 3 - 9 * Z ** 4) / (288 * n ** 2))
+        p = np.exp(-Z) * (1 + (2 * Z - Z**2) / (4 * n) - (24 * Z - 132 * Z**2 + 76 * Z**3 - 9 * Z**4) / (288 * n**2))
         p = min(max(p, 0), 1)
 
         return DirectionalResult(
@@ -128,9 +128,7 @@ class DirectionalAnalyzer:
             raw_data=angles_deg,
         )
 
-    def bin_for_rose(
-        self, angles_deg: npt.NDArray, n_bins: int = 12
-    ) -> tuple[npt.NDArray, npt.NDArray]:
+    def bin_for_rose(self, angles_deg: npt.NDArray, n_bins: int = 12) -> tuple[npt.NDArray, npt.NDArray]:
         """
         Bin angles into a rose diagram.
 

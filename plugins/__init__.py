@@ -12,17 +12,17 @@ version: 1.0.1
 """
 
 from .base import AnalysisPlugin, AnalysisResult
+from .decorators import auto_register, register_analysis
+from .loader import discover_plugins_in_package, load_builtin_plugins
 from .registry import AnalysisPluginRegistry, get_plugin_registry
-from .decorators import register_analysis, auto_register
-from .loader import load_builtin_plugins, discover_plugins_in_package
 
 __all__ = [
     "AnalysisPlugin",
-    "AnalysisResult",
     "AnalysisPluginRegistry",
-    "get_plugin_registry",
-    "register_analysis",
+    "AnalysisResult",
     "auto_register",
-    "load_builtin_plugins",
     "discover_plugins_in_package",
+    "get_plugin_registry",
+    "load_builtin_plugins",
+    "register_analysis",
 ]

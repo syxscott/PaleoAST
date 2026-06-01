@@ -331,7 +331,7 @@ class ProcessPool:
 
         # 构建距离矩阵
         dist_matrix = np.zeros((n, n), dtype=np.float64)
-        for (i, j), d in zip(pairs, distances):
+        for (i, j), d in zip(pairs, distances, strict=False):
             dist_matrix[i, j] = d
             dist_matrix[j, i] = d
 

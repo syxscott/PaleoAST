@@ -13,6 +13,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
+import contextlib
 import logging
 
 import matplotlib.pyplot as plt
@@ -43,10 +44,8 @@ class DiversityPlotter:
         try:
             plt.style.use(self._style)
         except OSError:
-            try:
+            with contextlib.suppress(OSError):
                 plt.style.use(self._style.replace("v0_8-", ""))
-            except OSError:
-                pass
 
     def plot_rarefaction(self, result: RarefactionResult, show_ci: bool = False, title: str | None = None) -> Figure:
         """
@@ -166,7 +165,7 @@ class DiversityPlotter:
         ax.set_xticklabels(samples, rotation=45, ha="right")
 
         # Add value labels on bars
-        for bar, value in zip(bars, values):
+        for bar, value in zip(bars, values, strict=False):
             height = bar.get_height()
             ax.annotate(
                 f"{value:.2f}",
@@ -215,7 +214,7 @@ class DiversityPlotter:
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
         # 1. Shannon vs Simpson comparison
-        ax1 = axes[0, 0]
+        axes[0, 0]
 
         # 2. Diversity indices radar chart (simplified as bar)
         ax2 = axes[0, 1]
@@ -234,7 +233,7 @@ class DiversityPlotter:
                     values_to_show.append(value)
 
         colors = get_color_scheme(len(indices_to_show))
-        bars = ax2.bar(indices_to_show, values_to_show, color=colors, edgecolor="white")
+        ax2.bar(indices_to_show, values_to_show, color=colors, edgecolor="white")
 
         ax2.set_ylabel("Value", fontsize=9)
         ax2.set_title("Diversity Indices", fontsize=11, fontweight="bold")

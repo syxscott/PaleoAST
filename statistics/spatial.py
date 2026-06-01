@@ -36,7 +36,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -137,9 +136,7 @@ class RipleyKAnalyzer:
             if n_points < 3:
                 raise ComputationError("Need at least 3 points for spatial analysis")
 
-            self._logger.info(
-                f"RipleyK analyze started: n_points={n_points}, n_simulations={n_simulations}"
-            )
+            self._logger.info(f"RipleyK analyze started: n_points={n_points}, n_simulations={n_simulations}")
 
             # Compute bounding box
             x_min, x_max = points[:, 0].min(), points[:, 0].max()
@@ -168,13 +165,11 @@ class RipleyKAnalyzer:
                 l_values = np.nan_to_num(l_values, nan=0.0)
 
             # Monte Carlo envelope
-            envelope_upper, envelope_lower = self._compute_envelope(
-                points, r_values, area, n_simulations
-            )
+            envelope_upper, envelope_lower = self._compute_envelope(points, r_values, area, n_simulations)
 
             # Determine interpretation
             # Check if L(r) is predominantly above, below, or within envelope
-            l_mean = np.mean(l_values[len(r_values) // 4:])  # Ignore very small r
+            l_mean = np.mean(l_values[len(r_values) // 4 :])  # Ignore very small r
             envelope_range = np.mean(envelope_upper - envelope_lower)
 
             if l_mean > envelope_range / 2:

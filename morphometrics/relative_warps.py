@@ -140,7 +140,7 @@ class RelativeWarpsAnalyzer:
 
             # PCA via SVD (more numerically stable than eigendecomposition)
             try:
-                U, singular_values, Vt = np.linalg.svd(flattened_centered, full_matrices=False)
+                _U, singular_values, Vt = np.linalg.svd(flattened_centered, full_matrices=False)
             except np.linalg.LinAlgError as e:
                 raise ComputationError("SVD failed during Relative Warps analysis", original_exception=e)
 

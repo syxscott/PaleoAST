@@ -12,12 +12,9 @@ import logging
 from typing import Any
 
 import numpy as np
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -71,12 +68,10 @@ class MissingValueReportWidget(QWidget):
         nan_by_row: np.ndarray,
         nan_by_col: np.ndarray,
         n_rows: int,
-        n_cols: int
+        n_cols: int,
     ) -> None:
         """Update the report display."""
-        self.summary_label.setText(
-            f"<b>缺失值统计:</b> {total_nan} 个 NaN ({nan_proportion*100:.1f}%)"
-        )
+        self.summary_label.setText(f"<b>缺失值统计:</b> {total_nan} 个 NaN ({nan_proportion * 100:.1f}%)")
 
         # Show rows and columns with NaN
         self.distribution_label.setText(
@@ -117,13 +112,15 @@ class ImputationConfigWidget(QWidget):
         method_layout = QVBoxLayout(method_group)
 
         self.method_combo = QComboBox()
-        self.method_combo.addItems([
-            _("列均值填充 (Mean)"),
-            _("列中位数填充 (Median)"),
-            _("K近邻填充 (KNN)"),
-            _("删除含NaN的行"),
-            _("删除含NaN的列"),
-        ])
+        self.method_combo.addItems(
+            [
+                _("列均值填充 (Mean)"),
+                _("列中位数填充 (Median)"),
+                _("K近邻填充 (KNN)"),
+                _("删除含NaN的行"),
+                _("删除含NaN的列"),
+            ]
+        )
         method_layout.addWidget(self.method_combo)
 
         # KNN options
@@ -183,7 +180,7 @@ class ImputationDialog(BaseAnalysisDialog):
         nan_by_col: np.ndarray | None = None,
         n_rows: int = 0,
         n_cols: int = 0,
-        nan_proportion: float = 0.0
+        nan_proportion: float = 0.0,
     ) -> None:
         """
         Initialize the imputation dialog.
@@ -217,17 +214,12 @@ class ImputationDialog(BaseAnalysisDialog):
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme."""
         self._is_dark_theme = is_dark
-        self.result_label.setStyleSheet(
-            f"color: {get_palette(is_dark).text_secondary}; padding: 8px;"
-        )
+        self.result_label.setStyleSheet(f"color: {get_palette(is_dark).text_secondary}; padding: 8px;")
 
     def _setup_parameters(self) -> None:
         """Setup the dialog UI."""
         # Header
-        header = QLabel(
-            _("<h2>缺失值处理中心</h2>"
-              "<p>检测到数据中存在缺失值，请选择处理方式。</p>")
-        )
+        header = QLabel(_("<h2>缺失值处理中心</h2><p>检测到数据中存在缺失值，请选择处理方式。</p>"))
         header.setWordWrap(True)
         self.layout().addWidget(header)
 
@@ -243,7 +235,7 @@ class ImputationDialog(BaseAnalysisDialog):
         result_group = QGroupBox(_("处理预览"))
         result_layout = QVBoxLayout(result_group)
 
-        self.result_label = QLabel(_("点击\"预览处理结果\"查看处理后的数据预览"))
+        self.result_label = QLabel(_('点击"预览处理结果"查看处理后的数据预览'))
         self.result_label.setWordWrap(True)
         self.result_label.setStyleSheet("color: #666; padding: 8px;")
         result_layout.addWidget(self.result_label)
@@ -264,7 +256,7 @@ class ImputationDialog(BaseAnalysisDialog):
             nan_by_row=self.nan_by_row,
             nan_by_col=self.nan_by_col,
             n_rows=self.n_rows,
-            n_cols=self.n_cols
+            n_cols=self.n_cols,
         )
 
     def _on_preview(self) -> None:
@@ -277,7 +269,7 @@ class ImputationDialog(BaseAnalysisDialog):
             "median": "中位数填充",
             "knn": f"KNN填充 (k={k})",
             "remove_rows": "删除行",
-            "remove_columns": "删除列"
+            "remove_columns": "删除列",
         }
 
         # Generate impact description
@@ -300,8 +292,7 @@ class ImputationDialog(BaseAnalysisDialog):
                 preview_note = ""
 
         self.result_label.setText(
-            f"<b>选择的方法:</b> {method_names.get(method, method)}\n"
-            f"<b>影响:</b> {impact}{preview_note}"
+            f"<b>选择的方法:</b> {method_names.get(method, method)}\n<b>影响:</b> {impact}{preview_note}"
         )
 
     def get_parameters(self) -> dict[str, Any]:

@@ -214,9 +214,7 @@ class StateManager:
                 self._column_metadata = ColumnMetadataManager(
                     n_columns=matrix.n_variables, column_labels=matrix.col_labels
                 )
-                self._row_metadata = RowMetadataManager(
-                    n_rows=matrix.n_samples, row_labels=matrix.row_labels
-                )
+                self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
             self._analysis_cache.clear()
             self._modified = True
         get_event_bus().emit_data_changed(matrix)
@@ -410,7 +408,9 @@ class StateManager:
         with self._read_write_lock:
             if not self._undo_stack:
                 return
-            self._logger.debug(f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
+            self._logger.debug(
+                f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
+            )
             if self._data_matrix is not None:
                 current_state = {
                     "data_matrix": self._data_matrix.copy(),
@@ -421,10 +421,14 @@ class StateManager:
             state = self._undo_stack.pop()
             self._data_matrix = state["data_matrix"]
             if state["column_metadata"] is not None and self._data_matrix:
-                self._column_metadata = ColumnMetadataManager(n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels)
+                self._column_metadata = ColumnMetadataManager(
+                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
+                )
                 self._column_metadata.from_dict(state["column_metadata"])
             if state["row_metadata"] is not None and self._data_matrix:
-                self._row_metadata = RowMetadataManager(n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels)
+                self._row_metadata = RowMetadataManager(
+                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
+                )
                 self._row_metadata.from_dict(state["row_metadata"])
         get_event_bus().emit_undo_stack_changed()
 
@@ -433,7 +437,9 @@ class StateManager:
         with self._read_write_lock:
             if not self._redo_stack:
                 return
-            self._logger.debug(f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}")
+            self._logger.debug(
+                f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
+            )
             if self._data_matrix is not None:
                 current_state = {
                     "data_matrix": self._data_matrix.copy(),
@@ -444,10 +450,14 @@ class StateManager:
             state = self._redo_stack.pop()
             self._data_matrix = state["data_matrix"]
             if state["column_metadata"] is not None and self._data_matrix:
-                self._column_metadata = ColumnMetadataManager(n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels)
+                self._column_metadata = ColumnMetadataManager(
+                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
+                )
                 self._column_metadata.from_dict(state["column_metadata"])
             if state["row_metadata"] is not None and self._data_matrix:
-                self._row_metadata = RowMetadataManager(n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels)
+                self._row_metadata = RowMetadataManager(
+                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
+                )
                 self._row_metadata.from_dict(state["row_metadata"])
         get_event_bus().emit_undo_stack_changed()
 

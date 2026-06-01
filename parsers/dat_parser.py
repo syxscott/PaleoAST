@@ -18,7 +18,6 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -28,12 +27,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PASTData:
     """Container for parsed PAST data."""
+
     data: np.ndarray
-    row_labels: Optional[list[str]] = None
-    col_labels: Optional[list[str]] = None
-    groups: Optional[list[str]] = None
-    comments: Optional[list[str]] = None
-    file_path: Optional[str] = None
+    row_labels: list[str] | None = None
+    col_labels: list[str] | None = None
+    groups: list[str] | None = None
+    comments: list[str] | None = None
+    file_path: str | None = None
 
     def summary(self) -> str:
         lines = [
@@ -50,9 +50,9 @@ class DATParser:
 
     # PAST comment patterns (compiled for efficiency)
     _COMMENT_PATTERNS = [
-        (r'^#(.+)$', re.compile(r'^#(.+)$')),
-        (r'^\[(.+)\]$', re.compile(r'^\[(.+)\]$')),
-        (r'^\{(.+)\}$', re.compile(r'^\{(.+)\}$')),
+        (r"^#(.+)$", re.compile(r"^#(.+)$")),
+        (r"^\[(.+)\]$", re.compile(r"^\[(.+)\]$")),
+        (r"^\{(.+)\}$", re.compile(r"^\{(.+)\}$")),
     ]
 
     def __init__(self) -> None:
@@ -77,7 +77,7 @@ class DATParser:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PAST dat file not found: {file_path}")
 
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
 
         if len(lines) == 0:
@@ -110,7 +110,7 @@ class DATParser:
 
             if is_comment:
                 # Check if this is a group assignment line like "{Group1}"
-                if stripped.startswith('{') and stripped.endswith('}'):
+                if stripped.startswith("{") and stripped.endswith("}"):
                     group_name = stripped[1:-1]
                     groups.append(group_name)
                     has_groups = True
@@ -142,11 +142,11 @@ class DATParser:
                 # Handle both comma and space separators within data
                 data_values = []
                 for val in data_parts:
-                    val = val.replace(',', '.').strip()
+                    val = val.replace(",", ".").strip()
                     if val:
                         data_values.append(float(val))
                 data_lines.append(data_values)
-            except ValueError as e:
+            except ValueError:
                 self._logger.warning(f"Could not parse line {line_num + 1}: {original_line}")
                 continue
 
@@ -159,7 +159,7 @@ class DATParser:
             for i, row in enumerate(data_lines):
                 if len(row) != first_row_len:
                     self._logger.warning(
-                        f"Inconsistent row length at line {i+1}: expected {first_row_len}, got {len(row)}. Padding with NaN."
+                        f"Inconsistent row length at line {i + 1}: expected {first_row_len}, got {len(row)}. Padding with NaN."
                     )
                     # Pad short rows with NaN
                     while len(row) < first_row_len:
@@ -169,20 +169,18 @@ class DATParser:
 
         # Handle column labels
         if col_labels is None:
-            col_labels = [f"Col_{i+1}" for i in range(data.shape[1])]
+            col_labels = [f"Col_{i + 1}" for i in range(data.shape[1])]
         elif len(col_labels) != data.shape[1]:
-            self._logger.warning(
-                f"Column label count ({len(col_labels)}) doesn't match data columns ({data.shape[1]})"
-            )
+            self._logger.warning(f"Column label count ({len(col_labels)}) doesn't match data columns ({data.shape[1]})")
             # Adjust column labels
             if len(col_labels) > data.shape[1]:
-                col_labels = col_labels[:data.shape[1]]
+                col_labels = col_labels[: data.shape[1]]
             else:
-                col_labels.extend([f"Col_{i+1}" for i in range(len(col_labels), data.shape[1])])
+                col_labels.extend([f"Col_{i + 1}" for i in range(len(col_labels), data.shape[1])])
 
         # Handle row labels
         if len(row_labels) != data.shape[0]:
-            row_labels = [f"Row_{i+1}" for i in range(data.shape[0])]
+            row_labels = [f"Row_{i + 1}" for i in range(data.shape[0])]
 
         # Handle groups
         if not has_groups or len(groups) == 0:
@@ -196,15 +194,15 @@ class DATParser:
             col_labels=col_labels,
             groups=groups,
             comments=comments if comments else None,
-            file_path=file_path
+            file_path=file_path,
         )
 
     def _split_line(self, line: str) -> list[str]:
         """Split a line by tabs and spaces."""
         # Replace tabs with spaces
-        line = line.replace('\t', ' ')
+        line = line.replace("\t", " ")
         # Split by multiple spaces
-        parts = re.split(r'\s+', line)
+        parts = re.split(r"\s+", line)
         return [p.strip() for p in parts if p.strip()]
 
     def _looks_like_header(self, parts: list[str]) -> bool:
@@ -216,7 +214,7 @@ class DATParser:
         numeric_count = 0
         for part in parts:
             try:
-                float(part.replace(',', '.'))
+                float(part.replace(",", "."))
                 numeric_count += 1
             except ValueError:
                 pass
@@ -227,9 +225,9 @@ class DATParser:
     def _is_label(self, value: str) -> bool:
         """Check if a value looks like a label (non-numeric)."""
         # Remove quotes if present
-        value = value.strip('"\'')
+        value = value.strip("\"'")
         try:
-            float(value.replace(',', '.'))
+            float(value.replace(",", "."))
             return False
         except ValueError:
             return True

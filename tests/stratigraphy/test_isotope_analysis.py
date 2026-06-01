@@ -1,12 +1,13 @@
 # tests/stratigraphy/test_isotope_analysis.py
 import numpy as np
+
 from stratigraphy.isotope_analysis import (
     IsotopeData,
-    IsotopeResult,
+    compute_correlation,
     compute_moving_average,
     detect_excursions_from_values,
-    compute_correlation
 )
+
 
 def test_isotope_data_creation():
     """测试 IsotopeData 数据类"""
@@ -20,6 +21,7 @@ def test_isotope_data_creation():
     assert len(data.depth) == 6
     assert len(data.d13C) == 6
     assert len(data.d18O) == 6
+
 
 def test_moving_average():
     """测试移动平均"""
@@ -40,6 +42,7 @@ def test_moving_average():
     print(f"Original variance: {original_var:.4f}")
     print(f"Smoothed variance: {smoothed_var:.4f}")
 
+
 def test_excursion_detection():
     """测试 excursion 检测"""
     # 模拟 excursion 数据
@@ -56,6 +59,7 @@ def test_excursion_detection():
         assert excursion.start_idx <= 3 <= excursion.end_idx
 
     print(f"Detected {len(excursions)} excursion(s)")
+
 
 def test_correlation():
     """测试相关性分析"""

@@ -252,7 +252,6 @@ def get_light_theme_stylesheet() -> str:
     return get_modern_stylesheet()
 
 
-
 # =============================================================================
 # 闪屏窗口
 # =============================================================================
@@ -277,7 +276,7 @@ class SplashScreen:
     def show(self) -> None:
         """显示闪屏"""
         try:
-            from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
+            from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt
             from PyQt6.QtGui import QFont
             from PyQt6.QtWidgets import QApplication, QLabel, QProgressBar, QVBoxLayout, QWidget
 
@@ -410,7 +409,7 @@ class SplashScreen:
     def close(self) -> None:
         """关闭闪屏"""
         try:
-            from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+            from PyQt6.QtCore import QEasingCurve, QPropertyAnimation
             from PyQt6.QtWidgets import QApplication
 
             if not self._widget:
@@ -576,7 +575,7 @@ class PaleoASTApplication:
         self._logger.info("Loading configuration...")
 
         try:
-            import config
+            import config  # noqa: F401  # availability check
 
             self._logger.info("Configuration loaded")
         except ImportError:

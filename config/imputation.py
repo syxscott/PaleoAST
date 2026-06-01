@@ -17,16 +17,15 @@ version: 1.0.1
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
 
 import numpy as np
-import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
 
 class ImputationMethod(Enum):
     """Imputation method types."""
+
     MEAN = "mean"
     MEDIAN = "median"
     KNN = "knn"
@@ -37,6 +36,7 @@ class ImputationMethod(Enum):
 @dataclass
 class ImputationResult:
     """Result of an imputation operation."""
+
     data: np.ndarray
     method: ImputationMethod
     nan_removed: int
@@ -46,51 +46,49 @@ class ImputationResult:
 
     def to_dict(self) -> dict:
         return {
-            'method': self.method.value,
-            'nan_removed': self.nan_removed,
-            'rows_removed': self.rows_removed,
-            'columns_removed': self.columns_removed,
-            'summary': self.summary
+            "method": self.method.value,
+            "nan_removed": self.nan_removed,
+            "rows_removed": self.rows_removed,
+            "columns_removed": self.columns_removed,
+            "summary": self.summary,
         }
 
 
 @dataclass
 class MissingValueReport:
     """Report on missing values in a dataset."""
+
     total_nan: int
     nan_proportion: float
     rows_with_nan: int
     cols_with_nan: int
     nan_by_row: np.ndarray
     nan_by_col: np.ndarray
-    column_names: Optional[list] = None
+    column_names: list | None = None
 
     def to_dict(self) -> dict:
         return {
-            'total_nan': self.total_nan,
-            'nan_proportion': self.nan_proportion,
-            'rows_with_nan': self.rows_with_nan,
-            'cols_with_nan': self.cols_with_nan,
-            'nan_by_row': self.nan_by_row.tolist() if self.nan_by_row is not None else None,
-            'nan_by_col': self.nan_by_col.tolist() if self.nan_by_col is not None else None,
+            "total_nan": self.total_nan,
+            "nan_proportion": self.nan_proportion,
+            "rows_with_nan": self.rows_with_nan,
+            "cols_with_nan": self.cols_with_nan,
+            "nan_by_row": self.nan_by_row.tolist() if self.nan_by_row is not None else None,
+            "nan_by_col": self.nan_by_col.tolist() if self.nan_by_col is not None else None,
         }
 
     def summary(self) -> str:
         lines = [
-            f"缺失值报告",
-            f"{'='*40}",
+            "缺失值报告",
+            f"{'=' * 40}",
             f"总 NaN 数量: {self.total_nan}",
-            f"NaN 占比: {self.nan_proportion*100:.2f}%",
+            f"NaN 占比: {self.nan_proportion * 100:.2f}%",
             f"含 NaN 的行: {self.rows_with_nan}",
             f"含 NaN 的列: {self.cols_with_nan}",
         ]
         return "\n".join(lines)
 
 
-def analyze_missing_values(
-    data: np.ndarray,
-    column_names: Optional[list] = None
-) -> MissingValueReport:
+def analyze_missing_values(data: np.ndarray, column_names: list | None = None) -> MissingValueReport:
     """
     Analyze missing values in a data matrix.
 
@@ -118,7 +116,7 @@ def analyze_missing_values(
         cols_with_nan=cols_with_nan,
         nan_by_row=nan_by_row,
         nan_by_col=nan_by_col,
-        column_names=column_names
+        column_names=column_names,
     )
 
 
@@ -141,7 +139,6 @@ def impute_mean(data: np.ndarray) -> ImputationResult:
 
     nan_count = int(np.sum(nan_mask))
     rows_removed = 0
-    cols_removed = 0
 
     # Compute column means (ignoring NaN)
     col_means = np.nanmean(result_data, axis=0)
@@ -151,10 +148,7 @@ def impute_mean(data: np.ndarray) -> ImputationResult:
     all_nan_cols = np.all(nan_mask, axis=0)
     if np.any(all_nan_cols):
         nan_cols = np.where(all_nan_cols)[0]
-        logger.warning(
-            f"impute_mean: {len(nan_cols)} all-NaN column(s) found; "
-            f"falling back to 0 for these columns"
-        )
+        logger.warning(f"impute_mean: {len(nan_cols)} all-NaN column(s) found; falling back to 0 for these columns")
         col_means = np.where(all_nan_cols, 0.0, col_means)
 
     # Impute
@@ -172,7 +166,7 @@ def impute_mean(data: np.ndarray) -> ImputationResult:
         nan_removed=nan_count,
         rows_removed=rows_removed,
         columns_removed=0,
-        summary=summary
+        summary=summary,
     )
 
 
@@ -195,7 +189,6 @@ def impute_median(data: np.ndarray) -> ImputationResult:
 
     nan_count = int(np.sum(nan_mask))
     rows_removed = 0
-    cols_removed = 0
 
     # Compute column medians (ignoring NaN)
     col_medians = np.nanmedian(result_data, axis=0)
@@ -205,10 +198,7 @@ def impute_median(data: np.ndarray) -> ImputationResult:
     all_nan_cols = np.all(nan_mask, axis=0)
     if np.any(all_nan_cols):
         nan_cols = np.where(all_nan_cols)[0]
-        logger.warning(
-            f"impute_median: {len(nan_cols)} all-NaN column(s) found; "
-            f"falling back to 0 for these columns"
-        )
+        logger.warning(f"impute_median: {len(nan_cols)} all-NaN column(s) found; falling back to 0 for these columns")
         col_medians = np.where(all_nan_cols, 0.0, col_medians)
 
     # Impute
@@ -226,15 +216,11 @@ def impute_median(data: np.ndarray) -> ImputationResult:
         nan_removed=nan_count,
         rows_removed=rows_removed,
         columns_removed=0,
-        summary=summary
+        summary=summary,
     )
 
 
-def impute_knn(
-    data: np.ndarray,
-    k: int = 5,
-    distance_metric: str = "euclidean"
-) -> ImputationResult:
+def impute_knn(data: np.ndarray, k: int = 5, distance_metric: str = "euclidean") -> ImputationResult:
     """
     Impute missing values using K-Nearest Neighbors.
 
@@ -254,10 +240,8 @@ def impute_knn(
     nan_mask = np.isnan(result_data)
 
     nan_count = int(np.sum(nan_mask))
-    rows_removed = 0
-    cols_removed = 0
 
-    n_samples, n_features = result_data.shape
+    _n_samples, n_features = result_data.shape
 
     # For each sample with missing values
     for sample_idx in np.where(np.any(nan_mask, axis=1))[0]:
@@ -334,7 +318,7 @@ def impute_knn(
         nan_removed=nan_count,
         rows_removed=0,
         columns_removed=0,
-        summary=summary
+        summary=summary,
     )
 
 
@@ -365,7 +349,7 @@ def remove_rows_with_nan(data: np.ndarray) -> ImputationResult:
         nan_removed=nan_count,
         rows_removed=rows_removed,
         columns_removed=0,
-        summary=summary
+        summary=summary,
     )
 
 
@@ -396,15 +380,11 @@ def remove_columns_with_nan(data: np.ndarray) -> ImputationResult:
         nan_removed=nan_count,
         rows_removed=0,
         columns_removed=cols_removed,
-        summary=summary
+        summary=summary,
     )
 
 
-def impute(
-    data: np.ndarray,
-    method: ImputationMethod,
-    **kwargs
-) -> ImputationResult:
+def impute(data: np.ndarray, method: ImputationMethod, **kwargs) -> ImputationResult:
     """
     Apply specified imputation method.
 
@@ -426,12 +406,7 @@ def impute(
     if nan_count == 0:
         logger.info("No missing values found, returning copy of data")
         return ImputationResult(
-            data=data.copy(),
-            method=method,
-            nan_removed=0,
-            rows_removed=0,
-            columns_removed=0,
-            summary="无缺失值"
+            data=data.copy(), method=method, nan_removed=0, rows_removed=0, columns_removed=0, summary="无缺失值"
         )
 
     if method == ImputationMethod.MEAN:
@@ -439,7 +414,7 @@ def impute(
     elif method == ImputationMethod.MEDIAN:
         return impute_median(data)
     elif method == ImputationMethod.KNN:
-        k = kwargs.get('k', 5)
+        k = kwargs.get("k", 5)
         return impute_knn(data, k=k)
     elif method == ImputationMethod.REMOVE_ROWS:
         return remove_rows_with_nan(data)

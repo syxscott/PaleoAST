@@ -12,11 +12,9 @@ version: 1.0.1
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from dataclasses import dataclass
 
 import numpy as np
-import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +22,33 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StratigraphicSection:
     """单条地层剖面数据"""
+
     name: str
     heights: np.ndarray  # 层位高度 (m)
     thicknesses: np.ndarray  # 层厚 (m)
-    lithologies: List[str]  # 岩性描述
-    ages: Optional[np.ndarray] = None  # 绝对年龄 (如果有)
-    age_errors: Optional[np.ndarray] = None  # 年龄误差
-    notes: Optional[List[str]] = None  # 备注
+    lithologies: list[str]  # 岩性描述
+    ages: np.ndarray | None = None  # 绝对年龄 (如果有)
+    age_errors: np.ndarray | None = None  # 年龄误差
+    notes: list[str] | None = None  # 备注
 
     def to_dict(self) -> dict:
         return {
-            'name': self.name,
-            'heights': self.heights.tolist(),
-            'thicknesses': self.thicknesses.tolist(),
-            'lithologies': self.lithologies,
-            'ages': self.ages.tolist() if self.ages is not None else None,
-            'age_errors': self.age_errors.tolist() if self.age_errors is not None else None
+            "name": self.name,
+            "heights": self.heights.tolist(),
+            "thicknesses": self.thicknesses.tolist(),
+            "lithologies": self.lithologies,
+            "ages": self.ages.tolist() if self.ages is not None else None,
+            "age_errors": self.age_errors.tolist() if self.age_errors is not None else None,
         }
 
 
 @dataclass
 class StratigraphicCorrelationResult:
     """相关性分析结果"""
-    sections: List[StratigraphicSection]
+
+    sections: list[StratigraphicSection]
     correlation_matrix: np.ndarray
-    best_matches: List[Tuple[int, int, float]]
+    best_matches: list[tuple[int, int, float]]
 
     def summary(self) -> str:
         n = len(self.sections)
@@ -65,17 +65,18 @@ class StratigraphicCorrelationResult:
 
     def to_dict(self) -> dict:
         return {
-            'sections': [s.to_dict() for s in self.sections],
-            'correlation_matrix': self.correlation_matrix.tolist()
+            "sections": [s.to_dict() for s in self.sections],
+            "correlation_matrix": self.correlation_matrix.tolist(),
         }
 
 
 @dataclass
 class AgeModelResult:
     """年龄模型结果"""
+
     section: StratigraphicSection
     modeled_ages: np.ndarray
-    confidence_intervals: Tuple[np.ndarray, np.ndarray]
+    confidence_intervals: tuple[np.ndarray, np.ndarray]
     sedimentation_rates: np.ndarray
 
     def summary(self) -> str:
@@ -88,11 +89,11 @@ class AgeModelResult:
 
     def to_dict(self) -> dict:
         return {
-            'section': self.section.to_dict(),
-            'modeled_ages': self.modeled_ages.tolist(),
-            'ci_lower': self.confidence_intervals[0].tolist(),
-            'ci_upper': self.confidence_intervals[1].tolist(),
-            'sedimentation_rates': self.sedimentation_rates.tolist()
+            "section": self.section.to_dict(),
+            "modeled_ages": self.modeled_ages.tolist(),
+            "ci_lower": self.confidence_intervals[0].tolist(),
+            "ci_upper": self.confidence_intervals[1].tolist(),
+            "sedimentation_rates": self.sedimentation_rates.tolist(),
         }
 
 
@@ -103,10 +104,7 @@ class StratigraphicCorrelationAnalyzer:
         self._logger = logging.getLogger(f"{__name__}.StratigraphicCorrelationAnalyzer")
 
     def analyze(
-        self,
-        sections: List[StratigraphicSection],
-        method: str = 'dtw',
-        max_matches: int = 5
+        self, sections: list[StratigraphicSection], method: str = "dtw", max_matches: int = 5
     ) -> StratigraphicCorrelationResult:
         """
         分析多个地层剖面的相关性
@@ -136,20 +134,13 @@ class StratigraphicCorrelationAnalyzer:
         self._logger.info(f"Correlation analysis complete: {n} sections, avg corr={np.mean(corr_matrix):.3f}")
 
         return StratigraphicCorrelationResult(
-            sections=sections,
-            correlation_matrix=corr_matrix,
-            best_matches=best_matches
+            sections=sections, correlation_matrix=corr_matrix, best_matches=best_matches
         )
 
-    def _compute_correlation(
-        self,
-        sec_a: StratigraphicSection,
-        sec_b: StratigraphicSection,
-        method: str
-    ) -> float:
-        if method == 'dtw':
+    def _compute_correlation(self, sec_a: StratigraphicSection, sec_b: StratigraphicSection, method: str) -> float:
+        if method == "dtw":
             return self._dtw_correlation(sec_a, sec_b)
-        elif method == 'euclidean':
+        elif method == "euclidean":
             return self._euclidean_correlation(sec_a, sec_b)
         else:
             return self._dtw_correlation(sec_a, sec_b)
@@ -186,11 +177,8 @@ class StratigraphicCorrelationAnalyzer:
         return similarity
 
     def _find_best_matches(
-        self,
-        corr_matrix: np.ndarray,
-        sections: List[StratigraphicSection],
-        max_matches: int = 5
-    ) -> List[Tuple[int, int, float]]:
+        self, corr_matrix: np.ndarray, sections: list[StratigraphicSection], max_matches: int = 5
+    ) -> list[tuple[int, int, float]]:
         """找相关性最高的剖面对"""
         matches = []
         n = len(sections)
@@ -210,8 +198,8 @@ class AgeModelAnalyzer:
     def build_model(
         self,
         section: StratigraphicSection,
-        age_constraints: List[Tuple[float, float, float]],
-        model_type: str = 'linear'
+        age_constraints: list[tuple[float, float, float]],
+        model_type: str = "linear",
     ) -> AgeModelResult:
         """
         构建地层年龄模型
@@ -230,19 +218,14 @@ class AgeModelAnalyzer:
         constraint_ages = np.array([c[1] for c in age_constraints])
         constraint_errors = np.array([c[2] for c in age_constraints])
 
-        kind = 'linear' if model_type == 'linear' else 'cubic'
-        age_func = interp1d(
-            constraint_heights,
-            constraint_ages,
-            kind=kind,
-            fill_value='extrapolate'
-        )
+        kind = "linear" if model_type == "linear" else "cubic"
+        age_func = interp1d(constraint_heights, constraint_ages, kind=kind, fill_value="extrapolate")
 
         modeled_ages = age_func(section.heights)
 
         rates = np.zeros(len(section.heights))
         if len(section.heights) > 1:
-            with np.errstate(divide='ignore', invalid='ignore'):
+            with np.errstate(divide="ignore", invalid="ignore"):
                 # Note: In geological convention, age decreases with height
                 # so dHeight/dAge < 0, hence the negation to get positive rates
                 rates = np.diff(section.heights) / np.diff(modeled_ages)
@@ -261,7 +244,7 @@ class AgeModelAnalyzer:
             section=section,
             modeled_ages=modeled_ages,
             confidence_intervals=(ci_lower, ci_upper),
-            sedimentation_rates=rates
+            sedimentation_rates=rates,
         )
 
 
@@ -272,11 +255,8 @@ class SedimentationRateAnalyzer:
         self._logger = logging.getLogger(f"{__name__}.SedimentationRateAnalyzer")
 
     def calculate(
-        self,
-        section: StratigraphicSection,
-        smooth: bool = True,
-        frac: float = 0.3
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self, section: StratigraphicSection, smooth: bool = True, frac: float = 0.3
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         计算沉积速率
 
@@ -295,7 +275,7 @@ class SedimentationRateAnalyzer:
             raise ValueError("需要年龄数据来计算沉积速率")
 
         rates = np.zeros(len(heights))
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             rates = np.gradient(heights, ages)
             rates = -rates  # 沉积为正
 
@@ -303,15 +283,13 @@ class SedimentationRateAnalyzer:
         if smooth and len(heights) > 3:
             try:
                 from scipy.interpolate import Lowess
+
                 sorted_idx = np.argsort(heights)
                 result = Lowess(rates[sorted_idx], heights[sorted_idx], frac=frac, return_sorted=False)
                 smoothed_rates[sorted_idx] = result[:, 1]
             except Exception as e:
                 self._logger.warning(f"LOWESS smoothing failed: {e}")
 
-        self._logger.info(
-            f"Sedimentation rates computed: {len(heights)} points, "
-            f"mean={np.mean(rates):.2f} m/Myr"
-        )
+        self._logger.info(f"Sedimentation rates computed: {len(heights)} points, mean={np.mean(rates):.2f} m/Myr")
 
         return heights, rates, smoothed_rates

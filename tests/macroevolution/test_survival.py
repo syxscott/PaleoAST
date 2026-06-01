@@ -2,12 +2,13 @@
 """Tests for survival analysis module including Cox PH."""
 
 import numpy as np
+
 from macroevolution.survival import (
-    KaplanMeierAnalyzer,
-    log_rank_test,
-    cox_ph,
     CoxPHResult,
+    KaplanMeierAnalyzer,
     _compute_concordance,
+    cox_ph,
+    log_rank_test,
 )
 
 
@@ -22,8 +23,7 @@ def test_kaplan_meier_basic():
     # Survival probabilities should be non-increasing
     assert len(result.survival_prob) >= 1
     assert result.survival_prob[0] <= 1.0
-    assert all(result.survival_prob[i] >= result.survival_prob[i+1]
-               for i in range(len(result.survival_prob)-1))
+    assert all(result.survival_prob[i] >= result.survival_prob[i + 1] for i in range(len(result.survival_prob) - 1))
 
 
 def test_kaplan_meier_empty():
@@ -48,8 +48,8 @@ def test_log_rank_test():
 
     result = log_rank_test(times1, events1, times2, events2)
 
-    assert hasattr(result, 'statistic')
-    assert hasattr(result, 'p_value')
+    assert hasattr(result, "statistic")
+    assert hasattr(result, "p_value")
     assert 0 <= result.p_value <= 1
 
 
@@ -161,10 +161,12 @@ def test_cox_ph_scipy_concordance_vs_manual():
     # Create a strong effect: covariate 0 is protective (higher = longer survival)
     durations = np.random.exponential(5, n)
     events = np.random.binomial(1, 0.6, n)
-    covariates = np.column_stack([
-        (10 - durations) / 5,  # Covariate 1: inverse relationship
-        np.random.randn(n),
-    ])
+    covariates = np.column_stack(
+        [
+            (10 - durations) / 5,  # Covariate 1: inverse relationship
+            np.random.randn(n),
+        ]
+    )
 
     try:
         result = cox_ph(durations, events, covariates, max_iter=50)

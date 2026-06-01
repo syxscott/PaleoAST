@@ -260,11 +260,11 @@ class NMDSAnalyzer:
             D = np.sqrt(np.sum(diff**2, axis=2))
         else:
             # Use cdist for large matrices (more memory efficient)
-            D = cdist(X, X, metric='euclidean')
+            D = cdist(X, X, metric="euclidean")
 
         return D
 
-    def get_shepard_data(self, result: NMDSResult | None = None) -> dict[str, npt.NDArray]:
+    def get_shepard_data(self, result: NMDSResult | None = None) -> dict[str, npt.NDArray | float]:
         """
         Get data for Shepard diagram.
 
@@ -284,7 +284,11 @@ class NMDSAnalyzer:
         n = D_orig.shape[0]
         indices = np.triu_indices(n, k=1)
 
-        return {"original": D_orig[indices], "ordination": D_ord[indices], "stress": result.stress}
+        return {
+            "original": D_orig[indices],
+            "ordination": D_ord[indices],
+            "stress": float(result.stress),
+        }
 
     @property
     def last_result(self) -> NMDSResult | None:

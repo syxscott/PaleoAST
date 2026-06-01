@@ -47,10 +47,14 @@ class TestQuaternionBasics(unittest.TestCase):
         q = Quaternion(1.0, 2.0, 3.0, 4.0)
         q_conj = q.conjugate
 
-        self.assertEqual(q_conj.w, q.w)
-        self.assertEqual(q_conj.x, -q.x)
-        self.assertEqual(q_conj.y, -q.y)
-        self.assertEqual(q_conj.z, -q.z)
+        # ``__post_init__`` 会自动归一化,所以即使 (1, 2, 3, 4) 在
+        # 内部存为 (1, 2, 3, 4) / sqrt(30),共轭也必须经过同样的
+        # 归一化才能保证 ``q_conj.w == q.w`` 严格成立。这中间会
+        # 引入 1e-17 级别的浮点误差,因此这里用 ``assertAlmostEqual``。
+        self.assertAlmostEqual(q_conj.w, q.w, places=14)
+        self.assertAlmostEqual(q_conj.x, -q.x, places=14)
+        self.assertAlmostEqual(q_conj.y, -q.y, places=14)
+        self.assertAlmostEqual(q_conj.z, -q.z, places=14)
 
     def test_quaternion_inverse(self):
         """测试逆运算"""
@@ -138,10 +142,12 @@ class TestQuaternionRotation(unittest.TestCase):
 
     def test_slerp(self):
         """测试球面线性插值"""
+        # q1: 0 度旋转 (w=1)
+        # q2: 90 度绕 z 轴旋转 (w=cos(45°), z=sin(45°))
+        # 角度差为 90°,所以 t=0.5 处的插值应当是 45° 旋转。
         q1 = Quaternion(1.0, 0.0, 0.0, 0.0)
-        q2 = Quaternion(0.0, 1.0, 0.0, 0.0)  # 180度旋转
+        q2 = Quaternion.from_axis_angle([0.0, 0.0, 1.0], np.pi / 2)
 
-        # 插值t=0.5应该是90度
         q_mid = q1.slerp(q2, 0.5)
 
         expected_angle = np.pi / 4  # 45度
@@ -204,8 +210,10 @@ class TestRotationMatrix(unittest.TestCase):
         R_valid = RotationMatrix.from_axis_angle([0, 1, 0], np.pi / 2)
         self.assertTrue(RotationMatrix.verify_special(R_valid))
 
-        # 反射矩阵 (det = -1)
-        R_reflection = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        # 反射矩阵 (det = -1)。注意: ``[[-1,0,0],[0,-1,0],[0,0,1]]``
+        # 实际上是绕 z 轴 180° 的旋转 (det = +1),不是反射。
+        # 一个真正的反射矩阵应当有一个 (且仅一个) 特征值为 -1。
+        R_reflection = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.assertFalse(RotationMatrix.verify_special(R_reflection))
 
     def test_compose_rotations(self):

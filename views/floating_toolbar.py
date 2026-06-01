@@ -11,7 +11,7 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QStyle, QToolButton, QWidget
 
@@ -82,20 +82,17 @@ class FloatingToolBar(QWidget):
         btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Set icon with fallback to Qt standard icons
-        icon_set = False
         for key, svg_path, std_icon in self.ICON_MAPPINGS:
             if key == icon_key:
                 try:
                     custom_icon = QIcon(svg_path)
                     if not custom_icon.isNull():
                         btn.setIcon(custom_icon)
-                        icon_set = True
                         break
                 except Exception:
                     pass
                 # Fallback to Qt standard icon
                 btn.setIcon(btn.style().standardIcon(std_icon))
-                icon_set = True
                 break
 
         return btn
@@ -181,11 +178,11 @@ class FloatingToolBar(QWidget):
             return
 
         # Connect to canvas operations with existence checks
-        if hasattr(canvas, '_export_plot'):
+        if hasattr(canvas, "_export_plot"):
             self._btn_save.clicked.connect(canvas._export_plot)
-        if hasattr(canvas, '_zoom_in'):
+        if hasattr(canvas, "_zoom_in"):
             self._btn_zoom.clicked.connect(canvas._zoom_in)
-        if hasattr(canvas, '_reset_view'):
+        if hasattr(canvas, "_reset_view"):
             self._btn_reset.clicked.connect(canvas._reset_view)
         # Pan button logs info (actual pan mode would need canvas support)
         self._btn_pan.clicked.connect(lambda: self._logger.info("Pan mode - use mouse drag"))

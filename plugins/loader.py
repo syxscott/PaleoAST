@@ -14,9 +14,6 @@ import importlib
 import logging
 import pkgutil
 from pathlib import Path
-from typing import Any
-
-from .registry import get_plugin_registry
 
 logger = logging.getLogger(__name__)
 
@@ -75,4 +72,4 @@ def discover_plugins_in_package(package_path: Path) -> list[str]:
     return modules
 
 
-__all__ = ["load_builtin_plugins", "discover_plugins_in_package"]
+__all__ = ["discover_plugins_in_package", "load_builtin_plugins"]

@@ -13,6 +13,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
+import contextlib
 import logging
 
 import matplotlib.pyplot as plt
@@ -43,10 +44,8 @@ class SpectralPlotter:
         try:
             plt.style.use(self._style)
         except OSError:
-            try:
+            with contextlib.suppress(OSError):
                 plt.style.use(self._style.replace("v0_8-", ""))
-            except OSError:
-                pass
 
     def plot_periodogram(
         self, result: SpectralResult, show_peaks: bool = True, peak_threshold: float = 0.5, title: str | None = None

@@ -16,7 +16,6 @@ version: 1.0.1
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -26,21 +25,23 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TPSSpecimen:
     """Container for a single specimen's TPS data."""
+
     id: str
     landmarks: np.ndarray  # Shape: (n_landmarks, 2) or (n_landmarks, 3)
-    scale: Optional[float] = None
-    curve_points: Optional[dict] = None
-    raw_data: Optional[dict] = None
+    scale: float | None = None
+    curve_points: dict | None = None
+    raw_data: dict | None = None
 
 
 @dataclass
 class TPSFile:
     """Container for a complete TPS file."""
+
     specimens: list[TPSSpecimen]
     n_landmarks: int
     n_dimensions: int  # 2 or 3
     comments: list[str]
-    file_path: Optional[str] = None
+    file_path: str | None = None
 
     def to_matrix(self) -> np.ndarray:
         """Convert landmarks to a 2D matrix (n_specimens, n_landmarks * n_dimensions)."""
@@ -70,7 +71,7 @@ class TPSParser:
         self.n_landmarks: int = 0
         self.n_dimensions: int = 0
         self.comments: list[str] = []
-        self._current_spec: Optional[TPSSpecimen] = None
+        self._current_spec: TPSSpecimen | None = None
         self._current_landmarks: list = []
         self._in_curve: bool = False
 
@@ -101,12 +102,12 @@ class TPSParser:
         self.n_landmarks = 0
         self.n_dimensions = 0
 
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if not line or line.startswith('!'):
+                if not line or line.startswith("!"):
                     # Comment line
-                    if line.startswith('!'):
+                    if line.startswith("!"):
                         self.comments.append(line[1:].strip())
                     continue
 
@@ -129,7 +130,7 @@ class TPSParser:
             n_landmarks=self.n_landmarks,
             n_dimensions=self.n_dimensions,
             comments=self.comments,
-            file_path=file_path
+            file_path=file_path,
         )
 
     def _parse_line(self, line: str) -> None:
@@ -145,50 +146,46 @@ class TPSParser:
         and dropped plain coordinate lines, which meant no real-world
         TPS file would parse. This version accepts both styles.
         """
-        if '=' in line:
-            parts = line.split('=', 1)
+        if "=" in line:
+            parts = line.split("=", 1)
             key = parts[0].strip().upper()
             value = parts[1].strip()
 
-            if key == 'LM':
+            if key == "LM":
                 # Number of landmarks
                 self.n_landmarks = int(value)
-            elif key == 'DIM':
+            elif key == "DIM":
                 # Dimensions (2 or 3)
                 self.n_dimensions = int(value)
-            elif key == 'SCALE':
+            elif key == "SCALE":
                 # Scale factor
                 scale = float(value)
                 if self._current_spec is not None:
                     self._current_spec.scale = scale
-            elif key == 'ID':
+            elif key == "ID":
                 # Specimen ID - start new specimen
                 if self._current_spec is not None and self._current_landmarks:
                     self._finalize_specimen()
 
                 self._current_spec = TPSSpecimen(
-                    id=value,
-                    landmarks=np.array([]),
-                    scale=None,
-                    curve_points=None,
-                    raw_data={'id': value}
+                    id=value, landmarks=np.array([]), scale=None, curve_points=None, raw_data={"id": value}
                 )
                 self._current_landmarks = []
-            elif key == 'CO':
+            elif key == "CO":
                 # Curve order
                 if self._current_spec is not None:
                     if self._current_spec.curve_points is None:
                         self._current_spec.curve_points = {}
                     self._in_curve = True
-                    self._current_spec.curve_points['order'] = [int(x) for x in value.split()]
-            elif key == 'POINTS':
+                    self._current_spec.curve_points["order"] = [int(x) for x in value.split()]
+            elif key == "POINTS":
                 # Curve points for current curve
                 if self._current_spec is not None and self._in_curve:
-                    if 'points' not in self._current_spec.curve_points:
-                        self._current_spec.curve_points['points'] = []
+                    if "points" not in self._current_spec.curve_points:
+                        self._current_spec.curve_points["points"] = []
                     coords = [float(x) for x in value.split()]
-                    self._current_spec.curve_points['points'].append(coords)
-            elif key == 'END':
+                    self._current_spec.curve_points["points"].append(coords)
+            elif key == "END":
                 # End of specimen
                 if self._current_spec is not None and self._current_landmarks:
                     self._finalize_specimen()
@@ -214,7 +211,7 @@ class TPSParser:
                 landmarks=np.array([]),
                 scale=None,
                 curve_points=None,
-                raw_data={}
+                raw_data={},
             )
             self._current_landmarks = []
 
@@ -222,9 +219,7 @@ class TPSParser:
         if self.n_dimensions == 0:
             self.n_dimensions = len(coords)
         elif len(coords) != self.n_dimensions:
-            raise ValueError(
-                f"Invalid coordinate dimension: expected {self.n_dimensions}, got {len(coords)}"
-            )
+            raise ValueError(f"Invalid coordinate dimension: expected {self.n_dimensions}, got {len(coords)}")
         self._current_landmarks.append(coords)
 
         # If we have all landmarks, finalize

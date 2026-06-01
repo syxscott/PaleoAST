@@ -12,7 +12,6 @@ version: 1.0.1
 
 import logging
 import threading
-from typing import Any
 
 from .base import AnalysisPlugin
 

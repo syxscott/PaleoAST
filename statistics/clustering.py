@@ -21,7 +21,6 @@ from scipy.cluster.hierarchy import cophenet, fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 
 from config.i18n import _
-from utils.exceptions import ComputationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -64,8 +63,14 @@ class ClusteringResult:
 
 LINKAGE_METHODS = ["ward", "complete", "average", "single"]
 DISTANCE_METRICS = [
-    "euclidean", "braycurtis", "canberra", "cityblock",
-    "jaccard", "hamming", "cosine", "correlation",
+    "euclidean",
+    "braycurtis",
+    "canberra",
+    "cityblock",
+    "jaccard",
+    "hamming",
+    "cosine",
+    "correlation",
 ]
 
 
@@ -141,9 +146,7 @@ class ClusteringAnalyzer:
             )
 
             self._last_result = result
-            self._logger.info(
-                f"Clustering complete: {n_found} clusters, cophenetic r={coph_corr:.4f}"
-            )
+            self._logger.info(f"Clustering complete: {n_found} clusters, cophenetic r={coph_corr:.4f}")
             return result
 
     def _is_distance_matrix(self, data: npt.NDArray) -> bool:

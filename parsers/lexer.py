@@ -411,11 +411,7 @@ class BaseLexer(ABC):
             return True
 
         # 检查规则标记
-        for rule in self._rules:
-            if rule.token_type == token.type and rule.skip:
-                return True
-
-        return False
+        return any(rule.token_type == token.type and rule.skip for rule in self._rules)
 
     def _update_position(self, source: str, start: int, end: int) -> None:
         """

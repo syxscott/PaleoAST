@@ -634,8 +634,7 @@ class DataMatrix:
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
                 self._logger.warning(
-                    f"impute_mean: {int(np.sum(all_nan_cols))} all-NaN column(s) "
-                    f"detected, falling back to 0"
+                    f"impute_mean: {int(np.sum(all_nan_cols))} all-NaN column(s) detected, falling back to 0"
                 )
                 col_means = np.where(all_nan_cols, 0.0, col_means)
 
@@ -671,8 +670,7 @@ class DataMatrix:
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
                 self._logger.warning(
-                    f"impute_median: {int(np.sum(all_nan_cols))} all-NaN column(s) "
-                    f"detected, falling back to 0"
+                    f"impute_median: {int(np.sum(all_nan_cols))} all-NaN column(s) detected, falling back to 0"
                 )
                 col_medians = np.where(all_nan_cols, 0.0, col_medians)
 
@@ -728,7 +726,7 @@ class DataMatrix:
             incomplete_indices = np.where(has_nan)[0]
 
             for idx in incomplete_indices:
-                row = result[idx]
+                result[idx]
                 row_nan = nan_mask[idx]
 
                 if not np.any(row_nan):

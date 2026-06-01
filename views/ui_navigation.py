@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import ColorPalette, Typography, BorderRadius, get_palette
+from config.design_system import BorderRadius, ColorPalette, Typography, get_palette
 from config.i18n import _
 
 

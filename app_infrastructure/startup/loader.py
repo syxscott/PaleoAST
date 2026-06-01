@@ -98,7 +98,7 @@ class StartupLoader:
         logger.info("StartupLoader initialized")
 
     def register_module(
-        self, name: str, import_func: Callable[[], Any], weight: int = 1, dependencies: list[str] = None
+        self, name: str, import_func: Callable[[], Any], weight: int = 1, dependencies: list[str] | None = None
     ) -> None:
         """
         注册模块
@@ -154,7 +154,7 @@ class StartupLoader:
         if module_name not in self._modules:
             return []
 
-        module = self._modules[module_name]
+        self._modules[module_name]
         resolved = []
         visited = set()
 
@@ -176,7 +176,7 @@ class StartupLoader:
         """计算总权重"""
         return sum(self._modules[name].weight for name in module_names if name in self._modules)
 
-    def start(self, splash_callback: Callable[[int, str], None] = None) -> dict[str, Any]:
+    def start(self, splash_callback: Callable[[int, str], None] | None = None) -> dict[str, Any]:
         """
         开始加载
 

@@ -322,7 +322,7 @@ class PhyloNode:
             return None
 
         parent = self.parent
-        siblings = self.get_siblings()
+        self.get_siblings()
 
         # Copy children before modifying
         children_copy = list(self.children)

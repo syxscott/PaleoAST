@@ -29,7 +29,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -167,9 +166,7 @@ class CCAAnalyzer:
             )
 
             if X_arr.shape[0] != n_samples:
-                raise MatrixDimensionError(
-                    "Environmental matrix must have same number of samples as species matrix"
-                )
+                raise MatrixDimensionError("Environmental matrix must have same number of samples as species matrix")
 
             # Determine number of components
             max_components = min(n_samples - 1, n_species, n_env)
@@ -189,8 +186,7 @@ class CCAAnalyzer:
 
             self._last_result = result
             self._logger.info(
-                f"CCA/RDA completed: method={result.method}, "
-                f"constrained_variance={result.constrained_variance:.2f}%"
+                f"CCA/RDA completed: method={result.method}, constrained_variance={result.constrained_variance:.2f}%"
             )
             return result
 
@@ -260,7 +256,7 @@ class CCAAnalyzer:
 
         # Compute proportions
         # eigenvalues are on sum-of-squares scale (not divided by n), so use total SS
-        total_inertia = np.sum(Y_centered ** 2)  # Total sum of squares of Y
+        total_inertia = np.sum(Y_centered**2)  # Total sum of squares of Y
 
         proportion_explained = (eigenvalues / total_inertia) * 100 if total_inertia > 0 else np.zeros_like(eigenvalues)
         cumulative_proportion = np.cumsum(proportion_explained)

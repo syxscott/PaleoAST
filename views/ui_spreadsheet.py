@@ -170,7 +170,11 @@ class SpreadsheetDelegate(QStyledItemDelegate):
             painter.fillRect(option.rect, QBrush(QColor("#3498DB").lighter(150)))
 
         # Draw data cell content
-        if self._data_cache is not None and 0 <= row_idx < self._data_cache.shape[0] and 0 <= col_idx < self._data_cache.shape[1]:
+        if (
+            self._data_cache is not None
+            and 0 <= row_idx < self._data_cache.shape[0]
+            and 0 <= col_idx < self._data_cache.shape[1]
+        ):
             value = self._data_cache[row_idx, col_idx]
 
             if np.isnan(value):
@@ -1204,10 +1208,7 @@ class ScientificSpreadsheet(QWidget):
                 max_cols = max(max_cols, len(row))
 
             if not data:
-                QMessageBox.warning(
-                    self, _("Import Error"),
-                    _("Clipboard contains no tabular data to import.")
-                )
+                QMessageBox.warning(self, _("Import Error"), _("Clipboard contains no tabular data to import."))
                 return
 
             # Pad rows to equal length

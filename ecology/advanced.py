@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from scipy import optimize, stats
+from scipy import optimize
 
 from config.i18n import _
 from utils.exceptions import ComputationError
@@ -108,12 +108,12 @@ class AbundanceModelFitter:
         R = octaves[valid]
         ln_S = np.log(hist[valid])
 
-        coeffs = np.polyfit(R ** 2, ln_S, deg=1)
+        coeffs = np.polyfit(R**2, ln_S, deg=1)
         a = -coeffs[0]
         ln_S0 = coeffs[1]
         S0 = np.exp(ln_S0)
 
-        predicted_oct = S0 * np.exp(-a * octaves ** 2)
+        predicted_oct = S0 * np.exp(-a * octaves**2)
         # Map back to species abundances
         predicted = self._octave_to_rank(predicted_oct, n_species)
 
@@ -144,19 +144,13 @@ class AbundanceModelFitter:
         def residual(c):
             if c <= 0 or c >= 1:
                 return 1e10
-            expected = np.array([
-                N * c ** (k) * (1 - c) / (1 - c ** n_species)
-                for k in range(n_species)
-            ])
+            expected = np.array([N * c ** (k) * (1 - c) / (1 - c**n_species) for k in range(n_species)])
             return np.sum((abundances - expected) ** 2)
 
         result = optimize.minimize_scalar(residual, bounds=(0.01, 0.99), method="bounded")
         c = result.x
 
-        predicted = np.array([
-            N * c ** (k) * (1 - c) / (1 - c ** n_species)
-            for k in range(n_species)
-        ])
+        predicted = np.array([N * c ** (k) * (1 - c) / (1 - c**n_species) for k in range(n_species)])
 
         r_sq = self._r_squared(abundances, predicted)
         aic_val = self._aic(abundances, predicted, 1)
@@ -181,10 +175,9 @@ class AbundanceModelFitter:
         n_species = len(abundances)
         N = np.sum(abundances)
 
-        predicted = np.array([
-            (N / n_species) * np.sum(1.0 / np.arange(k + 1, n_species + 1))
-            for k in range(n_species)
-        ])
+        predicted = np.array(
+            [(N / n_species) * np.sum(1.0 / np.arange(k + 1, n_species + 1)) for k in range(n_species)]
+        )
 
         r_sq = self._r_squared(abundances, predicted)
         # Broken stick has no free parameters, but n_params=1 for AIC (variance only)
@@ -229,7 +222,7 @@ class AbundanceModelFitter:
 
         # Predicted abundances
         max_n = int(np.max(abundances))
-        predicted_freq = np.array([alpha * x ** n / n for n in range(1, max_n + 1)])
+        predicted_freq = np.array([alpha * x**n / n for n in range(1, max_n + 1)])
         # Sort descending and take top S
         predicted = np.sort(predicted_freq)[::-1][:S]
 
@@ -252,8 +245,8 @@ class AbundanceModelFitter:
         """Convert octave class counts to rank-abundance array."""
         result = []
         for octave_idx, count in enumerate(octave_counts):
-            abundance = 2 ** octave_idx
-            for _ in range(int(round(count))):
+            abundance = 2**octave_idx
+            for _ in range(round(count)):
                 result.append(abundance)
         result = sorted(result, reverse=True)[:n_species]
         while len(result) < n_species:
@@ -321,7 +314,7 @@ class SHEAnalyzer:
         Returns:
             SHEResult
         """
-        n_samples, n_species = abundance_matrix.shape
+        n_samples, _n_species = abundance_matrix.shape
 
         # Sort samples by total abundance (most abundant first)
         totals = np.nansum(abundance_matrix, axis=1)

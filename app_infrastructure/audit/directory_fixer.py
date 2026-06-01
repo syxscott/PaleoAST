@@ -254,7 +254,7 @@ class DirectoryFixer:
         "tests/test_gpa.py",
     ]
 
-    def __init__(self, project_root: str = None):
+    def __init__(self, project_root: str | None = None):
         """
         初始化目录修复器
 
@@ -367,7 +367,6 @@ class DirectoryFixer:
 
         def add_tree(dir_path: Path, prefix: str = "", is_last: bool = True):
             """递归添加目录树"""
-            parts = []
             for i, subdir in enumerate(sorted(dir_path.iterdir())):
                 if subdir.is_dir() and not subdir.name.startswith("."):
                     is_last_sub = i == len(list(dir_path.iterdir())) - 1
@@ -402,7 +401,7 @@ class DirectoryFixer:
         return permissions
 
 
-def fix_paleoast_directories(project_root: str = None) -> DirectoryFixerResult:
+def fix_paleoast_directories(project_root: str | None = None) -> DirectoryFixerResult:
     """
     便捷函数：修复PaleoAST目录结构
 

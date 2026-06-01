@@ -26,6 +26,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
+import contextlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -57,10 +58,8 @@ from config.i18n import _
 try:
     plt.style.use("seaborn-v0_8-whitegrid")
 except OSError:
-    try:
+    with contextlib.suppress(OSError):
         plt.style.use("seaborn-whitegrid")
-    except OSError:
-        pass
 plt.rcParams.update(
     {
         "font.family": "sans-serif",
@@ -329,33 +328,36 @@ class InteractivePlotCanvas(QWidget):
         # Sync matplotlib theme
         if is_dark:
             # Dark theme colors for matplotlib
-            plt.rcParams.update({
-                "axes.facecolor": "#1E1E1E",
-                "figure.facecolor": "#2D2D2D",
-                "axes.edgecolor": "#555555",
-                "axes.labelcolor": "#E0E0E0",
-                "xtick.color": "#E0E0E0",
-                "ytick.color": "#E0E0E0",
-                "text.color": "#E0E0E0",
-                "grid.color": "#444444",
-                "axes.spines.top": False,
-                "axes.spines.right": False,
-            })
+            plt.rcParams.update(
+                {
+                    "axes.facecolor": "#1E1E1E",
+                    "figure.facecolor": "#2D2D2D",
+                    "axes.edgecolor": "#555555",
+                    "axes.labelcolor": "#E0E0E0",
+                    "xtick.color": "#E0E0E0",
+                    "ytick.color": "#E0E0E0",
+                    "text.color": "#E0E0E0",
+                    "grid.color": "#444444",
+                    "axes.spines.top": False,
+                    "axes.spines.right": False,
+                }
+            )
         else:
             # Light theme colors for matplotlib
-            plt.rcParams.update({
-                "axes.facecolor": "#FAFBFC",
-                "figure.facecolor": "#FFFFFF",
-                "axes.edgecolor": "#E4E7EB",
-                "axes.labelcolor": "#2C3E50",
-                "xtick.color": "#2C3E50",
-                "ytick.color": "#2C3E50",
-                "text.color": "#2C3E50",
-                "grid.color": "#E4E7EB",
-                "axes.edgecolor": "#E4E7EB",
-                "axes.spines.top": False,
-                "axes.spines.right": False,
-            })
+            plt.rcParams.update(
+                {
+                    "axes.facecolor": "#FAFBFC",
+                    "figure.facecolor": "#FFFFFF",
+                    "axes.edgecolor": "#E4E7EB",
+                    "axes.labelcolor": "#2C3E50",
+                    "xtick.color": "#2C3E50",
+                    "ytick.color": "#2C3E50",
+                    "text.color": "#2C3E50",
+                    "grid.color": "#E4E7EB",
+                    "axes.spines.top": False,
+                    "axes.spines.right": False,
+                }
+            )
 
         # Update figure background
         c = get_palette(is_dark)
@@ -451,7 +453,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(scores[:, pc1], scores[:, pc2])):
+            for i, (x, y) in enumerate(zip(scores[:, pc1], scores[:, pc2], strict=False)):
                 self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
 
         # Add ellipses if enabled
@@ -563,7 +565,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Labels
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(coords[:, coord1], coords[:, coord2])):
+            for i, (x, y) in enumerate(zip(coords[:, coord1], coords[:, coord2], strict=False)):
                 self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
         # Ellipses
@@ -624,9 +626,9 @@ class InteractivePlotCanvas(QWidget):
             eigenvalues = np.ones(site_scores.shape[1])
 
         if hasattr(result, "proportion_explained"):
-            proportion = result.proportion_explained
+            pass
         else:
-            proportion = np.ones(len(eigenvalues)) * 100 / len(eigenvalues)
+            np.ones(len(eigenvalues)) * 100 / len(eigenvalues)
 
         if hasattr(result, "method"):
             method = result.method.upper()
@@ -732,7 +734,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(site_scores[:, ax1], site_scores[:, ax2])):
+            for i, (x, y) in enumerate(zip(site_scores[:, ax1], site_scores[:, ax2], strict=False)):
                 self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
         # Axis labels
@@ -767,10 +769,7 @@ class InteractivePlotCanvas(QWidget):
     # =========================================================================
 
     def plot_tps_deformation_grid(
-        self,
-        tps_result: Any,
-        grid_shape: tuple[int, int] = (15, 15),
-        show_vectors: bool = True
+        self, tps_result: Any, grid_shape: tuple[int, int] = (15, 15), show_vectors: bool = True
     ) -> None:
         """
         Plot TPS deformation grid visualization.
@@ -783,7 +782,9 @@ class InteractivePlotCanvas(QWidget):
             grid_shape: Shape of the deformation grid (rows, cols)
             show_vectors: Whether to show displacement vectors
         """
-        self._record_plot_call("plot_tps_deformation_grid", tps_result, grid_shape=grid_shape, show_vectors=show_vectors)
+        self._record_plot_call(
+            "plot_tps_deformation_grid", tps_result, grid_shape=grid_shape, show_vectors=show_vectors
+        )
         self._ax.clear()
         self._current_plot_type = "tps_grid"
 
@@ -799,14 +800,14 @@ class InteractivePlotCanvas(QWidget):
             target = source
 
         if hasattr(tps_result, "warped"):
-            warped = tps_result.warped
+            pass
         else:
-            warped = target
+            pass
 
         if hasattr(tps_result, "landmarks"):
-            landmarks = tps_result.landmarks
+            pass
         else:
-            landmarks = None
+            pass
 
         # Generate original grid points
         x_min, x_max = source[:, 0].min(), source[:, 0].max()
@@ -852,12 +853,30 @@ class InteractivePlotCanvas(QWidget):
             self._ax.plot(warped_grid[:, j, 0], warped_grid[:, j, 1], color="#3498DB", linewidth=1.5, alpha=0.8)
 
         # Plot source landmarks
-        self._ax.scatter(source[:, 0], source[:, 1], c="#E74C3C", s=80, marker="o",
-                        edgecolors="white", linewidths=1, label=_("Source"), zorder=5)
+        self._ax.scatter(
+            source[:, 0],
+            source[:, 1],
+            c="#E74C3C",
+            s=80,
+            marker="o",
+            edgecolors="white",
+            linewidths=1,
+            label=_("Source"),
+            zorder=5,
+        )
 
         # Plot target landmarks
-        self._ax.scatter(target[:, 0], target[:, 1], c="#27AE60", s=80, marker="s",
-                        edgecolors="white", linewidths=1, label=_("Target"), zorder=5)
+        self._ax.scatter(
+            target[:, 0],
+            target[:, 1],
+            c="#27AE60",
+            s=80,
+            marker="s",
+            edgecolors="white",
+            linewidths=1,
+            label=_("Target"),
+            zorder=5,
+        )
 
         # Show displacement vectors if requested
         if show_vectors and len(source) == len(target):
@@ -954,7 +973,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Labels
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(coords[:, 0], coords[:, 1])):
+            for i, (x, y) in enumerate(zip(coords[:, 0], coords[:, 1], strict=False)):
                 self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
         # Ellipses
@@ -1010,7 +1029,7 @@ class InteractivePlotCanvas(QWidget):
         bars = self._ax.bar(x_pos, values, color=self.COLORS[: len(indices)], alpha=0.7, edgecolor="white", linewidth=1)
 
         # Add value labels
-        for bar, val in zip(bars, values):
+        for bar, val in zip(bars, values, strict=False):
             height = bar.get_height()
             self._ax.annotate(
                 f"{val:.2f}",
@@ -1049,9 +1068,9 @@ class InteractivePlotCanvas(QWidget):
         if hasattr(result, "coverage_levels") and hasattr(result, "expected_richness"):
             coverage_levels = result.coverage_levels
             expected_richness = result.expected_richness
-            sample_names = getattr(result, "sample_names", [f"Sample {i+1}" for i in range(len(coverage_levels))])
-            ci_lower = getattr(result, "confidence_lower", None)
-            ci_upper = getattr(result, "confidence_upper", None)
+            sample_names = getattr(result, "sample_names", [f"Sample {i + 1}" for i in range(len(coverage_levels))])
+            getattr(result, "confidence_lower", None)
+            getattr(result, "confidence_upper", None)
 
             # Build curve_data dict for consistent plotting
             curve_data = {}
@@ -1060,12 +1079,9 @@ class InteractivePlotCanvas(QWidget):
         elif hasattr(result, "curve_data"):
             # Legacy format
             curve_data = result.curve_data
-            ci_lower = None
-            ci_upper = None
         else:
             # No data available
-            self._ax.text(0.5, 0.5, _("No rarefaction data available"),
-                         ha="center", va="center", fontsize=12)
+            self._ax.text(0.5, 0.5, _("No rarefaction data available"), ha="center", va="center", fontsize=12)
             self._ax.set_xlim(0, 1)
             self._ax.set_ylim(0, 1)
             self._ax.set_title(_("Rarefaction Curves: No Data"), fontsize=12, fontweight="bold")
@@ -1112,8 +1128,7 @@ class InteractivePlotCanvas(QWidget):
             power = result.power
         else:
             # No spectral data available
-            self._ax.text(0.5, 0.5, _("No spectral data available"),
-                         ha="center", va="center", fontsize=12)
+            self._ax.text(0.5, 0.5, _("No spectral data available"), ha="center", va="center", fontsize=12)
             self._ax.set_xlim(0, 1)
             self._ax.set_ylim(0, 1)
             self._ax.set_title(_("Spectral Analysis: No Data"), fontsize=12, fontweight="bold")
@@ -1128,14 +1143,16 @@ class InteractivePlotCanvas(QWidget):
 
         # Highlight peak
         if peak_frequency is not None:
-            peak_idx = np.argmin(np.abs(frequencies - peak_frequency))
+            np.argmin(np.abs(frequencies - peak_frequency))
             self._ax.axvline(
                 x=peak_frequency,
                 color=self.COLORS[3],
                 linestyle="--",
                 linewidth=1.5,
                 alpha=0.7,
-                label=f"{_('Peak')}: f={peak_frequency:.4f}, T={peak_period:.2f}" if peak_period else f"{_('Peak')}: f={peak_frequency:.4f}",
+                label=f"{_('Peak')}: f={peak_frequency:.4f}, T={peak_period:.2f}"
+                if peak_period
+                else f"{_('Peak')}: f={peak_frequency:.4f}",
             )
 
         # Fill under curve
@@ -1166,10 +1183,8 @@ class InteractivePlotCanvas(QWidget):
 
         # Remove old colorbar if exists to prevent memory leak
         if hasattr(self, "_colorbar") and self._colorbar is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._colorbar.remove()
-            except Exception:
-                pass
             self._colorbar = None
 
         # Extract data
@@ -1181,8 +1196,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Check if required data is available
         if time is None or frequencies is None or power is None:
-            self._ax.text(0.5, 0.5, _("No wavelet data available"),
-                         ha="center", va="center", fontsize=12)
+            self._ax.text(0.5, 0.5, _("No wavelet data available"), ha="center", va="center", fontsize=12)
             self._ax.set_xlim(0, 1)
             self._ax.set_ylim(0, 1)
             self._ax.set_title(_("Wavelet Scalogram: No Data"), fontsize=12, fontweight="bold")
@@ -1194,7 +1208,9 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot power as colormap
         self._pcolormesh = self._ax.pcolormesh(
-            time_grid, freq_grid, power,
+            time_grid,
+            freq_grid,
+            power,
             shading="gouraud",
             cmap="hot",
         )
@@ -1247,7 +1263,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Bar chart for R statistic
         color = self.COLORS[3] if p_value < 0.05 else self.COLORS[0]
-        bar = self._ax.bar([0], [R], color=color, alpha=0.7, edgecolor="white", width=0.5)
+        self._ax.bar([0], [R], color=color, alpha=0.7, edgecolor="white", width=0.5)
 
         # Add value label
         self._ax.annotate(
@@ -1281,7 +1297,13 @@ class InteractivePlotCanvas(QWidget):
         # Info text
         info = f"{_('Groups')}: {n_groups}  |  {_('Samples')}: {n_samples}"
         self._ax.text(
-            0, -0.1 * max(abs(R), 0.1), info, ha="center", va="top", fontsize=9, color="#7F8C8D",
+            0,
+            -0.1 * max(abs(R), 0.1),
+            info,
+            ha="center",
+            va="top",
+            fontsize=9,
+            color="#7F8C8D",
             transform=self._ax.get_xaxis_transform(),
         )
 
@@ -1311,10 +1333,10 @@ class InteractivePlotCanvas(QWidget):
         p_value = getattr(result, "p_value", 1.0)
         ss_between = getattr(result, "ss_between", 0.0)
         ss_within = getattr(result, "ss_within", 0.0)
-        df_between = getattr(result, "df_between", 1)
-        df_within = getattr(result, "df_within", 1)
-        ms_between = getattr(result, "ms_between", 0.0)
-        ms_within = getattr(result, "ms_within", 0.0)
+        getattr(result, "df_between", 1)
+        getattr(result, "df_within", 1)
+        getattr(result, "ms_between", 0.0)
+        getattr(result, "ms_within", 0.0)
         n_groups = getattr(result, "n_groups", 1)
         n_samples = getattr(result, "n_samples", 0)
 
@@ -1331,13 +1353,22 @@ class InteractivePlotCanvas(QWidget):
                 f"{_('Between')}\nSS={ss_between:.2f}\n({sizes[0] * 100:.1f}%)",
                 f"{_('Within')}\nSS={ss_within:.2f}\n({sizes[1] * 100:.1f}%)",
             ]
-            wedges, texts = self._ax.pie(sizes, labels=labels_pie, colors=colors, startangle=90, textprops={"fontsize": 9})
+            _wedges, _texts = self._ax.pie(
+                sizes, labels=labels_pie, colors=colors, startangle=90, textprops={"fontsize": 9}
+            )
 
             # Add center text with F and p (pie axes centered at origin)
             sig = "**" if p_value < 0.01 else ("*" if p_value < 0.05 else "")
             center_text = f"F = {F:.3f}{sig}\np = {p_value:.4f}"
             self._ax.text(
-                0, 0, center_text, ha="center", va="center", fontsize=10, fontweight="bold", color="#2C3E50",
+                0,
+                0,
+                center_text,
+                ha="center",
+                va="center",
+                fontsize=10,
+                fontweight="bold",
+                color="#2C3E50",
             )
         else:
             # Single group or zero between-group SS: show text instead of pie
@@ -1349,8 +1380,13 @@ class InteractivePlotCanvas(QWidget):
                 f"({_('No between-group variance')})"
             )
             self._ax.text(
-                0.5, 0.5, info_text,
-                ha="center", va="center", fontsize=11, color="#2C3E50",
+                0.5,
+                0.5,
+                info_text,
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="#2C3E50",
                 transform=self._ax.transAxes,
             )
 
@@ -1398,9 +1434,15 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_xlabel(_("Average Contribution (%)"), color=self.COLORS[0])
         self._ax.set_title(_("SIMPER: Top Contributing Variables"))
 
-        for bar, val in zip(bars, values):
-            self._ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
-                         f"{val:.1f}%", va="center", fontsize=8, color="#2C3E50")
+        for bar, val in zip(bars, values, strict=False):
+            self._ax.text(
+                bar.get_width() + 0.5,
+                bar.get_y() + bar.get_height() / 2,
+                f"{val:.1f}%",
+                va="center",
+                fontsize=8,
+                color="#2C3E50",
+            )
 
         # Cumulative contribution line on top axis
         ax_top.plot(cumulative, y_pos, color=self.COLORS[3], linewidth=2, marker="o", markersize=4, alpha=0.8)
@@ -1416,8 +1458,9 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_anova_boxplot(self, data: np.ndarray, groups: list[int],
-                           variable_name: str = "", group_names: list[str] | None = None) -> None:
+    def plot_anova_boxplot(
+        self, data: np.ndarray, groups: list[int], variable_name: str = "", group_names: list[str] | None = None
+    ) -> None:
         """Plot boxplot comparing groups for a variable."""
         self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         self._current_plot_type = "anova_boxplot"
@@ -1426,14 +1469,14 @@ class InteractivePlotCanvas(QWidget):
 
         unique_groups = sorted(set(groups))
         if group_names is None:
-            group_names = [f"Group {g+1}" for g in unique_groups]
+            group_names = [f"Group {g + 1}" for g in unique_groups]
 
         plot_data = []
         for g in unique_groups:
             mask = np.array(groups) == g
             plot_data.append(data[mask])
 
-        bp = self._ax.boxplot(plot_data, labels=group_names[:len(unique_groups)], patch_artist=True)
+        bp = self._ax.boxplot(plot_data, labels=group_names[: len(unique_groups)], patch_artist=True)
         for i, patch in enumerate(bp["boxes"]):
             patch.set_facecolor(self.COLORS[i % len(self.COLORS)])
             patch.set_alpha(0.7)
@@ -1477,12 +1520,20 @@ class InteractivePlotCanvas(QWidget):
         for i, g in enumerate(unique_groups):
             mask = groups == g
             color = self.COLORS[i % len(self.COLORS)]
-            self._ax.scatter(x_data[mask], y_data[mask], c=color, s=50, alpha=0.7,
-                           edgecolors="white", linewidth=0.5, label=f"Group {g+1}")
+            self._ax.scatter(
+                x_data[mask],
+                y_data[mask],
+                c=color,
+                s=50,
+                alpha=0.7,
+                edgecolors="white",
+                linewidth=0.5,
+                label=f"Group {g + 1}",
+            )
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(x_data, y_data)):
+            for i, (x, y) in enumerate(zip(x_data, y_data, strict=False)):
                 self._ax.annotate(self._labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
 
         # Add ellipses if enabled
@@ -1524,18 +1575,21 @@ class InteractivePlotCanvas(QWidget):
 
         from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
 
-        scipy_dendrogram(result.linkage_matrix, labels=labels, ax=self._ax,
-                        leaf_rotation=90, leaf_font_size=8,
-                        color_threshold=result.linkage_matrix[-(result.n_clusters - 1), 2]
-                        if result.n_clusters > 1 else 0)
+        scipy_dendrogram(
+            result.linkage_matrix,
+            labels=labels,
+            ax=self._ax,
+            leaf_rotation=90,
+            leaf_font_size=8,
+            color_threshold=result.linkage_matrix[-(result.n_clusters - 1), 2] if result.n_clusters > 1 else 0,
+        )
 
         self._ax.set_title(f"{_('Hierarchical Clustering')} (cophenetic r={result.cophenetic_corr:.3f})")
         self._ax.set_ylabel(_("Distance"))
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_rose_diagram(self, bin_centers: np.ndarray, counts: np.ndarray,
-                          mean_direction_deg: float = 0.0) -> None:
+    def plot_rose_diagram(self, bin_centers: np.ndarray, counts: np.ndarray, mean_direction_deg: float = 0.0) -> None:
         """Plot rose diagram for directional data."""
         self._record_plot_call("plot_rose_diagram", bin_centers, counts, mean_direction_deg=mean_direction_deg)
         self._current_plot_type = "rose"
@@ -1547,31 +1601,35 @@ class InteractivePlotCanvas(QWidget):
         # Convert degree centers to radians if values > 2*pi
         centers = np.deg2rad(bin_centers) if np.max(bin_centers) > 2 * np.pi else bin_centers
 
-        bars = self._ax.bar(centers, counts, width=bin_width * 0.8,
-                           color=self.COLORS[0], alpha=0.7, edgecolor="white")
+        self._ax.bar(centers, counts, width=bin_width * 0.8, color=self.COLORS[0], alpha=0.7, edgecolor="white")
 
         # Mean direction arrow
         max_count = max(counts) if len(counts) > 0 else 1
         mean_rad = np.deg2rad(mean_direction_deg)
-        self._ax.annotate("", xy=(mean_rad, max_count * 0.9), xytext=(0, 0),
-                         arrowprops=dict(arrowstyle="->", color=self.COLORS[3], lw=2))
+        self._ax.annotate(
+            "",
+            xy=(mean_rad, max_count * 0.9),
+            xytext=(0, 0),
+            arrowprops=dict(arrowstyle="->", color=self.COLORS[3], lw=2),
+        )
 
         self._ax.set_title(_("Rose Diagram"), pad=20)
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_efa_contours(self, original: np.ndarray, reconstructed: np.ndarray,
-                          title: str = "") -> None:
+    def plot_efa_contours(self, original: np.ndarray, reconstructed: np.ndarray, title: str = "") -> None:
         """Plot original vs reconstructed EFA contours."""
         self._record_plot_call("plot_efa_contours", original, reconstructed, title=title)
         self._current_plot_type = "efa"
         self._figure.clear()
         self._ax = self._figure.add_subplot(111)
 
-        self._ax.plot(original[:, 0], original[:, 1], "o-",
-                     color=self.COLORS[0], markersize=2, linewidth=1, label=_("Original"))
-        self._ax.plot(reconstructed[:, 0], reconstructed[:, 1], "-",
-                     color=self.COLORS[3], linewidth=1.5, label=_("Reconstructed"))
+        self._ax.plot(
+            original[:, 0], original[:, 1], "o-", color=self.COLORS[0], markersize=2, linewidth=1, label=_("Original")
+        )
+        self._ax.plot(
+            reconstructed[:, 0], reconstructed[:, 1], "-", color=self.COLORS[3], linewidth=1.5, label=_("Reconstructed")
+        )
 
         self._ax.set_aspect("equal")
         self._ax.legend(fontsize=8)
@@ -1588,10 +1646,8 @@ class InteractivePlotCanvas(QWidget):
         ax1 = self._figure.add_subplot(111)
         ax2 = ax1.twinx()
 
-        ax1.plot(result.sample_sizes, result.s_values, "o-",
-                color=self.COLORS[0], markersize=3, label="S (Richness)")
-        ax2.plot(result.sample_sizes, result.e_values, "s-",
-                color=self.COLORS[2], markersize=3, label="E (Evenness)")
+        ax1.plot(result.sample_sizes, result.s_values, "o-", color=self.COLORS[0], markersize=3, label="S (Richness)")
+        ax2.plot(result.sample_sizes, result.e_values, "s-", color=self.COLORS[2], markersize=3, label="E (Evenness)")
 
         ax1.set_xlabel(_("Sample Size"))
         ax1.set_ylabel("S", color=self.COLORS[0])
@@ -1609,11 +1665,7 @@ class InteractivePlotCanvas(QWidget):
     # Ripley's K Plotting
     # =========================================================================
 
-    def plot_ripley_k(
-        self,
-        result: Any,
-        show_points: bool = True
-    ) -> None:
+    def plot_ripley_k(self, result: Any, show_points: bool = True) -> None:
         """
         Plot Ripley's K-function results.
 
@@ -1636,16 +1688,11 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot envelope as shaded region
         self._ax.fill_between(
-            r_values, envelope_lower, envelope_upper,
-            color="#3498DB", alpha=0.2, label=_("95% Envelope")
+            r_values, envelope_lower, envelope_upper, color="#3498DB", alpha=0.2, label=_("95% Envelope")
         )
 
         # Plot L(r) curve
-        self._ax.plot(
-            r_values, l_values,
-            color="#E74C3C", linewidth=2.5,
-            label=_("L(r) - r")
-        )
+        self._ax.plot(r_values, l_values, color="#E74C3C", linewidth=2.5, label=_("L(r) - r"))
 
         # Plot zero reference line
         self._ax.axhline(y=0, color="#2C3E50", linestyle="--", linewidth=1, alpha=0.7)
@@ -1665,12 +1712,14 @@ class InteractivePlotCanvas(QWidget):
         # Interpretation text
         interp = result.interpretation
         self._ax.text(
-            0.98, 0.02, interp,
+            0.98,
+            0.02,
+            interp,
             transform=self._ax.transAxes,
             fontsize=9,
             verticalalignment="bottom",
             horizontalalignment="right",
-            bbox=dict(boxstyle="round", facecolor="#F8F9F9", edgecolor="#E4E7EB", alpha=0.9)
+            bbox=dict(boxstyle="round", facecolor="#F8F9F9", edgecolor="#E4E7EB", alpha=0.9),
         )
 
         self._canvas.draw()
@@ -1691,8 +1740,14 @@ class InteractivePlotCanvas(QWidget):
             if i == 0:
                 self._ax.scatter(ranks, obs, s=20, color="#2C3E50", alpha=0.6, label=_("Observed"), zorder=5)
 
-            self._ax.plot(ranks, pred, "-", color=self.COLORS[i % len(self.COLORS)],
-                         linewidth=1.5, label=f"{fit.model_name} (R²={fit.r_squared:.3f})")
+            self._ax.plot(
+                ranks,
+                pred,
+                "-",
+                color=self.COLORS[i % len(self.COLORS)],
+                linewidth=1.5,
+                label=f"{fit.model_name} (R²={fit.r_squared:.3f})",
+            )
 
         self._ax.set_yscale("log")
         self._ax.set_xlabel(_("Rank"))
@@ -1983,12 +2038,23 @@ class InteractivePlotCanvas(QWidget):
         r_squared = result.r_squared
         residuals = result.residuals
 
-        self._scores = np.column_stack([log_cs, residuals]) if residuals.ndim > 1 else np.column_stack([log_cs, np.zeros_like(log_cs)])
+        self._scores = (
+            np.column_stack([log_cs, residuals])
+            if residuals.ndim > 1
+            else np.column_stack([log_cs, np.zeros_like(log_cs)])
+        )
         self._labels = [f"S{i}" for i in range(len(log_cs))]
         self._group_labels = np.zeros(len(log_cs), dtype=int)
 
         # Scatter plot
-        self._ax.scatter(log_cs, residuals if residuals.ndim == 1 else residuals[:, 0], c="#2C3E50", s=80, alpha=0.7, edgecolors="white")
+        self._ax.scatter(
+            log_cs,
+            residuals if residuals.ndim == 1 else residuals[:, 0],
+            c="#2C3E50",
+            s=80,
+            alpha=0.7,
+            edgecolors="white",
+        )
 
         # Regression line
         x_range = np.linspace(log_cs.min(), log_cs.max(), 100)
@@ -1999,9 +2065,10 @@ class InteractivePlotCanvas(QWidget):
         n = len(log_cs)
         if n > 2:
             from scipy import stats
+
             x_mean = np.mean(log_cs)
             ss_x = np.sum((log_cs - x_mean) ** 2)
-            mse = np.sum(residuals ** 2) / (n - 2) if residuals.ndim == 1 else np.sum(residuals[:, 0] ** 2) / (n - 2)
+            mse = np.sum(residuals**2) / (n - 2) if residuals.ndim == 1 else np.sum(residuals[:, 0] ** 2) / (n - 2)
             se = np.sqrt(mse)
             t_val = stats.t.ppf(0.975, n - 2)
             se_line = se * np.sqrt(1 / n + (x_range - x_mean) ** 2 / ss_x)
@@ -2036,8 +2103,7 @@ class InteractivePlotCanvas(QWidget):
             n_points = len(trait_series)
         else:
             # Fallback: show message if no data available
-            self._ax.text(0.5, 0.5, "No trait series data available",
-                         ha="center", va="center", fontsize=12)
+            self._ax.text(0.5, 0.5, "No trait series data available", ha="center", va="center", fontsize=12)
             self._ax.set_xlim(0, 1)
             self._ax.set_ylim(0, 1)
             self._ax.set_title("Phenogram: No Data Available", fontsize=12, fontweight="bold")
@@ -2063,8 +2129,15 @@ class InteractivePlotCanvas(QWidget):
 
         # Model info
         model_label = f"Best model: {result.best_model.upper()}\nRate: {result.rate_estimate:.6f}"
-        self._ax.text(0.02, 0.98, model_label, transform=self._ax.transAxes, fontsize=9,
-                      verticalalignment="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+        self._ax.text(
+            0.02,
+            0.98,
+            model_label,
+            transform=self._ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
 
         self._ax.set_xlabel("Stratigraphic Position", fontsize=10)
         self._ax.set_ylabel("Trait Value", fontsize=10)
@@ -2082,7 +2155,7 @@ class InteractivePlotCanvas(QWidget):
             ax2.set_xlabel("AIC Weight", fontsize=10)
             ax2.set_title("Model Comparison", fontsize=10)
             ax2.set_xlim(0, 1)
-            for bar, w in zip(bars, weights):
+            for bar, w in zip(bars, weights, strict=False):
                 ax2.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{w:.3f}", va="center")
 
         self._figure.tight_layout()
@@ -2115,7 +2188,9 @@ class InteractivePlotCanvas(QWidget):
         names_sorted = [taxon_names[i] for i in sorted_indices]
 
         # Plot ranges
-        for i, (lad, _, ci_u, name) in enumerate(zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted)):
+        for i, (lad, _, ci_u, name) in enumerate(
+            zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted, strict=False)
+        ):
             # Observed range (solid line from top to LAD)
             self._ax.plot([0.3, 0.7], [0, lad], "b-", linewidth=3, solid_capstyle="butt")
             self._ax.plot([0.2, 0.8], [lad, lad], "b-", linewidth=2)
@@ -2125,8 +2200,10 @@ class InteractivePlotCanvas(QWidget):
 
             # CI box
             from matplotlib.patches import Rectangle
-            rect = Rectangle((0.25, ci_u), 0.5, lad - ci_u, linewidth=1, edgecolor="red",
-                           facecolor="red", alpha=0.2, linestyle="--")
+
+            rect = Rectangle(
+                (0.25, ci_u), 0.5, lad - ci_u, linewidth=1, edgecolor="red", facecolor="red", alpha=0.2, linestyle="--"
+            )
             self._ax.add_patch(rect)
 
             # Taxon label
@@ -2138,15 +2215,21 @@ class InteractivePlotCanvas(QWidget):
         self._ax.invert_yaxis()
         self._ax.set_xlabel("Taxonomic Range", fontsize=10)
         self._ax.set_ylabel("Stratigraphic Height (layers from top)", fontsize=10)
-        self._ax.set_title(f"Extinction Confidence Intervals ({result.method.upper()}, {int(result.confidence_level * 100)}% CI)",
-                          fontsize=12, fontweight="bold")
+        self._ax.set_title(
+            f"Extinction Confidence Intervals ({result.method.upper()}, {int(result.confidence_level * 100)}% CI)",
+            fontsize=12,
+            fontweight="bold",
+        )
         self._ax.set_xticks([])
 
         # Legend
         from matplotlib.lines import Line2D
+
         legend_elements = [
             Line2D([0], [0], color="blue", linewidth=3, label="Observed LAD"),
-            Line2D([0], [0], color="red", linewidth=1.5, linestyle="--", label=f"{int(result.confidence_level * 100)}% CI"),
+            Line2D(
+                [0], [0], color="red", linewidth=1.5, linestyle="--", label=f"{int(result.confidence_level * 100)}% CI"
+            ),
         ]
         self._ax.legend(handles=legend_elements, loc="lower right", frameon=True)
         self._ax.grid(True, axis="y", linestyle="--", alpha=0.3)
@@ -2183,7 +2266,9 @@ class InteractivePlotCanvas(QWidget):
             for j in range(n):
                 self._ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center", color="black", fontsize=8)
 
-        self._ax.set_title(f"Beta Diversity Decomposition ({result.decomposition_type.upper()})", fontsize=12, fontweight="bold")
+        self._ax.set_title(
+            f"Beta Diversity Decomposition ({result.decomposition_type.upper()})", fontsize=12, fontweight="bold"
+        )
 
     def plot_null_model(self, result: Any) -> None:
         """
@@ -2203,21 +2288,44 @@ class InteractivePlotCanvas(QWidget):
         self._ax.hist(simulated, bins=50, color="#3498DB", alpha=0.7, edgecolor="black", label="Simulated")
 
         # Observed score line
-        self._ax.axvline(result.observed_score, color="red", linewidth=2, linestyle="--",
-                        label=f"Observed = {result.observed_score:.4f}")
-        self._ax.axvline(result.mean_simulated, color="green", linewidth=2, linestyle="-",
-                        label=f"Mean = {result.mean_simulated:.4f}")
+        self._ax.axvline(
+            result.observed_score,
+            color="red",
+            linewidth=2,
+            linestyle="--",
+            label=f"Observed = {result.observed_score:.4f}",
+        )
+        self._ax.axvline(
+            result.mean_simulated,
+            color="green",
+            linewidth=2,
+            linestyle="-",
+            label=f"Mean = {result.mean_simulated:.4f}",
+        )
 
         # SES annotation
-        sig = "***" if result.p_value < 0.001 else ("**" if result.p_value < 0.01 else ("*" if result.p_value < 0.05 else ""))
-        self._ax.text(0.02, 0.98, f"SES = {result.standardized_effect_size:.2f}\np = {result.p_value:.4f} {sig}",
-                     transform=self._ax.transAxes, fontsize=10, verticalalignment="top",
-                     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+        sig = (
+            "***"
+            if result.p_value < 0.001
+            else ("**" if result.p_value < 0.01 else ("*" if result.p_value < 0.05 else ""))
+        )
+        self._ax.text(
+            0.02,
+            0.98,
+            f"SES = {result.standardized_effect_size:.2f}\np = {result.p_value:.4f} {sig}",
+            transform=self._ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
 
         self._ax.set_xlabel(f"{result.metric.upper()} Score", fontsize=10)
         self._ax.set_ylabel("Frequency", fontsize=10)
-        self._ax.set_title(f"Null Model Analysis ({result.algorithm.upper()}, {result.n_permutations} permutations)",
-                          fontsize=12, fontweight="bold")
+        self._ax.set_title(
+            f"Null Model Analysis ({result.algorithm.upper()}, {result.n_permutations} permutations)",
+            fontsize=12,
+            fontweight="bold",
+        )
         self._ax.legend(loc="best")
 
     def _record_plot_call(self, method_name: str, *args, **kwargs) -> None:
@@ -2292,7 +2400,7 @@ class InteractivePlotCanvas(QWidget):
                 - Vector: SVG, PDF, EPS (infinite resolution)
         """
         # Show save dialog
-        filepath, selected_filter = QFileDialog.getSaveFileName(
+        filepath, _selected_filter = QFileDialog.getSaveFileName(
             self, _("Export Plot"), "", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)"
         )
 

@@ -14,28 +14,24 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
-    QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from config.design_system import Typography, BorderRadius, get_palette
+from config.design_system import Typography, get_palette
 from config.i18n import _
 
 logger = logging.getLogger(__name__)
@@ -72,13 +68,15 @@ class BaseAllometryDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; "
-                           f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; "
+            f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup common UI structure."""
@@ -98,8 +96,10 @@ class BaseAllometryDialog(QDialog):
         data_layout = QVBoxLayout(data_group)
 
         data_info = QLabel(
-            _("Select a GPA result from the workspace to analyze.\n"
-              "The aligned configurations will be used for allometry/integration analysis.")
+            _(
+                "Select a GPA result from the workspace to analyze.\n"
+                "The aligned configurations will be used for allometry/integration analysis."
+            )
         )
         data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
@@ -112,7 +112,7 @@ class BaseAllometryDialog(QDialog):
 
         # Method-specific content (subclasses override)
         self._method_widget = QWidget()
-        method_layout = QVBoxLayout(self._method_widget)
+        QVBoxLayout(self._method_widget)
         layout.addWidget(self._method_widget, 1)
 
         # Results
@@ -187,20 +187,22 @@ class AllometryDialog(BaseAllometryDialog):
     def _on_run(self) -> None:
         """Run allometry analysis."""
         try:
-            from morphometrics import AllometryAnalyzer, GPAAnalyzer
-
             # Get GPA data from state or use sample data
             # In real usage, this would come from the current workspace
             # For now, create sample data for testing
 
             QMessageBox.information(
-                self, _("Information"),
-                _("Allometry analysis requires GPA-aligned configurations.\n"
-                  "Please run GPA analysis first and ensure data is loaded.")
+                self,
+                _("Information"),
+                _(
+                    "Allometry analysis requires GPA-aligned configurations.\n"
+                    "Please run GPA analysis first and ensure data is loaded."
+                ),
             )
         except Exception as e:
             self._logger.error(f"Allometry failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "异速生长分析"))
 
 
@@ -222,11 +224,13 @@ class PLSDialog(BaseAllometryDialog):
         division_layout = QVBoxLayout(division_group)
 
         self._division_combo = QComboBox()
-        self._division_combo.addItems([
-            _("Anterior-Posterior Split"),
-            _("Size-Matched Split"),
-            _("Random Split"),
-        ])
+        self._division_combo.addItems(
+            [
+                _("Anterior-Posterior Split"),
+                _("Size-Matched Split"),
+                _("Random Split"),
+            ]
+        )
         division_layout.addWidget(QLabel(_("How to divide landmarks into two blocks:")))
         division_layout.addWidget(self._division_combo)
 
@@ -252,9 +256,12 @@ class PLSDialog(BaseAllometryDialog):
         """Run PLS analysis."""
         try:
             QMessageBox.information(
-                self, _("Information"),
-                _("PLS analysis requires two blocks of shape variables.\n"
-                  "Please ensure GPA analysis has been run with the data loaded.")
+                self,
+                _("Information"),
+                _(
+                    "PLS analysis requires two blocks of shape variables.\n"
+                    "Please ensure GPA analysis has been run with the data loaded."
+                ),
             )
         except Exception as e:
             self._logger.error(f"PLS failed: {e}")

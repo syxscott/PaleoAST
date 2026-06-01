@@ -20,8 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class StratigraphyPlotter:
 
         # Plot each taxon's range
         for i, (lad, ci_l, ci_u, name) in enumerate(
-            zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted)
+            zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted, strict=False)
         ):
             # Observed range: from 0 (top) to LAD
             # Draw vertical line for observed range
@@ -213,7 +213,9 @@ class StratigraphyPlotter:
         legend_elements = [
             Line2D([0], [0], color="blue", linewidth=3, label="Observed LAD"),
             Line2D([0], [0], color="red", linewidth=1.5, linestyle="--", label=f"{int(confidence_level * 100)}% CI"),
-            Line2D([0], [0], marker="^", color="green", linestyle="none", markersize=10, label="True extinction estimate"),
+            Line2D(
+                [0], [0], marker="^", color="green", linestyle="none", markersize=10, label="True extinction estimate"
+            ),
         ]
         ax.legend(handles=legend_elements, loc="lower right", frameon=True)
 
@@ -371,7 +373,7 @@ class StratigraphyPlotter:
 
         # Annotate samples
         if sample_names:
-            for i, (pos, div, name) in enumerate(zip(sample_positions, diversity_values, sample_names)):
+            for i, (pos, div, name) in enumerate(zip(sample_positions, diversity_values, sample_names, strict=False)):
                 ax.annotate(name, (pos, div), fontsize=7, xytext=(5, 5), textcoords="offset points")
 
         ax.set_xlabel("Stratigraphic Position", fontsize=self._font_size)

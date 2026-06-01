@@ -169,7 +169,7 @@ class EvolutionRatePlotter:
             ax2.set_xlim(0, 1)
 
             # Add value labels
-            for bar, w in zip(bars, weights):
+            for bar, w in zip(bars, weights, strict=False):
                 ax2.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{w:.3f}", va="center")
 
         fig.tight_layout()
@@ -227,7 +227,7 @@ class EvolutionRatePlotter:
         ax.grid(True, axis="y", linestyle="--", alpha=0.3)
 
         # Add value labels
-        for bar, rate in zip(bars, rates):
+        for bar, rate in zip(bars, rates, strict=False):
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01, f"{rate:.4f}", ha="center", fontsize=9)
 
         fig.tight_layout()

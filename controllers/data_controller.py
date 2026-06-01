@@ -180,7 +180,9 @@ class DataController:
                 try:
                     import pandas as pd
                 except ImportError:
-                    raise FileOperationError("pandas is required for Excel import. Install with: pip install pandas openpyxl")
+                    raise FileOperationError(
+                        "pandas is required for Excel import. Install with: pip install pandas openpyxl"
+                    )
 
                 df = pd.read_excel(
                     filepath,
@@ -260,7 +262,7 @@ class DataController:
                     # Write header
                     if include_labels:
                         if matrix.col_labels:
-                            header = [""] + list(matrix.col_labels)
+                            header = ["", *list(matrix.col_labels)]
                         else:
                             header = [""] + [f"Var_{i + 1}" for i in range(matrix.n_variables)]
                         writer.writerow(header)

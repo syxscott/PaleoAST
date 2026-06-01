@@ -143,9 +143,8 @@ def validate_matrix_shape(
     n_rows, n_cols = matrix.shape
 
     # Check for empty matrix
-    if not allow_empty:
-        if n_rows == 0 or n_cols == 0:
-            raise MatrixDimensionError("Matrix cannot be empty", details={"shape": matrix.shape})
+    if not allow_empty and (n_rows == 0 or n_cols == 0):
+        raise MatrixDimensionError("Matrix cannot be empty", details={"shape": matrix.shape})
 
     # Check exact shape if specified
     if exact_shape is not None:

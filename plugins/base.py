@@ -16,6 +16,7 @@ from typing import Any
 @dataclass
 class AnalysisResult:
     """Standard container for analysis results."""
+
     name: str
     data: Any
     metadata: dict[str, Any]

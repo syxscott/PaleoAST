@@ -41,7 +41,6 @@ version: 1.0.1
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -137,13 +136,10 @@ class DTWAnalyzer:
             if s2.ndim == 1:
                 s2 = s2.reshape(-1, 1)
 
-            n1, n_features = s1.shape
+            n1, _n_features = s1.shape
             n2 = s2.shape[0]
 
-            self._logger.info(
-                f"Computing DTW alignment: seq1({n1}), seq2({n2}), "
-                f"metric={metric}, window={window}"
-            )
+            self._logger.info(f"Computing DTW alignment: seq1({n1}), seq2({n2}), metric={metric}, window={window}")
 
             # Compute pairwise distance matrix
             dist_mat = cdist(s1, s2, metric=metric)

@@ -14,17 +14,15 @@ version: 1.0.1
 
 import logging
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -64,13 +62,15 @@ class BaseBetaDialog(QDialog):
         """Apply themed stylesheet."""
         c = get_palette(self._is_dark_theme)
         t = Typography()
-        self.setStyleSheet(f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
-                           f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
-                           f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
-                           f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
-                           f"border: 1px solid {c.border_light}; border-radius: 4px; "
-                           f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}")
+        self.setStyleSheet(
+            f"QDialog {{ background-color: {c.bg_primary}; color: {c.text_primary}; }}"
+            f"QLabel {{ color: {c.text_primary}; font-size: {t.body_size}px; }}"
+            f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; "
+            f"font-family: 'Consolas', monospace; font-size: {t.body_sm_size}px; }}"
+        )
 
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
@@ -90,8 +90,10 @@ class BaseBetaDialog(QDialog):
         data_layout = QVBoxLayout(data_group)
 
         data_info = QLabel(
-            _("Enter species abundances per site (one row per site, tab or comma separated).\n"
-              "Rows: sites/samples, Columns: species, Values: abundance counts.")
+            _(
+                "Enter species abundances per site (one row per site, tab or comma separated).\n"
+                "Rows: sites/samples, Columns: species, Values: abundance counts."
+            )
         )
         data_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         data_layout.addWidget(data_info)
@@ -105,7 +107,7 @@ class BaseBetaDialog(QDialog):
 
         # Method-specific content
         self._method_widget = QWidget()
-        method_layout = QVBoxLayout(self._method_widget)
+        QVBoxLayout(self._method_widget)
         layout.addWidget(self._method_widget, 1)
 
         # Results
@@ -141,13 +143,14 @@ class BaseBetaDialog(QDialog):
 
         try:
             import numpy as np
-            lines = text.strip().split('\n')
+
+            lines = text.strip().split("\n")
             # Format: each line is "site_name\tspecies1_count\tspecies2_count\t..."
             data_rows = []
             site_names = []
 
             for line in lines:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 if len(parts) >= 2:
                     site_names.append(parts[0])
                     row = [float(p) for p in parts[1:]]
@@ -207,8 +210,7 @@ class CoverageRarefactionDialog(BaseBetaDialog):
             abundance_matrix, site_names = self._parse_abundance_data()
             if abundance_matrix is None or abundance_matrix.shape[0] < 2:
                 QMessageBox.warning(
-                    self, _("Input Error"),
-                    _("Please enter valid abundance data for at least 2 sites.")
+                    self, _("Input Error"), _("Please enter valid abundance data for at least 2 sites.")
                 )
                 return
 
@@ -232,6 +234,7 @@ class CoverageRarefactionDialog(BaseBetaDialog):
         except Exception as e:
             self._logger.error(f"Rarefaction failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "稀疏化分析"))
 
 
@@ -253,18 +256,22 @@ class BetaDiversityDialog(BaseBetaDialog):
         opts_layout = QFormLayout(opts_group)
 
         self._metric_combo = QComboBox()
-        self._metric_combo.addItems([
-            _("Sørensen index"),
-            _("Jaccard index"),
-        ])
+        self._metric_combo.addItems(
+            [
+                _("Sørensen index"),
+                _("Jaccard index"),
+            ]
+        )
         opts_layout.addRow(_("Dissimilarity metric:"), self._metric_combo)
 
         self._transform_combo = QComboBox()
-        self._transform_combo.addItems([
-            _("None (presence-absence)"),
-            _("Square root transformation"),
-            _("Log transformation"),
-        ])
+        self._transform_combo.addItems(
+            [
+                _("None (presence-absence)"),
+                _("Square root transformation"),
+                _("Log transformation"),
+            ]
+        )
         opts_layout.addRow(_("Data transformation:"), self._transform_combo)
 
         method_layout.addWidget(opts_group)
@@ -274,10 +281,12 @@ class BetaDiversityDialog(BaseBetaDialog):
         pairwise_layout = QVBoxLayout(pairwise_group)
 
         self._show_pairwise_check = QComboBox()
-        self._show_pairwise_check.addItems([
-            _("Similarity matrix only"),
-            _("Full pairwise comparison"),
-        ])
+        self._show_pairwise_check.addItems(
+            [
+                _("Similarity matrix only"),
+                _("Full pairwise comparison"),
+            ]
+        )
         pairwise_layout.addWidget(QLabel(_("Display mode:")))
         pairwise_layout.addWidget(self._show_pairwise_check)
 
@@ -289,8 +298,7 @@ class BetaDiversityDialog(BaseBetaDialog):
             abundance_matrix, site_names = self._parse_abundance_data()
             if abundance_matrix is None or abundance_matrix.shape[0] < 2:
                 QMessageBox.warning(
-                    self, _("Input Error"),
-                    _("Please enter valid abundance data for at least 2 sites.")
+                    self, _("Input Error"), _("Please enter valid abundance data for at least 2 sites.")
                 )
                 return
 
@@ -317,4 +325,5 @@ class BetaDiversityDialog(BaseBetaDialog):
         except Exception as e:
             self._logger.error(f"Beta diversity failed: {e}")
             from views.ui_main_window import format_user_error
+
             QMessageBox.critical(self, _("Error"), format_user_error(e, "Beta多样性"))

@@ -51,7 +51,6 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -317,8 +316,8 @@ def _compute_contrasts_recursive(
 
     if len(child_results) == 2:
         # Binary node: single contrast (Felsenstein 1985)
-        child1, val1, var1 = child_results[0]
-        child2, val2, var2 = child_results[1]
+        _child1, val1, var1 = child_results[0]
+        _child2, val2, var2 = child_results[1]
         # v1 = cumulative var from child subtree = var1 (already includes branch to this node)
         # No need to add child1.branch_length - var1 already represents the cumulative
         # variance from child1's subtree to all descendant tips
@@ -342,14 +341,12 @@ def _compute_contrasts_recursive(
     # Multi-way node: reduce iteratively (Felsenstein 1985)
     # Iteratively contrast adjacent children, combining one each step
     # Build list of (value, cum_var, child) for active nodes
-    active: list[tuple[float, float, PhyloNode]] = [
-        (val, cvar, child) for child, val, cvar in child_results
-    ]
+    active: list[tuple[float, float, PhyloNode]] = [(val, cvar, child) for child, val, cvar in child_results]
 
     while len(active) > 1:
         # Contrast first two (Felsenstein 1985)
-        val1, var1, ch1 = active[0]
-        val2, var2, ch2 = active[1]
+        val1, var1, _ch1 = active[0]
+        val2, var2, _ch2 = active[1]
         # var1/var2 already include branches to current node, no need to add again
         v1 = var1
         v2 = var2
@@ -367,7 +364,7 @@ def _compute_contrasts_recursive(
             combined_val = (val1 + val2) / 2.0
         # Replace first two with combined
         combined_child = PhyloNode(name="combined", node_type=NodeType.INTERNAL, branch_length=0.0)
-        active = [(combined_val, combined_cvar, combined_child)] + active[2:]
+        active = [(combined_val, combined_cvar, combined_child), *active[2:]]
 
     # Reconstructed value at this node = inverse-variance weighted mean of immediate child values
     total_w = 0.0
@@ -449,9 +446,7 @@ class PCMAnalyzer:
         trait_names = set(trait_values.keys())
         missing = leaf_names - trait_names
         if missing:
-            raise ValidationError(
-                _("Trait data missing for taxa: {0}").format(", ".join(sorted(missing)))
-            )
+            raise ValidationError(_("Trait data missing for taxa: {0}").format(", ".join(sorted(missing))))
 
         # Filter tree to taxa with trait data
         # Prune taxa not in trait_values
@@ -611,7 +606,7 @@ class PCMAnalyzer:
         if n_tips < 3:
             raise ValidationError(_("Need at least 3 taxa with trait data"))
 
-        name_to_idx, VCV = _compute_vcv_matrix(working_tree.root)
+        _name_to_idx, VCV = _compute_vcv_matrix(working_tree.root)
         tip_names = [l.name for l in leaves]
 
         # VCV inverse under BM gives weights for ancestral reconstruction
@@ -625,7 +620,7 @@ class PCMAnalyzer:
         # = (sum IC_i^2 / n) / (sum v_i / n)
         # Standardized contrasts: IC / sqrt(v)
         std_contrasts = ic_vals / np.sqrt(branch_sums)
-        K = np.mean(std_contrasts ** 2)
+        K = np.mean(std_contrasts**2)
 
         # Compute Z-score via permutations
         tip_array = np.array([trait_values[l.name] for l in leaves], dtype=np.float64)
@@ -639,7 +634,7 @@ class PCMAnalyzer:
                 perm_ic = np.array([c[0] for c in perm_ic_data], dtype=np.float64)
                 perm_branch = np.array([c[1] for c in perm_ic_data], dtype=np.float64)
                 perm_std = perm_ic / np.sqrt(perm_branch)
-                perm_Ks.append(np.mean(perm_std ** 2))
+                perm_Ks.append(np.mean(perm_std**2))
 
         perm_Ks_arr = np.array(perm_Ks)
         z = (K - np.mean(perm_Ks_arr)) / np.std(perm_Ks_arr) if np.std(perm_Ks_arr) > 0 else 0.0
@@ -752,6 +747,7 @@ class PCMAnalyzer:
                 node_id_str = node_name.split("_")[-1]
                 try:
                     node_id = int(node_id_str)
+
                     def search_by_id(n: PhyloNode, tid: int) -> PhyloNode | None:
                         if id(n) == tid:
                             return n
@@ -760,6 +756,7 @@ class PCMAnalyzer:
                             if r:
                                 return r
                         return None
+
                     target_node = search_by_id(working_tree.root, node_id)
                 except ValueError:
                     pass
@@ -827,6 +824,7 @@ class PCMAnalyzer:
                     node_id_str = node_name.split("_")[-1]
                     try:
                         node_id = int(node_id_str)
+
                         def search_by_id(n: PhyloNode, tid: int) -> PhyloNode | None:
                             if id(n) == tid:
                                 return n
@@ -835,6 +833,7 @@ class PCMAnalyzer:
                                 if r:
                                     return r
                             return None
+
                         target_node = search_by_id(working_tree.root, node_id)
                     except ValueError:
                         pass
@@ -863,14 +862,10 @@ class PCMAnalyzer:
 
             perm_gm = np.mean(perm_ic)
             perm_ss_between = sum(
-                sum(1 for i, g in enumerate(perm_contrast_groups) if g == grp) *
-                (perm_grp_means[grp] - perm_gm) ** 2
+                sum(1 for i, g in enumerate(perm_contrast_groups) if g == grp) * (perm_grp_means[grp] - perm_gm) ** 2
                 for grp in groups
             )
-            perm_ss_within = sum(
-                (perm_ic[i] - perm_grp_means[g]) ** 2
-                for i, g in enumerate(perm_contrast_groups)
-            )
+            perm_ss_within = sum((perm_ic[i] - perm_grp_means[g]) ** 2 for i, g in enumerate(perm_contrast_groups))
             perm_ms_between = perm_ss_between / df_between if df_between > 0 else 0.0
             perm_ms_within = perm_ss_within / df_within if df_within > 0 else 0.0
             perm_Fs.append(perm_ms_between / perm_ms_within if perm_ms_within > 0 else 0.0)

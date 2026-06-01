@@ -323,12 +323,10 @@ TRANSLATIONS = {
     "Relative Warps": "相对扭曲",
     "EFA": "EFA",
     "Unitary Associations": "单元关联",
-    "Spectral Analysis": "频谱分析",
     "CONISS": "CONISS",
     "Markov": "马尔可夫",
     "Directional": "方向统计",
     "Confidence Intervals": "置信区间",
-    "Diversity": "多样性",
     "Rarefaction": "稀释分析",
     "Abundance Models": "丰度模型",
     "SHE": "SHE",
@@ -339,11 +337,6 @@ TRANSLATIONS = {
     "Facies": "岩相",
     "Outline": "轮廓",
     "Filter:": "筛选:",
-    # ============================================================
-    # New Dialogs
-    # ============================================================
-    "Distance Metric": "距离度量",
-    "Distance measure:": "距离度量:",
     "Test Type": "检验类型",
     "Summary Statistics": "描述性统计",
     "Normality Test (Shapiro-Wilk)": "正态性检验 (Shapiro-Wilk)",
@@ -364,10 +357,6 @@ TRANSLATIONS = {
     "Contour points: ": "轮廓点数: ",
     "Input": "输入",
     "Components (CCA)": "分量",
-    "Options": "选项",
-    "Run": "运行",
-    "Cancel": "取消",
-    "Help": "帮助",
     # ============================================================
     # Plot Canvas - New
     # ============================================================
@@ -504,7 +493,6 @@ TRANSLATIONS = {
     "Export Error": "导出错误",
     "Rarefaction Analysis": "稀释分析",
     "Non-metric MDS (NMDS)": "非度量MDS (NMDS)",
-    "Shannon Index (H'):": "Shannon指数 (H'):",
     "GPA": "GPA",
     "Spectral": "频谱",
     "None": "无",

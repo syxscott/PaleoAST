@@ -10,11 +10,9 @@ version: 1.0.1
 """
 
 import logging
-import sys
 from datetime import datetime
-from typing import Optional
 
-from PyQt6.QtCore import Qt, QMutex, QMutexLocker
+from PyQt6.QtCore import QMutex, QMutexLocker
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QDockWidget,
@@ -42,19 +40,19 @@ class ConsoleTextEdit(QTextEdit):
 
     # Theme-aware colors (will be updated based on theme)
     DARK_COLORS = {
-        'DEBUG': '#888888',     # Gray
-        'INFO': '#E0E0E0',      # Light gray (visible on dark)
-        'WARNING': '#FFA500',   # Orange
-        'ERROR': '#FF5252',     # Light red
-        'CRITICAL': '#FF1744',  # Bright red
+        "DEBUG": "#888888",  # Gray
+        "INFO": "#E0E0E0",  # Light gray (visible on dark)
+        "WARNING": "#FFA500",  # Orange
+        "ERROR": "#FF5252",  # Light red
+        "CRITICAL": "#FF1744",  # Bright red
     }
 
     LIGHT_COLORS = {
-        'DEBUG': '#888888',     # Gray
-        'INFO': '#000000',      # Black
-        'WARNING': '#FFA500',   # Orange
-        'ERROR': '#FF0000',     # Red
-        'CRITICAL': '#8B0000',  # Dark Red
+        "DEBUG": "#888888",  # Gray
+        "INFO": "#000000",  # Black
+        "WARNING": "#FFA500",  # Orange
+        "ERROR": "#FF0000",  # Red
+        "CRITICAL": "#8B0000",  # Dark Red
     }
 
     MAX_LINES = 1000
@@ -73,7 +71,7 @@ class ConsoleTextEdit(QTextEdit):
     def append_log(self, level: str, message: str, timestamp: bool = True) -> None:
         """Append a log message with color coding."""
         colors = self.DARK_COLORS if self._is_dark_theme else self.LIGHT_COLORS
-        color = colors.get(level, '#000000')
+        color = colors.get(level, "#000000")
 
         text = ""
         if timestamp:
@@ -148,6 +146,7 @@ class DiagnosticConsole(QDockWidget):
 
         # Create a horizontal layout for buttons
         from PyQt6.QtWidgets import QHBoxLayout
+
         btn_bar = QHBoxLayout()
         btn_bar.addWidget(self._btn_clear)
         btn_bar.addWidget(self._btn_pause)
@@ -293,15 +292,15 @@ class DiagnosticConsole(QDockWidget):
 
     def log_info(self, message: str) -> None:
         """Log an info message."""
-        self.append_message('INFO', message)
+        self.append_message("INFO", message)
 
     def log_warning(self, message: str) -> None:
         """Log a warning message."""
-        self.append_message('WARNING', message)
+        self.append_message("WARNING", message)
 
     def log_error(self, message: str) -> None:
         """Log an error message."""
-        self.append_message('ERROR', message)
+        self.append_message("ERROR", message)
 
 
 class ConsoleLogHandler(logging.Handler):

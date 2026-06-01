@@ -207,7 +207,7 @@ class TaskScheduler:
         while self._running and not self._shutdown_event.is_set():
             try:
                 # 从就绪队列获取任务
-                priority, created_at, task_id = self._ready_queue.get(timeout=0.1)
+                _priority, _created_at, task_id = self._ready_queue.get(timeout=0.1)
 
                 # 获取任务
                 with self._lock:

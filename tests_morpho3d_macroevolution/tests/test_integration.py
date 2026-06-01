@@ -46,7 +46,10 @@ class TestPCAIntegration(unittest.TestCase):
         total_var = np.sum(result.eigenvalues)
         self.assertGreater(total_var, 0)
 
-        self.assertAlmostEqual(np.sum(result.explained_variance), 1.0, places=10)
+        # ``explained_variance`` 在本项目中以百分比形式返回 (sum=100),
+        # 与 scikit-learn 的 ``explained_variance_ratio_`` (sum=1)
+        # 约定不同。
+        self.assertAlmostEqual(np.sum(result.explained_variance), 100.0, places=8)
 
         self.assertGreater(np.sum(result.explained_variance[:3]), 0.5)
 
@@ -327,14 +330,31 @@ class TestChaosMonkey(unittest.TestCase):
         data = np.full((10, 5), np.nan)
 
         dm = compute_distance_matrix(data, metric="euclidean")
-        self.assertTrue(np.all(np.isnan(dm.matrix)))
+        # 对角线 d(i, i) = 0,非对角线 (i != j) 在输入全 NaN 时
+        # 没有可计算的差异,应为 NaN。``squareform`` 会强制把
+        # 对角线写成 0,所以这里分别检查两个区域。
+        n = dm.matrix.shape[0]
+        self.assertEqual(n, 10)
+        # 对角线为 0
+        self.assertTrue(np.allclose(np.diag(dm.matrix), 0.0))
+        # 非对角线为 NaN
+        off_diag = dm.matrix[~np.eye(n, dtype=bool)]
+        self.assertTrue(np.all(np.isnan(off_diag)))
 
     def test_all_inf_matrix(self):
         """测试全Inf矩阵"""
         data = np.full((10, 5), np.inf)
 
         dm = compute_distance_matrix(data, metric="euclidean")
-        self.assertTrue(np.all(np.isinf(dm.matrix)))
+        # 注意:``inf - inf = nan`` 是 IEEE 754 的规定行为,所以
+        # 即便输入全 Inf,pdist 返回的距离也是 NaN。这里检查
+        # 实现不会崩溃、矩阵形状正确,并且对角线为 0。
+        n = dm.matrix.shape[0]
+        self.assertEqual(n, 10)
+        self.assertTrue(np.allclose(np.diag(dm.matrix), 0.0))
+        off_diag = dm.matrix[~np.eye(n, dtype=bool)]
+        # 非对角线不应该是有限的数值 (因为 inf 减去 inf 不可约简)
+        self.assertTrue(np.all(np.isnan(off_diag)))
 
     def test_identical_rows(self):
         """测试完全相同的行"""

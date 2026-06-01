@@ -51,7 +51,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -60,7 +60,7 @@ import numpy.typing as npt
 from scipy import stats
 
 from config.i18n import _
-from utils.exceptions import ComputationError, ValidationError
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class EvolutionRateResult:
 
     def summary(self) -> str:
         """Generate summary text."""
-        best_idx = max(self.aic_weights, key=self.aic_weights.get)
+        max(self.aic_weights, key=self.aic_weights.get)
         lines = [
             f"{_('Rate of Morphological Evolution')}\n",
             f"{'=' * 50}\n",
@@ -138,16 +138,16 @@ class EvolutionRateResult:
         lines.append("")
         lines.append(f"{_('Evolution rate: {0:.6f}').format(self.rate_estimate)}")
         if self.rate_ci_lower is not None and self.rate_ci_upper is not None:
-            lines.append(
-                f"  95% CI: [{self.rate_ci_lower:.6f}, {self.rate_ci_upper:.6f}]"
-            )
+            lines.append(f"  95% CI: [{self.rate_ci_lower:.6f}, {self.rate_ci_upper:.6f}]")
 
         if self.trend_estimate is not None:
             lines.append(f"{_('Directional trend: {0:.6f}').format(self.trend_estimate)}")
             if self.trend_significance is not None:
-                sig = "***" if self.trend_significance < 0.001 else (
-                    "**" if self.trend_significance < 0.01 else (
-                        "*" if self.trend_significance < 0.05 else ""))
+                sig = (
+                    "***"
+                    if self.trend_significance < 0.001
+                    else ("**" if self.trend_significance < 0.01 else ("*" if self.trend_significance < 0.05 else ""))
+                )
                 lines.append(f"  p = {self.trend_significance:.4f} {sig}")
 
         if self.optimum is not None:
@@ -237,16 +237,12 @@ class EvolutionRateAnalyzer:
             ValidationError: If input data is invalid
         """
         with self._lock:
-            self._logger.info(
-                f"Analyzing evolution rate: n={len(trait_series)}"
-            )
+            self._logger.info(f"Analyzing evolution rate: n={len(trait_series)}")
 
             # Validate input
             trait_series = np.asarray(trait_series, dtype=np.float64)
             if len(trait_series) < 3:
-                raise ValidationError(
-                    _("Need at least 3 measurements for evolution rate analysis")
-                )
+                raise ValidationError(_("Need at least 3 measurements for evolution rate analysis"))
 
             if time_intervals is None:
                 time_intervals = np.ones(len(trait_series) - 1)
@@ -281,9 +277,7 @@ class EvolutionRateAnalyzer:
                 params["random_walk"] = {"rate": rate}
 
             if "directional" in models:
-                ll, rate, trend, trend_se, trend_p = self._fit_directional(
-                    trait_series, dx, dt
-                )
+                ll, rate, trend, trend_se, trend_p = self._fit_directional(trait_series, dx, dt)
                 log_liks["directional"] = ll
                 params["directional"] = {
                     "rate": rate,
@@ -302,7 +296,7 @@ class EvolutionRateAnalyzer:
                 }
 
             # Compute AIC values
-            n = len(trait_series)
+            len(trait_series)
             k = {"random_walk": 1, "directional": 2, "stasis": 3}
 
             aic_values = {}
@@ -314,10 +308,7 @@ class EvolutionRateAnalyzer:
 
             # Compute AIC weights
             min_aic = min(aic_values.values())
-            aic_weights = {
-                m: math.exp(-0.5 * (aic_values[m] - min_aic))
-                for m in aic_values
-            }
+            aic_weights = {m: math.exp(-0.5 * (aic_values[m] - min_aic)) for m in aic_values}
             total_weight = sum(aic_weights.values())
             aic_weights = {m: w / total_weight for m, w in aic_weights.items()}
 
@@ -352,9 +343,7 @@ class EvolutionRateAnalyzer:
             )
 
             self._last_result = result
-            self._logger.info(
-                f"Evolution rate: best={best_model}, rate={result.rate_estimate:.6f}"
-            )
+            self._logger.info(f"Evolution rate: best={best_model}, rate={result.rate_estimate:.6f}")
             return result
 
     def _fit_random_walk(
@@ -383,7 +372,9 @@ class EvolutionRateAnalyzer:
         # Handle zero variance
         var = np.maximum(var, 1e-10)
 
-        ll = -0.5 * len(dx) * math.log(2 * math.pi) - 0.5 * float(np.sum(np.log(var))) - 0.5 * float(np.sum(dx**2 / var))
+        ll = (
+            -0.5 * len(dx) * math.log(2 * math.pi) - 0.5 * float(np.sum(np.log(var))) - 0.5 * float(np.sum(dx**2 / var))
+        )
 
         return ll, float(rate)
 
@@ -447,7 +438,11 @@ class EvolutionRateAnalyzer:
         # Log-likelihood
         var = rate * dt
         var = np.maximum(var, 1e-10)
-        ll = -0.5 * len(dx) * math.log(2 * math.pi) - 0.5 * float(np.sum(np.log(var))) - 0.5 * float(np.sum(residuals**2 / var))
+        ll = (
+            -0.5 * len(dx) * math.log(2 * math.pi)
+            - 0.5 * float(np.sum(np.log(var)))
+            - 0.5 * float(np.sum(residuals**2 / var))
+        )
 
         return ll, float(rate), float(beta), float(se_beta), float(p_value)
 
@@ -494,7 +489,11 @@ class EvolutionRateAnalyzer:
         # Log-likelihood (Gaussian approximation)
         var = sigma**2 * dt
         var = np.maximum(var, 1e-10)
-        ll = -0.5 * len(dx) * math.log(2 * math.pi) - 0.5 * float(np.sum(np.log(var))) - 0.5 * float(np.sum(residuals**2 / var))
+        ll = (
+            -0.5 * len(dx) * math.log(2 * math.pi)
+            - 0.5 * float(np.sum(np.log(var)))
+            - 0.5 * float(np.sum(residuals**2 / var))
+        )
 
         return ll, float(sigma), float(theta), float(alpha)
 

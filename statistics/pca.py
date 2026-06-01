@@ -261,7 +261,7 @@ class PCAAnalyzer:
             4. Scores: T = Z * V
             5. Loadings: P = V * sqrt(Λ)
         """
-        n_samples, n_variables = X.shape
+        n_samples, _n_variables = X.shape
 
         # Step 1: Center the data
         mean_vector = np.mean(X, axis=0)
@@ -273,7 +273,7 @@ class PCAAnalyzer:
         # SVD of Z: Z = U * Σ * V^T
         # Then: S = V * (Σ²/(n-1)) * V^T
         try:
-            U, singular_values, Vt = np.linalg.svd(Z, full_matrices=False)
+            _U, singular_values, Vt = np.linalg.svd(Z, full_matrices=False)
         except np.linalg.LinAlgError as e:
             raise ComputationError("SVD computation failed during PCA", original_exception=e)
 
@@ -336,7 +336,7 @@ class PCAAnalyzer:
         Note: For standardized data, correlation matrix equals
               covariance matrix, so we can use the same algorithm.
         """
-        n_samples, n_variables = X.shape
+        n_samples, _n_variables = X.shape
 
         # Step 1: Compute mean and std for standardization
         mean_vector = np.mean(X, axis=0)
@@ -351,7 +351,7 @@ class PCAAnalyzer:
 
         # Step 2: SVD of standardized data
         try:
-            U, singular_values, Vt = np.linalg.svd(Z, full_matrices=False)
+            _U, singular_values, Vt = np.linalg.svd(Z, full_matrices=False)
         except np.linalg.LinAlgError as e:
             raise ComputationError("SVD computation failed during correlation PCA", original_exception=e)
 

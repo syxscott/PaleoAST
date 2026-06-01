@@ -43,7 +43,7 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError, ValidationError
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -191,8 +191,7 @@ class ExtinctionIntervalAnalyzer:
         """
         with self._lock:
             self._logger.info(
-                f"Computing extinction CI: n_taxa={len(lad_positions)}, "
-                f"method={method}, q={confidence_level}"
+                f"Computing extinction CI: n_taxa={len(lad_positions)}, method={method}, q={confidence_level}"
             )
 
             # Validate input
@@ -201,14 +200,10 @@ class ExtinctionIntervalAnalyzer:
                 raise ValidationError(_("Need at least one LAD position"))
 
             if detection_probability <= 0 or detection_probability > 1:
-                raise ValidationError(
-                    _("Detection probability must be in (0, 1]")
-                )
+                raise ValidationError(_("Detection probability must be in (0, 1]"))
 
             if confidence_level <= 0 or confidence_level >= 1:
-                raise ValidationError(
-                    _("Confidence level must be in (0, 1)")
-                )
+                raise ValidationError(_("Confidence level must be in (0, 1)"))
 
             # Sort LADs in descending order (top to bottom)
             lad_sorted = np.sort(lad_positions)[::-1]
@@ -216,10 +211,7 @@ class ExtinctionIntervalAnalyzer:
 
             # Compute number of layers above each LAD
             # LAD at position k means k layers above it
-            n_layers_above = np.array(
-                [np.sum(lad_sorted > lad) for lad in lad_sorted],
-                dtype=np.int64
-            )
+            n_layers_above = np.array([np.sum(lad_sorted > lad) for lad in lad_sorted], dtype=np.int64)
 
             # Compute probability of detection per layer
             # Based on the proportion of taxa still present
@@ -241,9 +233,7 @@ class ExtinctionIntervalAnalyzer:
                     confidence_level,
                 )
             else:
-                raise ValidationError(
-                    _("Unknown method: {0}. Use 'marshall' or 'strauss_sadler'").format(method)
-                )
+                raise ValidationError(_("Unknown method: {0}. Use 'marshall' or 'strauss_sadler'").format(method))
 
             # Compute sample coverage
             # Coverage = proportion of "true" extinction events captured
@@ -265,10 +255,7 @@ class ExtinctionIntervalAnalyzer:
             )
 
             self._last_result = result
-            self._logger.info(
-                f"Extinction CI computed: {n_taxa} taxa, "
-                f"coverage={sample_coverage:.2%}"
-            )
+            self._logger.info(f"Extinction CI computed: {n_taxa} taxa, coverage={sample_coverage:.2%}")
             return result
 
     def _marshall_ci(
@@ -386,7 +373,7 @@ class ExtinctionIntervalAnalyzer:
 
         for i in range(n_taxa):
             k = n_layers_above[i]
-            rank = i + 1  # 1-indexed rank
+            i + 1  # 1-indexed rank
 
             if k == 0:
                 ci_lower[i] = lad_sorted[i]
@@ -439,7 +426,7 @@ class ExtinctionIntervalAnalyzer:
             Estimated detection probability
         """
         lad_sorted = np.sort(lad_positions)[::-1]
-        n_taxa = len(lad_sorted)
+        len(lad_sorted)
 
         if known_extinction_layer is not None:
             # Use known extinction to calibrate

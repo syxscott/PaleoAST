@@ -32,12 +32,16 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+import contextlib
+
 from PyQt6.QtCore import QPoint, QRect, QSettings, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QBrush,
     QColor,
     QCursor,
+    QDragEnterEvent,
+    QDropEvent,
     QIcon,
     QKeySequence,
     QPainter,
@@ -45,7 +49,6 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
 )
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -68,15 +71,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from views.file_drop_handler import FileDropHandler
-from views.diagnostic_console import DiagnosticConsole
-
-from config.design_system import Typography, BorderRadius, get_palette
+from config.design_system import BorderRadius, Typography, get_palette
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from models.state_manager import get_state_manager
 from utils.event_bus import get_event_bus
+from views.diagnostic_console import DiagnosticConsole
+from views.file_drop_handler import FileDropHandler
+from views.ui_allometry_dialogs import AllometryDialog
+from views.ui_beta_diversity_dialogs import BetaDiversityDialog
 from views.ui_dialogs import (
     BiostratigraphyDialog,
     CCADialog,
@@ -100,14 +104,12 @@ from views.ui_dialogs import (
     UnivariateDialog,
     WaveletDialog,
 )
+from views.ui_evolution_rate_dialogs import EvolutionRateDialog
+from views.ui_extinction_dialogs import ExtinctionIntervalDialog
 from views.ui_imputation_dialog import ImputationDialog
 from views.ui_navigation import NavigationItem, NavigationTree
-from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
-from views.ui_allometry_dialogs import AllometryDialog, PLSDialog
-from views.ui_evolution_rate_dialogs import EvolutionRateDialog
-from views.ui_beta_diversity_dialogs import BetaDiversityDialog, CoverageRarefactionDialog
-from views.ui_extinction_dialogs import ExtinctionIntervalDialog
 from views.ui_null_model_dialogs import NullModelDialog
+from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_spreadsheet import ScientificSpreadsheet
 
@@ -129,11 +131,19 @@ def format_user_error(e: Exception, operation: str = "") -> str:
     # 数据类型错误（最常见的中文字符或 "NA" 问题）
     if isinstance(e, (ValueError, TypeError)):
         # 检查是否是非法字符问题（更精确的匹配）
-        if any(keyword in error_msg.lower() for keyword in [
-            "could not convert string", "invalid literal for float",
-            "can't convert", "string to float", "could not convert",
-            "无法转换", "invalid choice", "not a valid"
-        ]):
+        if any(
+            keyword in error_msg.lower()
+            for keyword in [
+                "could not convert string",
+                "invalid literal for float",
+                "can't convert",
+                "string to float",
+                "could not convert",
+                "无法转换",
+                "invalid choice",
+                "not a valid",
+            ]
+        ):
             return _(
                 f"{operation_hint}失败：数据包含无效字符。\n\n"
                 "请检查以下几点：\n"
@@ -143,10 +153,10 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             )
 
         # 检查是否是数值计算错误（如 log(负数)、sqrt(负数)）
-        if any(keyword in error_msg.lower() for keyword in [
-            "negative value", "invalid value", "math domain error",
-            "不能求", "数值计算"
-        ]):
+        if any(
+            keyword in error_msg.lower()
+            for keyword in ["negative value", "invalid value", "math domain error", "不能求", "数值计算"]
+        ):
             return _(
                 f"{operation_hint}失败：数值计算错误。\n\n"
                 "请检查以下几点：\n"
@@ -156,9 +166,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             )
 
         # 检查是否是维度不匹配问题
-        if any(keyword in error_msg.lower() for keyword in [
-            "dimension", "shape", "axes"
-        ]):
+        if any(keyword in error_msg.lower() for keyword in ["dimension", "shape", "axes"]):
             return _(
                 f"{operation_hint}失败：数据维度不匹配。\n\n"
                 "请检查以下几点：\n"
@@ -169,10 +177,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
 
         # 检查是否是空数据问题
         if "empty" in error_msg.lower() or "没有数据" in error_msg:
-            return _(
-                f"{operation_hint}失败：数据为空。\n\n"
-                "请确保已选中有效的数据区域。"
-            )
+            return _(f"{operation_hint}失败：数据为空。\n\n请确保已选中有效的数据区域。")
 
         # 通用数据类型错误
         return _(
@@ -183,10 +188,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
 
     # 验证错误
     if "ValidationError" in type(e).__name__ or "验证" in error_msg:
-        return _(
-            f"{operation_hint}失败：数据验证未通过。\n\n"
-            "{0}"
-        ).format(error_msg)
+        return _(f"{operation_hint}失败：数据验证未通过。\n\n{{0}}").format(error_msg)
 
     # 收敛错误（迭代算法未收敛）
     if "ConvergenceError" in type(e).__name__ or "收敛" in error_msg:
@@ -211,11 +213,9 @@ def format_user_error(e: Exception, operation: str = "") -> str:
         )
 
     # 默认：显示原始错误消息的前100个字符
-    return _(
-        f"{operation_hint}时发生错误：\n\n"
-        "{0}\n\n"
-        "如果问题持续存在，请检查数据格式是否正确。"
-    ).format(error_msg[:200])
+    return _(f"{operation_hint}时发生错误：\n\n{{0}}\n\n如果问题持续存在，请检查数据格式是否正确。").format(
+        error_msg[:200]
+    )
 
 
 class RibbonStyle(Enum):
@@ -587,7 +587,7 @@ class RibbonButton(QPushButton):
 
         self._icon_type = icon_type
         self._style = style
-        self._is_dark_theme = getattr(parent, '_is_dark_theme', False) if parent else False
+        self._is_dark_theme = getattr(parent, "_is_dark_theme", False) if parent else False
 
         # Set button properties
         self.setText(text)
@@ -875,7 +875,10 @@ class RibbonBar(QWidget):
         tab_button = QPushButton(title)
         tab_button.setCheckable(True)
         tab_button.setChecked(len(self._tabs) - 1 == self._current_tab_index)
-        tab_button.clicked.connect(lambda checked=False, idx=len(self._tabs) - 1: self._on_tab_clicked(idx))
+        # ``len()`` is evaluated once at lambda definition, capturing the
+        # current tab count; this is the intended behaviour, not a
+        # default-argument pitfall. The B008 warning is a false positive.
+        tab_button.clicked.connect(lambda checked=False, idx=len(self._tabs) - 1: self._on_tab_clicked(idx))  # noqa: B008
         self._tab_button_group.append(tab_button)
         self._tab_bar_layout.addWidget(tab_button)
 
@@ -944,9 +947,7 @@ class RibbonBar(QWidget):
             "}"
         )
         self.setStyleSheet(ss)
-        self._separator.setStyleSheet(
-            "background-color: " + c.border_light + "; max-height: 1px;"
-        )
+        self._separator.setStyleSheet("background-color: " + c.border_light + "; max-height: 1px;")
 
 
 class StatusBarWidget(QStatusBar):
@@ -991,16 +992,10 @@ class StatusBarWidget(QStatusBar):
             "}"
         )
         self._info_label.setStyleSheet(
-            "QLabel { "
-            "color: " + c.text_secondary + "; "
-            "font-size: " + str(t.body_sm_size) + "px; "
-            "}"
+            "QLabel { color: " + c.text_secondary + "; font-size: " + str(t.body_sm_size) + "px; }"
         )
         self._memory_label.setStyleSheet(
-            "QLabel { "
-            "color: " + c.text_disabled + "; "
-            "font-size: " + str(t.caption_size) + "px; "
-            "}"
+            "QLabel { color: " + c.text_disabled + "; font-size: " + str(t.caption_size) + "px; }"
         )
         self._progress_bar.setStyleSheet(
             "QProgressBar { "
@@ -1160,7 +1155,7 @@ class MainWindow(QMainWindow):
 
         # Initialize state manager
         self._state = get_state_manager()
-        
+
         # UI state management - register data-dependent elements
         self._data_actions = []
         self._data_buttons = []
@@ -1223,38 +1218,28 @@ class MainWindow(QMainWindow):
         try:
             from models.data_matrix import DataMatrix
 
-            if data.get('type') == 'tree':
+            if data.get("type") == "tree":
                 QMessageBox.information(
                     self,
                     _("File Loaded"),
-                    _("Tree file loaded: {0}\nNote: Tree visualization coming soon.").format(file_type)
+                    _("Tree file loaded: {0}\nNote: Tree visualization coming soon.").format(file_type),
                 )
                 return
 
-            matrix_data = data.get('data')
+            matrix_data = data.get("data")
             if matrix_data is None:
                 raise ValueError("No data in parsed file")
 
-            row_labels = data.get('row_labels')
-            col_labels = data.get('col_labels')
+            row_labels = data.get("row_labels")
+            col_labels = data.get("col_labels")
 
-            new_matrix = DataMatrix(
-                matrix_data,
-                row_labels=row_labels,
-                col_labels=col_labels
-            )
+            new_matrix = DataMatrix(matrix_data, row_labels=row_labels, col_labels=col_labels)
 
             self._state.set_data_matrix(new_matrix)
-            self._spreadsheet.load_data(
-                matrix_data,
-                row_labels=row_labels,
-                col_labels=col_labels
-            )
+            self._spreadsheet.load_data(matrix_data, row_labels=row_labels, col_labels=col_labels)
 
             self._status_bar.setInfo(
-                _("Loaded: {0} rows x {1} columns").format(
-                    new_matrix.n_samples, new_matrix.n_variables
-                )
+                _("Loaded: {0} rows x {1} columns").format(new_matrix.n_samples, new_matrix.n_variables)
             )
 
             QMessageBox.information(
@@ -1262,15 +1247,11 @@ class MainWindow(QMainWindow):
                 _("File Loaded"),
                 _("Successfully loaded {0}\n{1} rows x {2} columns").format(
                     file_type, new_matrix.n_samples, new_matrix.n_variables
-                )
+                ),
             )
 
         except Exception as e:
-            QMessageBox.critical(
-                self,
-                _("Load Error"),
-                format_user_error(e, "文件加载")
-            )
+            QMessageBox.critical(self, _("Load Error"), format_user_error(e, "文件加载"))
 
     def _on_file_drop_failed(self, error_msg: str) -> None:
         """Handle file load failure."""
@@ -1355,10 +1336,16 @@ class MainWindow(QMainWindow):
         transform_group = home_tab.addGroup(_("Transform"))
         self._btn_log_transform = transform_group.addButton("settings", _("Log"), _("Log transformation (base 10)"))
         self._btn_sqrt_transform = transform_group.addButton("settings", _("Sqrt"), _("Square root transformation"))
-        self._btn_hellinger_transform = transform_group.addButton("settings", _("Hellinger"), _("Hellinger transformation"))
+        self._btn_hellinger_transform = transform_group.addButton(
+            "settings", _("Hellinger"), _("Hellinger transformation")
+        )
         self._btn_zscore_transform = transform_group.addButton("settings", _("Z-Score"), _("Z-score standardization"))
-        self._btn_percent_transform = transform_group.addButton("settings", _("% Total"), _("Percentage standardization"))
-        self._btn_wisconsin_transform = transform_group.addButton("settings", _("Wisconsin"), _("Wisconsin double standardization"))
+        self._btn_percent_transform = transform_group.addButton(
+            "settings", _("% Total"), _("Percentage standardization")
+        )
+        self._btn_wisconsin_transform = transform_group.addButton(
+            "settings", _("Wisconsin"), _("Wisconsin double standardization")
+        )
 
         # View group
         view_group = home_tab.addGroup(_("View"))
@@ -1463,8 +1450,14 @@ class MainWindow(QMainWindow):
         self._btn_zscore_transform.clicked.connect(self._on_transform_zscore)
         self._btn_percent_transform.clicked.connect(self._on_transform_percent)
         self._btn_wisconsin_transform.clicked.connect(self._on_transform_wisconsin)
-        for btn in [self._btn_log_transform, self._btn_sqrt_transform, self._btn_hellinger_transform,
-                    self._btn_zscore_transform, self._btn_percent_transform, self._btn_wisconsin_transform]:
+        for btn in [
+            self._btn_log_transform,
+            self._btn_sqrt_transform,
+            self._btn_hellinger_transform,
+            self._btn_zscore_transform,
+            self._btn_percent_transform,
+            self._btn_wisconsin_transform,
+        ]:
             self._register_data_button(btn)
 
         # Analysis buttons (require data)
@@ -1561,21 +1554,21 @@ class MainWindow(QMainWindow):
     def _update_ui_state(self) -> None:
         """Update UI element states based on data availability."""
         has_data = self._state.has_data
-        
+
         # Update all registered data-dependent actions
         for action in self._data_actions:
             action.setEnabled(has_data)
-        
+
         # Update all registered data-dependent buttons
         for button in self._data_buttons:
             button.setEnabled(has_data)
-    
+
     def _register_data_action(self, action: QAction) -> None:
         """Register an action as data-dependent."""
         if action not in self._data_actions:
             self._data_actions.append(action)
             action.setEnabled(self._state.has_data)
-    
+
     def _register_data_button(self, button) -> None:
         """Register a button as data-dependent."""
         if button not in self._data_buttons:
@@ -1690,7 +1683,7 @@ class MainWindow(QMainWindow):
         rarefaction_action.triggered.connect(self._on_run_rarefaction)
         analysis_menu.addAction(rarefaction_action)
         self._register_data_action(rarefaction_action)
-        
+
         analysis_menu.addSeparator()
 
         anosim_action = QAction(_("&ANOSIM..."), self)
@@ -1868,17 +1861,13 @@ class MainWindow(QMainWindow):
         from PyQt6.QtWidgets import QApplication
 
         # Save any pending state (settings, undo/redo) before the swap.
-        try:
+        with contextlib.suppress(Exception):
             QApplication.instance().aboutToQuit.emit()
-        except Exception:
-            pass
 
         # Stop the event loop explicitly. ``os.execv`` does not run
         # atexit handlers, so we are responsible for flushing state.
-        try:
+        with contextlib.suppress(Exception):
             self._save_settings()
-        except Exception:
-            pass
 
         QApplication.quit()
 
@@ -1886,7 +1875,7 @@ class MainWindow(QMainWindow):
         # ``os.execv`` is preferred over ``os.execl`` because it accepts
         # the full argument list as a single sequence.
         try:
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            os.execv(sys.executable, [sys.executable, *sys.argv])
         except OSError:
             # If exec fails (e.g. the binary is gone) fall back to a
             # plain exit and let the user restart manually.
@@ -2017,11 +2006,12 @@ class MainWindow(QMainWindow):
 
             # Create random data
             import numpy as np
+
             from models.data_matrix import DataMatrix
 
             data = np.random.randn(n_samples, n_vars) * 10 + 50
-            row_labels = [f"Sample_{i+1}" for i in range(n_samples)]
-            col_labels = [f"Var_{j+1}" for j in range(n_vars)]
+            row_labels = [f"Sample_{i + 1}" for i in range(n_samples)]
+            col_labels = [f"Var_{j + 1}" for j in range(n_vars)]
             matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
 
             # Update state manager
@@ -2039,8 +2029,12 @@ class MainWindow(QMainWindow):
     def _on_open_file(self) -> None:
         """Open data file (CSV/TXT/Excel)."""
         filepath, _ext = QFileDialog.getOpenFileName(
-            self, _("Open Data File"), "",
-            _("Data Files (*.csv *.txt *.xlsx *.xls);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xlsx *.xls);;All Files (*)")
+            self,
+            _("Open Data File"),
+            "",
+            _(
+                "Data Files (*.csv *.txt *.xlsx *.xls);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xlsx *.xls);;All Files (*)"
+            ),
         )
 
         if filepath:
@@ -2093,6 +2087,7 @@ class MainWindow(QMainWindow):
         """Set dark/light theme and propagate to all child widgets."""
         self._is_dark_theme = is_dark
         from config.design_system import get_stylesheet
+
         self.setStyleSheet(get_stylesheet(is_dark))
         self._ribbon.setDarkTheme(is_dark)
         self._status_bar.setDarkTheme(is_dark)
@@ -2135,6 +2130,7 @@ class MainWindow(QMainWindow):
             matrix = self._state.data_matrix
             transposed_data = matrix.data.T
             from models.data_matrix import DataMatrix
+
             new_matrix = DataMatrix(
                 transposed_data,
                 row_labels=matrix.col_labels,
@@ -2147,9 +2143,7 @@ class MainWindow(QMainWindow):
                 col_labels=matrix.row_labels,
             )
             self._status_bar.setInfo(
-                _("Transposed: {0} samples x {1} variables").format(
-                    new_matrix.n_samples, new_matrix.n_variables
-                )
+                _("Transposed: {0} samples x {1} variables").format(new_matrix.n_samples, new_matrix.n_variables)
             )
         except Exception as e:
             QMessageBox.critical(self, _("Transpose Error"), str(e))
@@ -2162,7 +2156,8 @@ class MainWindow(QMainWindow):
 
         try:
             import numpy as np
-            from config.imputation import impute, ImputationMethod
+
+            from config.imputation import ImputationMethod, impute
             from models.data_matrix import DataMatrix
 
             data = self._state.data_matrix.data
@@ -2171,9 +2166,7 @@ class MainWindow(QMainWindow):
 
             if total_nan == 0:
                 QMessageBox.information(
-                    self,
-                    _("No Missing Values"),
-                    _("The current dataset contains no missing values.")
+                    self, _("No Missing Values"), _("The current dataset contains no missing values.")
                 )
                 return
 
@@ -2193,7 +2186,7 @@ class MainWindow(QMainWindow):
                 nan_by_col=nan_by_col,
                 n_rows=data.shape[0],
                 n_cols=data.shape[1],
-                nan_proportion=total_nan / data.size
+                nan_proportion=total_nan / data.size,
             )
             dialog.setDarkTheme(self._is_dark_theme)
 
@@ -2247,14 +2240,15 @@ class MainWindow(QMainWindow):
         # Check if we need to confirm overwrite
         if self._state.has_data:
             reply = QMessageBox.question(
-                self, _("Overwrite Data?"),
+                self,
+                _("Overwrite Data?"),
                 _("You already have data loaded. Do you want to replace it?"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.No:
                 return
-        
+
         dialog = ImportDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
         dialog.dataImported.connect(self._on_data_imported)
@@ -2289,9 +2283,7 @@ class MainWindow(QMainWindow):
 
         # Show success message
         n_samples, n_vars = data.shape
-        self._status_bar.setInfo(
-            _("Data imported: {0} samples x {1} variables").format(n_samples, n_vars)
-        )
+        self._status_bar.setInfo(_("Data imported: {0} samples x {1} variables").format(n_samples, n_vars))
 
     def _apply_transformation(self, transform_func, name: str) -> None:
         """Apply a transformation to the current data."""
@@ -2305,10 +2297,11 @@ class MainWindow(QMainWindow):
 
             # Update state
             from models.data_matrix import DataMatrix
+
             matrix = DataMatrix(
                 transformed,
                 row_labels=self._state.data_matrix.row_labels,
-                col_labels=self._state.data_matrix.col_labels
+                col_labels=self._state.data_matrix.col_labels,
             )
             self._state.set_data_matrix(matrix)
 
@@ -2316,7 +2309,7 @@ class MainWindow(QMainWindow):
             self._spreadsheet.load_data(
                 transformed,
                 row_labels=self._state.data_matrix.row_labels,
-                col_labels=self._state.data_matrix.col_labels
+                col_labels=self._state.data_matrix.col_labels,
             )
 
             self._status_bar.setInfo(_("{0} transformation applied").format(name))
@@ -2327,31 +2320,37 @@ class MainWindow(QMainWindow):
     def _on_transform_log(self) -> None:
         """Apply log10 transformation."""
         from utils.transformations import log_transform
+
         self._apply_transformation(log_transform, "Log")
 
     def _on_transform_sqrt(self) -> None:
         """Apply square root transformation."""
         from utils.transformations import sqrt_transform
+
         self._apply_transformation(sqrt_transform, "Sqrt")
 
     def _on_transform_hellinger(self) -> None:
         """Apply Hellinger transformation."""
         from utils.transformations import hellinger_transform
+
         self._apply_transformation(hellinger_transform, "Hellinger")
 
     def _on_transform_zscore(self) -> None:
         """Apply Z-score standardization."""
         from utils.transformations import zscore_standardize
+
         self._apply_transformation(zscore_standardize, "Z-Score")
 
     def _on_transform_percent(self) -> None:
         """Apply percentage standardization."""
         from utils.transformations import percent_standardize
+
         self._apply_transformation(percent_standardize, "% Total")
 
     def _on_transform_wisconsin(self) -> None:
         """Apply Wisconsin double standardization."""
         from utils.transformations import wisconsin_double_standardize
+
         self._apply_transformation(wisconsin_double_standardize, "Wisconsin")
 
     def _on_export(self) -> None:
@@ -2359,18 +2358,16 @@ class MainWindow(QMainWindow):
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        
-        filepath, _ext = QFileDialog.getSaveFileName(
-            self, _("Export Data"), "",
-            _("CSV Files (*.csv);;All Files (*)")
-        )
-        
+
+        filepath, _ext = QFileDialog.getSaveFileName(self, _("Export Data"), "", _("CSV Files (*.csv);;All Files (*)"))
+
         if filepath:
             try:
                 self._data_controller.export_csv(filepath)
                 QMessageBox.information(
-                    self, _("Export Successful"),
-                    _("Data successfully exported to {0}").format(os.path.basename(filepath))
+                    self,
+                    _("Export Successful"),
+                    _("Data successfully exported to {0}").format(os.path.basename(filepath)),
                 )
                 self._logger.info(f"Data exported to {filepath}")
             except Exception as e:
@@ -2492,9 +2489,11 @@ class MainWindow(QMainWindow):
 
             try:
                 result = self._statistics_controller.run_nmds(
-                    metric=params["metric"], n_dimensions=params["n_dimensions"],
-                    n_restarts=params["n_restarts"], max_iterations=params["max_iterations"],
-                    tolerance=params["tolerance"]
+                    metric=params["metric"],
+                    n_dimensions=params["n_dimensions"],
+                    n_restarts=params["n_restarts"],
+                    max_iterations=params["max_iterations"],
+                    tolerance=params["tolerance"],
                 )
 
                 plot = InteractivePlotCanvas()
@@ -2530,7 +2529,8 @@ class MainWindow(QMainWindow):
                 sample_index = self._resolve_sample_index(sample_name, matrix)
                 if sample_index is None:
                     QMessageBox.warning(
-                        self, _("Sample Not Found"),
+                        self,
+                        _("Sample Not Found"),
                         _("No sample named '{0}' is loaded.").format(sample_name),
                     )
                     return
@@ -2564,7 +2564,8 @@ class MainWindow(QMainWindow):
                 selected_samples = params.get("samples", [])
                 if not selected_samples:
                     QMessageBox.information(
-                        self, _("No Selection"),
+                        self,
+                        _("No Selection"),
                         _("Please select at least one sample to rarefy."),
                     )
                     return
@@ -2577,7 +2578,8 @@ class MainWindow(QMainWindow):
                 sample_index = self._resolve_sample_index(selected_samples[0], matrix)
                 if sample_index is None:
                     QMessageBox.warning(
-                        self, _("Sample Not Found"),
+                        self,
+                        _("Sample Not Found"),
                         _("No sample named '{0}' is loaded.").format(selected_samples[0]),
                     )
                     return
@@ -2636,9 +2638,7 @@ class MainWindow(QMainWindow):
 
         try:
             self._status_bar.setProgress(0, 0)
-            result = self._statistics_controller.analyze_spectral(
-                data=self._state.data_matrix.data
-            )
+            result = self._statistics_controller.analyze_spectral(data=self._state.data_matrix.data)
             plot = InteractivePlotCanvas()
             plot.plot_spectral(result)
             plot_index = self._add_plot_to_workspace(plot, _("Spectral Analysis"))
@@ -2659,9 +2659,12 @@ class MainWindow(QMainWindow):
         groups = self._get_groups()
         if groups is None:
             QMessageBox.warning(
-                self, _("No Groups"),
-                _("Please define groups in the spreadsheet before running ANOSIM.\n"
-                  "Use the Group column to assign samples to groups.")
+                self,
+                _("No Groups"),
+                _(
+                    "Please define groups in the spreadsheet before running ANOSIM.\n"
+                    "Use the Group column to assign samples to groups."
+                ),
             )
             return
 
@@ -2691,9 +2694,12 @@ class MainWindow(QMainWindow):
         groups = self._get_groups()
         if groups is None:
             QMessageBox.warning(
-                self, _("No Groups"),
-                _("Please define groups in the spreadsheet before running PERMANOVA.\n"
-                  "Use the Group column to assign samples to groups.")
+                self,
+                _("No Groups"),
+                _(
+                    "Please define groups in the spreadsheet before running PERMANOVA.\n"
+                    "Use the Group column to assign samples to groups."
+                ),
             )
             return
 
@@ -2723,9 +2729,12 @@ class MainWindow(QMainWindow):
         groups = self._get_groups()
         if groups is None:
             QMessageBox.warning(
-                self, _("No Groups"),
-                _("Please define groups in the spreadsheet before running SIMPER.\n"
-                  "Use the Group column to assign samples to groups.")
+                self,
+                _("No Groups"),
+                _(
+                    "Please define groups in the spreadsheet before running SIMPER.\n"
+                    "Use the Group column to assign samples to groups."
+                ),
             )
             return
 
@@ -2769,26 +2778,34 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, _("Summary Statistics"), msg)
                 elif test_type == 1:  # Normality
                     results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
                 elif test_type == 2:  # t-test
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
                 elif test_type == 3:  # ANOVA
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
                 elif test_type == 4:  # Kruskal-Wallis
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
@@ -2818,26 +2835,34 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, _("Summary Statistics"), msg)
                 elif test_type == 1:  # Normality
                     results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
                 elif test_type == 2:  # t-test
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
                 elif test_type == 3:  # ANOVA
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
                 elif test_type == 4:  # Kruskal-Wallis
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
@@ -2865,26 +2890,34 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, _("Summary Statistics"), msg)
                 elif test_type == 1:  # Normality
                     results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
                 elif test_type == 2:  # t-test
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
                 elif test_type == 3:  # ANOVA
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
                 elif test_type == 4:  # Kruskal-Wallis
                     groups = self._get_groups()
                     results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                             for i, r in enumerate(results)]
+                    lines = [
+                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
+                        for i, r in enumerate(results)
+                    ]
                     QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
 
                 self._status_bar.setInfo(_("Univariate analysis completed"))
@@ -2902,8 +2935,9 @@ class MainWindow(QMainWindow):
         groups = self._get_groups()
         if groups is None:
             QMessageBox.warning(
-                self, _("No Groups"),
-                _("LDA requires group assignments. Please set row groups first via the spreadsheet metadata.")
+                self,
+                _("No Groups"),
+                _("LDA requires group assignments. Please set row groups first via the spreadsheet metadata."),
             )
             return
 
@@ -2913,7 +2947,9 @@ class MainWindow(QMainWindow):
             params = dialog.get_parameters()
             try:
                 self._status_bar.setProgress(0, 0)
-                self._logger.info(f"Running LDA with {len(set(groups))} groups, n_components={params.get('n_components')}")
+                self._logger.info(
+                    f"Running LDA with {len(set(groups))} groups, n_components={params.get('n_components')}"
+                )
                 result = self._statistics_controller.analyze_lda(
                     data=self._state.data_matrix.data,
                     groups=groups,
@@ -2946,7 +2982,7 @@ class MainWindow(QMainWindow):
         # Provide column choices: first half as species, second half as env
         mid = max(1, data.shape[1] // 2)
         species_cols = col_labels[:mid] if mid < len(col_labels) else col_labels
-        env_cols = col_labels[mid:mid + min(mid, len(col_labels) - mid)] if mid < len(col_labels) else []
+        env_cols = col_labels[mid : mid + min(mid, len(col_labels) - mid)] if mid < len(col_labels) else []
         dialog.set_column_names(species_cols, env_cols)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -2959,7 +2995,9 @@ class MainWindow(QMainWindow):
                 env_indices = [i for i, c in enumerate(col_labels) if c in selected_env]
 
                 if not env_indices:
-                    QMessageBox.warning(self, _("No Selection"), _("Please select at least one environmental variable."))
+                    QMessageBox.warning(
+                        self, _("No Selection"), _("Please select at least one environmental variable.")
+                    )
                     return
 
                 # Split data into species (Y) and environmental (X) matrices
@@ -2971,7 +3009,8 @@ class MainWindow(QMainWindow):
                 )
 
                 result = self._statistics_controller.run_cca(
-                    Y=Y, X=X,
+                    Y=Y,
+                    X=X,
                     n_components=params.get("n_components"),
                     method=params.get("method"),
                 )
@@ -2979,7 +3018,9 @@ class MainWindow(QMainWindow):
                 plot = InteractivePlotCanvas()
                 plot.plot_cca_triplot(result)
 
-                plot_index = self._add_plot_to_workspace(plot, _("{0} Triplot").format(params.get("method", "cca").upper()))
+                plot_index = self._add_plot_to_workspace(
+                    plot, _("{0} Triplot").format(params.get("method", "cca").upper())
+                )
                 self._workspace.setCurrentIndex(plot_index)
 
                 self._status_bar.setInfo(
@@ -2991,7 +3032,11 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"CCA/RDA analysis failed: {e}")
-                QMessageBox.critical(self, _("{0} Error").format(params.get("method", "CCA").upper()), format_user_error(e, params.get("method", "CCA").upper()))
+                QMessageBox.critical(
+                    self,
+                    _("{0} Error").format(params.get("method", "CCA").upper()),
+                    format_user_error(e, params.get("method", "CCA").upper()),
+                )
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -3040,7 +3085,7 @@ class MainWindow(QMainWindow):
             plot.plot_abundance_models(results)
             plot_index = self._add_plot_to_workspace(plot, _("Abundance Models"))
             self._workspace.setCurrentIndex(plot_index)
-            msg_lines = [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
+            [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
             self._status_bar.setInfo(_("Abundance models fitted"))
         except Exception as e:
             QMessageBox.critical(self, _("Abundance Models Error"), format_user_error(e, "丰度模型"))
@@ -3082,10 +3127,7 @@ class MainWindow(QMainWindow):
                     data=self._state.data_matrix.data,
                     n_zones=params.get("n_zones", 4),
                 )
-                QMessageBox.information(
-                    self, "CONISS",
-                    result.summary()
-                )
+                QMessageBox.information(self, "CONISS", result.summary())
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
             except Exception as e:
                 QMessageBox.critical(self, "CONISS Error", format_user_error(e, "CONISS"))
@@ -3104,10 +3146,7 @@ class MainWindow(QMainWindow):
             try:
                 self._status_bar.setProgress(0, 0)
                 result = self._statistics_controller.analyze_markov()
-                QMessageBox.information(
-                    self, _("Markov Chain Analysis"),
-                    result.summary()
-                )
+                QMessageBox.information(self, _("Markov Chain Analysis"), result.summary())
                 self._status_bar.setInfo(_("Markov analysis completed"))
             except Exception as e:
                 QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "马尔可夫链"))
@@ -3127,9 +3166,7 @@ class MainWindow(QMainWindow):
             try:
                 self._status_bar.setProgress(0, 0)
                 result = self._statistics_controller.analyze_directional()
-                bin_edges, counts = self._statistics_controller.bin_rose_diagram(
-                    n_bins=params.get("n_bins", 12)
-                )
+                bin_edges, counts = self._statistics_controller.bin_rose_diagram(n_bins=params.get("n_bins", 12))
                 plot = InteractivePlotCanvas()
                 plot.plot_rose_diagram(bin_edges, counts, result.mean_direction_deg)
                 plot_index = self._add_plot_to_workspace(plot, _("Rose Diagram"))
@@ -3162,8 +3199,7 @@ class MainWindow(QMainWindow):
                     n_points=params.get("n_points", 200),
                 )
                 plot = InteractivePlotCanvas()
-                plot.plot_efa_contours(result.original, result.reconstructed,
-                                       f"EFA ({result.n_harmonics} harmonics)")
+                plot.plot_efa_contours(result.original, result.reconstructed, f"EFA ({result.n_harmonics} harmonics)")
                 plot_index = self._add_plot_to_workspace(plot, "EFA")
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(
@@ -3187,13 +3223,15 @@ class MainWindow(QMainWindow):
             self._status_bar.setProgress(0, 0)
             try:
                 import numpy as np
-                from stratigraphy.isotope_analysis import IsotopeData, IsotopeAnalyzer
+
+                from stratigraphy.isotope_analysis import IsotopeAnalyzer, IsotopeData
 
                 # Create IsotopeData from loaded data
                 data = self._state.data_matrix.data
                 if data.shape[1] < 3:
                     QMessageBox.warning(
-                        self, _("Insufficient Data"),
+                        self,
+                        _("Insufficient Data"),
                         _("Need at least 3 columns: depth, age, and isotope values"),
                     )
                     return
@@ -3201,12 +3239,12 @@ class MainWindow(QMainWindow):
                 # Build IsotopeData from loaded data
                 # Column 0: depth, Column 1: age, Column 2+: isotope values
                 iso_kwargs = {
-                    'depth': data[:, 0],
-                    'age': data[:, 1],
+                    "depth": data[:, 0],
+                    "age": data[:, 1],
                 }
 
                 # Map additional columns to isotope types (only if column has valid data)
-                isotope_names = ['d13C', 'd18O', 'sr', 'nd']
+                isotope_names = ["d13C", "d18O", "sr", "nd"]
                 for i, name in enumerate(isotope_names):
                     col_idx = i + 2
                     if col_idx < data.shape[1]:
@@ -3218,7 +3256,8 @@ class MainWindow(QMainWindow):
                 # Check we have at least one isotope
                 if len(iso_kwargs) <= 2:
                     QMessageBox.warning(
-                        self, _("Insufficient Data"),
+                        self,
+                        _("Insufficient Data"),
                         _("Need at least one isotope column with valid data"),
                     )
                     return
@@ -3235,17 +3274,17 @@ class MainWindow(QMainWindow):
                 )
 
                 # Show summary
-                self._status_bar.setInfo(
-                    _("Isotope: {0} excursions detected").format(len(result.excursions))
-                )
+                self._status_bar.setInfo(_("Isotope: {0} excursions detected").format(len(result.excursions)))
                 QMessageBox.information(
-                    self, _("Analysis Complete"),
+                    self,
+                    _("Analysis Complete"),
                     result.summary(),
                 )
 
             except Exception as e:
                 QMessageBox.critical(
-                    self, "Isotope Error",
+                    self,
+                    "Isotope Error",
                     format_user_error(e, "同位素分析"),
                 )
             finally:
@@ -3268,16 +3307,18 @@ class MainWindow(QMainWindow):
             try:
                 self._status_bar.setProgress(0, 0)
 
-                from stratigraphy.correlation import StratigraphicSection, StratigraphicCorrelationAnalyzer
                 import numpy as np
+
+                from stratigraphy.correlation import StratigraphicCorrelationAnalyzer, StratigraphicSection
 
                 # Create sections from loaded data
                 data = self._state.data_matrix.data
                 n_rows = len(data)
 
                 if data.shape[1] < 2:
-                    QMessageBox.warning(self, _("Insufficient Data"),
-                        _("Need at least 2 columns: height and thickness"))
+                    QMessageBox.warning(
+                        self, _("Insufficient Data"), _("Need at least 2 columns: height and thickness")
+                    )
                     return
 
                 # Extract heights (first column) and compute thicknesses
@@ -3299,37 +3340,40 @@ class MainWindow(QMainWindow):
                             t = data[:, t_col]
                             t_diff = np.diff(t)
                             t_diff = np.append(t_diff, t_diff[-1] if len(t_diff) > 0 else 1.0)
-                            sections.append(StratigraphicSection(
-                                name=_("Section {0}").format(i + 1),
-                                heights=h,
-                                thicknesses=t_diff,
-                                lithologies=["layer"] * len(h)
-                            ))
+                            sections.append(
+                                StratigraphicSection(
+                                    name=_("Section {0}").format(i + 1),
+                                    heights=h,
+                                    thicknesses=t_diff,
+                                    lithologies=["layer"] * len(h),
+                                )
+                            )
                 else:
                     # Single section with computed thicknesses
-                    sections.append(StratigraphicSection(
-                        name=_("Section 1"),
-                        heights=heights,
-                        thicknesses=thicknesses,
-                        lithologies=["layer"] * n_rows
-                    ))
+                    sections.append(
+                        StratigraphicSection(
+                            name=_("Section 1"),
+                            heights=heights,
+                            thicknesses=thicknesses,
+                            lithologies=["layer"] * n_rows,
+                        )
+                    )
 
                 if len(sections) < 2:
-                    QMessageBox.warning(self, _("Insufficient Data"),
-                        _("Need at least 2 sections for correlation. Please prepare data with multiple section columns."))
+                    QMessageBox.warning(
+                        self,
+                        _("Insufficient Data"),
+                        _(
+                            "Need at least 2 sections for correlation. Please prepare data with multiple section columns."
+                        ),
+                    )
                     return
 
                 analyzer = StratigraphicCorrelationAnalyzer()
-                result = analyzer.analyze(
-                    sections,
-                    method=params.get("correlation_method", "dtw")
-                )
+                result = analyzer.analyze(sections, method=params.get("correlation_method", "dtw"))
 
-                self._status_bar.setInfo(
-                    _("Stratigraphic Correlation: complete")
-                )
-                QMessageBox.information(self, _("Analysis Complete"),
-                    result.summary())
+                self._status_bar.setInfo(_("Stratigraphic Correlation: complete"))
+                QMessageBox.information(self, _("Analysis Complete"), result.summary())
 
             except Exception as e:
                 QMessageBox.critical(self, "Correlation Error", format_user_error(e, "地层相关性"))
@@ -3352,7 +3396,7 @@ class MainWindow(QMainWindow):
             # Plot GPA-aligned landmarks
             if hasattr(result, "aligned_configurations"):
                 coords = result.aligned_configurations
-                mean_shape = coords.mean(axis=0) if hasattr(coords, 'mean') else coords
+                mean_shape = coords.mean(axis=0) if hasattr(coords, "mean") else coords
                 plot.plot_efa_contours(
                     coords[0] if len(coords.shape) > 2 else coords,
                     mean_shape,
@@ -3386,8 +3430,9 @@ class MainWindow(QMainWindow):
 
                 if tps_result is None:
                     QMessageBox.information(
-                        self, _("No TPS Result"),
-                        _("Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation.")
+                        self,
+                        _("No TPS Result"),
+                        _("Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation."),
                     )
                     return
 
@@ -3395,7 +3440,7 @@ class MainWindow(QMainWindow):
                 plot.plot_tps_deformation_grid(
                     tps_result,
                     grid_shape=(params.get("grid_rows", 15), params.get("grid_cols", 15)),
-                    show_vectors=params.get("show_vectors", True)
+                    show_vectors=params.get("show_vectors", True),
                 )
 
                 plot_index = self._add_plot_to_workspace(plot, _("TPS Deformation Grid"))
@@ -3431,10 +3476,7 @@ class MainWindow(QMainWindow):
                 )
 
                 plot = InteractivePlotCanvas()
-                plot.plot_ripley_k(
-                    result,
-                    show_points=params.get("show_points", True)
-                )
+                plot.plot_ripley_k(result, show_points=params.get("show_points", True))
 
                 plot_index = self._add_plot_to_workspace(plot, _("Ripley's K"))
                 self._workspace.setCurrentIndex(plot_index)
@@ -3461,6 +3503,7 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(0, 0)
 
                 import numpy as np
+
                 data = self._state.data_matrix.data
                 # Use first column as time, second as values
                 time = data[:, 0]
@@ -3472,7 +3515,8 @@ class MainWindow(QMainWindow):
                 analyzer = SpectralAnalyzer()
                 scales = np.arange(params.get("min_scale", 2), params.get("max_scale", 50))
                 result = analyzer.wavelet_transform(
-                    time, values,
+                    time,
+                    values,
                     wavelet=params.get("wavelet", "morlet"),
                     scales=scales,
                 )
@@ -3484,9 +3528,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
 
                 self._status_bar.setInfo(
-                    _("{0} wavelet: peak freq = {1:.4f}").format(
-                        result.wavelet, result.peak_frequency
-                    )
+                    _("{0} wavelet: peak freq = {1:.4f}").format(result.wavelet, result.peak_frequency)
                 )
                 self._logger.info(f"Wavelet CWT completed: {result.summary()}")
 
@@ -3510,18 +3552,18 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(0, 0)
 
                 import numpy as np
+
                 data = self._state.data_matrix.data
                 col_labels = self._state.data_matrix.col_labels
 
                 # FAD/LAD data: first half of columns are FADs, second half are LADs
                 mid = data.shape[1] // 2
                 if mid < 2:
-                    QMessageBox.warning(self, _("Insufficient Data"),
-                                       _("Need at least 4 columns for FAD/LAD data."))
+                    QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 4 columns for FAD/LAD data."))
                     return
 
                 fad_matrix = data[:, :mid]
-                lad_matrix = data[:, mid:mid*2]
+                lad_matrix = data[:, mid : mid * 2]
 
                 # Get event names from column labels
                 event_names = col_labels[:mid] if mid < len(col_labels) else None
@@ -3530,26 +3572,24 @@ class MainWindow(QMainWindow):
 
                 if method == "ua":
                     from stratigraphy.biostratigraphy import UAAnalyzer
+
                     analyzer = UAAnalyzer()
                     result = analyzer.analyze(fad_matrix, lad_matrix, event_names=event_names)
                 else:
                     from stratigraphy.biostratigraphy import RASCAnalyzer
+
                     analyzer = RASCAnalyzer()
                     # RASC needs a distance matrix - compute from FAD/LAD
                     dist = np.abs(fad_matrix.mean(axis=0) - lad_matrix.mean(axis=0)).reshape(-1, 1)
                     dist = np.abs(fad_matrix.mean(axis=0)[:, np.newaxis] - lad_matrix.mean(axis=0)[np.newaxis, :])
-                    result = analyzer.analyze(dist, event_names=event_names,
-                                            n_iterations=params.get("rasc_iterations", 100))
+                    result = analyzer.analyze(
+                        dist, event_names=event_names, n_iterations=params.get("rasc_iterations", 100)
+                    )
 
                 # Show result summary
-                QMessageBox.information(
-                    self, _("Biostratigraphy Complete"),
-                    result.summary()
-                )
+                QMessageBox.information(self, _("Biostratigraphy Complete"), result.summary())
 
-                self._status_bar.setInfo(
-                    _("{0}: {1} events").format(method.upper(), len(result.events))
-                )
+                self._status_bar.setInfo(_("{0}: {1} events").format(method.upper(), len(result.events)))
                 self._logger.info(f"Biostratigraphy completed: {result.summary()}")
 
             except Exception as e:
@@ -3638,6 +3678,7 @@ class MainWindow(QMainWindow):
         # Update memory usage label
         try:
             import psutil
+
             process = psutil.Process()
             mem_mb = process.memory_info().rss / (1024 * 1024)
             self._status_bar._memory_label.setText(_("Memory: {0:.1f} MB").format(mem_mb))

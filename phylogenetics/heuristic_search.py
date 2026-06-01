@@ -360,6 +360,7 @@ class TBROperation(TreeOperation):
 
     def _deep_copy(self, root: PhyloNode) -> PhyloNode:
         """深拷贝树"""
+
         def copy_node(node: PhyloNode, parent: PhyloNode | None) -> PhyloNode:
             new_node = PhyloNode(
                 name=node.name,
@@ -371,15 +372,18 @@ class TBROperation(TreeOperation):
             for child in node.children:
                 new_node.children.append(copy_node(child, new_node))
             return new_node
+
         return copy_node(root, None)
 
     def _build_map(self, old: PhyloNode, new: PhyloNode) -> dict[PhyloNode, PhyloNode]:
         """构建新旧节点映射"""
         mapping = {}
+
         def walk(o: PhyloNode, n: PhyloNode):
             mapping[o] = n
-            for oc, nc in zip(o.children, n.children):
+            for oc, nc in zip(o.children, n.children, strict=False):
                 walk(oc, nc)
+
         walk(old, new)
         return mapping
 
