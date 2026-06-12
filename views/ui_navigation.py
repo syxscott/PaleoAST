@@ -646,6 +646,17 @@ class NavigationTree(QWidget):
             NavigationItem(_("Markov"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Directional"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Extinction Intervals"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            # Industrial-grade entries added in v1.0.1 - previously
+            # accessible only via the ribbon; now also exposed in the
+            # left navigation tree.
+            NavigationItem(_("Isotope"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem(
+                _("Stratigraphic Correlation"),
+                NavigationCategory.STRATIGRAPHY,
+                "stratigraphy",
+            ),
+            NavigationItem(_("Wavelet"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
+            NavigationItem(_("CA Axis"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
         ]
         for child in strat_children:
             categories[NavigationCategory.STRATIGRAPHY].children.append(child)

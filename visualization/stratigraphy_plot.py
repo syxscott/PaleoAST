@@ -9,6 +9,7 @@ This module implements publication-quality stratigraphic plots including:
     - Stratigraphic columns
     - CONISS clustering diagrams
     - Markov chain transition diagrams
+    - Multi-section stratigraphic correlation with DTW warping paths
 
 Author: PaleoAST Development Team
 version: 1.0.1
@@ -19,6 +20,9 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+from matplotlib.cm import ScalarMappable
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
@@ -385,3 +389,333 @@ class StratigraphyPlotter:
 
         fig.tight_layout()
         return fig
+
+    # =====================================================================
+    # Multi-section stratigraphic correlation plot
+    # =====================================================================
+
+    def plot_stratigraphic_correlation(
+        self,
+        correlation_result,
+        title: str = "Stratigraphic Correlation",
+        cmap_name: str = "viridis",
+        max_pairs: int = 3,
+    ) -> Figure:
+        """
+        Render a multi-section stratigraphic correlation diagram with
+        similarity-coded warping paths.
+
+        Parameters:
+            correlation_result: A
+                :class:`stratigraphy.correlation.StratigraphicCorrelationResult`
+                object containing the sections and their pairwise best
+                matches.
+            title: Plot title.
+            cmap_name: Name of a matplotlib colormap used to encode the
+                similarity score of each warping path. Default
+                ``"viridis"`` follows the design-system conventions.
+            max_pairs: Maximum number of section pairs (ranked by
+                similarity) to display in the correlation panel. Use
+                ``-1`` to render all pairs.
+
+        Returns:
+            matplotlib Figure object with a left column for the
+            stratigraphic columns and a right column for the
+            warping-path correlation panel.
+
+        Note:
+            The function reads the design-system palette from
+            ``config.design_system`` or falls back to the legacy
+            ``config.colors`` constants. Each warping path is drawn
+            between the per-section height arrays, with colour, alpha
+            and line-width controlled by the per-pair DTW similarity
+            score.
+        """
+        self.set_style(self._style)
+
+        # Defer heavy imports to keep module import cost low
+        from stratigraphy.correlation import StratigraphicCorrelationResult
+
+        if not isinstance(correlation_result, StratigraphicCorrelationResult):
+            raise TypeError(
+                "correlation_result must be a StratigraphicCorrelationResult instance, "
+                f"got {type(correlation_result).__name__}"
+            )
+
+        sections = correlation_result.sections
+        n_sections = len(sections)
+        if n_sections < 2:
+            raise ValueError("At least 2 sections are required for correlation plotting")
+
+        # Resolve colour palette (prefer design system, fall back to config.colors)
+        try:
+            from config.design_system import colors as ds_colors
+            primary_color = ds_colors.primary
+            text_color = ds_colors.text_primary
+            border_color = ds_colors.border_medium
+        except Exception:
+            from config.colors import PRIMARY_COLOR, CELL_HEADER_TEXT, DEFAULT_EDGE_COLOR
+            primary_color = PRIMARY_COLOR
+            text_color = CELL_HEADER_TEXT
+            border_color = DEFAULT_EDGE_COLOR
+
+        # Select the best-matching section pairs to render as warping paths
+        best_matches = list(correlation_result.best_matches or [])
+        if max_pairs == -1:
+            render_matches = best_matches
+        else:
+            render_matches = best_matches[:max_pairs]
+        if not render_matches:
+            self._logger.warning("No best_matches available; rendering columns only")
+            render_matches = []
+
+        # Figure layout: each section gets a column, plus extra axes for warping
+        n_cols = n_sections + len(render_matches) if render_matches else n_sections
+        if render_matches:
+            # n_sections section columns + len(render_matches) warping panels
+            col_widths: list[float] = [3.0] * n_sections + [1.2] * len(render_matches)
+        else:
+            col_widths = [3.0] * n_sections
+
+        fig = Figure(figsize=(max(10.0, 1.5 * n_cols + 4.0), 10))
+        gs = fig.add_gridspec(
+            1,
+            n_cols,
+            width_ratios=col_widths,
+            wspace=0.15,
+        )
+
+        # Determine global y-range across all sections
+        all_heights = np.concatenate([np.asarray(s.heights, dtype=np.float64) for s in sections])
+        y_min = float(np.nanmin(all_heights))
+        y_max = float(np.nanmax(all_heights))
+        # Add a 5% pad
+        y_pad = 0.05 * (y_max - y_min) if y_max > y_min else 1.0
+
+        # Per-section axes.
+        # NOTE: ``_render_section_column`` no longer flips the y-axis;
+        # we own the final orientation here so that the section columns
+        # and the warping panels stay in lockstep ("older at top"
+        # convention). ``set_ylim(low, high)`` first, then a single
+        # ``invert_yaxis()`` for both column and warp axes.
+        section_axes: list = []
+        for i, section in enumerate(sections):
+            ax = fig.add_subplot(gs[0, i])
+            section_axes.append(ax)
+            self._render_section_column(ax, section, primary_color, text_color, border_color)
+            ax.set_ylim(y_min - y_pad, y_max + y_pad)
+            ax.invert_yaxis()
+
+        # Warping-path axes - one per pair
+        warp_axes: list = []
+        for j, (idx_a, idx_b, similarity) in enumerate(render_matches):
+            ax = fig.add_subplot(gs[0, n_sections + j])
+            warp_axes.append((ax, idx_a, idx_b, similarity))
+            self._render_warping_panel(
+                ax=ax,
+                section_a=sections[idx_a],
+                section_b=sections[idx_b],
+                similarity=float(similarity),
+                cmap_name=cmap_name,
+                primary_color=primary_color,
+                text_color=text_color,
+                border_color=border_color,
+                y_min=y_min - y_pad,
+                y_max=y_max + y_pad,
+            )
+
+        # Suppress redundant y-axis labels for warping panels
+        for ax, *_ in warp_axes:
+            ax.set_yticklabels([])
+
+        fig.suptitle(title, fontsize=self._title_font_size + 1, fontweight="bold")
+        # Colorbar for similarity scores
+        if render_matches:
+            sm = ScalarMappable(norm=Normalize(vmin=0.0, vmax=1.0), cmap=plt.get_cmap(cmap_name))
+            sm.set_array([])
+            cbar_ax = fig.add_axes([0.92, 0.15, 0.015, 0.7])
+            cbar = fig.colorbar(sm, cax=cbar_ax)
+            cbar.set_label("Similarity score", fontsize=self._font_size)
+
+        fig.subplots_adjust(left=0.04, right=0.9, top=0.92, bottom=0.06)
+        return fig
+
+    def _render_section_column(
+        self,
+        ax,
+        section,
+        primary_color: str,
+        text_color: str,
+        border_color: str,
+    ) -> None:
+        """Render a single stratigraphic column on the given axis.
+
+        Each layer is drawn as a rectangle *centred on* its actual
+        stratigraphic height, with the rectangle's vertical extent set
+        to the layer's thickness. This way the column respects the
+        real height array instead of stacking everything from zero.
+        The y-axis is inverted so that older layers (smaller height)
+        appear at the top, matching the standard geological convention.
+        """
+        heights = np.asarray(section.heights, dtype=np.float64)
+        thicknesses = (
+            np.asarray(section.thicknesses, dtype=np.float64)
+            if section.thicknesses is not None
+            and len(section.thicknesses) == len(heights)
+            else np.ones_like(heights)
+        )
+        lithologies = section.lithologies or [f"L{i + 1}" for i in range(len(heights))]
+
+        for k in range(len(heights)):
+            h_center = float(heights[k])
+            t = float(thicknesses[k])
+            y_bottom = h_center - t / 2.0
+            rect = Rectangle(
+                (0.0, y_bottom),
+                1.0,
+                t,
+                linewidth=0.6,
+                edgecolor=border_color,
+                facecolor=primary_color,
+                alpha=0.18 + 0.04 * (k % 4),
+            )
+            ax.add_patch(rect)
+            ax.text(
+                0.5,
+                h_center,
+                str(lithologies[k]) if k < len(lithologies) else "",
+                ha="center",
+                va="center",
+                fontsize=max(6, self._font_size - 3),
+                color=text_color,
+            )
+
+        # Add a representative "core" line through the actual height range
+        h_min = float(np.min(heights))
+        h_max = float(np.max(heights))
+        ax.plot([0.5, 0.5], [h_min, h_max], color=primary_color, linewidth=2.0)
+        ax.set_xlim(-0.1, 1.1)
+        ax.set_xticks([])
+        ax.set_title(getattr(section, "name", "Section"), fontsize=self._font_size)
+        ax.set_ylabel("Stratigraphic height (m)", fontsize=self._font_size)
+        # NOTE: do NOT invert the y-axis here. The orientation is
+        # owned by ``plot_stratigraphic_correlation`` so the section
+        # columns and the warping panels stay synchronised. Inverting
+        # twice (once here, once again outside) would flip the column
+        # back to ascending order and visually de-sync it from the
+        # warping panels.
+
+    def _render_warping_panel(
+        self,
+        ax,
+        section_a,
+        section_b,
+        similarity: float,
+        cmap_name: str,
+        primary_color: str,
+        text_color: str,
+        border_color: str,
+        y_min: float,
+        y_max: float,
+    ) -> None:
+        """Render the warping-path correlation panel for a single pair."""
+        h_a = np.asarray(section_a.heights, dtype=np.float64)
+        h_b = np.asarray(section_b.heights, dtype=np.float64)
+        n_a, n_b = len(h_a), len(h_b)
+        cmap = plt.get_cmap(cmap_name)
+
+        if n_a == 0 or n_b == 0:
+            ax.text(0.5, 0.5, "empty", ha="center", va="center", color=text_color)
+            return
+
+        # Compute DTW warping path
+        path = self._dtw_warping_path(h_a, h_b)
+        if not path:
+            return
+
+        # Style parameters driven by the similarity score
+        similarity = float(np.clip(similarity, 0.0, 1.0))
+        # Higher similarity => more saturated colour, thicker line, less transparent
+        line_width = 0.4 + 2.6 * similarity
+        alpha = 0.25 + 0.6 * similarity
+        is_solid = similarity >= 0.5
+        linestyle = "-" if is_solid else "--"
+
+        # Draw all path segments in a single LineCollection for speed.
+        # Building one ``ax.plot`` per segment is O(N) Matplotlib draws
+        # and is prohibitively slow for long warping paths (e.g. N>500).
+        # ``LineCollection`` submits everything in one shot.
+        color = cmap(similarity)
+        segments = np.empty((len(path), 2, 2), dtype=np.float64)
+        for k, (i_a, i_b) in enumerate(path):
+            segments[k, 0, 0] = 0.0
+            segments[k, 0, 1] = h_a[i_a]
+            segments[k, 1, 0] = 1.0
+            segments[k, 1, 1] = h_b[i_b]
+        lc = LineCollection(
+            segments,
+            colors=[color] * len(segments),
+            linewidths=line_width,
+            alpha=alpha,
+            linestyles=linestyle,
+            capstyle="round",
+        )
+        ax.add_collection(lc)
+
+        # Add a faint background grid for orientation
+        ax.set_xlim(0.0, 1.0)
+        ax.set_ylim(y_min, y_max)
+        ax.invert_yaxis()
+        ax.set_xticks([])
+        ax.grid(True, axis="y", linestyle=":", alpha=0.3, color=border_color)
+        ax.set_title(
+            f"{getattr(section_a, 'name', 'A')} - {getattr(section_b, 'name', 'B')}\n"
+            f"sim={similarity:.2f}",
+            fontsize=max(6, self._font_size - 1),
+        )
+
+    @staticmethod
+    def _dtw_warping_path(
+        h_a: npt.NDArray[np.float64],
+        h_b: npt.NDArray[np.float64],
+    ) -> list[tuple[int, int]]:
+        """Compute the optimal DTW warping path between two height arrays.
+
+        Parameters:
+            h_a: Heights of section A (length ``n_a``).
+            h_b: Heights of section B (length ``n_b``).
+
+        Returns:
+            List of ``(i_a, i_b)`` pairs along the optimal warping path
+            (in forward order).
+        """
+        n_a = len(h_a)
+        n_b = len(h_b)
+        if n_a == 0 or n_b == 0:
+            return []
+        # Vectorise the local cost matrix: |h_a[i] - h_b[j]|.
+        local = np.abs(h_a[:, None] - h_b[None, :])
+        cost = np.full((n_a + 1, n_b + 1), np.inf, dtype=np.float64)
+        cost[0, 0] = 0.0
+        # Row-wise DP. Inner loop is in NumPy via cumulative ``minimum``.
+        for i in range(1, n_a + 1):
+            for j in range(1, n_b + 1):
+                cost[i, j] = local[i - 1, j - 1] + min(
+                    cost[i - 1, j], cost[i, j - 1], cost[i - 1, j - 1]
+                )
+
+        # Backtrack the optimal path
+        path: list[tuple[int, int]] = []
+        i, j = n_a, n_b
+        while i > 0 and j > 0:
+            path.append((i - 1, j - 1))
+            step = int(np.argmin([cost[i - 1, j - 1], cost[i - 1, j], cost[i, j - 1]]))
+            if step == 0:
+                i -= 1
+                j -= 1
+            elif step == 1:
+                i -= 1
+            else:
+                j -= 1
+        path.reverse()
+        return path

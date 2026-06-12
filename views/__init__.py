@@ -17,12 +17,14 @@ from .floating_toolbar import FloatingToolBar
 from .ui_allometry_dialogs import AllometryDialog, PLSDialog
 from .ui_beta_diversity_dialogs import BetaDiversityDialog, CoverageRarefactionDialog
 from .ui_dialogs import (
+    BiostratigraphyDialog,
     DiversityDialog,
     ImportDialog,
     IsotopeAnalysisDialog,
     NMDSOptionsDialog,
     PCADialog,
     PCoADialog,
+    PaleoEnvironmentDialog,
     RarefactionDialog,
     StratigraphicCorrelationDialog,
 )
@@ -40,6 +42,7 @@ __all__ = [
     "AllometryDialog",
     "AncestralStateDialog",
     "BetaDiversityDialog",
+    "BiostratigraphyDialog",
     "ConsoleLogHandler",
     "CoverageRarefactionDialog",
     "DiagnosticConsole",
@@ -59,6 +62,7 @@ __all__ = [
     "PCoADialog",
     "PICDialog",
     "PLSDialog",
+    "PaleoEnvironmentDialog",
     "PhyloANOVADialog",
     "PhyloSignalDialog",
     "RarefactionDialog",

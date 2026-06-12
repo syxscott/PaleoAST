@@ -625,11 +625,6 @@ class InteractivePlotCanvas(QWidget):
         else:
             eigenvalues = np.ones(site_scores.shape[1])
 
-        if hasattr(result, "proportion_explained"):
-            pass
-        else:
-            np.ones(len(eigenvalues)) * 100 / len(eigenvalues)
-
         if hasattr(result, "method"):
             method = result.method.upper()
         else:
@@ -798,16 +793,6 @@ class InteractivePlotCanvas(QWidget):
             target = tps_result.target
         else:
             target = source
-
-        if hasattr(tps_result, "warped"):
-            pass
-        else:
-            pass
-
-        if hasattr(tps_result, "landmarks"):
-            pass
-        else:
-            pass
 
         # Generate original grid points
         x_min, x_max = source[:, 0].min(), source[:, 0].max()
@@ -1143,7 +1128,6 @@ class InteractivePlotCanvas(QWidget):
 
         # Highlight peak
         if peak_frequency is not None:
-            np.argmin(np.abs(frequencies - peak_frequency))
             self._ax.axvline(
                 x=peak_frequency,
                 color=self.COLORS[3],
@@ -1333,10 +1317,6 @@ class InteractivePlotCanvas(QWidget):
         p_value = getattr(result, "p_value", 1.0)
         ss_between = getattr(result, "ss_between", 0.0)
         ss_within = getattr(result, "ss_within", 0.0)
-        getattr(result, "df_between", 1)
-        getattr(result, "df_within", 1)
-        getattr(result, "ms_between", 0.0)
-        getattr(result, "ms_within", 0.0)
         n_groups = getattr(result, "n_groups", 1)
         n_samples = getattr(result, "n_samples", 0)
 
@@ -2188,7 +2168,7 @@ class InteractivePlotCanvas(QWidget):
         names_sorted = [taxon_names[i] for i in sorted_indices]
 
         # Plot ranges
-        for i, (lad, _, ci_u, name) in enumerate(
+        for i, (lad, _ci_l, ci_u, name) in enumerate(
             zip(lad_sorted, ci_lower_sorted, ci_upper_sorted, names_sorted, strict=False)
         ):
             # Observed range (solid line from top to LAD)

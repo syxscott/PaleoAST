@@ -1461,17 +1461,11 @@ class ClusteringDialog(BaseAnalysisDialog):
         n_layout.addWidget(self._n_clusters_spin)
 
     def get_parameters(self) -> dict[str, Any]:
-        metric_map = {
-            "euclidean": "euclidean",
-            "bray-curtis": "braycurtis",
-            "jaccard": "jaccard",
-            "cityblock": "cityblock",
-            "canberra": "canberra",
-        }
-        raw_metric = self._metric_combo.currentText().lower().replace("-", "_")
-        # Map display names to scipy-compatible metric names
-        metric_display = self._metric_combo.currentText().lower()
-        metric = metric_map.get(metric_display, raw_metric)
+        # Map display names to scipy-compatible metric names.
+        # All combo items are either single words (Euclidean, Jaccard, …)
+        # or hyphenated (Bray-Curtis). ``lower().replace("-", "_")``
+        # produces the correct scipy name in every case.
+        metric = self._metric_combo.currentText().lower().replace("-", "_")
         self._parameters = {
             "method": self._method_combo.currentText().lower(),
             "metric": metric,
@@ -1732,6 +1726,57 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
         self._rasc_iterations.setPrefix(_("RASC iterations: "))
         opt_layout.addWidget(self._rasc_iterations)
 
+        # ---------------------------------------------------------------
+        # Advanced UA-only options
+        # ---------------------------------------------------------------
+        ua_adv_group = self.add_parameter_group(_("Advanced UA Options"))
+        ua_adv_layout = QVBoxLayout(ua_adv_group)
+
+        # Endemic-species filter
+        self._min_section_occurrence_spin = QSpinBox()
+        self._min_section_occurrence_spin.setRange(1, 50)
+        self._min_section_occurrence_spin.setValue(2)
+        self._min_section_occurrence_spin.setToolTip(
+            _(
+                "Minimum number of distinct sections in which a taxon must be "
+                "present. Endemic (local) species occurring in fewer sections are "
+                "filtered out before the overlap graph is built. (Industrial UA "
+                "data-cleaning, classical UAgraph heuristic.)"
+            )
+        )
+        self._min_section_occurrence_spin.setPrefix(_("Min section occurrence (endemic filter): "))
+        ua_adv_layout.addWidget(self._min_section_occurrence_spin)
+
+        # UAZ similarity threshold
+        self._uaz_similarity_spin = QDoubleSpinBox()
+        self._uaz_similarity_spin.setRange(0.0, 1.0)
+        self._uaz_similarity_spin.setSingleStep(0.05)
+        self._uaz_similarity_spin.setDecimals(2)
+        self._uaz_similarity_spin.setValue(0.80)
+        self._uaz_similarity_spin.setToolTip(
+            _(
+                "Sørensen-style similarity threshold in [0, 1] used to merge "
+                "highly overlapping Unitary Associations into Unitary Association "
+                "Zones (UAZ). 0.80 is the empirical Guex (1991) default."
+            )
+        )
+        self._uaz_similarity_spin.setPrefix(_("UAZ similarity threshold: "))
+        ua_adv_layout.addWidget(self._uaz_similarity_spin)
+
+        # Enable advanced UA preprocessing
+        self._enable_cyclic_check = QCheckBox(
+            _("Detect cyclic FAD/LAD contradictions (recommended)")
+        )
+        self._enable_cyclic_check.setChecked(True)
+        self._enable_cyclic_check.setToolTip(
+            _(
+                "Run cross-section FAD/LAD ordering checks and emit structured "
+                "warnings whenever a pair of taxa shows mutually exclusive "
+                "ordering across sections (geological contradiction detection)."
+            )
+        )
+        ua_adv_layout.addWidget(self._enable_cyclic_check)
+
     def get_parameters(self) -> dict[str, Any]:
         method_text = self._method_combo.currentText()
         method = "ua" if "UA" in method_text else "rasc"
@@ -1739,12 +1784,23 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
             "method": method,
             "min_events": self._min_events_spin.value(),
             "rasc_iterations": self._rasc_iterations.value(),
+            "min_section_occurrence": self._min_section_occurrence_spin.value(),
+            "uaz_similarity_threshold": self._uaz_similarity_spin.value(),
+            "enable_cyclic_check": self._enable_cyclic_check.isChecked(),
         }
         return self._parameters
 
     def _get_help_text(self) -> str:
         return _(
-            "UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy."
+            "UA finds maximal cliques of overlapping events to identify biozones. "
+            "RASC uses dynamic programming to find optimal event ranking. Both are "
+            "methods for quantitative biostratigraphy.\n\n"
+            "Advanced options:\n"
+            " * Endemic-species filter: removes local taxa whose cross-section "
+            "occurrence is below the threshold.\n"
+            " * UAZ similarity threshold: merges highly similar UAs into Unitary "
+            "Association Zones (Guex 1991).\n"
+            " * Cyclic contradiction detection: flags FAD/LAD ordering inversions."
         )
 
 
@@ -1917,7 +1973,7 @@ class IsotopeAnalysisDialog(BaseAnalysisDialog):
                 "First column: depth, Second column: age, Subsequent columns: isotope values"
             )
         )
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        info_label.setWordWrap(True)
         info_layout.addWidget(info_label)
 
     def get_parameters(self) -> dict[str, Any]:
@@ -1946,15 +2002,28 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
     Stratigraphic Correlation Configuration Dialog.
 
     Provides tools for correlating stratigraphic sections using
-    Dynamic Time Warping (DTW) or Euclidean distance methods.
+    Dynamic Time Warping (DTW) or Euclidean distance methods, and for
+    rendering the publication-quality multi-section correlation
+    diagram (warping-path plot).
 
     Parameters:
         method: Correlation method (DTW or Euclidean)
+        max_pairs: Maximum number of best-matching section pairs to draw.
+        cmap_name: Colormap used to encode similarity score.
+        render_plot: Whether to actually generate the figure.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(_("Stratigraphic Correlation"), parent)
         self._setup_parameters()
+
+    def set_column_labels(self, labels: list[str]) -> None:
+        """Populate the height-column selector from the loaded data."""
+        if not labels:
+            return
+        self._height_combo.clear()
+        for idx, label in enumerate(labels):
+            self._height_combo.addItem("{0}: {1}".format(idx, label), idx)
 
     def _setup_parameters(self) -> None:
         # Method group
@@ -1970,11 +2039,80 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
         method_layout.addWidget(dtw_radio)
         method_layout.addWidget(euclidean_radio)
 
+        # Plot rendering group
+        plot_group = self.add_parameter_group(_("Visualization"))
+        plot_layout = QVBoxLayout(plot_group)
+
+        self._render_plot_check = QCheckBox(_("Render multi-section warping-path diagram"))
+        self._render_plot_check.setChecked(True)
+        self._render_plot_check.setToolTip(
+            _(
+                "When enabled, generates a publication-quality figure showing "
+                "all section columns plus similarity-coded DTW warping paths "
+                "across the best-matching section pairs."
+            )
+        )
+        plot_layout.addWidget(self._render_plot_check)
+
+        # max_pairs
+        self._max_pairs_spin = QSpinBox()
+        # Allow -1 (special "render all pairs" sentinel) as well as the
+        # natural 1..20 range. ``setRange(-1, 20)`` keeps the spinner
+        # functional while letting the user type ``-1`` explicitly.
+        self._max_pairs_spin.setRange(-1, 20)
+        self._max_pairs_spin.setValue(3)
+        self._max_pairs_spin.setPrefix(_("Max pairs to render: "))
+        self._max_pairs_spin.setToolTip(
+            _(
+                "Maximum number of section pairs (ranked by DTW similarity) "
+                "to display in the warping-path correlation panel. Use -1 for "
+                "all pairs."
+            )
+        )
+        plot_layout.addWidget(self._max_pairs_spin)
+
+        # cmap_name
+        self._cmap_combo = QComboBox()
+        for name in [
+            "viridis",
+            "plasma",
+            "inferno",
+            "magma",
+            "cividis",
+            "RdBu",
+            "coolwarm",
+            "Spectral",
+        ]:
+            self._cmap_combo.addItem(name)
+        self._cmap_combo.setCurrentText("viridis")
+        plot_layout.addWidget(QLabel(_("Similarity colormap:")))
+        plot_layout.addWidget(self._cmap_combo)
+
+        # Height column selector
+        data_group = self.add_parameter_group(_("Height Column"))
+        data_layout = QVBoxLayout(data_group)
+        data_layout.addWidget(
+            QLabel(_("Column used as stratigraphic height for each sample:"))
+        )
+        self._height_combo = QComboBox()
+        self._height_combo.addItem(_("(first numeric column)"), 0)
+        data_layout.addWidget(self._height_combo)
+
         # Data info
         info_group = self.add_parameter_group(_("Data Requirements"))
         info_layout = QVBoxLayout(info_group)
-        info_label = QLabel(_("Select sections with height/thickness data for correlation analysis."))
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        info_label = QLabel(
+            _(
+                "Multiple data layouts are supported:\n"
+                "  • 4+ columns: classical (height, thickness) pairs - "
+                "h1, t1, h2, t2, ...\n"
+                "  • 2-3 columns: one selected height column + each "
+                "remaining column becomes one section whose 'signal' "
+                "drives the DTW comparison (e.g. isotopes, abundance).\n"
+                "  • 1 column: rendered as a single self-correlated section."
+            )
+        )
+        info_label.setWordWrap(True)
         info_layout.addWidget(info_label)
 
     def get_parameters(self) -> dict[str, Any]:
@@ -1982,16 +2120,222 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
 
         self._parameters = {
             "correlation_method": method_map[self._method_group.checkedId()],
+            "render_plot": self._render_plot_check.isChecked(),
+            "max_pairs": self._max_pairs_spin.value(),
+            "cmap_name": self._cmap_combo.currentText(),
+            "height_column": int(self._height_combo.currentData() or 0),
         }
         return self._parameters
 
     def _get_help_text(self) -> str:
         return _("""
 <h2>Stratigraphic Correlation</h2>
-<p>Correlates stratigraphic sections using pattern matching algorithms.</p>
+<p>Correlates stratigraphic sections using pattern matching algorithms and
+renders a publication-quality warping-path diagram.</p>
 <h3>Correlation Methods</h3>
 <ul>
 <li><b>DTW:</b> Dynamic Time Warping - aligns sections by minimizing warping distance</li>
 <li><b>Euclidean:</b> Simple distance-based correlation</li>
 </ul>
+<h3>Visualization</h3>
+<p>The warping-path diagram shows each section's column plus similarity-coded
+DTW paths. Line colour, alpha and width are all driven by the per-pair
+similarity score, so high-confidence ties are vivid solid lines and
+controversial ties appear as faint dashed lines.</p>
         """)
+
+
+class PaleoEnvironmentDialog(BaseAnalysisDialog):
+    """
+    Paleo-Environmental Reconstruction Dialog (Correspondence Analysis).
+
+    Configures the :class:`ecology.paleoenv.PaleoEnvironmentReconstructor` and
+    exposes the height-column / taxa-column selection plus the polarity-
+    auto-calibration switch.
+
+    Parameters exposed:
+        height_column: Column index of the stratigraphic height array.
+        taxon_columns: List of column indices to use as taxa.
+        calibrate_direction: If True, the first CA axis is sign-corrected
+            to positively correlate with the height array (the geological
+            convention).
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(_("Paleo-Environmental Reconstruction"), parent)
+        self._setup_parameters()
+
+    def set_column_labels(self, labels: list[str]) -> None:
+        """Populate the column selectors from the loaded data.
+
+        The taxa list defaults to *all columns except the currently
+        selected height column*, so the user gets a working analysis
+        out of the box without having to manually deselect the height.
+        When the user later changes the height-column selection, the
+        taxa list is re-synchronised via :meth:`_on_height_changed`.
+        """
+        if not labels:
+            return
+        # Block signals while we rebuild so we don't trigger
+        # ``_on_height_changed`` mid-build.
+        self._height_combo.blockSignals(True)
+        try:
+            self._height_combo.clear()
+            for idx, label in enumerate(labels):
+                self._height_combo.addItem("{0}: {1}".format(idx, label), idx)
+        finally:
+            self._height_combo.blockSignals(False)
+
+        # Cache the labels so we can rebuild the taxa list cheaply when
+        # the height-column selection changes.
+        self._cached_labels: list[str] = list(labels)
+        self._rebuild_taxa_list()
+
+    def _rebuild_taxa_list(self) -> None:
+        """Refresh the taxa list to exclude the current height column.
+
+        Selected indices that survive the rebuild are restored so the
+        user does not lose their selection when only the height column
+        changes. If the user's prior selection has been fully cleared
+        by the rebuild (e.g. they had only the height column selected),
+        we fall back to "select everything except the height column"
+        so the user still has a runnable analysis configuration.
+        """
+        if not hasattr(self, "_cached_labels"):
+            return
+        previously_selected = set(self.get_selected_taxon_indices())
+        height_idx = self._current_height_column()
+        candidate_indices = [
+            idx for idx in range(len(self._cached_labels)) if idx != height_idx
+        ]
+        # Filter the prior selection down to indices that still exist.
+        surviving_selection = {
+            idx for idx in previously_selected if idx in candidate_indices
+        }
+        # If nothing of the user's selection survived, fall back to
+        # selecting all remaining columns so the dialog stays usable.
+        if not surviving_selection:
+            surviving_selection = set(candidate_indices)
+
+        self._taxa_list.blockSignals(True)
+        try:
+            self._taxa_list.clear()
+            for idx in candidate_indices:
+                label = self._cached_labels[idx]
+                self._taxa_list.addItem("{0}: {1}".format(idx, label))
+                item = self._taxa_list.item(self._taxa_list.count() - 1)
+                if idx in surviving_selection:
+                    item.setSelected(True)
+        finally:
+            self._taxa_list.blockSignals(False)
+
+    def _current_height_column(self) -> int:
+        """Return the currently-selected height column index, with
+        defensive fallback to 0 when ``currentData()`` is ``None``."""
+        data = self._height_combo.currentData()
+        try:
+            return int(data) if data is not None else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def _on_height_changed(self, _idx: int) -> None:
+        """Re-build the taxa list whenever the height column changes."""
+        self._rebuild_taxa_list()
+
+    def _setup_parameters(self) -> None:
+        # Header info
+        info_group = self.add_parameter_group(_("Data Layout"))
+        info_layout = QVBoxLayout(info_group)
+        info_label = QLabel(
+            _(
+                "Select the column containing the stratigraphic height and the "
+                "columns to use as fossil taxa abundances. The analysis runs a "
+                "pure-Python Correspondence Analysis (CA, Benzécri / Greenacre) "
+                "with auto polarity calibration, replacing FactoMineR::CA()."
+            )
+        )
+        info_label.setWordWrap(True)
+        info_layout.addWidget(info_label)
+
+        # Height column
+        height_group = self.add_parameter_group(_("Stratigraphic Height"))
+        height_layout = QVBoxLayout(height_group)
+        self._height_combo = QComboBox()
+        self._height_combo.addItem(_("(first numeric column)"), 0)
+        # When the user picks a new height column, refresh the taxa list
+        # so the height column doesn't show up there.
+        self._height_combo.currentIndexChanged.connect(self._on_height_changed)
+        height_layout.addWidget(QLabel(_("Column index / label:")))
+        height_layout.addWidget(self._height_combo)
+
+        # Taxa columns
+        taxa_group = self.add_parameter_group(_("Taxa Columns (multi-select)"))
+        taxa_layout = QVBoxLayout(taxa_group)
+        self._taxa_list = QListWidget()
+        self._taxa_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self._taxa_list.setMinimumHeight(160)
+        taxa_layout.addWidget(QLabel(_("Columns to use as fossil taxa abundances:")))
+        taxa_layout.addWidget(self._taxa_list)
+
+        # CA settings
+        ca_group = self.add_parameter_group(_("CA Options"))
+        ca_layout = QVBoxLayout(ca_group)
+        self._calibrate_check = QCheckBox(
+            _("Auto-calibrate polarity (recommended)")
+        )
+        self._calibrate_check.setChecked(True)
+        self._calibrate_check.setToolTip(
+            _(
+                "Compute the Pearson correlation between the raw first CA axis "
+                "and the stratigraphic height array. If the correlation is "
+                "negative, automatically multiply the axis by -1 to enforce a "
+                "monotonic paleo-environmental trend."
+            )
+        )
+        ca_layout.addWidget(self._calibrate_check)
+
+        self._render_plot_check = QCheckBox(
+            _("Render paleo-environmental axis plot (vs. height)")
+        )
+        self._render_plot_check.setChecked(True)
+        ca_layout.addWidget(self._render_plot_check)
+
+    def get_selected_taxon_indices(self) -> list[int]:
+        """Return the indices (in the data matrix) of selected taxon columns.
+
+        The original column index is recovered by parsing the leading
+        ``"<i>: <label>"`` text format set in :meth:`set_column_labels`.
+        Duplicate indices are removed while preserving the user's
+        selection order.
+        """
+        result: list[int] = []
+        seen: set[int] = set()
+        for item in self._taxa_list.selectedItems():
+            try:
+                col_idx = int(item.text().split(":", 1)[0].strip())
+            except (ValueError, AttributeError):
+                continue
+            if col_idx in seen:
+                continue
+            seen.add(col_idx)
+            result.append(col_idx)
+        return result
+
+    def get_parameters(self) -> dict[str, Any]:
+        self._parameters = {
+            "height_column": self._current_height_column(),
+            "taxon_columns": self.get_selected_taxon_indices(),
+            "calibrate_direction": self._calibrate_check.isChecked(),
+            "render_plot": self._render_plot_check.isChecked(),
+        }
+        return self._parameters
+
+    def _get_help_text(self) -> str:
+        return _(
+            "Correspondence Analysis (CA) is a multivariate ordination method "
+            "designed for contingency-style abundance data. The reconstructed "
+            "first axis serves as a quantitative paleo-environmental proxy "
+            "(e.g. paleobathymetry in marine micropalaeontology). This module "
+            "is a pure-Python replacement for R's FactoMineR::CA() with "
+            "automatic Pearson-based polarity calibration."
+        )

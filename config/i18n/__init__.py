@@ -57,7 +57,19 @@ class _TranslatorBase:
             d = self._dictionaries.get(self._current_lang, {})
             text = d.get(key, key)
             if args:
-                return text.format(*args)
+                # Defensive: if the source key provides more positional
+                # placeholders than ``args`` (e.g. a translation drift
+                # or a typo), ``str.format`` would raise ``IndexError``
+                # and propagate up through the UI. ``TypeError`` covers
+                # the case where a format-spec is incompatible with the
+                # actual argument type (e.g. ``{0:.2%}`` with a string).
+                # Fall back to a best-effort formatting that swallows
+                # the error and returns the unformatted text instead so
+                # the user still sees a useful message.
+                try:
+                    return text.format(*args)
+                except (IndexError, KeyError, ValueError, TypeError):
+                    return text
             return text
 
 

@@ -67,6 +67,8 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -96,6 +98,7 @@ from views.ui_dialogs import (
     NMDSOptionsDialog,
     PCADialog,
     PCoADialog,
+    PaleoEnvironmentDialog,
     RarefactionDialog,
     SimperDialog,
     SpatialRipleyKDialog,
@@ -145,12 +148,12 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             ]
         ):
             return _(
-                f"{operation_hint}失败：数据包含无效字符。\n\n"
+                "{0}失败：数据包含无效字符。\n\n"
                 "请检查以下几点：\n"
                 "• 选中的数据仅包含数值，不含文字或符号\n"
                 "• 不存在缺失值标记（如 NA、NaN、-、空格等）\n"
                 "• 如有中文或特殊字符，请先删除或替换"
-            )
+            ).format(operation_hint)
 
         # 检查是否是数值计算错误（如 log(负数)、sqrt(负数)）
         if any(
@@ -158,63 +161,63 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             for keyword in ["negative value", "invalid value", "math domain error", "不能求", "数值计算"]
         ):
             return _(
-                f"{operation_hint}失败：数值计算错误。\n\n"
+                "{0}失败：数值计算错误。\n\n"
                 "请检查以下几点：\n"
                 "• 数据中是否存在负数（特别是对数运算前）\n"
                 "• 是否存在零值（某些除法运算前）\n"
                 "• 数值是否在有效范围内"
-            )
+            ).format(operation_hint)
 
         # 检查是否是维度不匹配问题
         if any(keyword in error_msg.lower() for keyword in ["dimension", "shape", "axes"]):
             return _(
-                f"{operation_hint}失败：数据维度不匹配。\n\n"
+                "{0}失败：数据维度不匹配。\n\n"
                 "请检查以下几点：\n"
                 "• 数据的行数和列数符合分析要求\n"
                 "• 不同数据集的样本数量是否一致\n"
                 "• Landmark 数据是否为完整的 x,y 坐标对"
-            )
+            ).format(operation_hint)
 
         # 检查是否是空数据问题
         if "empty" in error_msg.lower() or "没有数据" in error_msg:
-            return _(f"{operation_hint}失败：数据为空。\n\n请确保已选中有效的数据区域。")
+            return _("{0}失败：数据为空。\n\n请确保已选中有效的数据区域。").format(operation_hint)
 
         # 通用数据类型错误
         return _(
-            f"{operation_hint}失败：数据类型错误。\n\n"
-            "错误信息：{0}\n\n"
+            "{0}失败：数据类型错误。\n\n"
+            "错误信息：{1}\n\n"
             "请检查选中的数据是否为数值类型，并确保无缺失值。"
-        ).format(error_msg[:100])
+        ).format(operation_hint, error_msg[:100])
 
     # 验证错误
     if "ValidationError" in type(e).__name__ or "验证" in error_msg:
-        return _(f"{operation_hint}失败：数据验证未通过。\n\n{{0}}").format(error_msg)
+        return _("{0}失败：数据验证未通过。\n\n{1}").format(operation_hint, error_msg)
 
     # 收敛错误（迭代算法未收敛）
     if "ConvergenceError" in type(e).__name__ or "收敛" in error_msg:
         return _(
-            f"{operation_hint}警告：算法未收敛。\n\n"
+            "{0}警告：算法未收敛。\n\n"
             "这通常是由于数据质量问题或参数设置不当导致。\n"
             "建议：\n"
             "• 检查数据中是否存在异常值\n"
             "• 尝试增加迭代次数\n"
             "• 尝试使用不同的初始化参数"
-        )
+        ).format(operation_hint)
 
     # 矩阵计算错误
     if "singular" in error_msg.lower() or "matrix" in error_msg.lower():
         return _(
-            f"{operation_hint}失败：矩阵计算错误。\n\n"
+            "{0}失败：矩阵计算错误。\n\n"
             "这通常是由于数据中存在线性相关（多重共线性）导致。\n"
             "建议：\n"
             "• 检查并移除高度相关的变量\n"
             "• 标准化数据后再试\n"
             "• 减少变量数量"
-        )
+        ).format(operation_hint)
 
     # 默认：显示原始错误消息的前100个字符
-    return _(f"{operation_hint}时发生错误：\n\n{{0}}\n\n如果问题持续存在，请检查数据格式是否正确。").format(
-        error_msg[:200]
+    return _("{0}时发生错误：\n\n{1}\n\n如果问题持续存在，请检查数据格式是否正确。").format(
+        operation_hint, error_msg[:200]
     )
 
 
@@ -807,9 +810,16 @@ class RibbonTab(QWidget):
         return self._title
 
     def setDarkTheme(self, is_dark: bool) -> None:
-        """Set dark/light theme and propagate to all groups."""
+        """Set dark/light theme and propagate to all groups.
+
+        ``RibbonTab`` is a plain container widget - it does not own a
+        stylesheet of its own (visual appearance is delegated to the
+        child ``RibbonGroup`` instances and the global app stylesheet).
+        Earlier versions called a non-existent ``self._apply_stylesheet``
+        here, which crashed the whole theme-switch chain with
+        ``AttributeError`` the first time the user toggled the theme.
+        """
         self._is_dark_theme = is_dark
-        self._apply_stylesheet()
         for group in self._groups:
             group.setDarkTheme(is_dark)
 
@@ -1076,7 +1086,21 @@ class WorkspaceArea(QWidget):
         self.currentChanged.emit(widget)
 
     def setDarkTheme(self, is_dark: bool) -> None:
-        """Set dark/light theme and propagate to current widget."""
+        """Set dark/light theme and propagate to current widget.
+
+        The workspace can host arbitrary widgets including plain
+        ``QWidget`` figure-host containers (created by
+        :meth:`MainWindow._embed_figure_in_workspace`) and
+        ``QTreeWidget`` UAZ-hierarchy hosts. Only widgets that
+        actually expose ``setDarkTheme`` are notified; for figure
+        hosts, the matplotlib Figure is repainted via
+        :meth:`MainWindow._apply_dark_theme_to_figure` (delegated by
+        re-emitting the ``currentChanged`` signal so the parent
+        MainWindow can react). This avoids the historical
+        ``AttributeError: 'QWidget' object has no attribute
+        'setDarkTheme'`` crash when toggling the theme after a
+        publication-quality figure had been embedded.
+        """
         self._is_dark_theme = is_dark
         c = get_palette(is_dark)
         t = Typography()
@@ -1087,9 +1111,22 @@ class WorkspaceArea(QWidget):
             "background-color: " + c.bg_primary + "; "
             "}"
         )
-        current = self._stack.currentWidget()
-        if current is not None and current is not self._placeholder:
-            current.setDarkTheme(is_dark)
+        # Propagate the theme to every widget in the stack that has a
+        # ``setDarkTheme`` method, not just the currently visible one.
+        # Iterating the whole stack means previously-embedded plots
+        # also re-theme correctly when the user switches modes.
+        for i in range(self._stack.count()):
+            w = self._stack.widget(i)
+            if w is None or w is self._placeholder:
+                continue
+            setter = getattr(w, "setDarkTheme", None)
+            if callable(setter):
+                try:
+                    setter(is_dark)
+                except Exception:
+                    # Best-effort: never let a single widget's failure
+                    # break the global theme switch.
+                    pass
 
     def addWidget(self, widget: QWidget, name: str = "") -> int:
         """Add a widget to the workspace."""
@@ -1408,6 +1445,11 @@ class MainWindow(QMainWindow):
         bio_group = strat_tab.addGroup(_("Biostratigraphy"))
         self._btn_biostrat = bio_group.addButton("stratigraphy", _("Biozone"), _("UA/RASC Biostratigraphy"))
 
+        paleo_group = strat_tab.addGroup(_("Paleo-Environment"))
+        self._btn_paleo_env = paleo_group.addButton(
+            "stratigraphy", _("CA Axis"), _("Paleo-Env. CA Reconstruction")
+        )
+
         markov_group = strat_tab.addGroup(_("Facies"))
         self._btn_markov = markov_group.addButton("stratigraphy", _("Markov"), _("Markov Chain Analysis"))
         self._btn_directional = markov_group.addButton("stratigraphy", _("Rose"), _("Directional Statistics"))
@@ -1501,6 +1543,8 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_wavelet)
         self._btn_biostrat.clicked.connect(self._on_run_biostrat)
         self._register_data_button(self._btn_biostrat)
+        self._btn_paleo_env.clicked.connect(self._on_run_paleo_env)
+        self._register_data_button(self._btn_paleo_env)
         self._btn_efa.clicked.connect(self._on_run_efa)
         self._register_data_button(self._btn_efa)
         self._btn_tps_grid.clicked.connect(self._on_run_tps_grid)
@@ -1819,7 +1863,13 @@ class MainWindow(QMainWindow):
         help_menu.addAction(doc_action)
 
     def _switch_language(self, lang: str) -> None:
-        """Switch application language with restart prompt."""
+        """Switch application language with restart prompt.
+
+        The menu-bar check state is only flipped after the user
+        confirms an immediate restart. If the user defers ("Later"),
+        the actual translator language remains unchanged and the menu
+        check-marks are rolled back to reflect the real current state.
+        """
         from PyQt6.QtCore import QSettings
         from PyQt6.QtWidgets import QMessageBox
 
@@ -1827,24 +1877,42 @@ class MainWindow(QMainWindow):
         if lang == current_lang:
             return
 
-        # Save language setting
-        settings = QSettings("PaleoAST", "PaleoAST")
-        settings.setValue("language", lang)
-        self._lang_action_en.setChecked(lang == "en")
-        self._lang_action_zh.setChecked(lang == "zh")
-
-        # Ask user whether to restart now
+        # Ask user whether to restart now.
+        # NOTE: do NOT update QSettings / check-marks yet. We commit
+        # the new language only if the user explicitly accepts the
+        # restart, otherwise the menu would be lying about the
+        # in-session language.
         msg = QMessageBox(self)
         msg.setWindowTitle(_("Language Changed"))
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setText(_("The language has been changed to {0}.").format("中文" if lang == "zh" else "English"))
+        msg.setText(
+            _("The language has been changed to {0}.").format(
+                "中文" if lang == "zh" else "English"
+            )
+        )
         msg.setInformativeText(_("Restart now to apply the change?"))
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
         msg.button(QMessageBox.StandardButton.Yes).setText(_("Restart Now"))
         msg.button(QMessageBox.StandardButton.No).setText(_("Later"))
 
-        if msg.exec() == QMessageBox.StandardButton.Yes:
-            self._restart_application()
+        if msg.exec() != QMessageBox.StandardButton.Yes:
+            # User deferred. Roll back the menu check-marks so they
+            # reflect the actual current language.
+            self._lang_action_en.setChecked(current_lang == "en")
+            self._lang_action_zh.setChecked(current_lang == "zh")
+            return
+
+        # User accepted the restart: persist the choice *before* the
+        # process is replaced (QSettings flush is best-effort but
+        # explicit saves are safer).
+        settings = QSettings("PaleoAST", "PaleoAST")
+        settings.setValue("language", lang)
+        settings.sync()
+        self._lang_action_en.setChecked(lang == "en")
+        self._lang_action_zh.setChecked(lang == "zh")
+        self._restart_application()
 
     def _restart_application(self) -> None:
         """Restart the application process.
@@ -1929,6 +1997,12 @@ class MainWindow(QMainWindow):
             _("Extinction Intervals"): self._on_run_extinction_intervals,
             _("Beta Diversity"): self._on_run_beta_diversity,
             _("Null Models"): self._on_run_null_models,
+            # Stratigraphy & paleo-environment entries also reachable
+            # via the navigation tree (mirrors the ribbon buttons).
+            _("Isotope"): self._on_run_isotope,
+            _("Stratigraphic Correlation"): self._on_run_stratigraphic,
+            _("Wavelet"): self._on_run_wavelet,
+            _("CA Axis"): self._on_run_paleo_env,
         }
 
         handler = action_map.get(name)
@@ -2093,6 +2167,115 @@ class MainWindow(QMainWindow):
         self._status_bar.setDarkTheme(is_dark)
         self._workspace.setDarkTheme(is_dark)
         self._navigation.setDarkTheme(is_dark)
+        # Re-theme any embedded matplotlib Figure widgets that we
+        # added via :meth:`_embed_figure_in_workspace`. These do not
+        # implement ``setDarkTheme`` themselves; the helper applies
+        # the palette directly to the Figure's axes / spines / labels
+        # and triggers a canvas redraw so the embedded plot matches
+        # the rest of the UI after the theme toggle.
+        self._retheme_embedded_figures(is_dark)
+
+    def _retheme_embedded_figures(self, is_dark: bool) -> None:
+        """Re-paint every embedded Matplotlib figure in the workspace
+        to match the current theme."""
+        try:
+            stack = self._workspace._stack
+            for i in range(stack.count()):
+                widget = stack.widget(i)
+                if widget is None:
+                    continue
+                canvas = widget.property("figure_canvas")
+                # ``figure_canvas`` is set by ``_embed_figure_in_workspace``
+                # to a ``FigureCanvasQTAgg``; ``_show_uaz_tree`` does not
+                # set this property, so only true figure hosts respond.
+                figure = getattr(canvas, "figure", None)
+                if figure is None:
+                    continue
+                if is_dark:
+                    self._apply_dark_theme_to_figure(figure)
+                else:
+                    self._apply_light_theme_to_figure(figure)
+                try:
+                    canvas.draw_idle()
+                except Exception:
+                    self._logger.debug(
+                        "canvas.draw_idle() failed during re-theme", exc_info=True
+                    )
+        except Exception:
+            self._logger.debug("_retheme_embedded_figures failed", exc_info=True)
+
+    def _apply_light_theme_to_figure(self, figure: object) -> None:
+        """Restore the default (light) Matplotlib palette on a figure.
+
+        Mirrors :meth:`_apply_dark_theme_to_figure` so the user can
+        toggle the global theme back to light after dark-theming an
+        embedded plot. Without this restoration the dark colours would
+        stay baked into the figure and only the surrounding chrome
+        would flip back to white.
+        """
+        try:
+            from config.design_system import get_palette
+
+            palette = get_palette(False)
+            bg = palette.bg_primary
+            fg = palette.text_primary
+            border = palette.border_medium
+            try:
+                figure.patch.set_facecolor(bg)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            suptitle = getattr(figure, "_suptitle", None)
+            if suptitle is not None:
+                try:
+                    suptitle.set_color(fg)
+                except Exception:
+                    pass
+
+            for ax in figure.get_axes():  # type: ignore[attr-defined]
+                try:
+                    ax.set_facecolor(bg)
+                except Exception:
+                    pass
+                for spine in ax.spines.values():
+                    try:
+                        spine.set_color(border)
+                    except Exception:
+                        pass
+                try:
+                    ax.tick_params(colors=fg, which="both")
+                except Exception:
+                    pass
+                for text_attr in ("title", "_left_title", "_right_title"):
+                    text_obj = getattr(ax, text_attr, None)
+                    if text_obj is not None:
+                        try:
+                            text_obj.set_color(fg)
+                        except Exception:
+                            pass
+                for axis_attr in ("xaxis", "yaxis"):
+                    axis_obj = getattr(ax, axis_attr, None)
+                    if axis_obj is None:
+                        continue
+                    label = getattr(axis_obj, "label", None)
+                    if label is not None:
+                        try:
+                            label.set_color(fg)
+                        except Exception:
+                            pass
+                legend = ax.get_legend()
+                if legend is not None:
+                    try:
+                        for text in legend.get_texts():
+                            text.set_color(fg)
+                        frame = legend.get_frame()
+                        if frame is not None:
+                            frame.set_facecolor(bg)
+                            frame.set_edgecolor(border)
+                    except Exception:
+                        pass
+        except Exception:  # pragma: no cover - best-effort
+            self._logger.debug("_apply_light_theme_to_figure failed", exc_info=True)
 
     def _on_undo(self) -> None:
         """Undo last state change and refresh spreadsheet."""
@@ -2375,11 +2558,30 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, _("Export Error"), str(e))
 
     def _cleanup_plot_widgets(self) -> None:
-        """Remove all plot canvases from the workspace to prevent memory leaks."""
+        """Remove all plot canvases from the workspace to prevent memory leaks.
+
+        Handles both the legacy :class:`InteractivePlotCanvas` instances
+        and any "cleanable" workspace host widget. The latter is
+        identified by the dynamic ``workspace_cleanable`` Qt property
+        (set on the container by :meth:`_embed_figure_in_workspace` and
+        :meth:`_show_uaz_tree`). The spreadsheet is always preserved.
+        """
         stack = self._workspace._stack
         for i in range(stack.count() - 1, -1, -1):
             widget = stack.widget(i)
-            if isinstance(widget, InteractivePlotCanvas) and widget is not self._spreadsheet:
+            if widget is self._spreadsheet:
+                continue
+            is_interactive_plot = isinstance(widget, InteractivePlotCanvas)
+            # Read the new property name with backward-compat fallback.
+            is_cleanable = False
+            if widget is not None:
+                marker = widget.property("workspace_cleanable")
+                if marker is not None and bool(marker):
+                    is_cleanable = True
+                # Backward-compatibility: legacy property name.
+                elif widget.property("figure_canvas") is not None:
+                    is_cleanable = True
+            if is_interactive_plot or is_cleanable:
                 stack.removeWidget(widget)
                 widget.deleteLater()
 
@@ -2387,6 +2589,145 @@ class MainWindow(QMainWindow):
         """Remove old plots and add a new plot to the workspace."""
         self._cleanup_plot_widgets()
         return self._workspace.addWidget(plot, name)
+
+    def _embed_figure_in_workspace(
+        self,
+        figure: object,
+        name: str,
+        dark_theme: bool = False,
+    ) -> int | None:
+        """Embed a pre-built matplotlib Figure into the workspace.
+
+        The :class:`matplotlib.figure.Figure` object returned by the
+        analysis plotters can be hosted inside the workspace as a
+        stand-alone ``QWidget`` wrapping a ``FigureCanvasQTAgg``. This
+        keeps the new industrial-grade plot routines (stratigraphic
+        correlation, paleo-environmental CA, etc.) fully integrated
+        without forcing them to depend on the ``InteractivePlotCanvas``
+        template.
+
+        Parameters:
+            figure: Matplotlib Figure returned by the plotter.
+            name: Workspace tab name.
+            dark_theme: Whether to apply the dark-theme background.
+
+        Returns:
+            The workspace index of the newly added widget, or ``None``
+            if ``figure`` is ``None``.
+        """
+        if figure is None:
+            return None
+
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+        from config.design_system import get_palette
+
+        container = QWidget()
+        container.setObjectName("FigureHostWidget")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        canvas = FigureCanvasQTAgg(figure)
+        canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        if dark_theme:
+            self._apply_dark_theme_to_figure(figure)
+        layout.addWidget(canvas)
+        # Tagged so :meth:`_cleanup_plot_widgets` can garbage-collect
+        # this container on the next analysis run.
+        container.setProperty("workspace_cleanable", True)
+        # Keep a reference to the canvas as a *separate* dynamic
+        # property so external callers can still introspect it if needed
+        # (e.g. to call ``draw_idle`` from elsewhere).
+        container.setProperty("figure_canvas", canvas)
+
+        self._cleanup_plot_widgets()
+        idx = self._workspace.addWidget(container, name)
+        self._workspace.setCurrentIndex(idx)
+        try:
+            canvas.draw_idle()
+        except Exception:  # pragma: no cover - best-effort UI update
+            self._logger.debug("canvas.draw_idle() failed", exc_info=True)
+        return idx
+
+    def _apply_dark_theme_to_figure(self, figure: object) -> None:
+        """Apply a uniform dark-theme palette to a Matplotlib figure.
+
+        Setting only ``figure.patch.set_facecolor`` leaves the axes
+        background, tick colour, spine colour and text colour at the
+        Matplotlib default (white / black), which looks broken under
+        dark mode. This helper iterates every axes child and brings
+        them in line with the design system palette.
+
+        Robust against:
+          - Colorbar axes (whose ``xaxis.label`` / ``yaxis.label`` may
+            be empty ``Text`` objects without a meaningful color).
+          - Figures with a ``suptitle`` that also needs re-colouring.
+          - Texts/legend frames that are absent.
+        """
+        try:
+            from config.design_system import get_palette
+
+            palette = get_palette(True)
+            bg = palette.bg_primary
+            fg = palette.text_primary
+            border = palette.border_medium
+            figure.patch.set_facecolor(bg)  # type: ignore[attr-defined]
+
+            # Re-colour the figure-level suptitle, if any. Matplotlib
+            # stores it on the private ``_suptitle`` attribute when
+            # ``Figure.suptitle()`` has been called.
+            suptitle = getattr(figure, "_suptitle", None)
+            if suptitle is not None:
+                try:
+                    suptitle.set_color(fg)
+                except Exception:
+                    pass
+
+            for ax in figure.get_axes():  # type: ignore[attr-defined]
+                try:
+                    ax.set_facecolor(bg)
+                except Exception:
+                    pass
+                for spine in ax.spines.values():
+                    try:
+                        spine.set_color(border)
+                    except Exception:
+                        pass
+                try:
+                    ax.tick_params(colors=fg, which="both")
+                except Exception:
+                    pass
+                for text_attr in ("title", "_left_title", "_right_title"):
+                    text_obj = getattr(ax, text_attr, None)
+                    if text_obj is not None:
+                        try:
+                            text_obj.set_color(fg)
+                        except Exception:
+                            pass
+                for axis_attr in ("xaxis", "yaxis"):
+                    axis_obj = getattr(ax, axis_attr, None)
+                    if axis_obj is None:
+                        continue
+                    label = getattr(axis_obj, "label", None)
+                    if label is not None:
+                        try:
+                            label.set_color(fg)
+                        except Exception:
+                            pass
+                legend = ax.get_legend()
+                if legend is not None:
+                    try:
+                        for text in legend.get_texts():
+                            text.set_color(fg)
+                        frame = legend.get_frame()
+                        if frame is not None:
+                            frame.set_facecolor(bg)
+                            frame.set_edgecolor(border)
+                    except Exception:
+                        pass
+        except Exception:  # pragma: no cover - best-effort UI hint
+            self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
     def _on_run_pca(self) -> None:
         """
@@ -3284,7 +3625,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(
                     self,
-                    "Isotope Error",
+                    _("Isotope Error"),
                     format_user_error(e, "同位素分析"),
                 )
             finally:
@@ -3295,13 +3636,26 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(100, 100)
 
     def _on_run_stratigraphic(self) -> None:
-        """Run Stratigraphic Correlation Analysis."""
+        """Run Stratigraphic Correlation Analysis.
+
+        Builds the multi-section correlation analysis and, when
+        ``render_plot=True`` in the dialog, also produces a
+        publication-quality warping-path diagram via
+        :meth:`StratigraphyPlotter.plot_stratigraphic_correlation`.
+        """
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
         dialog = StratigraphicCorrelationDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        col_labels = []
+        try:
+            col_labels = list(self._state.data_matrix.col_labels or [])
+        except AttributeError:
+            col_labels = []
+        if col_labels:
+            dialog.set_column_labels(col_labels)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
@@ -3309,74 +3663,428 @@ class MainWindow(QMainWindow):
 
                 import numpy as np
 
-                from stratigraphy.correlation import StratigraphicCorrelationAnalyzer, StratigraphicSection
+                from stratigraphy.correlation import (
+                    StratigraphicCorrelationAnalyzer,
+                    StratigraphicSection,
+                )
 
                 # Create sections from loaded data
                 data = self._state.data_matrix.data
                 n_rows = len(data)
 
-                if data.shape[1] < 2:
+                if data.ndim != 2 or data.shape[1] < 1:
                     QMessageBox.warning(
-                        self, _("Insufficient Data"), _("Need at least 2 columns: height and thickness")
+                        self,
+                        _("Insufficient Data"),
+                        _("Need at least 1 numeric column to build a section."),
+                    )
+                    return
+                if n_rows < 2:
+                    QMessageBox.warning(
+                        self,
+                        _("Insufficient Data"),
+                        _("Need at least 2 stratigraphic samples per section."),
                     )
                     return
 
-                # Extract heights (first column) and compute thicknesses
-                heights = data[:, 0]
-                thicknesses = np.diff(heights)
-                thicknesses = np.append(thicknesses, thicknesses[-1] if len(thicknesses) > 0 else 1.0)
+                # Honour the user-selected height column index. When the
+                # user did not pick anything, fall back to column 0.
+                height_col = int(params.get("height_column", 0)) % data.shape[1]
 
-                # If we have multiple section-like column pairs, create multiple sections
-                # Otherwise, create a single section with computed thicknesses
-                sections = []
+                # Section construction strategy
+                # ---------------------------------------------------------
+                # Three layouts are supported:
+                #   (1) shape[1] >= 4: classical (height, thickness) pairs,
+                #       laid out columnwise as h1, t1, h2, t2, ...
+                #   (2) shape[1] in (2, 3): one height column + the rest
+                #       interpreted as per-section *proxy signals* (lithology
+                #       index, abundance, isotope value...). Each proxy
+                #       column becomes one StratigraphicSection that shares
+                #       the height axis but carries its own signal in
+                #       ``heights`` so the DTW compares the signals, not
+                #       the identical height array.
+                #   (3) shape[1] == 1: degenerate case - we replicate the
+                #       column twice so the analyser still produces a
+                #       trivial 1.0 self-similarity, instead of refusing.
+                # ---------------------------------------------------------
+                sections: list[StratigraphicSection] = []
+                base_heights = np.asarray(data[:, height_col], dtype=np.float64)
+                # Pre-compute per-row thicknesses from the height column;
+                # all sections share the same vertical sampling grid.
+                if base_heights.size > 1:
+                    base_t = np.diff(base_heights)
+                    base_t = np.append(base_t, base_t[-1] if base_t.size > 0 else 1.0)
+                else:
+                    base_t = np.array([1.0], dtype=np.float64)
+
                 if data.shape[1] >= 4:
-                    # Assume columns are: height1, thick1, height2, thick2, ...
-                    section_count = (data.shape[1]) // 2
+                    section_count = data.shape[1] // 2
                     for i in range(section_count):
                         h_col = i * 2
                         t_col = i * 2 + 1
-                        if t_col < data.shape[1]:
-                            h = data[:, h_col]
-                            t = data[:, t_col]
-                            t_diff = np.diff(t)
-                            t_diff = np.append(t_diff, t_diff[-1] if len(t_diff) > 0 else 1.0)
-                            sections.append(
-                                StratigraphicSection(
-                                    name=_("Section {0}").format(i + 1),
-                                    heights=h,
-                                    thicknesses=t_diff,
-                                    lithologies=["layer"] * len(h),
-                                )
+                        if t_col >= data.shape[1]:
+                            continue
+                        h = np.asarray(data[:, h_col], dtype=np.float64)
+                        t = np.asarray(data[:, t_col], dtype=np.float64)
+                        t_diff = np.diff(t)
+                        t_diff = np.append(
+                            t_diff, t_diff[-1] if t_diff.size > 0 else 1.0
+                        )
+                        sec_name = (
+                            col_labels[h_col]
+                            if 0 <= h_col < len(col_labels)
+                            else _("Section {0}").format(i + 1)
+                        )
+                        sections.append(
+                            StratigraphicSection(
+                                name=str(sec_name),
+                                heights=h,
+                                thicknesses=t_diff,
+                                lithologies=["layer"] * len(h),
                             )
+                        )
+                elif data.shape[1] >= 2:
+                    # Layout (2): build one section per non-height column,
+                    # putting the column's values into ``heights`` so the
+                    # downstream DTW actually compares signals rather than
+                    # comparing the identical height axis to itself.
+                    proxy_cols = [c for c in range(data.shape[1]) if c != height_col]
+                    for pc in proxy_cols:
+                        signal = np.asarray(data[:, pc], dtype=np.float64)
+                        sec_name = (
+                            col_labels[pc]
+                            if 0 <= pc < len(col_labels)
+                            else _("Section {0}").format(pc + 1)
+                        )
+                        sections.append(
+                            StratigraphicSection(
+                                name=str(sec_name),
+                                heights=signal,  # DTW compares these
+                                thicknesses=base_t,
+                                lithologies=["layer"] * n_rows,
+                            )
+                        )
                 else:
-                    # Single section with computed thicknesses
+                    # Layout (3): degenerate single column. Replicate to
+                    # guarantee >= 2 sections so the analyser does not
+                    # refuse the data. The user gets a sim=1.0 trivial
+                    # answer and at least sees the column rendered.
+                    h = np.asarray(data[:, 0], dtype=np.float64)
+                    only_name = (
+                        col_labels[0]
+                        if 0 < len(col_labels)
+                        else _("Section 1")
+                    )
                     sections.append(
                         StratigraphicSection(
-                            name=_("Section 1"),
-                            heights=heights,
-                            thicknesses=thicknesses,
+                            name=str(only_name),
+                            heights=h,
+                            thicknesses=base_t,
+                            lithologies=["layer"] * n_rows,
+                        )
+                    )
+                    sections.append(
+                        StratigraphicSection(
+                            name=_("{0} (copy)").format(only_name),
+                            heights=h.copy(),
+                            thicknesses=base_t.copy(),
                             lithologies=["layer"] * n_rows,
                         )
                     )
 
-                if len(sections) < 2:
+                analyzer = StratigraphicCorrelationAnalyzer()
+                # Forward the user-selected ``max_pairs`` to the analyser
+                # so the ``best_matches`` list is long enough for the
+                # plotter to honour the same setting. ``-1`` means
+                # "all pairs", which we translate into a generous cap
+                # of N*(N-1)/2.
+                requested_max_pairs = int(params.get("max_pairs", 3))
+                n_secs = len(sections)
+                total_pairs = max(1, n_secs * (n_secs - 1) // 2)
+                if requested_max_pairs == -1:
+                    analyser_max_matches = total_pairs
+                else:
+                    analyser_max_matches = max(1, min(requested_max_pairs, total_pairs))
+                result = analyzer.analyze(
+                    sections,
+                    method=params.get("correlation_method", "dtw"),
+                    max_matches=analyser_max_matches,
+                )
+
+                # Optionally render the publication-quality warping-path plot
+                rendered_figure = None
+                if params.get("render_plot", True):
+                    try:
+                        from visualization.stratigraphy_plot import StratigraphyPlotter
+
+                        plotter = StratigraphyPlotter()
+                        rendered_figure = plotter.plot_stratigraphic_correlation(
+                            correlation_result=result,
+                            title=_("Stratigraphic Correlation (DTW warping paths)"),
+                            cmap_name=params.get("cmap_name", "viridis"),
+                            max_pairs=int(params.get("max_pairs", 3)),
+                        )
+                    except Exception as plot_exc:  # pragma: no cover
+                        self._logger.warning(
+                            "Failed to render stratigraphic correlation plot: %s",
+                            plot_exc,
+                        )
+
+                if rendered_figure is not None:
+                    self._embed_figure_in_workspace(
+                        rendered_figure,
+                        _("Stratigraphic Correlation"),
+                        dark_theme=self._is_dark_theme,
+                    )
+                else:
+                    self._status_bar.setInfo(_("Stratigraphic Correlation: complete"))
+                    QMessageBox.information(
+                        self, _("Analysis Complete"), result.summary()
+                    )
+
+            except Exception as e:
+                self._logger.critical(f"Stratigraphic correlation failed: {e}")
+                QMessageBox.critical(
+                    self,
+                    _("Correlation Error"),
+                    format_user_error(e, "地层相关性"),
+                )
+            finally:
+                self._status_bar.setProgress(100, 100)
+
+    def _on_run_paleo_env(self) -> None:
+        """Run Paleo-Environmental Reconstruction via Correspondence Analysis.
+
+        Wraps :class:`ecology.paleoenv.PaleoEnvironmentReconstructor` and
+        exposes its first-axis reconstruction as both a numeric result
+        and an optional height-vs-axis plot.
+        """
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
+        dialog = PaleoEnvironmentDialog(self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        col_labels = []
+        try:
+            col_labels = list(self._state.data_matrix.col_labels or [])
+        except AttributeError:
+            col_labels = []
+        if col_labels:
+            dialog.set_column_labels(col_labels)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            params = dialog.get_parameters()
+            try:
+                self._status_bar.setProgress(0, 0)
+
+                import numpy as np
+
+                from ecology.paleoenv import PaleoEnvironmentReconstructor
+
+                data = self._state.data_matrix.data
+                if data.ndim != 2 or data.shape[1] < 2:
                     QMessageBox.warning(
                         self,
                         _("Insufficient Data"),
                         _(
-                            "Need at least 2 sections for correlation. Please prepare data with multiple section columns."
+                            "Need at least 2 columns (1 height + at least 1 taxon) "
+                            "for paleo-environmental reconstruction."
+                        ),
+                    )
+                    return
+                if data.shape[0] < 2:
+                    QMessageBox.warning(
+                        self,
+                        _("Insufficient Data"),
+                        _(
+                            "Need at least 2 stratigraphic samples to perform "
+                            "correspondence analysis."
                         ),
                     )
                     return
 
-                analyzer = StratigraphicCorrelationAnalyzer()
-                result = analyzer.analyze(sections, method=params.get("correlation_method", "dtw"))
+                height_col = int(params.get("height_column", 0)) % data.shape[1]
+                taxon_indices = [
+                    int(c)
+                    for c in params.get("taxon_columns", [])
+                    if 0 <= int(c) < data.shape[1] and int(c) != height_col
+                ]
+                if len(taxon_indices) < 1:
+                    QMessageBox.warning(
+                        self,
+                        _("No Taxa Selected"),
+                        _(
+                            "Please select at least one taxon column in the dialog."
+                        ),
+                    )
+                    return
 
-                self._status_bar.setInfo(_("Stratigraphic Correlation: complete"))
-                QMessageBox.information(self, _("Analysis Complete"), result.summary())
+                heights = np.asarray(data[:, height_col], dtype=np.float64)
+                abundance = np.asarray(data[:, taxon_indices], dtype=np.float64)
+
+                # Build column labels for the chosen taxa (best-effort).
+                # Built *before* validation so error messages can quote
+                # the human-readable taxon names rather than raw indices.
+                taxon_labels: list[str] = []
+                for idx in taxon_indices:
+                    if 0 <= idx < len(col_labels):
+                        taxon_labels.append(
+                            "{0}: {1}".format(idx, col_labels[idx])
+                        )
+                    else:
+                        taxon_labels.append("col_{0}".format(idx))
+
+                # --------------------------------------------------------
+                # Pre-validate to give actionable error messages instead
+                # of letting ``PaleoEnvironmentReconstructor.reconstruct``
+                # raise a generic ``DataValidationError`` that the user
+                # has to decode.
+                # --------------------------------------------------------
+                validation_issues: list[str] = []
+                if not np.all(np.isfinite(heights)):
+                    bad_rows = np.where(~np.isfinite(heights))[0].tolist()
+                    validation_issues.append(
+                        _(
+                            "Height column contains non-finite values at rows: {0}"
+                        ).format(bad_rows[:10])
+                    )
+                else:
+                    h_diff = np.diff(heights)
+                    if not (np.all(h_diff > 0) or np.all(h_diff < 0)):
+                        validation_issues.append(
+                            _(
+                                "Heights must be strictly monotonic. Please sort "
+                                "the rows by stratigraphic height first."
+                            )
+                        )
+                if not np.all(np.isfinite(abundance)):
+                    validation_issues.append(
+                        _(
+                            "Abundance matrix contains NaN/Inf. Please clean or "
+                            "impute the data before running CA."
+                        )
+                    )
+                if np.any(abundance < 0):
+                    neg_cnt = int(np.sum(abundance < 0))
+                    validation_issues.append(
+                        _(
+                            "Abundance matrix contains {0} negative cell(s); "
+                            "CA requires non-negative input."
+                        ).format(neg_cnt)
+                    )
+                if abundance.size > 0:
+                    row_sums = abundance.sum(axis=1)
+                    zero_rows = np.where(row_sums <= 0.0)[0]
+                    if zero_rows.size > 0:
+                        validation_issues.append(
+                            _(
+                                "Rows with zero total abundance at indices {0}; "
+                                "drop these rows or pick more taxa."
+                            ).format(zero_rows[:10].tolist())
+                        )
+                    col_sums = abundance.sum(axis=0)
+                    zero_cols = np.where(col_sums <= 0.0)[0]
+                    if zero_cols.size > 0:
+                        bad_taxa = [taxon_labels[int(c)] for c in zero_cols.tolist()]
+                        validation_issues.append(
+                            _(
+                                "Taxa with zero total abundance: {0}; "
+                                "remove them from the selection."
+                            ).format(bad_taxa[:10])
+                        )
+
+                if validation_issues:
+                    QMessageBox.warning(
+                        self,
+                        _("Insufficient Data"),
+                        "\n\n".join(validation_issues),
+                    )
+                    return
+
+                reconstructor = PaleoEnvironmentReconstructor()
+                result = reconstructor.reconstruct(
+                    abundance_matrix=abundance,
+                    heights=heights,
+                    taxon_names=taxon_labels,
+                    calibrate_direction=bool(params.get("calibrate_direction", True)),
+                )
+
+                # Optionally render a height-vs-CA-axis plot
+                rendered_figure = None
+                if params.get("render_plot", True):
+                    try:
+                        from matplotlib.figure import Figure
+
+                        # NOTE: do NOT hard-code a white facecolor here.
+                        # Leaving the Figure's default lets
+                        # ``_apply_dark_theme_to_figure`` (called from
+                        # ``_embed_figure_in_workspace`` when
+                        # ``dark_theme=True``) re-paint background and
+                        # foreground consistently. A hard-coded white
+                        # would override the dark palette and produce a
+                        # white-on-dark "blank-card" look.
+                        fig = Figure(figsize=(8, 5))
+                        ax = fig.add_subplot(111)
+                        ax.plot(
+                            result.heights,
+                            result.row_species_axis,
+                            "o-",
+                            color="#1E40AF",
+                            linewidth=2.0,
+                            markersize=6,
+                            label=_("CA axis 1 (reconstructed paleo-env. proxy)"),
+                        )
+                        ax.axhline(0.0, color="#888", linestyle="--", linewidth=0.8)
+                        ax.set_xlabel(_("Stratigraphic height"))
+                        ax.set_ylabel(_("CA axis 1 score"))
+                        was_flipped_txt = _("yes") if result.was_flipped else _("no")
+                        title = _(
+                            "Paleo-Environmental CA Reconstruction\n"
+                            "Inertia explained = {0:.2%} | "
+                            "r(axis, height) = {1:+.3f} | "
+                            "Auto-flip = {2}"
+                        ).format(
+                            result.explained_inertia,
+                            result.pearson_corr_axis_vs_height,
+                            was_flipped_txt,
+                        )
+                        ax.set_title(title, fontsize=11)
+                        ax.grid(True, linestyle=":", alpha=0.4)
+                        ax.legend(loc="best", fontsize=9)
+                        fig.tight_layout()
+                        rendered_figure = fig
+                    except Exception as plot_exc:  # pragma: no cover
+                        self._logger.warning(
+                            "Failed to render paleo-env plot: %s", plot_exc
+                        )
+
+                if rendered_figure is not None:
+                    self._embed_figure_in_workspace(
+                        rendered_figure,
+                        _("Paleo-Environmental CA Axis"),
+                        dark_theme=self._is_dark_theme,
+                    )
+
+                # Always show the textual summary
+                self._status_bar.setInfo(
+                    _("Paleo-Env. CA: inertia={0:.2%}, r={1:+.3f}").format(
+                        result.explained_inertia,
+                        result.pearson_corr_axis_vs_height,
+                    )
+                )
+                QMessageBox.information(
+                    self,
+                    _("Paleo-Environment Complete"),
+                    result.summary(),
+                )
 
             except Exception as e:
-                QMessageBox.critical(self, "Correlation Error", format_user_error(e, "地层相关性"))
+                self._logger.critical(f"Paleo-environmental reconstruction failed: {e}")
+                QMessageBox.critical(
+                    self,
+                    _("Paleo-Environment Error"),
+                    format_user_error(e, "古环境重建"),
+                )
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -3565,8 +4273,16 @@ class MainWindow(QMainWindow):
                 fad_matrix = data[:, :mid]
                 lad_matrix = data[:, mid : mid * 2]
 
-                # Get event names from column labels
-                event_names = col_labels[:mid] if mid < len(col_labels) else None
+                # Get event names from column labels. We need exactly
+                # ``mid`` labels for the FAD half; if the col_labels are
+                # missing/short we synthesize the rest defensively.
+                col_labels_list = list(col_labels or [])
+                if len(col_labels_list) >= mid:
+                    event_names = col_labels_list[:mid]
+                else:
+                    event_names = col_labels_list + [
+                        f"Event_{i + 1}" for i in range(len(col_labels_list), mid)
+                    ]
 
                 method = params.get("method", "ua")
 
@@ -3574,13 +4290,37 @@ class MainWindow(QMainWindow):
                     from stratigraphy.biostratigraphy import UAAnalyzer
 
                     analyzer = UAAnalyzer()
-                    result = analyzer.analyze(fad_matrix, lad_matrix, event_names=event_names)
+                    result = analyzer.analyze(
+                        fad_matrix,
+                        lad_matrix,
+                        event_names=event_names,
+                        min_section_occurrence=params.get("min_section_occurrence", 2),
+                        uaz_similarity_threshold=params.get("uaz_similarity_threshold", 0.8),
+                        enable_cyclic_check=bool(
+                            params.get("enable_cyclic_check", True)
+                        ),
+                    )
+                    # Surface detected cyclic contradictions prominently.
+                    cyclic = result.cyclic_contradictions or []
+                    if cyclic:
+                        lines = [_("Detected {0} cyclic FAD contradiction(s):").format(len(cyclic))]
+                        for entry in cyclic[:5]:
+                            lines.append(
+                                "  - {0} ↔ {1}  (a→b in {2}, b→a in {3})".format(
+                                    entry.get("event_a", "?"),
+                                    entry.get("event_b", "?"),
+                                    entry.get("n_sections_a_before_b", 0),
+                                    entry.get("n_sections_b_before_a", 0),
+                                )
+                            )
+                        if len(cyclic) > 5:
+                            lines.append("  ... ({0} more)".format(len(cyclic) - 5))
+                        QMessageBox.warning(self, _("Cyclic Contradictions Detected"), "\n".join(lines))
                 else:
                     from stratigraphy.biostratigraphy import RASCAnalyzer
 
                     analyzer = RASCAnalyzer()
                     # RASC needs a distance matrix - compute from FAD/LAD
-                    dist = np.abs(fad_matrix.mean(axis=0) - lad_matrix.mean(axis=0)).reshape(-1, 1)
                     dist = np.abs(fad_matrix.mean(axis=0)[:, np.newaxis] - lad_matrix.mean(axis=0)[np.newaxis, :])
                     result = analyzer.analyze(
                         dist, event_names=event_names, n_iterations=params.get("rasc_iterations", 100)
@@ -3588,6 +4328,10 @@ class MainWindow(QMainWindow):
 
                 # Show result summary
                 QMessageBox.information(self, _("Biostratigraphy Complete"), result.summary())
+
+                # For UA runs, also show the UAZ hierarchy in a tree view.
+                if method == "ua" and getattr(result, "uaz_groups", None):
+                    self._show_uaz_tree(result)
 
                 self._status_bar.setInfo(_("{0}: {1} events").format(method.upper(), len(result.events)))
                 self._logger.info(f"Biostratigraphy completed: {result.summary()}")
@@ -3597,6 +4341,101 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, _("Biostratigraphy Error"), format_user_error(e, "生物地层学"))
             finally:
                 self._status_bar.setProgress(100, 100)
+
+    def _show_uaz_tree(self, result: object) -> None:
+        """Embed the Unitary Association Zone (UAZ) hierarchy tree in the
+        workspace.
+
+        Each top-level node corresponds to a UAZ group; its children are
+        the underlying maximal cliques (Unitary Associations). Leaf-level
+        tooltip carries the event-union for that UAZ. This complements the
+        textual ``result.summary()`` with an interactive, navigable
+        representation of the merging hierarchy.
+        """
+        if not getattr(result, "uaz_groups", None):
+            return
+
+        tree = QTreeWidget()
+        tree.setColumnCount(3)
+        tree.setHeaderLabels([_("Zone / UAZ"), _("Events"), _("Similarity")])
+        tree.setMinimumSize(720, 480)
+        tree.setAlternatingRowColors(True)
+
+        # Build a fast index from zone-index → zone name so we don't
+        # walk ``result.zones`` for every UAZ child node.
+        zone_index_to_name: dict[int, str] = {}
+        for idx, zone in enumerate(getattr(result, "zones", []) or []):
+            zone_index_to_name[idx] = zone.name
+
+        for uaz in result.uaz_groups:
+            uaz_name = str(uaz.get("uaz_name", "UAZ ?"))
+            event_union = uaz.get("event_union", [])
+            mean_sim_raw = uaz.get("mean_similarity", 0.0)
+            try:
+                mean_sim = float(mean_sim_raw)
+            except (TypeError, ValueError):
+                mean_sim = 0.0
+
+            top = QTreeWidgetItem(tree)
+            top.setText(0, uaz_name)
+            top.setText(1, ", ".join(str(e) for e in event_union))
+            # Format ``inf`` and NaN gracefully instead of printing
+            # the literal "inf" string in the UI.
+            if not (mean_sim == mean_sim) or mean_sim in (float("inf"), float("-inf")):
+                top.setText(2, "—")
+            else:
+                top.setText(2, "{0:.3f}".format(mean_sim))
+            top.setToolTip(1, "\n".join(str(e) for e in event_union))
+
+            for zone_idx in uaz.get("zone_indices", []) or []:
+                leaf = QTreeWidgetItem(top)
+                leaf.setText(0, zone_index_to_name.get(int(zone_idx), "Zone ?"))
+                if 0 <= int(zone_idx) < len(result.zones):
+                    zone_obj = result.zones[int(zone_idx)]
+                    zone_events = zone_obj.events
+                    leaf.setText(1, ", ".join(zone_events))
+                    leaf.setToolTip(1, "\n".join(zone_events))
+                    # Show the per-zone dissimilarity-to-predecessor that
+                    # we now propagate from ``_merge_to_uaz`` (Fix #4).
+                    diss = getattr(zone_obj, "dissimilarity_to_predecessor", None)
+                    if diss is None:
+                        leaf.setText(2, "—")
+                    else:
+                        try:
+                            d_val = float(diss)
+                            if d_val != d_val or d_val in (
+                                float("inf"),
+                                float("-inf"),
+                            ):
+                                leaf.setText(2, "—")
+                            else:
+                                leaf.setText(2, "{0:.3f}".format(d_val))
+                        except (TypeError, ValueError):
+                            leaf.setText(2, "—")
+                else:
+                    leaf.setText(1, "—")
+                    leaf.setText(2, "—")
+
+        for col in range(tree.columnCount()):
+            tree.resizeColumnToContents(col)
+        tree.expandAll()
+
+        # Embed into the workspace using a tagged container so
+        # :meth:`_cleanup_plot_widgets` can garbage-collect it.
+        container = QWidget()
+        container.setObjectName("UAZTreeHostWidget")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(tree)
+        # Tag for the generic cleanup hook. We do NOT reuse
+        # ``figure_canvas`` here because the embedded widget is a
+        # QTreeWidget, not a Matplotlib canvas, and overloading the
+        # property name would mislead future maintainers.
+        container.setProperty("workspace_cleanable", True)
+
+        self._cleanup_plot_widgets()
+        idx = self._workspace.addWidget(container, _("UAZ Hierarchy"))
+        self._workspace.setCurrentIndex(idx)
 
     def _on_run_pic(self) -> None:
         """Run Phylogenetic Independent Contrasts (PIC) analysis.

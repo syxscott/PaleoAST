@@ -151,6 +151,9 @@ class StratigraphicCorrelationAnalyzer:
         h_b = sec_b.heights
 
         n, m = len(h_a), len(h_b)
+        if n + m == 0:
+            return 1.0
+
         dtw = np.full((n + 1, m + 1), np.inf)
         dtw[0, 0] = 0
 
@@ -159,8 +162,6 @@ class StratigraphicCorrelationAnalyzer:
                 cost = abs(h_a[i - 1] - h_b[j - 1])
                 dtw[i, j] = cost + min(dtw[i - 1, j], dtw[i, j - 1], dtw[i - 1, j - 1])
 
-        if n + m == 0:
-            return 1.0
         similarity = 1 / (1 + dtw[n, m] / (n + m))
         return similarity
 
@@ -256,7 +257,7 @@ class SedimentationRateAnalyzer:
 
     def calculate(
         self, section: StratigraphicSection, smooth: bool = True, frac: float = 0.3
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         计算沉积速率
 
@@ -282,11 +283,15 @@ class SedimentationRateAnalyzer:
         smoothed_rates = rates.copy()
         if smooth and len(heights) > 3:
             try:
-                from scipy.interpolate import Lowess
+                from statsmodels.nonparametric.smoothers_lowess import lowess as stats_lowess
 
                 sorted_idx = np.argsort(heights)
-                result = Lowess(rates[sorted_idx], heights[sorted_idx], frac=frac, return_sorted=False)
-                smoothed_rates[sorted_idx] = result[:, 1]
+                h_sorted = heights[sorted_idx]
+                r_sorted = rates[sorted_idx]
+                # statsmodels lowess returns 2D array [x_sorted, y_smoothed]
+                result = stats_lowess(r_sorted, h_sorted, frac=frac, return_sorted=True)
+                # Interpolate back to original height order
+                smoothed_rates = np.interp(heights, result[:, 0], result[:, 1])
             except Exception as e:
                 self._logger.warning(f"LOWESS smoothing failed: {e}")
 
