@@ -593,4 +593,8 @@ TRANSLATIONS = {
     "Stratigraphic Correlation: complete": "地层相关性：完成",
     "Biostratigraphy Complete": "生物地层学分析完成",
     "Biostratigraphy Error": "生物地层学分析错误",
+    "SIMPER Error": "SIMPER错误",
+    "SHE Error": "SHE分析错误",
+    "CONISS Error": "CONISS错误",
+    "EFA Error": "EFA错误",
 }

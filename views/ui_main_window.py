@@ -3096,7 +3096,7 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo("SIMPER analysis completed")
             except Exception as e:
-                QMessageBox.critical(self, "SIMPER Error", format_user_error(e, "SIMPER"))
+                QMessageBox.critical(self, _("SIMPER Error"), format_user_error(e, "SIMPER"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -3448,7 +3448,7 @@ class MainWindow(QMainWindow):
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("SHE analysis completed"))
         except Exception as e:
-            QMessageBox.critical(self, "SHE Error", format_user_error(e, "SHE分析"))
+            QMessageBox.critical(self, _("SHE Error"), format_user_error(e, "SHE分析"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -3471,7 +3471,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "CONISS", result.summary())
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
             except Exception as e:
-                QMessageBox.critical(self, "CONISS Error", format_user_error(e, "CONISS"))
+                QMessageBox.critical(self, _("CONISS Error"), format_user_error(e, "CONISS"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -3547,7 +3547,7 @@ class MainWindow(QMainWindow):
                     _("EFA: {0} harmonics, {1} points").format(result.n_harmonics, result.n_points)
                 )
             except Exception as e:
-                QMessageBox.critical(self, "EFA Error", format_user_error(e, "EFA"))
+                QMessageBox.critical(self, _("EFA Error"), format_user_error(e, "EFA"))
             finally:
                 self._status_bar.setProgress(100, 100)
 

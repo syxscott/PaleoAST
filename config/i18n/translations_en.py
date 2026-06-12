@@ -573,4 +573,8 @@ TRANSLATIONS = {
     "Stratigraphic Correlation: complete": "Stratigraphic Correlation: complete",
     "Biostratigraphy Complete": "Biostratigraphy Complete",
     "Biostratigraphy Error": "Biostratigraphy Error",
+    "SIMPER Error": "SIMPER Error",
+    "SHE Error": "SHE Error",
+    "CONISS Error": "CONISS Error",
+    "EFA Error": "EFA Error",
 }
