@@ -301,16 +301,30 @@ class BinaryCache:
             row_labels_bytes = self._serialize_labels(row_labels)
             col_labels_bytes = self._serialize_labels(col_labels)
 
-            # 计算偏移量
-            header.metadata_offset = header.HEADER_SIZE + matrix_size + len(row_labels_bytes) + len(col_labels_bytes)
-
             # 序列化矩阵数据
             matrix_bytes = matrix.tobytes()
 
             # 可选压缩
+            # NOTE: compress *before* computing header.matrix_size and
+            # metadata_offset. The previous implementation computed
+            # metadata_offset using the *uncompressed* matrix_size and
+            # then compressed the bytes afterwards; when compression was
+            # enabled the on-disk matrix block was shorter than
+            # header.matrix_size advertised, so metadata_offset pointed
+            # into the middle of the matrix block and loading a cached
+            # file with compression enabled read garbage metadata (and
+            # failed CRC). Set header.matrix_size to the actual number
+            # of bytes written so all downstream offsets stay aligned
+            # with what is on disk.
             if self._use_compression:
                 matrix_bytes = zlib.compress(matrix_bytes, level=6)
                 header.flags |= 0x01  # 设置压缩标志
+                header.matrix_size = len(matrix_bytes)
+
+            # 计算偏移量（基于实际写入字节数）
+            header.metadata_offset = (
+                header.HEADER_SIZE + len(matrix_bytes) + len(row_labels_bytes) + len(col_labels_bytes)
+            )
 
             # 计算CRC32
             crc_data = matrix_bytes + row_labels_bytes + col_labels_bytes + metadata_bytes

@@ -81,8 +81,14 @@ class DiversityDynamics:
         for i, (t_start, t_end) in enumerate(intervals):
             times.append((t_start + t_end) / 2)
 
-            # 计算该区间内存在的物种数
-            count = sum(1 for o, L in records if o >= t_end and t_start >= L)
+            # 计算该区间内存在的物种数。
+            # 物种 (o, L) 在区间 [t_start, t_end] 内存在 ⇔
+            #   起源早于或等于区间起点 (o <= t_start) 且
+            #   灭绝晚于或等于区间终点 (L >= t_end)
+            # 旧条件 `o >= t_end and t_start >= L` 意为
+            # "起源晚于区间终点 且 灭绝早于区间起点"，几乎不可能满足，
+            # 导致 richness 恒为 0。
+            count = sum(1 for o, L in records if o <= t_start and L >= t_end)
             richness.append(count)
 
             # 计算速率

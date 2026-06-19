@@ -283,21 +283,39 @@ def _compute_contrasts_recursive(
     trait_values: dict[str, float],
 ) -> tuple[float | None, float, list[tuple[float, float, str]], list[str]]:
     """
-    Recursively compute independent contrasts.
+    Recursively compute independent contrasts (Felsenstein 1985).
 
-    Post-order traversal: process children first, then compute contrast at parent.
+    Post-order traversal: process children first, then compute contrast at
+    parent. Returns ``(reconstructed_value, cum_variance, contrasts_list,
+    node_names)`` where:
 
-    Returns:
-        (reconstructed_value, cum_variance, contrasts_list, node_names)
+    - ``reconstructed_value`` is the inverse-variance weighted estimate of
+      the trait at ``node`` using only its descendants.
+    - ``cum_variance`` is the variance of that reconstruction *evaluated at
+      this node* — i.e. the variance accumulated along the subtree BELOW
+      the node, NOT including the node's own branch_length. The caller
+      (parent) is responsible for adding ``child.branch_length`` when it
+      uses this value in its own contrast denominator. This matches the
+      Felsenstein (1985) convention: for a binary parent P with children
+      A and B,
 
-    Where cum_variance = sum of branch lengths from this node to ALL descendant tips.
-    Contrasts list entries are (raw_contrast, se, node_name).
+          Var(recon_A - recon_B | P) = (V_A + branch_A) + (V_B + branch_B)
+
+      where ``V_A = cum_variance(A)``. The previous implementation used
+      ``v_i = cum_variance(child_i)`` and made leaves return
+      ``branch_length`` as their ``cum_variance``; that double-counted
+      leaf branch lengths while leaving *internal* child branch lengths
+      uncounted, so IC standardization was systematically biased —
+      especially on deep trees. The fix below keeps the convention
+      uniform: leaves return ``V = 0`` and every parent adds the
+      child's branch_length explicitly.
+    - ``contrasts_list`` entries are ``(standardized_contrast, se, node_name)``.
     """
     if node.is_leaf:
         leaf_name = node.name
         val = trait_values.get(leaf_name)
-        cum_var = node.branch_length or 0.0
-        return val, cum_var, [], [] if val is None else [leaf_name]
+        # Leaf has no descendants -> cum_variance below the leaf is 0.
+        return val, 0.0, [], [] if val is None else [leaf_name]
 
     # Process all children first
     child_results: list[tuple[PhyloNode, float, float]] = []
@@ -316,20 +334,20 @@ def _compute_contrasts_recursive(
 
     if len(child_results) == 2:
         # Binary node: single contrast (Felsenstein 1985)
-        _child1, val1, var1 = child_results[0]
-        _child2, val2, var2 = child_results[1]
-        # v1 = cumulative var from child subtree = var1 (already includes branch to this node)
-        # No need to add child1.branch_length - var1 already represents the cumulative
-        # variance from child1's subtree to all descendant tips
-        v1 = var1
-        v2 = var2
+        child1, val1, var1 = child_results[0]
+        child2, val2, var2 = child_results[1]
+        # Variance of each child's reconstruction *at this node* includes
+        # the child's own branch_length on top of the descendant variance.
+        v1 = var1 + (child1.branch_length or 0.0)
+        v2 = var2 + (child2.branch_length or 0.0)
         # Standardized contrast IC = (x_A - x_B) / sqrt(v_A + v_B)
         contrast = (val1 - val2) / math.sqrt(v1 + v2)
         se = math.sqrt(v1 + v2)
         node_name = node.name or f"node_{id(node)}"
         all_contrasts.append((contrast, se, node_name))
         all_names.append(node_name)
-        # cum_variance from this node = sum of v1 and v2 (all tips in both subtrees)
+        # Variance of this node's reconstruction (at this node, excluding
+        # this node's branch_length) is the pooled child variance.
         cum_var = v1 + v2
         # Reconstructed value: inverse-variance weighted mean
         if v1 > 0 and v2 > 0:
@@ -339,43 +357,57 @@ def _compute_contrasts_recursive(
         return recon, cum_var, all_contrasts, all_names
 
     # Multi-way node: reduce iteratively (Felsenstein 1985)
-    # Iteratively contrast adjacent children, combining one each step
-    # Build list of (value, cum_var, child) for active nodes
-    active: list[tuple[float, float, PhyloNode]] = [(val, cvar, child) for child, val, cvar in child_results]
+    # Iteratively contrast adjacent children, combining one each step.
+    # Build list of (value, descendant_var, branch_length, child) — the
+    # branch_length is the edge from the child up to *this* node and must
+    # be added to the descendant variance before computing the contrast.
+    active: list[tuple[float, float, float, PhyloNode]] = [
+        (val, cvar, (child.branch_length or 0.0), child)
+        for child, val, cvar in child_results
+    ]
 
     while len(active) > 1:
-        # Contrast first two (Felsenstein 1985)
-        val1, var1, _ch1 = active[0]
-        val2, var2, _ch2 = active[1]
-        # var1/var2 already include branches to current node, no need to add again
-        v1 = var1
-        v2 = var2
+        val1, var1, bl1, _ch1 = active[0]
+        val2, var2, bl2, _ch2 = active[1]
+        # Variance at this node of each child's reconstruction.
+        v1 = var1 + bl1
+        v2 = var2 + bl2
         # Standardized contrast
         contrast = (val1 - val2) / math.sqrt(v1 + v2)
         se = math.sqrt(v1 + v2)
         node_name = f"{node.name}_c{len(active) - 2}" if node.name else f"node_{id(node)}_c{len(active) - 2}"
         all_contrasts.append((contrast, se, node_name))
         all_names.append(node_name)
-        # Combined subtree: weighted mean, combined cumulative variance
+        # Combined subtree: weighted mean; combined descendant variance.
+        # The combined node sits at *this* node, so its branch_length to
+        # itself is 0 — future contrasts will add this node's branch_length
+        # via the outer loop only when this combined value propagates up.
         combined_cvar = v1 + v2
         if v1 > 0 and v2 > 0:
             combined_val = (val1 / v1 + val2 / v2) / (1.0 / v1 + 1.0 / v2)
         else:
             combined_val = (val1 + val2) / 2.0
-        # Replace first two with combined
         combined_child = PhyloNode(name="combined", node_type=NodeType.INTERNAL, branch_length=0.0)
-        active = [(combined_val, combined_cvar, combined_child), *active[2:]]
+        # The combined pseudo-child lives at this node, so its edge to
+        # this node has length 0; any future propagation up the tree will
+        # pick up this node's branch_length via the outer caller.
+        active = [(combined_val, combined_cvar, 0.0, combined_child), *active[2:]]
 
-    # Reconstructed value at this node = inverse-variance weighted mean of immediate child values
+    # Reconstructed value at this node = inverse-variance weighted mean of
+    # immediate child reconstructions (each child's variance at this node
+    # includes its branch_length).
     total_w = 0.0
     weighted_sum = 0.0
-    for _, val, cvar in child_results:
-        w = 1.0 / max(cvar, 0.0001)
+    for child, val, cvar in child_results:
+        v = cvar + (child.branch_length or 0.0)
+        w = 1.0 / max(v, 0.0001)
         weighted_sum += w * val
         total_w += w
     recon = weighted_sum / total_w if total_w > 0 else (active[0][0] if active else 0.0)
-    # cum_variance from this node = sum of all child cum_vars
-    cum_var = sum(cvar for _, cvar, _ in child_results)
+    # Variance at this node = sum of (descendant_var + branch_length) over
+    # all immediate children. Excludes this node's own branch_length (the
+    # parent adds that when this node is used as a child).
+    cum_var = sum(cvar + (child.branch_length or 0.0) for child, _val, cvar in child_results)
     return recon, cum_var, all_contrasts, all_names
 
 
@@ -613,14 +645,24 @@ class PCMAnalyzer:
         # For K: compute contrasts and their expected variances
         _recon, _cumvar, contrasts_data, _unused = _compute_contrasts_recursive(working_tree.root, trait_values)
 
-        ic_vals = np.array([c[0] for c in contrasts_data], dtype=np.float64)
-        branch_sums = np.array([c[1] for c in contrasts_data], dtype=np.float64)
-
-        # Blomberg's K: K = mean((IC / sqrt(v))^2)
-        # = (sum IC_i^2 / n) / (sum v_i / n)
-        # Standardized contrasts: IC / sqrt(v)
-        std_contrasts = ic_vals / np.sqrt(branch_sums)
-        K = np.mean(std_contrasts**2)
+        # Each entry in contrasts_data is (standardized_contrast, se, node_name)
+        # where standardized_contrast = raw_contrast / sqrt(v) and se = sqrt(v).
+        # Recover the raw quantities needed for Blomberg's K (Blomberg, Garland
+        # & Ives 2003):
+        #     K = MSE_observed / MSE_expected_under_BM
+        #       = [Σ raw_IC_i² / (n - 1)] / [Σ v_i / (n - 1)]
+        #       = Σ raw_IC_i² / Σ v_i
+        # The previous implementation computed ``mean((IC/sqrt(v))²)`` which is
+        # the mean squared *standardized* contrast — that quantity has
+        # expectation 1 under BM regardless of phylogenetic signal, so it
+        # cannot be Blomberg's K. Use the canonical ratio of sums instead.
+        ic_std = np.array([c[0] for c in contrasts_data], dtype=np.float64)
+        se = np.array([c[1] for c in contrasts_data], dtype=np.float64)
+        v = se**2  # variance of each raw contrast under BM
+        # Raw contrast = standardized_contrast * sqrt(v) = ic_std * se.
+        raw_ic_sq = (ic_std * se) ** 2  # = ic_std² * v
+        v_sum = float(np.sum(v))
+        K = float(np.sum(raw_ic_sq) / v_sum) if v_sum > 0 else 0.0
 
         # Compute Z-score via permutations
         tip_array = np.array([trait_values[l.name] for l in leaves], dtype=np.float64)
@@ -631,10 +673,13 @@ class PCMAnalyzer:
             perm_dict = {name: perm_trait[i] for i, name in enumerate(tip_names)}
             _, _, perm_ic_data, _ = _compute_contrasts_recursive(working_tree.root, perm_dict)
             if perm_ic_data:
-                perm_ic = np.array([c[0] for c in perm_ic_data], dtype=np.float64)
-                perm_branch = np.array([c[1] for c in perm_ic_data], dtype=np.float64)
-                perm_std = perm_ic / np.sqrt(perm_branch)
-                perm_Ks.append(np.mean(perm_std**2))
+                perm_ic_std = np.array([c[0] for c in perm_ic_data], dtype=np.float64)
+                perm_se = np.array([c[1] for c in perm_ic_data], dtype=np.float64)
+                perm_v = perm_se**2
+                perm_v_sum = float(np.sum(perm_v))
+                if perm_v_sum > 0:
+                    perm_raw_ic_sq = (perm_ic_std * perm_se) ** 2
+                    perm_Ks.append(float(np.sum(perm_raw_ic_sq) / perm_v_sum))
 
         perm_Ks_arr = np.array(perm_Ks)
         z = (K - np.mean(perm_Ks_arr)) / np.std(perm_Ks_arr) if np.std(perm_Ks_arr) > 0 else 0.0
@@ -710,8 +755,17 @@ class PCMAnalyzer:
         if len(ic_arr) < 2 or n_groups < 2:
             raise ValidationError(_("Need at least 2 groups and 2 contrasts"))
 
-        # Assign contrasts to groups based on which group's tips dominate the node's subtree
-        # Precompute tip sets for each internal node
+        # Assign each contrast to "between-group" or "within-group" using the
+        # standard Garland (1993) / Garland et al. phylogenetic-ANOVA
+        # convention: a contrast at node P is *between-group* when the two
+        # direct children of P have *different* dominant tip groups; it is
+        # *within-group* when both children share the same dominant group.
+        # Only between-group contrasts carry information about group
+        # differences; within-group contrasts estimate the residual
+        # (phylogenetically corrected) variance. The previous
+        # implementation labelled each contrast with the single dominant
+        # group of the entire contrast subtree, which silently absorbed
+        # between-group signal into the within-group term and vice versa.
         node_to_tips: dict[int, set[str]] = {}
 
         def get_tip_names(node: PhyloNode) -> set[str]:
@@ -736,12 +790,26 @@ class PCMAnalyzer:
                     return result
             return None
 
+        def dominant_group_of(node: PhyloNode) -> str | None:
+            """Return the most common group label among ``node``'s
+            descendant tips, or ``None`` if no labelled tip is present."""
+            tips = get_tip_names(node)
+            counts: dict[str, int] = {}
+            for tip_name in tips:
+                grp = tips_with_groups.get(tip_name)
+                if grp:
+                    counts[grp] = counts.get(grp, 0) + 1
+            if not counts:
+                return None
+            return max(counts, key=counts.get)
+
         get_tip_names(working_tree.root)
 
-        contrast_groups: list[str] = []
+        between_contrasts: list[float] = []
+        within_contrasts: list[float] = []
         for c_data in contrasts_data:
             node_name = c_data[2]
-            # Find the node in the tree
+            # Find the contrast node in the tree.
             target_node: PhyloNode | None = None
             if node_name.startswith("node_"):
                 node_id_str = node_name.split("_")[-1]
@@ -763,37 +831,44 @@ class PCMAnalyzer:
             if target_node is None:
                 target_node = find_node_by_name(working_tree.root, node_name)
             if target_node is None:
-                contrast_groups.append(groups[0])
+                # Cannot classify — treat as residual (within).
+                within_contrasts.append(c_data[0])
                 continue
-            # Count tips per group in this node's subtree
-            all_desc_tips = get_tip_names(target_node)
-            group_counts: dict[str, int] = {}
-            for tip_name in all_desc_tips:
-                grp = tips_with_groups.get(tip_name)
-                if grp:
-                    group_counts[grp] = group_counts.get(grp, 0) + 1
-            if not group_counts:
-                contrast_groups.append(groups[0])
+
+            children = target_node.children
+            if len(children) < 2:
+                within_contrasts.append(c_data[0])
                 continue
-            dominant_group = max(group_counts, key=group_counts.get)
-            contrast_groups.append(dominant_group)
 
-        # Compute F statistic using contrasts
-        group_ic_means: dict[str, float] = {}
-        for grp in groups:
-            grp_ics = [ic_arr[i] for i, g in enumerate(contrast_groups) if g == grp]
-            group_ic_means[grp] = np.mean(grp_ics) if grp_ics else 0.0
+            g1 = dominant_group_of(children[0])
+            g2 = dominant_group_of(children[1])
+            if g1 is not None and g2 is not None and g1 != g2:
+                between_contrasts.append(c_data[0])
+            else:
+                within_contrasts.append(c_data[0])
 
-        grand_mean = np.mean(ic_arr)
-        ss_between = 0.0
-        for grp in groups:
-            grp_ics = [ic_arr[i] for i, g in enumerate(contrast_groups) if g == grp]
-            n_grp = len(grp_ics)
-            ss_between += n_grp * (group_ic_means[grp] - grand_mean) ** 2
-
-        ss_within = sum((ic_arr[i] - group_ic_means[g]) ** 2 for i, g in enumerate(contrast_groups))
-        df_between = n_groups - 1
-        df_within = len(ic_arr) - n_groups
+        # F statistic: between-group signal vs within-group residual.
+        # Under Garland et al.'s framework, between-group contrasts have
+        # expectation ≠ 0 when groups differ, while within-group contrasts
+        # estimate the residual variance. F = MS_between / MS_within.
+        n_between = len(between_contrasts)
+        n_within = len(within_contrasts)
+        if n_between == 0:
+            # No phylogenetically independent between-group contrast
+            # available — cannot test the group effect.
+            ss_between = 0.0
+            ss_within = float(np.sum(np.square(ic_arr))) if len(ic_arr) else 0.0
+            df_between = 0
+            df_within = max(len(ic_arr) - 1, 0)
+        else:
+            between_arr = np.array(between_contrasts, dtype=np.float64)
+            # Between-group contrasts are signed differences whose expected
+            # sign is arbitrary; use squared magnitudes as SS_between.
+            ss_between = float(np.sum(between_arr**2))
+            within_arr = np.array(within_contrasts, dtype=np.float64) if n_within > 0 else np.array([], dtype=np.float64)
+            ss_within = float(np.sum(within_arr**2)) if n_within > 0 else 0.0
+            df_between = n_groups - 1
+            df_within = max(n_within, 1)
         ms_between = ss_between / df_between if df_between > 0 else 0.0
         ms_within = ss_within / df_within if df_within > 0 else 0.0
         F = ms_between / ms_within if ms_within > 0 else 0.0

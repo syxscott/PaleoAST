@@ -138,61 +138,83 @@ def _log_factorial(n: int) -> float:
 def compute_sample_based_rarefaction(
     occurrence_matrix: npt.NDArray, sample_sizes: npt.NDArray | None = None
 ) -> list[RarefactionResult]:
-    """
-    Compute sample-based rarefaction (interpolation by sample).
+    """Compute sample-based rarefaction (interpolation by sample).
+
+    Sample-based rarefaction fixes the total pool of samples at the full
+    observed set (``N = n_samples``) and asks, for each sub-sample size
+    ``k`` from 1 to ``N``, how many species we expect to see on average
+    when drawing ``k`` samples uniformly without replacement:
+
+        E[S(k)] = Σ_i [ 1 − C(N − n_i, k) / C(N, k) ]
+
+    where ``n_i`` is the number of samples in which species ``i`` occurs.
+
+    The previous implementation instead iterated over prefixes of the
+    sample matrix (``n_total = i + 1`` for each ``i``) and recomputed a
+    truncated curve per prefix — that is *species-accumulation*
+    semantics, not rarefaction. Under accumulation the curve depends on
+    sample ordering and the per-prefix ``n_total`` shrinks the
+    combinatorial denominator, so the resulting "rarefaction" values
+    were neither a valid rarefaction curve nor an unbiased accumulation
+    curve. Compute a single canonical curve over the full dataset and
+    return it as a one-element list (preserving the original return
+    type).
 
     Parameters:
         occurrence_matrix: 2D binary matrix (n_samples, n_species)
-        sample_sizes: Array of sample subset sizes
+        sample_sizes: Optional array of sub-sample sizes ``k``. Values
+            larger than ``N`` are clipped to ``N``; if omitted, ``k``
+            runs from 1 to ``N``.
 
     Returns:
-        List of RarefactionResult for each original sample
+        List with a single :class:`RarefactionResult` describing the
+        rarefaction curve of the full dataset.
     """
     n_samples, _n_species = occurrence_matrix.shape
+    if n_samples == 0:
+        return []
 
-    results = []
+    # Number of samples in which each species occurs (over the FULL
+    # dataset). This is the canonical rarefaction denominator.
+    occurrences = np.sum(occurrence_matrix, axis=0)
+    occurrences = occurrences[occurrences > 0]
 
-    for i in range(n_samples):
-        # Count occurrences
-        occurrences = np.sum(occurrence_matrix[: i + 1], axis=0)
-        occurrences = occurrences[occurrences > 0]
+    if len(occurrences) == 0:
+        return []
 
-        if len(occurrences) == 0:
+    n_total = n_samples  # fixed total
+    if sample_sizes is None:
+        sample_k = np.arange(1, n_total + 1)
+    else:
+        sample_k = np.asarray(sample_sizes)
+        # Rarefaction is only defined for k ≤ N; clip rather than drop
+        # so the caller's requested grid is preserved in shape.
+        sample_k = np.clip(sample_k, 1, n_total)
+
+    expected_species = np.zeros(len(sample_k))
+    for j, k in enumerate(sample_k):
+        k_int = int(k)
+        # E[S(k)] = Σ_i [1 - C(N - n_i, k) / C(N, k)]
+        denom = _combinations(n_total, k_int)
+        if denom <= 0:
+            expected_species[j] = 0.0
             continue
-
-        # Compute rarefaction
-        # For sample-based rarefaction, the unit is samples (rows), not species
-        n_total_samples = i + 1  # number of samples accumulated so far
-        if sample_sizes is None:
-            max_k = n_total_samples
-            sample_k = np.arange(1, max_k + 1)
-        else:
-            sample_k = sample_sizes[sample_sizes <= n_total_samples]
-
-        expected_species = np.zeros(len(sample_k))
-
-        for j, k in enumerate(sample_k):
-            # Sample-based: expected species at k samples
-            expected_species[j] = np.sum(
-                1
-                - np.array(
-                    [
-                        _combinations(n_total_samples - int(occ), k) / _combinations(n_total_samples, k)
-                        for occ in occurrences
-                    ]
-                )
-            )
-
-        results.append(
-            RarefactionResult(
-                sample_name=f"Sample_{i + 1}",
-                expected_taxa=expected_species,
-                sample_sizes=sample_k.astype(int),
-                method="sample",
-            )
+        terms = np.array(
+            [
+                1.0 - _combinations(n_total - int(occ), k_int) / denom
+                for occ in occurrences
+            ]
         )
+        expected_species[j] = float(np.sum(terms))
 
-    return results
+    return [
+        RarefactionResult(
+            sample_name="pooled",
+            expected_taxa=expected_species,
+            sample_sizes=sample_k.astype(int),
+            method="sample",
+        )
+    ]
 
 
 def _combinations(n: int, k: int) -> float:

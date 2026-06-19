@@ -47,20 +47,31 @@ def log_transform(data: npt.NDArray, base: float = 10, offset: float = 1.0) -> n
 
 
 def sqrt_transform(data: npt.NDArray) -> npt.NDArray:
-    """
-    Square root transformation: sqrt(x).
+    """Square root transformation: ``sqrt(x)``.
 
-    Commonly used for count data to stabilize variance.
+    Commonly used for count data to stabilize variance. Requires
+    non-negative input — applying ``sqrt`` to negative values is
+    undefined and silently clipping them to zero (as the previous
+    ``np.maximum(result[valid], 0)`` did) hides data-quality problems
+    and produces misleading transformed values. Raise ``ValueError`` on
+    any negative non-NaN entry so the caller can decide how to handle
+    them (clip, shift, or pick a different transform).
 
     Parameters:
-        data: Input array (must be non-negative)
+        data: Input array (must be non-negative; NaNs are preserved).
 
     Returns:
-        Transformed array
+        Transformed array.
     """
     result = data.astype(float).copy()
     valid = ~np.isnan(result)
-    result[valid] = np.sqrt(np.maximum(result[valid], 0))
+    if np.any(result[valid] < 0):
+        neg_count = int(np.sum(result[valid] < 0))
+        raise ValueError(
+            f"sqrt_transform requires non-negative data; "
+            f"found {neg_count} negative value(s)."
+        )
+    result[valid] = np.sqrt(result[valid])
     return result
 
 
@@ -209,11 +220,26 @@ def boxcox_transform(data: npt.NDArray, column: int = 0, lambda_val: float | Non
     valid_mask = ~np.isnan(col) & (col > 0)
     valid_data = col[valid_mask]
 
-    if len(valid_data) < 3:
+    # scipy.stats.boxcox requires (a) at least 2 observations and (b)
+    # non-constant input. The previous guard only checked ``len < 3``,
+    # which still let constant or two-element-constant inputs through
+    # and crashed inside scipy. Fall back to the identity transform
+    # (lambda = 1) for degenerate inputs so the caller gets a defined
+    # result instead of an exception.
+    if len(valid_data) < 2:
+        return col, 1.0
+    if np.allclose(valid_data, valid_data[0]):
+        # Constant positive column — no variance to stabilise.
         return col, 1.0
 
     if lambda_val is None:
-        transformed, lambda_opt = sp_stats.boxcox(valid_data)
+        try:
+            transformed, lambda_opt = sp_stats.boxcox(valid_data)
+        except Exception:
+            # boxcox can still fail on near-degenerate input (e.g. all
+            # values identical up to floating point). Fall back to log.
+            transformed = np.log(valid_data)
+            lambda_opt = 0.0
     else:
         if abs(lambda_val) < 1e-10:
             transformed = np.log(valid_data)

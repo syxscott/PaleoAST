@@ -170,8 +170,12 @@ class PCoAAnalyzer:
             coordinates = coordinates[:, :n_components]
             eigenvalues = eigenvalues[:n_components]
 
-            # Compute proportion explained
-            total_eigenvalue = np.sum(eigenvalues_positive[:n_components])
+            # Compute proportion explained.
+            # The denominator MUST be the sum of *all* positive eigenvalues,
+            # not just the top n_components — otherwise the cumulative
+            # proportion cannot reach 100% and the scree plot misleads the
+            # user about how much variance the remaining coordinates carry.
+            total_eigenvalue = np.sum(eigenvalues_positive)
             if total_eigenvalue > 0:
                 proportion = eigenvalues_positive[:n_components] / total_eigenvalue * 100
             else:

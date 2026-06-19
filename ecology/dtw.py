@@ -254,7 +254,16 @@ class DTWAnalyzer:
         self._logger.info(f"Computing DTW distance matrix for {n} sequences")
 
         dist_mat = np.zeros((n, n))
-        warped = []
+        # ``warped[k]`` will hold sequence k warped against the reference
+        # sequence (sequence 0). The reference itself is its own trivial
+        # warp. Build the list with explicit placeholders so every index
+        # gets exactly one entry; the previous implementation appended
+        # entries conditionally inside the i==0 branch and ended up
+        # duplicating warped[1] into every higher slot while leaving
+        # warped[2..] pointing at the wrong sequence.
+        warped: list[npt.NDArray | None] = [None] * n
+        # Sequence 0 is the reference — warp it to itself.
+        warped[0] = np.asarray(sequences[0])
 
         for i in range(n):
             for j in range(i + 1, n):
@@ -263,13 +272,21 @@ class DTWAnalyzer:
                 dist_mat[j, i] = result.distance
 
                 if i == 0:
-                    # Warp every sequence against the first one; the first
-                    # sequence itself is its own trivial warp.
-                    warped.append(result.warped_seq1 if j == i + 1 else warped[j - 1])
-                    if j == i + 1:
-                        warped.append(result.warped_seq2)
+                    # Warp sequence j against the reference (sequence 0).
+                    # result.warped_seq1 is sequence 0 warped to seq j,
+                    # result.warped_seq2 is sequence j warped to seq 0.
+                    warped[j] = result.warped_seq2
+                    # Keep warped[0] as the reference's own warp.
+                    warped[0] = result.warped_seq1
 
-        return dist_mat, warped
+        # Any sequence that was never compared against the reference
+        # (shouldn't happen when n >= 2, but guard anyway) falls back to
+        # its own unwarped self.
+        for k in range(n):
+            if warped[k] is None:
+                warped[k] = np.asarray(sequences[k])
+
+        return dist_mat, [np.asarray(w) for w in warped]
 
     def lb_keogh(
         self,

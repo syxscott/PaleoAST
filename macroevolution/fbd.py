@@ -505,27 +505,81 @@ class FossilizedBirthDeathProcess:
 
         return probs
 
+    def _E(self, t: float) -> float:
+        """Probability that a lineage alive at time ``t`` (measured
+        backwards from the present, ``t = 0``) leaves *no* sampled
+        descendants — neither an extant sampled tip nor any fossil —
+        under the time-homogeneous FBD process with rates
+        ``(λ, μ, ψ)`` and extant sampling fraction ``ρ``.
+
+        ``E(t)`` satisfies the Riccati ODE
+        ``dE/dt = λ E² − (λ + μ + ψ) E + (μ + ψ)`` with boundary
+        condition ``E(0) = 1 − ρ``. For constant rates the closed-form
+        solution is
+
+            γ = sqrt((λ − μ − ψ)² + 4 λ ψ)
+            α = (λ + μ + ψ + γ) / (2 λ)
+            β = (λ + μ + ψ − γ) / (2 λ)
+            E(t) = (β (r − α) e^{γ t} − α (r − β)) /
+                   ((r − α) e^{γ t} − (r − β)),   r = 1 − ρ
+
+        derived by partial fractions of ``dE / ((E − α)(E − β)) = λ dt``.
+        This is the standard ``p₀(t)`` of Stadler (2010) / Heath et al.
+        (2014); it is the building block of the FBD likelihood because
+        each branching event, fossil find, and extinct terminal branch
+        must be weighted by the probability that the *unobserved* side
+        of the event left no sampled descendants.
+        """
+        rho = self._rho if self._rho is not None else 1.0
+        # Degenerate cases.
+        if self._lambda <= 0:
+            # No speciation: lineage either dies (μ) or is sampled (ψ).
+            # With λ = 0 the lineage cannot branch, so E(t) is governed by
+            # the simpler death-plus-sampling process. Fall back to the
+            # extant-sampling-only case E(t) = 1 − ρ e^{−(μ+ψ) t}.
+            return max(0.0, min(1.0, 1.0 - rho * np.exp(-(self._mu + self._psi) * t)))
+        if t <= 0:
+            return max(0.0, min(1.0, 1.0 - rho))
+
+        gamma = np.sqrt((self._lambda - self._mu - self._psi) ** 2 + 4.0 * self._lambda * self._psi)
+        alpha = (self._lambda + self._mu + self._psi + gamma) / (2.0 * self._lambda)
+        beta = (self._lambda + self._mu + self._psi - gamma) / (2.0 * self._lambda)
+        r = 1.0 - rho
+        # E(t) = (β(r-α) e^{γt} - α(r-β)) / ((r-α) e^{γt} - (r-β))
+        e_gt = np.exp(gamma * t)
+        num = beta * (r - alpha) * e_gt - alpha * (r - beta)
+        den = (r - alpha) * e_gt - (r - beta)
+        if abs(den) < 1e-300:
+            return 1.0
+        val = num / den
+        # Numerical guard: E(t) is a probability.
+        return float(max(0.0, min(1.0, val)))
+
     def log_likelihood(self, tree, fossils: list[tuple[float, ...]], complete_tree: bool = True) -> float:
         """
-        计算FBD过程的日志似然
+        计算FBD过程的对数似然 (Stadler 2010, Heath et al. 2014)
 
-        基于Stadler (2010)的FBD模型，似然函数由两部分组成：
+        似然函数按事件分解为：
 
-            log L = log L_tree + log L_fossils
+            log L = Σ_branches [−(λ+μ+ψ) × Δt]
+                  + Σ_internal_nodes  [log λ + log E(t_node)]
+                  + Σ_fossils         [log ψ + log E(t_fossil)]
+                  + Σ_extant_leaves   [log ρ]
+                  + Σ_extinct_leaves  [log μ + log E(t_leaf)]
 
-        树拓扑似然:
-            L_tree = ∏_{branches i} exp(-(λ + μ + ψ) × L_i) × (内部分支: λ, 叶分支: q(t))
+        其中 ``E(t)`` 是一条存在于时刻 ``t`` 的谱系不留任何采样
+        后代的概率（见 :meth:`_E`）。
 
-        化石保存似然:
-            L_fossils = ∏_{fossil j} ψ × exp(-ψ × age_j)
+        与旧实现的差异：
 
-        参数:
-            tree: 系统发育树 (PhyloTree对象或newick字符串)
-            fossils: 化石年龄列表，如 [(4.0,), (2.5, 1.0)]
-            complete_tree: 树是否包含完整信息
-
-        返回:
-            log L
+        - 旧代码用 ``log(λ·ρ)`` 给现存叶节点，这会把分支事件中的
+          ``λ`` 重复计入；标准公式只对现存叶节点计 ``ρ``。
+        - 旧代码用 ``log(ψ) − ψ·age`` 给化石项，正确形式应为
+          ``log ψ + log E(age)``：一个化石意味着该时刻被采样，而
+          该谱系自此不再留下其他采样后代（否则会出现在树/化石记
+          录里），因此需要 ``E(age)`` 因子。
+        - 旧代码完全缺失内部节点与灭绝叶节点的 ``E(t)`` 因子，
+          导致似然对采样比例 ρ 与化石采样率 ψ 的依赖被忽略。
         """
         # 解析树
         from ..phylogenetics.tree import PhyloTree
@@ -535,7 +589,13 @@ class FossilizedBirthDeathProcess:
         else:
             tree_obj = tree
 
+        rho = self._rho if self._rho is not None else 1.0
         log_lik = 0.0
+
+        NEG_INF = float("-inf")
+
+        def safe_log(x: float) -> float:
+            return np.log(x) if x > 0 else NEG_INF
 
         # 1. 树拓扑似然：遍历所有分支
         if tree_obj.root is not None:
@@ -544,31 +604,38 @@ class FossilizedBirthDeathProcess:
                     continue  # 跳过根节点
                 branch_length = node.branch_length if node.branch_length is not None else 0.0
                 if branch_length > 0:
-                    # 每个分支贡献: exp(-(λ + μ + ψ) × L)
+                    # 分支存活项: exp(-(λ + μ + ψ) × Δt)
                     log_lik += -(self._lambda + self._mu + self._psi) * branch_length
 
-                    if node.is_leaf:
-                        # 叶节点分支：终止似然项
-                        # 对于灭绝谱系: μ, 对于存活谱系: λ × ρ（采样概率）
-                        if not node.metadata.get("is_extant", True):
-                            log_lik += np.log(self._mu) if self._mu > 0 else float("-inf")
-                        else:
-                            rho = self._rho if self._rho is not None else 1.0
-                            log_lik += np.log(self._lambda * rho) if self._lambda * rho > 0 else float("-inf")
-                    else:
-                        # 内部节点分支：物种形成事件
-                        log_lik += np.log(self._lambda) if self._lambda > 0 else float("-inf")
+                    # 节点年龄 = 从现时刻向上回溯的时间
+                    # 通过累积 branch_length 估计节点年龄
+                    node_age = 0.0
+                    cursor = node
+                    while cursor is not None and cursor.parent is not None:
+                        node_age += cursor.branch_length or 0.0
+                        cursor = cursor.parent
+                    # node_age 此时是该节点到现存末端的累积分支长度，
+                    # 作为节点年龄 t 的近似。
 
-        # 2. 化石保存似然：每个化石独立的泊松过程
+                    if node.is_leaf:
+                        # 叶节点：现存采样或灭绝终止
+                        if node.metadata.get("is_extant", True):
+                            # 现存采样叶：贡献 ρ（λ 已在父节点分支事件计入）
+                            log_lik += safe_log(rho)
+                        else:
+                            # 灭绝叶：死亡事件 + 此后无采样后代
+                            log_lik += safe_log(self._mu) + safe_log(self._E(node_age))
+                    else:
+                        # 内部分支节点：物种形成事件 + 侧支无采样后代
+                        log_lik += safe_log(self._lambda) + safe_log(self._E(node_age))
+
+        # 2. 化石保存似然
         for fossil_group in fossils:
             for age in fossil_group:
                 if age < 0:
                     continue
-                # 化石保存的对数似然: log(ψ) - ψ × age
-                if self._psi > 0:
-                    log_lik += np.log(self._psi) - self._psi * age
-                else:
-                    log_lik += float("-inf")
+                # 化石项: ψ × E(age)（该时刻被采样 + 此后无其他采样后代）
+                log_lik += safe_log(self._psi) + safe_log(self._E(age))
 
         return log_lik
 

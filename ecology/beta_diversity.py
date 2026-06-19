@@ -280,16 +280,28 @@ class BetaDiversityAnalyzer:
                     nest_val = 0.0
                     total_val = 0.0
                 elif metric == "jaccard":
+                    # Baselga (2012) Jaccard-based partition:
+                    #   βjac = (b + c) / (a + b + c)
+                    #   βjtu = 2·min(b,c) / (a + 2·min(b,c))           (turnover)
+                    #   βjne = βjac - βjtu
+                    #         = a·|b - c| / [(a + b + c)·(a + 2·min(b,c))]
                     total_val = (b + c) / total
                     min_bc = min(b, c)
-                    turn_val = (2 * min_bc) / (a + 2 * min_bc) if (a + 2 * min_bc) > 0 else 0.0
-                    nest_val = abs(b - c) / total
+                    denom_turn = a + 2 * min_bc
+                    turn_val = (2 * min_bc) / denom_turn if denom_turn > 0 else 0.0
+                    nest_val = (a * abs(b - c)) / (total * denom_turn) if denom_turn > 0 else 0.0
                 else:  # sorensen
+                    # Baselga (2010) Sørensen-based partition:
+                    #   βsor = (b + c) / (2a + b + c)
+                    #   βsim = min(b,c) / (2a + min(b,c))              (turnover)
+                    #   βsne = βsor - βsim
+                    #         = a·|b - c| / [(2a + b + c)·(2a + min(b,c))]
                     denom = 2 * a + b + c
-                    total_val = 2 * a / denom if denom > 0 else 0.0
+                    total_val = (b + c) / denom if denom > 0 else 0.0
                     min_bc = min(b, c)
-                    turn_val = (2 * min_bc) / denom if denom > 0 else 0.0
-                    nest_val = abs(b - c) / denom if denom > 0 else 0.0
+                    denom_turn = 2 * a + min_bc
+                    turn_val = min_bc / denom_turn if denom_turn > 0 else 0.0
+                    nest_val = (a * abs(b - c)) / (denom * denom_turn) if (denom > 0 and denom_turn > 0) else 0.0
 
                 total_beta[i, j] = total_beta[j, i] = total_val
                 turnover[i, j] = turnover[j, i] = turn_val
@@ -522,22 +534,68 @@ class CoverageRarefactionAnalyzer:
         log_comb = math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
         return math.exp(log_comb)
 
-    def _hypergeometric_prob(self, k: int, N: int, n: int) -> float:
-        """Compute hypergeometric probability."""
-        if k < 0 or k > min(n, N):
+    def _hypergeometric_prob(self, K: int, N: int, n: int) -> float:
+        """Compute the probability of observing *zero* occurrences of a
+        species in a sample of size ``n`` drawn without replacement from
+        a population of size ``N`` containing ``K`` occurrences of the
+        species.
+
+        This is the hypergeometric tail probability P(X = 0):
+
+            P(X = 0) = C(N - K, n) * C(K, 0) / C(N, n)
+                     = C(N - K, n) / C(N, n)
+
+        The previous implementation was written as a generic
+        ``P(X = k)`` but its numerator and denominator terms cancelled
+        exactly, leaving only ``exp(-lgamma(N + 1))`` = ``1 / N!`` —
+        independent of ``K`` and ``n``. As a result every rarefaction /
+        coverage estimate silently returned the same probability
+        regardless of species abundance. Use the log-gamma form below
+        for numerical stability on large counts.
+
+        Parameters
+        ----------
+        K : int
+            Total count of the focal species in the population.
+        N : int
+            Total population size (sum of all species counts).
+        n : int
+            Sample size (number of individuals drawn).
+
+        Returns
+        -------
+        float
+            ``P(X = 0)`` — probability the species is absent from the
+            sample. The caller computes ``1 - P(X = 0)`` to obtain the
+            probability of presence.
+        """
+        if K < 0 or N < 0 or n < 0:
+            return 0.0
+        if K > N or n > N:
+            return 0.0
+        if n == 0:
+            # Drawing nothing -> the species is certainly absent.
+            return 1.0
+        if K == 0:
+            # Species not in the population -> certainly absent.
+            return 1.0
+        if N - K < n:
+            # Fewer non-focal individuals than the sample size, so the
+            # species must appear at least once in the sample.
             return 0.0
 
         import math
 
-        log_prob = (
-            math.lgamma(k + 1)
-            + math.lgamma(N - k + 1)
-            + math.lgamma(n - k + 1)
-            + math.lgamma(N - n + 1)
-            - math.lgamma(N + 1)
-            - math.lgamma(k + 1)
-            - math.lgamma(N - k + 1)
-            - math.lgamma(n - k + 1)
+        # log C(N - K, n) + log C(K, 0) - log C(N, n)
+        # C(K, 0) = 1 -> log = 0
+        log_num = (
+            math.lgamma(N - K + 1)
+            - math.lgamma(n + 1)
+            - math.lgamma(N - K - n + 1)
+        )
+        log_den = (
+            math.lgamma(N + 1)
+            - math.lgamma(n + 1)
             - math.lgamma(N - n + 1)
         )
-        return math.exp(log_prob)
+        return math.exp(log_num - log_den)

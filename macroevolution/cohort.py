@@ -235,17 +235,26 @@ class CohortSurvivorshipAnalysis:
                 ci_upper = (center + width) / (1 + z**2 / n)
                 confidence_intervals.append((ci_lower, ci_upper))
 
-                # 起步率和灭绝率
+                # 起源率 λ 与灭绝率 μ (Foote 1999 per-capita rates)
                 dt = t_start - t_end
                 if dt > 0:
-                    # λ = -ln(S) / Δt
-                    if p > 0:
-                        origination_rates[i] = -np.log(p) / dt
-                    # μ = -ln(O) / Δt
+                    # p = 该区间的存活率 S。
+                    # 若 P(存活) = exp(-μ·Δt)，则 μ = -ln(S) / Δt。
+                    # 若 P(起源) = 1 - exp(-λ·Δt) = 1 - S（在二项解释下），
+                    # 则 λ = -ln(1 - S) / Δt。
+                    # 旧实现把两条公式标签互换：origination_rates 写入
+                    # 了 μ 的公式、extinction_rates 写入了 λ 的公式，
+                    # 任何下游演化速率分析、平衡态检验全部用反。
                     if p < 1:
-                        extinction_rates[i] = -np.log(1 - p) / dt
+                        origination_rates[i] = -np.log(1 - p) / dt
                     else:
-                        extinction_rates[i] = 0.0
+                        # p = 1 ⇒ 无人起源 ⇒ λ = 0
+                        origination_rates[i] = 0.0
+                    if p > 0:
+                        extinction_rates[i] = -np.log(p) / dt
+                    else:
+                        # p = 0 ⇒ 无人存活 ⇒ μ → ∞
+                        extinction_rates[i] = float("inf")
             else:
                 survival_rates[i] = np.nan
                 extinction_probs[i] = np.nan
@@ -295,14 +304,20 @@ class CohortSurvivorshipAnalysis:
         ci_lower = (center - width) / (1 + z**2 / n)
         ci_upper = (center + width) / (1 + z**2 / n)
 
-        # 速率
+        # 速率：与 analyze() 保持一致 (Foote 1999)
+        #   λ = -ln(1 - p) / Δt   (起源率)
+        #   μ = -ln(p)     / Δt   (灭绝率)
+        # 旧实现把两式互换，导致返回字典里的 "origination_rate"
+        # 实为 μ、"extinction_rate" 实为 λ。
         if dt > 0:
-            if p > 0:
-                lambda_rate = -np.log(p) / dt
+            if p < 1:
+                lambda_rate = -np.log(1 - p) / dt
             else:
-                lambda_rate = np.inf
-
-            extinction_rate = -np.log(1 - p) / dt if p < 1 else np.inf
+                lambda_rate = 0.0  # p=1 ⇒ 无人起源
+            if p > 0:
+                extinction_rate = -np.log(p) / dt
+            else:
+                extinction_rate = float("inf")  # p=0 ⇒ 全部灭绝
         else:
             lambda_rate = np.nan
             extinction_rate = np.nan
@@ -330,8 +345,12 @@ class CohortSurvivorshipAnalysis:
         if dt <= 0 or survival_rate <= 0 or survival_rate >= 1:
             return np.nan, np.nan
 
-        lambda_rate = -np.log(survival_rate) / dt
-        extinction_rate = -np.log(1 - survival_rate) / dt
+        # Foote (1999) per-capita rates, swapped to correct labels.
+        #   λ (origination) = -ln(1 - p) / Δt
+        #   μ (extinction)  = -ln(p)     / Δt
+        # 旧实现的两式相互颠倒，调用方拿到 (λ, μ) 时实际收到的是 (μ, λ)。
+        lambda_rate = -np.log(1 - survival_rate) / dt
+        extinction_rate = -np.log(survival_rate) / dt
 
         return lambda_rate, extinction_rate
 

@@ -50,6 +50,7 @@ DFA是一个五元组 M = (Q, Σ, δ, q0, F)，其中：
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -217,15 +218,17 @@ class NFA(FiniteAutomaton):
             is_accepting=bool(initial & self._accepting_states),
         )
 
-        # 状态队列
-        state_queue: list[set[State]] = [initial]
+        # 状态队列。使用 ``deque`` 而非 ``list`` —— 前者的
+        # ``popleft()`` 是 O(1)，而 ``list.pop(0)`` 是 O(n)，会在
+        # 大型 NFA 转 DFA 时把整体复杂度从 O(Q) 推到 O(Q²)。
+        state_queue: deque[set[State]] = deque([initial])
         processed: set[frozenset[State]] = {frozenset(initial)}
 
         # 符号集合
         symbols = self._get_alphabet()
 
         while state_queue:
-            current_nfa_states = state_queue.pop(0)
+            current_nfa_states = state_queue.popleft()
             current_dfa_state = dfa._find_state_by_name(self._state_set_to_string(current_nfa_states))
 
             for symbol in symbols:

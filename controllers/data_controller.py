@@ -361,14 +361,32 @@ class DataController:
                 raise ValidationError(f"Unknown standardization method: {method}")
 
     def transform_sqrt(self, data: npt.NDArray | None = None) -> npt.NDArray:
-        """Apply square root transformation."""
+        """Apply square root transformation.
+
+        The square root transform is only defined for non-negative values.
+        The previous implementation silently called ``np.sqrt(np.abs(data))``,
+        which discarded the sign of any negative entry — a negative
+        abundance or measurement would be transformed as if it were
+        positive, with no warning, producing misleading downstream
+        results. Raise a :class:`ValidationError` instead so the caller
+        can decide how to handle negative values (clip, shift, or use a
+        different transform such as the Yeo-Johnson / signed-log).
+        """
         with self._lock:
             if data is None:
                 if not self._state.has_data:
                     raise ValidationError("No data available")
                 data = self._state.data_matrix.data
 
-            return np.sqrt(np.abs(data))
+            data_arr = np.asarray(data)
+            if np.any(data_arr < 0):
+                neg_count = int(np.sum(data_arr < 0))
+                raise ValidationError(
+                    f"Square root transformation requires non-negative data; "
+                    f"found {neg_count} negative value(s). "
+                    f"Consider clipping, shifting, or using a signed transform."
+                )
+            return np.sqrt(data_arr)
 
     # =========================================================================
     # Data Operations

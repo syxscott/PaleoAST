@@ -367,17 +367,33 @@ class NullModelAnalyzer:
         """
         Compute C-score for presence/absence matrix.
 
-        C-score(i,j) = (r_i - 1) * (r_j - 1)
+        The Stone & Roberts (1990) C-score for a species pair (i, j) is:
 
-        Average C-score = mean of all pairwise species combinations
+            C_ij = (r_i - S_ij) * (r_j - S_ij)
+
+        where ``r_i`` and ``r_j`` are the total number of sites occupied
+        by species i and j, and ``S_ij`` is the number of sites where the
+        two species *co-occur*. The score therefore measures the degree
+        of checkerboard structure between the two species — it is
+        maximised when the species never co-occur and small when they
+        share many sites.
+
+        The previous implementation used ``(r_i - 1)(r_j - 1)`` and
+        ignored ``S_ij`` entirely, so the C-score reduced to a function
+        of marginal species richness only and carried no information
+        about co-occurrence patterns. Use the canonical formula here.
         """
         n_species, _n_sites = matrix.shape
-        row_sums = np.sum(matrix, axis=1)
+        # Binary presence/absence row sums = number of occupied sites.
+        pa = (matrix > 0).astype(np.int64)
+        row_sums = pa.sum(axis=1)
 
         c_scores = []
         for i in range(n_species):
             for j in range(i + 1, n_species):
-                c_ij = float((row_sums[i] - 1) * (row_sums[j] - 1))
+                # Number of sites where BOTH species i and j occur.
+                s_ij = int(np.sum(pa[i] & pa[j]))
+                c_ij = float((row_sums[i] - s_ij) * (row_sums[j] - s_ij))
                 c_scores.append(c_ij)
 
         return float(np.mean(c_scores)) if c_scores else 0.0

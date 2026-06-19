@@ -320,15 +320,22 @@ class CCAAnalyzer:
         col_totals[col_totals == 0] = 1
         grand_total = max(grand_total, 1e-10)
 
-        # Chi-square standardization (ter Braak 1986)
-        # p_ik = Y[i,k] / grand_total
-        # expected[i,k] = (row_total_i / grand_total) * (col_total_k / grand_total)
-        # Q[i,k] = (p_ik - expected[i,k]) / sqrt(expected[i,k])
-        p = Y / grand_total
+        # Chi-square standardization (ter Braak 1986).
+        # The canonical formulation uses unscaled counts Y directly:
+        #   expected[i,k] = (row_total_i * col_total_k) / grand_total
+        #   Q[i,k]        = (Y[i,k] - expected[i,k]) / sqrt(expected[i,k])
+        # which is equivalent to the p-based form up to a constant factor
+        # sqrt(grand_total). The earlier implementation divided Y by
+        # grand_total *before* subtracting the expected and then divided
+        # by sqrt(expected_p) — this drops the sqrt(grand_total) factor
+        # relative to ter Braak (1986) and makes the resulting eigenvalues
+        # scale-dependent on the total abundance. Use the count form here.
         p_row = row_totals / grand_total  # (n_samples, 1)
         p_col = col_totals / grand_total  # (1, n_species)
-        expected = p_row @ p_col  # (n_samples, n_species)
-        Y_std = (p - expected) / np.sqrt(expected)
+        expected = (row_totals @ col_totals) / grand_total  # (n_samples, n_species)
+        # Guard against zero expected values before taking sqrt / dividing.
+        expected_safe = np.where(expected > 0, expected, 1.0)
+        Y_std = (Y - expected) / np.sqrt(expected_safe)
 
         # Center the environmental matrix
         X_centered = X - X.mean(axis=0)

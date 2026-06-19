@@ -513,22 +513,40 @@ class IntegrationAnalyzer:
         self,
         aligned_configurations: npt.NDArray,
         division: str = "anterior_posterior",
+        random_seed: int | None = None,
     ) -> tuple[npt.NDArray, npt.NDArray]:
-        """
-        Divide landmark configurations into two blocks for PLS analysis.
+        """Divide landmark configurations into two blocks for PLS analysis.
 
         Parameters:
             aligned_configurations: 3D array (n_specimens, n_landmarks, n_dims)
             division: How to divide landmarks
-                - "anterior_posterior": split landmarks into two groups
-                - "size_matched": divide by centroid size quartiles
-                - "random": random division
+
+                - ``"anterior_posterior"``: split landmarks into two
+                  contiguous groups at the midpoint.
+                - ``"size_matched"``: split the *landmark columns* at
+                  the midpoint (same as anterior_posterior on the
+                  flattened columns; kept for API compatibility). The
+                  previous implementation first partitioned *specimens*
+                  by centroid size and then threw that partition away
+                  and re-sliced by columns — the size-based partition
+                  was dead code that produced blocks with mismatched
+                  specimen counts, which PLS cannot consume. The dead
+                  code has been removed.
+                - ``"random"``: random permutation of landmarks, split
+                  at the midpoint.
+            random_seed: Optional seed for the ``"random"`` division.
+                The previous implementation hard-coded
+                ``np.random.seed(42)`` which silently reseeds the
+                *global* numpy RNG — a side effect that contaminated
+                every downstream stochastic operation. Use a local
+                :class:`numpy.random.Generator` instead so the global
+                RNG state is left untouched.
 
         Returns:
-            (block_a, block_b) tuple of 2D arrays
+            ``(block_a, block_b)`` tuple of 2D arrays.
 
         Raises:
-            ValidationError: If division method is invalid
+            ValidationError: If division method is invalid.
         """
         if aligned_configurations.ndim != 3:
             raise ValidationError(_("Aligned configurations must be 3D array"))
@@ -543,20 +561,18 @@ class IntegrationAnalyzer:
             block_b = flattened[:, mid * n_dims :]
 
         elif division == "size_matched":
-            # Divide by centroid size
-            sizes = np.sqrt(np.sum(flattened**2, axis=1))
-            median_size = np.median(sizes)
-            above_median = sizes >= median_size
-            block_a = flattened[above_median]
-            block_b = flattened[~above_median]
-            # Need same specimens for PLS - use all specimens instead
-            block_a = flattened[:, : n_landmarks * n_dims // 2]
-            block_b = flattened[:, n_landmarks * n_dims // 2 :]
+            # Split landmark columns at the midpoint. (The previous
+            # implementation computed a specimen-level size partition
+            # and then discarded it; that dead code is removed here.)
+            mid_cols = (n_landmarks * n_dims) // 2
+            block_a = flattened[:, :mid_cols]
+            block_b = flattened[:, mid_cols:]
 
         elif division == "random":
-            # Random division
-            np.random.seed(42)
-            indices = np.random.permutation(n_landmarks)
+            # Use a local Generator so the global numpy RNG is not
+            # perturbed as a side effect.
+            rng = np.random.default_rng(random_seed)
+            indices = rng.permutation(n_landmarks)
             mid = n_landmarks // 2
             # Select first half landmarks and second half landmarks
             first_half = indices[:mid]

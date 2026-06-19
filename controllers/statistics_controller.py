@@ -1090,18 +1090,27 @@ class StatisticsController:
         Returns:
             List of analysis names
         """
-        # Built-in analyses (methods on this controller)
-        builtin = [
-            m.replace("run_", "").replace("analyze_", "")
-            for m in dir(self)
-            if m.startswith("run_") or m.startswith("analyze_")
-        ]
-        builtin = [
-            m
-            for m in builtin
-            if not m.startswith("_")
-            and callable(getattr(self, f"run_{m}" if f"run_{m}" in dir(self) else f"analyze_{m}", None))
-        ]
+        # Built-in analyses (methods on this controller). Look for both
+        # ``run_<name>`` and ``analyze_<name>`` patterns; deduplicate by
+        # the bare analysis name. The previous implementation crammed a
+        # ternary inside ``getattr`` which is technically correct but
+        # fragile to read — split the lookup onto its own line.
+        builtin: list[str] = []
+        seen: set[str] = set()
+        for method_name in dir(self):
+            if method_name.startswith("_"):
+                continue
+            if method_name.startswith("run_"):
+                base = method_name[len("run_"):]
+            elif method_name.startswith("analyze_"):
+                base = method_name[len("analyze_"):]
+            else:
+                continue
+            if not base or base in seen:
+                continue
+            if callable(getattr(self, method_name, None)):
+                seen.add(base)
+                builtin.append(base)
 
         # Registered plugins
         try:

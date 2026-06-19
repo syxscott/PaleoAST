@@ -373,7 +373,11 @@ class ExtinctionIntervalAnalyzer:
 
         for i in range(n_taxa):
             k = n_layers_above[i]
-            i + 1  # 1-indexed rank
+            # 1-indexed rank of this LAD in the descending (old→young)
+            # sorted order. k=0 means the LAD sits at the top of the
+            # section (no deeper observation), so no upward CI can be
+            # computed.
+            rank = k + 1
 
             if k == 0:
                 ci_lower[i] = lad_sorted[i]
@@ -381,21 +385,42 @@ class ExtinctionIntervalAnalyzer:
                 true_extinction[i] = lad_sorted[i]
                 continue
 
-            # Strauss-Sadler confidence interval
-            # Based on the beta distribution of order statistics
-            # Lower bound: k - (k / (1 - q/2))^(1/(n+1))
-            # Upper bound: k + ((k+1) / (q/2))^(1/(n+1)) - 1
+            # Strauss & Sadler (1990) confidence interval, derived from
+            # the beta distribution of order statistics. Under a uniform
+            # sampling model, the rank ``rank`` of the LAD out of
+            # ``n_taxa`` observed positions follows a Beta(rank, n_taxa -
+            # rank + 1) distribution on the normalised extent
+            # [0, 1]. The true extinction can only be *older* (deeper)
+            # than the observed LAD, so the CI is one-sided: the lower
+            # bound collapses to the LAD itself, and the upper (older)
+            # bound is the (1 - q) quantile of the beta distribution
+            # scaled into layer coordinates.
+            #
+            # The previous implementation used an ad-hoc
+            # ``delta = k * sqrt(log(1/q)/n_taxa)`` formula that has no
+            # basis in the order-statistic literature and produced
+            # two-sided intervals (subtracting from the LAD) even though
+            # the Strauss-Sadler CI is intrinsically one-sided. Use the
+            # canonical beta-quantile form instead.
+            from scipy.stats import beta as beta_dist
 
-            # For simplicity, use an approximation
-            # Lower: LAD is older than observed by approximately
-            #   delta_L = (k / n_taxa) * log(1 / q)
-            # Upper: LAD is younger by approximately
-            #   delta_U = log(1 / q) / (k / n_taxa + 1)
+            n = n_taxa
+            a = rank
+            b = n - rank + 1
+            # Upper quantile in normalised [0, 1] coordinates.
+            upper_norm = beta_dist.ppf(1.0 - q, a, b)
+            # Scale normalised coordinate into layer-offset units. We
+            # treat the full section depth as the relevant range; using
+            # ``lad_sorted.max()`` (with a floor of 1) gives a per-layer
+            # scale that matches the input units.
+            scale = max(1.0, float(lad_sorted.max()))
+            # Offset (in layers) by which the true extinction is older
+            # than the observed LAD. Subtract the expected normalised
+            # position (rank / (n + 1)) to centre the offset on the LAD.
+            expected_norm = rank / (n + 1.0)
+            delta_upper = max(0.0, (upper_norm - expected_norm) * scale)
 
-            delta_lower = k * math.pow(math.log(1.0 / q) / n_taxa, 0.5)
-            delta_upper = math.log(1.0 / q) / (k / n_taxa + 1)
-
-            ci_lower[i] = lad_sorted[i] - delta_lower
+            ci_lower[i] = lad_sorted[i]
             ci_upper[i] = lad_sorted[i] + delta_upper
 
             # Point estimate

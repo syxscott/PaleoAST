@@ -361,6 +361,18 @@ class UnivariateAnalyzer:
 
             if len(group_data) < 2:
                 raise ComputationError("Need at least 2 non-empty groups for ANOVA")
+            # scipy.stats.f_oneway raises a confusing ValueError when any
+            # group has fewer than 2 observations (it cannot estimate the
+            # within-group variance). Validate up front and give the user
+            # an actionable message.
+            single_sample_groups = [
+                group_labels[i] for i, g in enumerate(group_data) if len(g) < 2
+            ]
+            if single_sample_groups:
+                raise ComputationError(
+                    "One-way ANOVA requires at least 2 observations per group; "
+                    f"group(s) {single_sample_groups} have only 1."
+                )
 
             # One-way ANOVA
             f_stat, p_val = sp_stats.f_oneway(*group_data)

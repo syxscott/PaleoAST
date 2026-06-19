@@ -146,13 +146,37 @@ class EFAAnalyzer:
         for n in range(1, n_harmonics + 1):
             omega = 2 * np.pi * n / T
 
-            # Integrate using rectangle rule (uniform spacing)
-            dt = T / n_points
+            # Kuhl & Giardina (1982) closed-form coefficients for a
+            # piecewise-linear contour. The contour is parameterised by
+            # cumulative chord length t, so each segment k from t_{k-1}
+            # to t_k has slope Δx_k / Δt_k and Δy_k / Δt_k. K&G integrate
+            # the piecewise-constant derivative analytically, yielding:
+            #
+            #   a_n = (T / (2 π² n²)) Σ (Δx_k/Δt_k) · (cos ωt_k − cos ωt_{k-1})
+            #   b_n = (T / (2 π² n²)) Σ (Δx_k/Δt_k) · (sin ωt_k − sin ωt_{k-1})
+            #   c_n, d_n analogous with Δy_k/Δt_k
+            #
+            # The previous implementation integrated ``x(t) cos(ωt)`` by
+            # the rectangle rule, which (a) is only a first-order
+            # approximation of the integral and (b) is *not* the K&G
+            # formulation — it loses the exactness property that makes
+            # EFA invariant to the choice of starting point on a
+            # piecewise-linear contour. Use the canonical K&G form.
+            cos_t = np.cos(omega * t)
+            sin_t = np.sin(omega * t)
+            dcos = cos_t[1:] - cos_t[:-1]   # cos(ω t_k) − cos(ω t_{k-1})
+            dsin = sin_t[1:] - sin_t[:-1]
+            # Per-segment slopes (guard against zero-length segments).
+            seg_len = np.diff(t)
+            seg_len_safe = np.where(seg_len > 0, seg_len, 1.0)
+            slope_x = dx / seg_len_safe
+            slope_y = dy / seg_len_safe
 
-            a_n = (2 / T) * np.sum(x * np.cos(omega * t)) * dt
-            b_n = (2 / T) * np.sum(x * np.sin(omega * t)) * dt
-            c_n = (2 / T) * np.sum(y * np.cos(omega * t)) * dt
-            d_n = (2 / T) * np.sum(y * np.sin(omega * t)) * dt
+            factor = T / (2.0 * (np.pi**2) * (n**2))
+            a_n = factor * np.sum(slope_x * dcos)
+            b_n = factor * np.sum(slope_x * dsin)
+            c_n = factor * np.sum(slope_y * dcos)
+            d_n = factor * np.sum(slope_y * dsin)
 
             harmonics.append(EFAHarmonic(n=n, a=a_n, b=b_n, c=c_n, d=d_n))
             coefficients.append([a_n, b_n, c_n, d_n])
@@ -174,11 +198,36 @@ class EFAAnalyzer:
         )
 
     def reconstruct_from_coefficients(
-        self, a0: float, c0: float, coefficients: npt.NDArray, n_points: int = 200
+        self,
+        a0: float,
+        c0: float,
+        coefficients: npt.NDArray,
+        n_points: int = 200,
+        period: float | None = None,
     ) -> npt.NDArray:
-        """Reconstruct a contour from Fourier coefficients."""
+        """Reconstruct a contour from Fourier coefficients.
+
+        Parameters
+        ----------
+        a0, c0 : float
+            DC (zeroth-harmonic) offsets along x and y.
+        coefficients : ndarray of shape (n_harmonics, 4)
+            Rows ``(a_n, b_n, c_n, d_n)`` for harmonics n = 1..N.
+        n_points : int, default 200
+            Number of points in the reconstructed contour.
+        period : float, optional
+            Contour period ``T`` used when the coefficients were
+            originally computed (typically the cumulative chord length
+            of the contour). If omitted, ``T = 2π`` is assumed, which is
+            the correct inverse only when the coefficients were
+            computed on a normalised ``t ∈ [0, 2π)`` parameterisation.
+            Mismatching ``T`` between analysis and reconstruction
+            stretches the harmonic frequencies and produces a visibly
+            wrong contour, so callers that obtained the coefficients
+            from :meth:`analyze` should pass the original perimeter.
+        """
         n_harmonics = coefficients.shape[0]
-        T = 2 * np.pi  # normalized period
+        T = 2 * np.pi if period is None else period
         t = np.linspace(0, T, n_points, endpoint=False)
 
         x = np.full(n_points, a0)
@@ -205,11 +254,12 @@ class EFAAnalyzer:
         # New uniform parameter values
         new_arc = np.linspace(0, total_length, n_points, endpoint=False)
 
-        # Interpolate x and y
-        from numpy import interp
-
-        x_new = interp(new_arc, cum_arc, contour[:, 0])
-        y_new = interp(new_arc, cum_arc, contour[:, 1])
+        # Interpolate x and y. Use ``np.interp`` directly — the previous
+        # ``from numpy import interp`` form triggers a DeprecationWarning
+        # under numpy >= 1.20 because ``numpy.interp`` is meant to be
+        # accessed via the package namespace.
+        x_new = np.interp(new_arc, cum_arc, contour[:, 0])
+        y_new = np.interp(new_arc, cum_arc, contour[:, 1])
 
         return np.column_stack([x_new, y_new])
 

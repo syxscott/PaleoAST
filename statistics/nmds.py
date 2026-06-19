@@ -193,20 +193,41 @@ class NMDSAnalyzer:
         """
         SMACOF algorithm for NMDS optimization.
 
-        The SMACOF algorithm minimizes stress by iteratively
-        updating the configuration using the Guttman transform.
+        This is the *non-metric* SMACOF: each iteration first performs an
+        isotonic regression of the current configuration distances ``d̂``
+        against the fixed original dissimilarities ``D`` to obtain the
+        disparities ``d̃`` (target distances that monotonically follow the
+        rank order of ``D``), then applies a Guttman majorization step
+        that minimizes ``Σ(d̃ - d̂)²``. Without the isotonic-regression
+        step this collapses to *metric* MDS and the rank-order
+        preservation that defines NMDS (Kruskal 1964) is lost.
         """
+        from sklearn.isotonic import IsotonicRegression
+
         n = X_init.shape[0]  # n_samples
         X = X_init.copy()
         stress_history = []
 
+        # Pre-compute the upper-triangular indices of the dissimilarity
+        # matrix. Only the off-diagonal (i < j) entries are used by NMDS.
+        iu, ju = np.triu_indices(n, k=1)
+        d_target = D[iu, ju]
+
         for iteration in range(max_iterations):
             # Compute distances in current configuration
             D_hat = self._compute_distances(X)
+            d_hat = D_hat[iu, ju]
 
-            # Compute stress
-            numerator = np.sum((D - D_hat) ** 2)
-            denominator = np.sum(D**2)
+            # Isotonic regression: find the monotone sequence d_tilde that
+            # follows the rank order of the fixed d_target while minimizing
+            # sum((d_hat - d_tilde)^2). This is the defining step of NMDS
+            # (Kruskal 1964). Pool-adjacent-violators algorithm via sklearn.
+            iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
+            d_tilde = iso.fit_transform(d_target, d_hat)
+
+            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2))
+            numerator = np.sum((d_hat - d_tilde) ** 2)
+            denominator = np.sum(d_hat**2)
             stress = np.sqrt(numerator / denominator) if denominator > 0 else 0.0
             stress_history.append(stress)
 
@@ -224,17 +245,23 @@ class NMDSAnalyzer:
                     logger.debug(f"SMACOF restart={restart_id} converged at iteration {iteration}: stress={stress:.6f}")
                     break
 
-            # Compute stress weights (avoid division by zero)
+            # Build the working disparity matrix D_tilde from the
+            # upper-triangular disparities and mirror it symmetrically.
+            D_tilde = np.zeros_like(D)
+            D_tilde[iu, ju] = d_tilde
+            D_tilde[ju, iu] = d_tilde
+
+            # Guttman transform using the disparities D_tilde.
+            # B[i,j] = -d_tilde_ij / d_hat_ij  if d_hat_ij > 0  else 0
+            # B[i,i] = -sum_{j!=i} B[i,j]      (row sums zero)
             B = np.zeros_like(D)
             mask = D_hat > 0
-            B[mask] = -D[mask] / D_hat[mask]
+            B[mask] = -D_tilde[mask] / D_hat[mask]
             np.fill_diagonal(B, 0)
             row_sums = np.sum(B, axis=1)
             np.fill_diagonal(B, -row_sums)
 
             # Guttman transform: X_new = (1/n) * B @ X
-            # B is doubly centered (row sums = 0), so dividing by row_sums
-            # would be 0/0. The standard SMACOF formula divides by n.
             X_new = (B @ X) / n
 
             # Update configuration
