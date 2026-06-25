@@ -3127,6 +3127,10 @@ class MainWindow(QMainWindow):
 
     def _run_univariate_analysis(self, pre_selected: int = 0) -> None:
         """Core univariate analysis dispatcher — shared by ribbon button and dropdown."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+
         dialog = UnivariateDialog(self)
         dialog.set_pre_selected_test(pre_selected)
         dialog.setDarkTheme(self._is_dark_theme)
@@ -3509,29 +3513,45 @@ class MainWindow(QMainWindow):
                 self._status_bar.setProgress(100, 100)
 
     def _on_run_eigenshape(self) -> None:
-        """Run Eigenshape Analysis on EFA coefficients."""
+        """Run Eigenshape Analysis on EFA coefficients.
+
+        Expects data where each row is one specimen and columns are
+        [x1, x2, ..., xN, y1, y2, ..., yN] (even number of columns,
+        at least 6 so that N ≥ 3 for a meaningful contour).
+        """
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
         try:
             self._status_bar.setProgress(0, 0)
+            import numpy as np
+
             from morphometrics.efa import EFAAnalyzer, EigenshapeAnalyzer
 
             data = self._state.data_matrix.data
-            if data.ndim != 2 or data.shape[1] < 2:
-                QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 2 columns (x, y coordinates)."))
+            if data.ndim != 2 or data.shape[1] < 6:
+                QMessageBox.warning(
+                    self, _("Insufficient Data"),
+                    _("Need at least 6 columns (x1..xN, y1..yN with N≥3). Got {0} columns.").format(data.shape[1]),
+                )
+                return
+            if data.shape[1] % 2 != 0:
+                QMessageBox.warning(
+                    self, _("Invalid Data"),
+                    _("Column count must be even (equal x and y coordinates). Got {0}.").format(data.shape[1]),
+                )
+                return
+            if data.shape[0] < 2:
+                QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 2 specimens (rows)."))
                 return
 
-            # Treat each row as a separate contour specimen (first 2 cols = x, y)
-            # Split into pairs of (x, y) per specimen
             efa = EFAAnalyzer()
-            n_harmonics = min(10, data.shape[1] // 2)
+            n_harmonics = max(2, min(10, data.shape[1] // 4))
             coefficients_list = []
             for i in range(data.shape[0]):
                 row = data[i]
-                # Reshape row into (n_points, 2) contour
                 n_pts = len(row) // 2
-                contour = np.column_stack([row[:n_pts], row[n_pts:2*n_pts]])
+                contour = np.column_stack([row[:n_pts], row[n_pts:2 * n_pts]])
                 result_i = efa.analyze(contour, n_harmonics=n_harmonics)
                 coefficients_list.append(result_i.coefficients)
 
