@@ -112,7 +112,7 @@ class DiversityPlotter:
 
         fig, ax = plt.subplots(figsize=self._figure_size)
 
-        colors = get_color_scheme(len(results))
+        colors = get_color_scheme("default")
 
         for i, result in enumerate(results):
             ax.plot(
@@ -157,9 +157,9 @@ class DiversityPlotter:
         samples = [r.sample_name for r in results]
         values = [r.get(index, 0) for r in results]
 
-        colors = get_color_scheme(len(results))
+        colors = get_color_scheme("default")
 
-        bars = ax.bar(range(len(results)), values, color=colors, edgecolor="white", linewidth=1.5)
+        bars = ax.bar(range(len(results)), values, color=[colors[i % len(colors)] for i in range(len(results))], edgecolor="white", linewidth=1.5)
 
         ax.set_xticks(range(len(results)))
         ax.set_xticklabels(samples, rotation=45, ha="right")
@@ -213,8 +213,39 @@ class DiversityPlotter:
 
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-        # 1. Shannon vs Simpson comparison
-        axes[0, 0]
+        # 1. Shannon vs Simpson comparison (abundance bar chart)
+        ax1 = axes[0, 0]
+        if hasattr(result, "abundances") and result.abundances is not None:
+            top_n = min(15, len(result.abundances))
+            sorted_abundances = sorted(result.abundances.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            taxa_names = [a[0] for a in sorted_abundances]
+            taxa_counts = [a[1] for a in sorted_abundances]
+            colors_bar = get_color_scheme("default")
+            ax1.barh(range(top_n), taxa_counts, color=colors_bar[:top_n], edgecolor="white")
+            ax1.set_yticks(range(top_n))
+            ax1.set_yticklabels(taxa_names, fontsize=8)
+            ax1.invert_yaxis()
+            ax1.set_xlabel("Abundance", fontsize=9)
+            ax1.set_title("Top Taxa Abundance", fontsize=11, fontweight="bold")
+            ax1.grid(True, axis="x", linestyle="--", alpha=0.3)
+        else:
+            # Fallback: show Shannon vs Simpson as a simple bar comparison
+            shannon_val = result.indices.get("shannon")
+            simpson_val = result.indices.get("simpson")
+            if shannon_val and simpson_val:
+                ax1.bar(
+                    ["Shannon (H')", "Simpson (1-D)"],
+                    [shannon_val.value, simpson_val.value * 100],
+                    color=["#3498DB", "#E74C3C"],
+                    edgecolor="white",
+                )
+                ax1.set_ylabel("Value", fontsize=9)
+                ax1.set_title("Shannon vs Simpson", fontsize=11, fontweight="bold")
+                ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
+            else:
+                ax1.axis("off")
+                ax1.text(0.5, 0.5, "Shannon/Simpson not available",
+                         transform=ax1.transAxes, ha="center", va="center", fontsize=10)
 
         # 2. Diversity indices radar chart (simplified as bar)
         ax2 = axes[0, 1]
@@ -232,8 +263,8 @@ class DiversityPlotter:
                 else:
                     values_to_show.append(value)
 
-        colors = get_color_scheme(len(indices_to_show))
-        ax2.bar(indices_to_show, values_to_show, color=colors, edgecolor="white")
+        colors = get_color_scheme("default")
+        ax2.bar(indices_to_show, values_to_show, color=[colors[i % len(colors)] for i in range(len(indices_to_show))], edgecolor="white")
 
         ax2.set_ylabel("Value", fontsize=9)
         ax2.set_title("Diversity Indices", fontsize=11, fontweight="bold")
