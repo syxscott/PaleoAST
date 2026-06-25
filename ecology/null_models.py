@@ -180,6 +180,7 @@ class NullModelAnalyzer:
         algorithm: str = "swap",
         n_workers: int | None = None,
         random_seed: int | None = None,
+        progress_callback: Any | None = None,
     ) -> NullModelResult:
         """
         Perform null model analysis.
@@ -233,7 +234,7 @@ class NullModelAnalyzer:
             if n_workers is not None and n_workers > 1:
                 simulated = self._run_parallel(presence_matrix, n_permutations, algorithm, n_workers, metric)
             else:
-                simulated = self._run_sequential(presence_matrix, n_permutations, algorithm, metric)
+                simulated = self._run_sequential(presence_matrix, n_permutations, algorithm, metric, progress_callback)
 
             # Compute statistics
             mean_sim = float(np.mean(simulated))
@@ -274,15 +275,19 @@ class NullModelAnalyzer:
         n_permutations: int,
         algorithm: str,
         metric: str = "c_score",
+        progress_callback: Any | None = None,
     ) -> npt.NDArray[np.float64]:
-        """Run permutations sequentially."""
+        """Run permutations sequentially with optional progress callback."""
         simulated = np.zeros(n_permutations)
         working = matrix.copy()
+        report_interval = max(1, n_permutations // 100)
 
         for i in range(n_permutations):
             permuted = self._permute_matrix(working, algorithm)
             if len(permuted) > 0:
                 simulated[i] = self._compute_score(permuted, metric)
+            if progress_callback and (i + 1) % report_interval == 0:
+                progress_callback((i + 1) / n_permutations)
 
         return simulated
 

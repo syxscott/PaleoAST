@@ -249,6 +249,7 @@ class NullModelDialog(QDialog):
                 n_permutations=self._n_sim_spin.value(),
                 algorithm=algorithm,
                 n_workers=self._n_workers_spin.value(),
+                progress_callback=progress_callback,
             )
 
             self._progress_bar.setValue(100)
