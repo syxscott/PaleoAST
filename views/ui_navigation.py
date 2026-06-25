@@ -632,6 +632,7 @@ class NavigationTree(QWidget):
             NavigationItem(_("TPS Deformation"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Relative Warps"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem("EFA", NavigationCategory.MORPHOMETRICS, "morphometrics"),
+            NavigationItem(_("Eigenshape"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Allometry"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Evolution Rate"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
         ]

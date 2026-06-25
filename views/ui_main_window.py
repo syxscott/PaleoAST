@@ -1423,6 +1423,8 @@ class MainWindow(QMainWindow):
 
         efa_group = morpho_tab.addGroup(_("Outline"))
         self._btn_efa = efa_group.addButton("morphometrics", "EFA", _("Elliptic Fourier Analysis"))
+        self._btn_eigenshape = efa_group.addButton("morphometrics", _("Eigenshape"), _("Eigenshape Analysis"))
+        self._register_data_button(self._btn_eigenshape)
 
         tps_group = morpho_tab.addGroup(_("Deformation"))
         self._btn_tps_grid = tps_group.addButton("morphometrics", _("Grid"), _("TPS Deformation Grid"))
@@ -1547,6 +1549,7 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_paleo_env)
         self._btn_efa.clicked.connect(self._on_run_efa)
         self._register_data_button(self._btn_efa)
+        self._btn_eigenshape.clicked.connect(self._on_run_eigenshape)
         self._btn_tps_grid.clicked.connect(self._on_run_tps_grid)
         self._register_data_button(self._btn_tps_grid)
         self._btn_gpa.clicked.connect(self._on_run_gpa)
@@ -1987,6 +1990,7 @@ class MainWindow(QMainWindow):
             _("Markov"): self._on_run_markov,
             _("Directional"): self._on_run_directional,
             "EFA": self._on_run_efa,
+            _("Eigenshape"): self._on_run_eigenshape,
             _("GPA Alignment"): self._on_run_gpa,
             _("TPS Deformation"): self._on_run_tps_grid,
             _("Relative Warps"): self._on_run_efa,  # Uses EFA as backend
@@ -2774,11 +2778,10 @@ class MainWindow(QMainWindow):
 
                 self._status_bar.setProgress(100, 100)
 
-                # Create and display plot
+                # Create and display score plot
                 plot = InteractivePlotCanvas()
                 plot.plot_pca_scores(result)
-
-                plot_index = self._add_plot_to_workspace(plot, _("PCA Plot"))
+                plot_index = self._add_plot_to_workspace(plot, _("PCA Score Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
                 ev = result.explained_variance
@@ -2788,6 +2791,14 @@ class MainWindow(QMainWindow):
                         result.n_components, cum2
                     )
                 )
+
+                # Also show scree plot in workspace
+                scree_plot = InteractivePlotCanvas()
+                scree_plot.plot_scree(
+                    result.eigenvalues_raw, result.explained_variance,
+                    result.cumulative_variance, method="PCA",
+                )
+                self._workspace.addWidget(scree_plot, _("PCA Scree Plot"))
 
             except Exception as e:
                 QMessageBox.critical(self, _("PCA Error"), format_user_error(e, "PCA"))
@@ -2814,6 +2825,14 @@ class MainWindow(QMainWindow):
 
                 plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
+
+                ev = result.proportion_explained
+                cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
+                self._status_bar.setInfo(
+                    _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(
+                        result.n_components, cum2
+                    )
+                )
 
             except Exception as e:
                 QMessageBox.critical(self, _("PCoA Error"), format_user_error(e, "PCoA"))
@@ -3104,170 +3123,106 @@ class MainWindow(QMainWindow):
 
     def _on_univariate_selection_changed(self, index: int) -> None:
         """Handle univariate dropdown selection."""
+        self._run_univariate_analysis(index)
+
+    def _run_univariate_analysis(self, pre_selected: int = 0) -> None:
+        """Core univariate analysis dispatcher — shared by ribbon button and dropdown."""
         dialog = UnivariateDialog(self)
-        dialog.set_pre_selected_test(index)
+        dialog.set_pre_selected_test(pre_selected)
         dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                test_type = params.get("test_type", 0)
-                data = self._state.data_matrix.data
-                col_names = self._state.data_matrix.col_labels
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        params = dialog.get_parameters()
+        try:
+            self._status_bar.setProgress(0, 0)
+            test_type = params.get("test_type", 0)
+            data = self._state.data_matrix.data
+            col_names = self._state.data_matrix.col_labels
 
-                if test_type == 0:  # Summary
-                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
-                    msg = result.summary()
-                    QMessageBox.information(self, _("Summary Statistics"), msg)
-                elif test_type == 1:  # Normality
-                    results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
-                elif test_type == 2:  # t-test
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
-                elif test_type == 3:  # ANOVA
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
-                elif test_type == 4:  # Kruskal-Wallis
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
+            if test_type == 0:  # Summary
+                result = self._statistics_controller.analyze_univariate_summary(data, col_names)
+                plot = InteractivePlotCanvas()
+                plot.plot_summary_statistics(data, col_names, result.columns)
+                idx = self._add_plot_to_workspace(plot, _("Summary Statistics"))
+                self._workspace.setCurrentIndex(idx)
+                self._status_bar.setInfo(
+                    _("Summary: {0} variables, {1} samples").format(data.shape[1], data.shape[0])
+                )
 
-                self._status_bar.setInfo(_("Univariate analysis completed"))
-            except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+            elif test_type == 1:  # Normality
+                results = self._statistics_controller.analyze_normality(data, col_names)
+                plot = InteractivePlotCanvas()
+                plot.plot_normality_qq(data, col_names, results)
+                idx = self._add_plot_to_workspace(plot, _("Normality Test"))
+                self._workspace.setCurrentIndex(idx)
+                n_normal = sum(1 for r in results if r.is_normal_shapiro)
+                self._status_bar.setInfo(
+                    _("Normality: {0}/{1} variables pass Shapiro-Wilk (α=0.05)").format(n_normal, len(results))
+                )
+
+            elif test_type == 2:  # t-test
+                groups = self._get_groups()
+                if groups is None:
+                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
+                    return
+                results = self._statistics_controller.analyze_t_test(data, groups=groups)
+                p_values = [r.p_value for r in results]
+                plot = InteractivePlotCanvas()
+                plot.plot_group_comparison(data, groups, col_names, "t-test", p_values)
+                idx = self._add_plot_to_workspace(plot, _("t-test Results"))
+                self._workspace.setCurrentIndex(idx)
+                n_sig = sum(1 for p in p_values if p < 0.05)
+                self._status_bar.setInfo(
+                    _("t-test: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                )
+
+            elif test_type == 3:  # ANOVA
+                groups = self._get_groups()
+                if groups is None:
+                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
+                    return
+                results = self._statistics_controller.analyze_anova(data, groups=groups)
+                p_values = [r.p_value for r in results]
+                plot = InteractivePlotCanvas()
+                plot.plot_group_comparison(data, groups, col_names, "ANOVA", p_values)
+                idx = self._add_plot_to_workspace(plot, _("ANOVA Results"))
+                self._workspace.setCurrentIndex(idx)
+                n_sig = sum(1 for p in p_values if p < 0.05)
+                self._status_bar.setInfo(
+                    _("ANOVA: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                )
+
+            elif test_type == 4:  # Kruskal-Wallis
+                groups = self._get_groups()
+                if groups is None:
+                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
+                    return
+                results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
+                p_values = [r.p_value for r in results]
+                plot = InteractivePlotCanvas()
+                plot.plot_group_comparison(data, groups, col_names, "Kruskal-Wallis", p_values)
+                idx = self._add_plot_to_workspace(plot, _("Kruskal-Wallis Results"))
+                self._workspace.setCurrentIndex(idx)
+                n_sig = sum(1 for p in p_values if p < 0.05)
+                self._status_bar.setInfo(
+                    _("Kruskal-Wallis: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                )
+
+        except Exception as e:
+            QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, _("Univariate")))
+        finally:
+            self._status_bar.setProgress(100, 100)
 
     def _on_run_univariate(self) -> None:
         """Run univariate statistics."""
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        dialog = UnivariateDialog(self)
-        dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                test_type = params.get("test_type", 0)
-                data = self._state.data_matrix.data
-                col_names = self._state.data_matrix.col_labels
-
-                if test_type == 0:  # Summary
-                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
-                    msg = result.summary()
-                    QMessageBox.information(self, _("Summary Statistics"), msg)
-                elif test_type == 1:  # Normality
-                    results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
-                elif test_type == 2:  # t-test
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
-                elif test_type == 3:  # ANOVA
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
-                elif test_type == 4:  # Kruskal-Wallis
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
-
-                self._status_bar.setInfo(_("Univariate analysis completed"))
-            except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+        self._run_univariate_analysis(0)
 
     def _on_run_univariate_by_index(self, index: int) -> None:
         """Run univariate analysis by test index (0=Summary, 1=Normality, 2=t-test, 3=ANOVA, 4=Kruskal-Wallis)."""
-        dialog = UnivariateDialog(self)
-        dialog.set_pre_selected_test(index)
-        dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                test_type = params.get("test_type", 0)
-                data = self._state.data_matrix.data
-                col_names = self._state.data_matrix.col_labels
-
-                if test_type == 0:  # Summary
-                    result = self._statistics_controller.analyze_univariate_summary(data, col_names)
-                    msg = result.summary()
-                    QMessageBox.information(self, _("Summary Statistics"), msg)
-                elif test_type == 1:  # Normality
-                    results = self._statistics_controller.analyze_normality(data, col_names)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: W={r.shapiro_stat:.4f}, p={r.shapiro_p:.4f} {'*' if r.is_normal_shapiro else 'ns'}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Normality Test"), "\n".join(lines))
-                elif test_type == 2:  # t-test
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: t={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("t-test Results"), "\n".join(lines))
-                elif test_type == 3:  # ANOVA
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_anova(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: F={r.f_statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("ANOVA Results"), "\n".join(lines))
-                elif test_type == 4:  # Kruskal-Wallis
-                    groups = self._get_groups()
-                    results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                    lines = [
-                        f"{col_names[i] if i < len(col_names) else f'Var{i}'}: H={r.statistic:.4f}, p={r.p_value:.4f}"
-                        for i, r in enumerate(results)
-                    ]
-                    QMessageBox.information(self, _("Kruskal-Wallis Results"), "\n".join(lines))
-
-                self._status_bar.setInfo(_("Univariate analysis completed"))
-            except Exception as e:
-                QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, "单变量统计"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+        self._run_univariate_analysis(index)
 
     def _on_run_lda(self) -> None:
         """Run Linear Discriminant Analysis."""
@@ -3552,6 +3507,48 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, _("EFA Error"), format_user_error(e, "EFA"))
             finally:
                 self._status_bar.setProgress(100, 100)
+
+    def _on_run_eigenshape(self) -> None:
+        """Run Eigenshape Analysis on EFA coefficients."""
+        if not self._state.has_data:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        try:
+            self._status_bar.setProgress(0, 0)
+            from morphometrics.efa import EFAAnalyzer, EigenshapeAnalyzer
+
+            data = self._state.data_matrix.data
+            if data.ndim != 2 or data.shape[1] < 2:
+                QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 2 columns (x, y coordinates)."))
+                return
+
+            # Treat each row as a separate contour specimen (first 2 cols = x, y)
+            # Split into pairs of (x, y) per specimen
+            efa = EFAAnalyzer()
+            n_harmonics = min(10, data.shape[1] // 2)
+            coefficients_list = []
+            for i in range(data.shape[0]):
+                row = data[i]
+                # Reshape row into (n_points, 2) contour
+                n_pts = len(row) // 2
+                contour = np.column_stack([row[:n_pts], row[n_pts:2*n_pts]])
+                result_i = efa.analyze(contour, n_harmonics=n_harmonics)
+                coefficients_list.append(result_i.coefficients)
+
+            eigenshape_analyzer = EigenshapeAnalyzer()
+            es_result = eigenshape_analyzer.analyze(coefficients_list, n_components=min(5, data.shape[0] - 1))
+
+            msg = es_result.summary()
+            QMessageBox.information(self, _("Eigenshape Analysis"), msg)
+            self._status_bar.setInfo(
+                _("Eigenshape: {0} specimens, {1} components").format(
+                    es_result.n_specimens, es_result.n_components
+                )
+            )
+        except Exception as e:
+            QMessageBox.critical(self, _("Eigenshape Error"), format_user_error(e, "Eigenshape"))
+        finally:
+            self._status_bar.setProgress(100, 100)
 
     def _on_run_isotope(self) -> None:
         """Run Isotope Time Series Analysis."""

@@ -2422,6 +2422,258 @@ class InteractivePlotCanvas(QWidget):
             QMessageBox.critical(self, _("Export Error"), _("Failed to export plot:\n{0}").format(str(e)))
 
     # =========================================================================
+    # Univariate Statistics Plots (P0: text → visualization)
+    # =========================================================================
+
+    def plot_summary_statistics(self, data: np.ndarray, col_names: list[str], stats_list: list[Any] | None = None) -> None:
+        """Plot summary statistics as a panel of histograms + boxplots.
+
+        Parameters:
+            data: Data matrix (n_samples, n_variables)
+            col_names: Column/variable names
+            stats_list: Optional list of ColumnStats objects for annotation
+        """
+        self._record_plot_call("plot_summary_statistics", data)
+        self._current_plot_type = "summary_statistics"
+        self._figure.clear()
+
+        n_vars = min(data.shape[1], 12)  # Limit to 12 panels
+        ncols = min(4, n_vars)
+        nrows = (n_vars + ncols - 1) // ncols
+
+        for i in range(n_vars):
+            ax = self._figure.add_subplot(nrows, ncols, i + 1)
+            col_data = data[:, i]
+            valid = col_data[~np.isnan(col_data)]
+            if len(valid) == 0:
+                ax.text(0.5, 0.5, "All NaN", transform=ax.transAxes, ha="center", fontsize=8)
+                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i+1}", fontsize=9)
+                continue
+
+            ax.hist(valid, bins=min(30, max(5, len(valid) // 3)), color="#3498DB", alpha=0.7, edgecolor="white")
+            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            ax.set_title(name, fontsize=9, fontweight="bold")
+
+            if stats_list and i < len(stats_list):
+                s = stats_list[i]
+                info = f"μ={s.mean:.2f} σ={s.std:.2f}\nmed={s.median:.2f}"
+                ax.text(0.97, 0.95, info, transform=ax.transAxes, fontsize=7,
+                        va="top", ha="right", style="italic",
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5))
+
+            ax.tick_params(labelsize=7)
+            ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+        self._figure.suptitle(_("Descriptive Statistics"), fontsize=13, fontweight="bold")
+        self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._canvas.draw()
+
+    def plot_normality_qq(self, data: np.ndarray, col_names: list[str], normality_results: list[Any] | None = None) -> None:
+        """Plot Q-Q plots for normality assessment.
+
+        Parameters:
+            data: Data matrix (n_samples, n_variables)
+            col_names: Column names
+            normality_results: Optional list of NormalityResult for annotation
+        """
+        self._record_plot_call("plot_normality_qq", data)
+        self._current_plot_type = "normality_qq"
+        self._figure.clear()
+
+        from scipy import stats as sp_stats
+
+        n_vars = min(data.shape[1], 9)
+        ncols = min(3, n_vars)
+        nrows = (n_vars + ncols - 1) // ncols
+
+        for i in range(n_vars):
+            ax = self._figure.add_subplot(nrows, ncols, i + 1)
+            col_data = data[:, i]
+            valid = col_data[~np.isnan(col_data)]
+            if len(valid) < 3:
+                ax.text(0.5, 0.5, "n < 3", transform=ax.transAxes, ha="center", fontsize=8)
+                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i+1}", fontsize=9)
+                continue
+
+            sp_stats.probplot(valid, dist="norm", plot=ax)
+            ax.get_lines()[0].set_markerfacecolor("#3498DB")
+            ax.get_lines()[0].set_markeredgecolor("white")
+            ax.get_lines()[0].set_markersize(4)
+            ax.get_lines()[1].set_color("#E74C3C")
+
+            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            title = name
+            if normality_results and i < len(normality_results):
+                nr = normality_results[i]
+                sig = "✓ Normal" if nr.is_normal_shapiro else "✗ Non-normal"
+                title += f"\nW={nr.shapiro_stat:.3f}, p={nr.shapiro_p:.3f} {sig}"
+            ax.set_title(title, fontsize=8, fontweight="bold")
+            ax.tick_params(labelsize=7)
+            ax.grid(True, linestyle="--", alpha=0.3)
+
+        self._figure.suptitle(_("Normality Test (Q-Q Plots)"), fontsize=13, fontweight="bold")
+        self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._canvas.draw()
+
+    def plot_group_comparison(self, data: np.ndarray, groups: list[int] | np.ndarray,
+                              col_names: list[str], test_name: str = "t-test",
+                              p_values: list[float] | None = None) -> None:
+        """Plot boxplots comparing groups across variables.
+
+        Parameters:
+            data: Data matrix (n_samples, n_variables)
+            groups: Group assignment per sample
+            col_names: Variable names
+            test_name: Name of the statistical test (for title)
+            p_values: Optional per-variable p-values for annotation
+        """
+        self._record_plot_call("plot_group_comparison", data)
+        self._current_plot_type = "group_comparison"
+        self._figure.clear()
+
+        groups_arr = np.asarray(groups)
+        unique_groups = sorted(set(groups_arr.tolist()))
+        n_groups = len(unique_groups)
+        n_vars = min(data.shape[1], 9)
+        ncols = min(3, n_vars)
+        nrows = (n_vars + ncols - 1) // ncols
+
+        colors = ["#3498DB", "#E74C3C", "#27AE60", "#F39C12", "#9B59B6", "#1ABC9C"]
+
+        for i in range(n_vars):
+            ax = self._figure.add_subplot(nrows, ncols, i + 1)
+            group_data = []
+            group_labels = []
+            for gi, g in enumerate(unique_groups):
+                mask = groups_arr == g
+                vals = data[mask, i]
+                valid = vals[~np.isnan(vals)]
+                if len(valid) > 0:
+                    group_data.append(valid)
+                    group_labels.append(str(g))
+
+            if not group_data:
+                ax.text(0.5, 0.5, "No data", transform=ax.transAxes, ha="center", fontsize=8)
+                continue
+
+            bp = ax.boxplot(group_data, labels=group_labels, patch_artist=True, widths=0.6)
+            for j, patch in enumerate(bp["boxes"]):
+                patch.set_facecolor(colors[j % len(colors)])
+                patch.set_alpha(0.7)
+
+            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            title = name
+            if p_values and i < len(p_values):
+                pv = p_values[i]
+                sig = "***" if pv < 0.001 else "**" if pv < 0.01 else "*" if pv < 0.05 else "ns"
+                title += f"\np={pv:.4f} {sig}"
+                if pv < 0.05:
+                    ax.set_title(title, fontsize=8, fontweight="bold", color="#E74C3C")
+                else:
+                    ax.set_title(title, fontsize=8, fontweight="bold")
+            else:
+                ax.set_title(title, fontsize=8, fontweight="bold")
+
+            ax.tick_params(labelsize=7)
+            ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+        self._figure.suptitle(_("{0} — Group Comparison").format(test_name), fontsize=13, fontweight="bold")
+        self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._canvas.draw()
+
+    def plot_coniss_dendrogram(self, linkage_matrix: np.ndarray, n_zones: int,
+                                sample_names: list[str] | None = None,
+                                zone_boundaries: list[int] | None = None) -> None:
+        """Plot CONISS dendrogram with zone boundaries.
+
+        Parameters:
+            linkage_matrix: scipy linkage matrix
+            n_zones: Number of zones
+            sample_names: Optional sample labels
+            zone_boundaries: Optional zone boundary indices
+        """
+        self._record_plot_call("plot_coniss_dendrogram", linkage_matrix)
+        self._current_plot_type = "coniss_dendrogram"
+        self._figure.clear()
+
+        from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
+
+        ax = self._figure.add_subplot(111)
+
+        # Use sample names as labels if available
+        labels = sample_names if sample_names and len(sample_names) == linkage_matrix.shape[0] + 1 else None
+
+        scipy_dendrogram(
+            linkage_matrix,
+            ax=ax,
+            labels=labels,
+            color_threshold=linkage_matrix[-(n_zones - 1), 2] if n_zones > 1 else 0,
+            leaf_rotation=90 if labels and len(labels) > 10 else 0,
+            leaf_font_size=8,
+        )
+
+        # Draw zone boundaries
+        if zone_boundaries:
+            y_max = ax.get_ylim()[1]
+            for zb in zone_boundaries:
+                ax.axhline(y=zb, color="#E74C3C", linestyle="--", linewidth=1.5, alpha=0.7)
+
+        ax.set_title(_("CONISS Zonation ({0} zones)").format(n_zones), fontsize=12, fontweight="bold")
+        ax.set_xlabel(_("Samples"), fontsize=10)
+        ax.set_ylabel(_("Distance"), fontsize=10)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_scree(self, eigenvalues: np.ndarray, explained_var: np.ndarray,
+                   cumulative_var: np.ndarray, method: str = "PCA") -> None:
+        """Plot scree diagram with individual and cumulative variance.
+
+        Parameters:
+            eigenvalues: Raw eigenvalues
+            explained_var: Per-component explained variance (%)
+            cumulative_var: Cumulative explained variance (%)
+            method: Analysis method name for title
+        """
+        self._record_plot_call("plot_scree", eigenvalues)
+        self._current_plot_type = "scree"
+        self._figure.clear()
+
+        ax1 = self._figure.add_subplot(111)
+        n = len(eigenvalues)
+        components = np.arange(1, n + 1)
+
+        # Bar chart: individual variance
+        ax1.bar(components, explained_var, color="#3498DB", alpha=0.8, label=_("Individual"))
+        ax1.set_xlabel(_("Component"), fontsize=10)
+        ax1.set_ylabel(_("Variance Explained (%)"), fontsize=10, color="#3498DB")
+        ax1.tick_params(axis="y", labelcolor="#3498DB")
+        ax1.set_xticks(components)
+
+        # Line chart: cumulative variance
+        ax2 = ax1.twinx()
+        ax2.plot(components, cumulative_var, "o-", color="#E74C3C", linewidth=2, markersize=5, label=_("Cumulative"))
+        ax2.set_ylabel(_("Cumulative (%)"), fontsize=10, color="#E74C3C")
+        ax2.tick_params(axis="y", labelcolor="#E74C3C")
+        ax2.set_ylim(0, 105)
+
+        # Kaiser criterion line (eigenvalue > 1 for correlation PCA)
+        ax1.axhline(y=100.0 / n, color="gray", linestyle=":", linewidth=1, alpha=0.5,
+                     label=f"Kaiser ({100.0/n:.1f}%)")
+
+        # Combined legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc="center right", fontsize=8)
+
+        ax1.set_title(_("{0} Scree Plot").format(method), fontsize=12, fontweight="bold")
+        ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    # =========================================================================
     # Public API
     # =========================================================================
 
