@@ -37,6 +37,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.i18n import _
+
 logger = logging.getLogger(__name__)
 
 
@@ -351,7 +353,7 @@ class CrashReportDialog(QDialog):
         clipboard.setText(self._exception_info.get_full_report())
 
         # 显示提示
-        QMessageBox.information(self, "Copied", "Error report copied to clipboard!")
+        QMessageBox.information(self, _("Copied"), _("Error report copied to clipboard!"))
 
     def _export_report(self) -> None:
         """导出报告"""
@@ -364,9 +366,9 @@ class CrashReportDialog(QDialog):
         # 显示保存对话框
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Crash Report",
+            _("Export Crash Report"),
             str(Path.home() / "Desktop" / default_name),
-            "Text Files (*.txt);;All Files (*)",
+            _("Text Files (*.txt);;All Files (*)"),
         )
 
         if file_path:
@@ -374,9 +376,9 @@ class CrashReportDialog(QDialog):
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(self._exception_info.get_full_report())
 
-                QMessageBox.information(self, "Export Successful", f"Report exported to:\n{file_path}")
+                QMessageBox.information(self, _("Export Successful"), _("Report exported to:\n{0}").format(file_path))
             except Exception as e:
-                QMessageBox.critical(self, "Export Failed", f"Failed to export report:\n{e!s}")
+                QMessageBox.critical(self, _("Export Failed"), _("Failed to export report:\n{0}").format(e))
 
     def _quit_application(self) -> None:
         """退出应用程序"""

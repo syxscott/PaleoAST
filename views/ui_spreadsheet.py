@@ -1223,7 +1223,7 @@ class ScientificSpreadsheet(QWidget):
             self.load_data(data)
 
         except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import data:\n{e!s}")
+            QMessageBox.critical(self, _("Import Error"), _("Failed to import data:\n{0}").format(e))
 
     @staticmethod
     def _make_display_item(value) -> QTableWidgetItem:

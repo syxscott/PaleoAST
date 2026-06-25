@@ -3470,7 +3470,7 @@ class MainWindow(QMainWindow):
                     data=self._state.data_matrix.data,
                     n_zones=params.get("n_zones", 4),
                 )
-                QMessageBox.information(self, "CONISS", result.summary())
+                QMessageBox.information(self, _("CONISS Results"), result.summary())
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
             except Exception as e:
                 QMessageBox.critical(self, _("CONISS Error"), format_user_error(e, "CONISS"))
