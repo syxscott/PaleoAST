@@ -34,15 +34,26 @@ def log_transform(data: npt.NDArray, base: float = 10, offset: float = 1.0) -> n
 
     Returns:
         Transformed array
+
+    Raises:
+        ValueError: If any value + offset ≤ 0 (log undefined).
     """
     result = data.astype(float).copy()
     valid = ~np.isnan(result)
+    shifted = result[valid] + offset
+    if np.any(shifted <= 0):
+        n_bad = int(np.sum(shifted <= 0))
+        raise ValueError(
+            f"log_transform: {n_bad} value(s) have x + offset ≤ 0 "
+            f"(offset={offset}). Increase the offset or remove/shift "
+            f"the offending values."
+        )
     if base == np.e:
-        result[valid] = np.log(result[valid] + offset)
+        result[valid] = np.log(shifted)
     elif base == 2:
-        result[valid] = np.log2(result[valid] + offset)
+        result[valid] = np.log2(shifted)
     else:
-        result[valid] = np.log10(result[valid] + offset)
+        result[valid] = np.log10(shifted)
     return result
 
 

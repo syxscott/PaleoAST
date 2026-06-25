@@ -360,17 +360,20 @@ class GillespieSimulator:
         )
 
     def _compute_diversity_curve(self) -> np.ndarray:
-        """计算多样性随时间变化"""
-        if not self._events:
+        """计算多样性随时间变化。
+
+        返回一维数组，每个元素为对应时刻的多样性计数。
+        起始时刻（初始化时刻）的初始多样性也包含在曲线中，
+        确保曲线从模拟开始时就有记录。
+        """
+        if not self._lineages:
             return np.array([])
 
-        times = sorted(set([self._current_time] + [e.time for e in self._events]))
-
-        # Build event lookup: time -> (births, deaths)
         from collections import Counter
 
-        births = Counter()
-        deaths = Counter()
+        # Build event lookup: time -> (births, deaths)
+        births: Counter = Counter()
+        deaths: Counter = Counter()
         for e in self._events:
             if hasattr(e, "event_type"):
                 if e.event_type == FBDEventType.BIRTH:
@@ -378,13 +381,22 @@ class GillespieSimulator:
                 elif e.event_type == FBDEventType.DEATH:
                     deaths[e.time] += 1
 
-        diversity = []
-        # Count initial lineages (those created at initialize time, with parent_id=None)
+        # Initial lineages: those created during initialize() (parent_id is None).
+        # Their birth_time equals the start_time passed to initialize().
+        start_time = self._lineages[0].birth_time
         initial_lineages = sum(
-            1 for l in self._lineages if l.parent_id is None and l.birth_time == self._lineages[0].birth_time
+            1 for l in self._lineages if l.parent_id is None and l.birth_time == start_time
         )
+
+        # Build time axis: include start_time so the curve begins at the
+        # simulation start, not at the first event.
+        all_times = sorted(set(
+            [start_time] + [e.time for e in self._events] + [self._current_time]
+        ))
+
+        diversity = []
         current_n = initial_lineages
-        for t in times:
+        for t in all_times:
             current_n += births.get(t, 0) - deaths.get(t, 0)
             diversity.append(max(0, current_n))
 

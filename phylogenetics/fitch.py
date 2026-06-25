@@ -72,6 +72,7 @@ class FitchResult:
         character_states: 每个节点的字符状态集合
         ancestral_states: 祖先节点的最可能状态
         changes: 状态变化位置列表
+        n_taxa: 分类单元数量（用于 RI / CI 等索引计算）
     """
 
     tree_length: int
@@ -79,6 +80,7 @@ class FitchResult:
     character_states: dict[int, dict[PhyloNode, set[Any]]]
     ancestral_states: dict[int, dict[PhyloNode, Any]]
     changes: list[tuple[PhyloNode, PhyloNode, int, Any, Any]]
+    n_taxa: int = 0
 
     @property
     def parsimony_score(self) -> int:
@@ -112,22 +114,34 @@ class FitchResult:
     @property
     def retention_index(self) -> float:
         """
-        留存指数 (Retention Index)
+        留存指数 (Retention Index, Farris 1989)
 
         RI = (g - s) / (g - m)
 
-        其中 g 为最大可能步长数，m 为最小可能步长数，s 为实际树长。
-        """
-        # m = minimum steps (informative sites, each needs at least 1 step)
-        m = sum(1 for s in self.site_scores if s > 0)
-        # g = maximum steps: for each site, max_steps = max_state_count - 1
-        # Simplified: each informative site can have at most (tree_length / m) steps on average
-        # For a binary character, max steps per site = number of taxa - 1
-        # Use total_sites as upper bound since each site contributes at most tree_length steps
-        g = len(self.site_scores) if len(self.site_scores) > 0 else m
-        s = self.tree_length
+        其中:
+            s = 实际树长
+            m = 最小可能步长数（每个简约信息位点至少 1 步）
+            g = 最大可能步长数（每个简约信息位点最多 n_taxa - 1 步）
 
-        if g - m == 0:
+        参考: Farris, J.S. (1989). The retention index and the rescaled
+        consistency index. Cladistics, 5, 417-419.
+        """
+        s = self.tree_length
+        # m = minimum steps: each parsimony-informative site (site_score > 0)
+        # contributes at least 1 step.
+        m = sum(1 for score in self.site_scores if score > 0)
+        # g = maximum steps: each parsimony-informative site can change at
+        # most (n_taxa - 1) times on a fully unresolved tree.  The previous
+        # code used len(self.site_scores) which is the *number of sites*,
+        # not the sum of maximum per-site steps — a fundamentally different
+        # quantity.
+        if self.n_taxa > 0:
+            g = sum(self.n_taxa - 1 for score in self.site_scores if score > 0)
+        else:
+            # Fallback: cannot compute without n_taxa
+            return 1.0 if s == 0 else 0.0
+
+        if g == m:
             return 1.0
         return max(0.0, (g - s) / (g - m))
 
@@ -222,6 +236,7 @@ class FitchAlgorithm:
             character_states=character_states,
             ancestral_states=ancestral_states,
             changes=changes,
+            n_taxa=len(taxon_names),
         )
 
     def _extract_site_states(self, sequences: dict[str, str], taxon_names: list[str], site_idx: int) -> dict[str, Any]:

@@ -231,9 +231,9 @@ class NullModelAnalyzer:
                 np.random.seed(random_seed)
 
             if n_workers is not None and n_workers > 1:
-                simulated = self._run_parallel(presence_matrix, n_permutations, algorithm, n_workers)
+                simulated = self._run_parallel(presence_matrix, n_permutations, algorithm, n_workers, metric)
             else:
-                simulated = self._run_sequential(presence_matrix, n_permutations, algorithm)
+                simulated = self._run_sequential(presence_matrix, n_permutations, algorithm, metric)
 
             # Compute statistics
             mean_sim = float(np.mean(simulated))
@@ -259,11 +259,21 @@ class NullModelAnalyzer:
             self._logger.info(f"Null model: observed={observed:.4f}, SES={ses:.4f}, p={p_value:.4f}")
             return result
 
+    def _compute_score(self, matrix: npt.NDArray, metric: str) -> float:
+        """Dispatch to the correct co-occurrence metric function."""
+        if metric == "checkerboard":
+            return self._compute_checkerboard(matrix)
+        elif metric == "combo":
+            return self._compute_combo_score(matrix)
+        else:
+            return self._compute_c_score(matrix)
+
     def _run_sequential(
         self,
         matrix: npt.NDArray,
         n_permutations: int,
         algorithm: str,
+        metric: str = "c_score",
     ) -> npt.NDArray[np.float64]:
         """Run permutations sequentially."""
         simulated = np.zeros(n_permutations)
@@ -272,7 +282,7 @@ class NullModelAnalyzer:
         for i in range(n_permutations):
             permuted = self._permute_matrix(working, algorithm)
             if len(permuted) > 0:
-                simulated[i] = self._compute_c_score(permuted)
+                simulated[i] = self._compute_score(permuted, metric)
 
         return simulated
 
@@ -282,6 +292,7 @@ class NullModelAnalyzer:
         n_permutations: int,
         algorithm: str,
         n_workers: int,
+        metric: str = "c_score",
     ) -> npt.NDArray[np.float64]:
         """Run permutations in parallel using multiprocessing."""
         try:
@@ -289,7 +300,8 @@ class NullModelAnalyzer:
 
             chunk_size = max(1, n_permutations // n_workers)
             args_list = [
-                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm) for i in range(n_workers)
+                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm, metric)
+                for i in range(n_workers)
             ]
 
             with Pool(n_workers) as pool:
@@ -300,7 +312,7 @@ class NullModelAnalyzer:
 
         except ImportError:
             self._logger.warning("Multiprocessing not available, running sequentially")
-            return self._run_sequential(matrix, n_permutations, algorithm)
+            return self._run_sequential(matrix, n_permutations, algorithm, metric)
 
     def _permute_matrix(
         self,
@@ -441,6 +453,7 @@ def _worker_permute(
     matrix: npt.NDArray,
     n_perms: int,
     algorithm: str,
+    metric: str = "c_score",
 ) -> npt.NDArray:
     """
     Worker function for parallel permutation.
@@ -463,7 +476,7 @@ def _worker_permute(
             np.random.shuffle(flat)
             result = flat.reshape(matrix.shape)
 
-        results[i] = _compute_c_score_worker(result)
+        results[i] = _compute_score_worker(result, metric)
 
     return results
 
@@ -498,14 +511,50 @@ def _swap_matrix_worker(matrix: npt.NDArray) -> npt.NDArray:
 
 
 def _compute_c_score_worker(matrix: npt.NDArray) -> float:
-    """C-score computation in worker function."""
+    """C-score computation in worker function (Stone & Roberts 1990).
+
+    C_ij = (r_i - S_ij) * (r_j - S_ij)
+    where S_ij is the number of sites where both species co-occur.
+    """
     n_species, _ = matrix.shape
-    row_sums = np.sum(matrix, axis=1)
+    pa = (matrix > 0).astype(np.int64)
+    row_sums = pa.sum(axis=1)
 
     c_scores = []
     for i in range(n_species):
         for j in range(i + 1, n_species):
-            c_ij = float((row_sums[i] - 1) * (row_sums[j] - 1))
+            s_ij = int(np.sum(pa[i] & pa[j]))
+            c_ij = float((row_sums[i] - s_ij) * (row_sums[j] - s_ij))
             c_scores.append(c_ij)
 
     return float(np.mean(c_scores)) if c_scores else 0.0
+
+
+def _compute_checkerboard_worker(matrix: npt.NDArray) -> float:
+    """Checkerboard count computation in worker function."""
+    n_species, n_sites = matrix.shape
+    checkerboards = 0
+    for i in range(n_species):
+        for j in range(i + 1, n_species):
+            for k in range(n_sites):
+                for l in range(k + 1, n_sites):
+                    if (matrix[i, k] == 1 and matrix[i, l] == 0 and matrix[j, k] == 0 and matrix[j, l] == 1) or (
+                        matrix[i, k] == 0 and matrix[i, l] == 1 and matrix[j, k] == 1 and matrix[j, l] == 0
+                    ):
+                        checkerboards += 1
+    return float(checkerboards)
+
+
+def _compute_score_worker(matrix: npt.NDArray, metric: str) -> float:
+    """Dispatch to the correct co-occurrence metric in the worker."""
+    if metric == "checkerboard":
+        return _compute_checkerboard_worker(matrix)
+    elif metric == "combo":
+        c_score = _compute_c_score_worker(matrix)
+        n_species, n_sites = matrix.shape
+        max_checkerboard = n_species * (n_species - 1) / 2 * n_sites * (n_sites - 1) / 2
+        checkerboard = _compute_checkerboard_worker(matrix)
+        norm_checkerboard = checkerboard / max_checkerboard if max_checkerboard > 0 else 0
+        return (c_score + norm_checkerboard) / 2
+    else:
+        return _compute_c_score_worker(matrix)

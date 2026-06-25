@@ -166,8 +166,12 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
         # Vectorized implementation using broadcasting with memory check
         if n <= 500:
             # For small matrices, use full broadcasting
+            # Bray-Curtis: Σ|x_ik - x_jk| / Σ(x_ik + x_jk)
+            # The denominator uses (x_ik + x_jk) — the previous code wrapped
+            # each term in np.abs() which is unnecessary for valid (non-negative)
+            # abundance data and could produce incorrect results for negative values.
             diff = np.abs(X[:, None, :] - X[None, :, :])
-            sum_arr = np.abs(X[:, None, :]) + np.abs(X[None, :, :])
+            sum_arr = X[:, None, :] + X[None, :, :]
             numerator = np.sum(diff, axis=2)
             denominator = np.sum(sum_arr, axis=2)
             denominator = np.where(denominator == 0, 1, denominator)

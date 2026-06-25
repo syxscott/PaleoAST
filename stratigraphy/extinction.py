@@ -451,7 +451,7 @@ class ExtinctionIntervalAnalyzer:
             Estimated detection probability
         """
         lad_sorted = np.sort(lad_positions)[::-1]
-        len(lad_sorted)
+        n_taxa = len(lad_sorted)
 
         if known_extinction_layer is not None:
             # Use known extinction to calibrate

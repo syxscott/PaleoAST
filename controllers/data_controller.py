@@ -305,7 +305,7 @@ class DataController:
 
     def transform_log(self, data: npt.NDArray | None = None, base: str = "natural") -> npt.NDArray:
         """
-        Apply log transformation.
+        Apply log transformation: log_b(x).
 
         Parameters:
             data: Input data. If None, uses state data.
@@ -313,6 +313,10 @@ class DataController:
 
         Returns:
             Transformed data
+
+        Raises:
+            ValidationError: If data contains zero or negative values
+                (log is undefined for x ≤ 0).
         """
         with self._lock:
             if data is None:
@@ -320,12 +324,27 @@ class DataController:
                     raise ValidationError("No data available")
                 data = self._state.data_matrix.data
 
+            data_arr = np.asarray(data, dtype=float)
+            if np.any(data_arr <= 0):
+                n_zero = int(np.sum(data_arr == 0))
+                n_neg = int(np.sum(data_arr < 0))
+                problems = []
+                if n_zero > 0:
+                    problems.append(f"{n_zero} zero value(s)")
+                if n_neg > 0:
+                    problems.append(f"{n_neg} negative value(s)")
+                raise ValidationError(
+                    f"Log transformation requires strictly positive data; "
+                    f"found {' and '.join(problems)}. "
+                    f"Consider adding an offset (e.g. log(x+1)) or filtering."
+                )
+
             if base == "natural":
-                return np.log(data)
+                return np.log(data_arr)
             elif base == "base10":
-                return np.log10(data)
+                return np.log10(data_arr)
             elif base == "base2":
-                return np.log2(data)
+                return np.log2(data_arr)
             else:
                 raise ValidationError(f"Unknown log base: {base}")
 

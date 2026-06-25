@@ -2498,7 +2498,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("{0} transformation applied").format(name))
 
         except Exception as e:
-            QMessageBox.critical(self, _("Transformation Error"), str(e))
+            QMessageBox.critical(self, _("Transformation Error"), format_user_error(e, name))
 
     def _on_transform_log(self) -> None:
         """Apply log10 transformation."""
@@ -2781,9 +2781,11 @@ class MainWindow(QMainWindow):
                 plot_index = self._add_plot_to_workspace(plot, _("PCA Plot"))
                 self._workspace.setCurrentIndex(plot_index)
 
+                ev = result.explained_variance
+                cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
                 self._status_bar.setInfo(
                     _("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(
-                        result.n_components, result.explained_variance[0] + result.explained_variance[1]
+                        result.n_components, cum2
                     )
                 )
 

@@ -193,13 +193,19 @@ class ProcessPool:
         for i, result in enumerate(results):
             try:
                 chunk_result = result.get(timeout=300)
-                output.extend(chunk_result)
+                # _worker_map now returns None for individually failed items
+                # instead of crashing the entire chunk. Filter them out.
+                valid_items = [item for item in chunk_result if item is not None]
+                output.extend(valid_items)
 
                 if callback:
-                    for item in chunk_result:
+                    for item in valid_items:
                         callback(item)
 
                 # 更新进度
+                failed = len(chunk_result) - len(valid_items)
+                if failed > 0:
+                    self._logger.warning(f"Chunk {i}: {failed}/{len(chunk_result)} items failed")
                 progress = (i + 1) / total
                 self._report_progress(progress, f"Processed chunk {i + 1}/{total}")
 
@@ -381,8 +387,20 @@ def _worker_execute(func: Callable, args: tuple, kwargs: dict, task_id: str) -> 
 
 
 def _worker_map(func: Callable[[Any], Any], items: list[Any]) -> list[Any]:
-    """Worker映射函数"""
-    return [func(item) for item in items]
+    """Worker映射函数 — 逐项执行，单个 item 失败不影响整块结果。
+
+    旧实现使用 ``[func(item) for item in items]``，任一 item 抛出异常
+    会导致整个 chunk 的所有结果丢失。改为逐项 try/except，失败项
+    记录日志并返回 ``None``，调用方可按需过滤。
+    """
+    results: list[Any] = []
+    for item in items:
+        try:
+            results.append(func(item))
+        except Exception as e:
+            logger.error(f"_worker_map: func({item!r}) failed: {type(e).__name__}: {e}")
+            results.append(None)
+    return results
 
 
 def _compute_pair_distance(pair_and_matrix: tuple) -> float:

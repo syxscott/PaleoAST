@@ -469,10 +469,13 @@ def _compute_concordance(
     n_pairs = n * (n - 1) // 2
 
     if n_pairs > max_pairs:
-        # Sample random pairs
-        np.random.seed(42)
-        idx1 = np.random.randint(0, n, max_pairs)
-        idx2 = np.random.randint(0, n, max_pairs)
+        # Sample random pairs using a local Generator so the global
+        # numpy RNG is not reseeded as a side-effect.  The previous
+        # ``np.random.seed(42)`` silently contaminated every downstream
+        # stochastic operation in the same process.
+        rng = np.random.default_rng(42)
+        idx1 = rng.integers(0, n, max_pairs)
+        idx2 = rng.integers(0, n, max_pairs)
         # Ensure idx2 > idx1 to avoid duplicates
         mask = idx2 > idx1
         idx1, idx2 = idx1[mask], idx2[mask]
