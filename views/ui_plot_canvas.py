@@ -2696,8 +2696,12 @@ class InteractivePlotCanvas(QWidget):
 
         # Layout: compute y positions (leaves evenly spaced) and x positions (depth)
         leaves = root.get_leaves()
+        if not leaves:
+            ax.text(0.5, 0.5, "No leaves", transform=ax.transAxes, ha="center", fontsize=12)
+            self._canvas.draw()
+            return
+
         leaf_y = {id(leaf): i for i, leaf in enumerate(leaves)}
-        y_counter = [0]
 
         def assign_y(node):
             if node.is_leaf:
