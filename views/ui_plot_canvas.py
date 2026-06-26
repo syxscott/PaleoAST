@@ -2673,6 +2673,175 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
+    def plot_phylo_tree(self, tree: Any, trait_values: dict[str, float] | None = None,
+                        title: str = "Phylogenetic Tree") -> None:
+        """Plot a phylogenetic tree with optional trait values.
+
+        Parameters:
+            tree: PhyloTree or PhyloNode with Newick structure
+            trait_values: Optional {taxon_name: value} for coloring tips
+            title: Plot title
+        """
+        self._record_plot_call("plot_phylo_tree", tree)
+        self._current_plot_type = "phylo_tree"
+        self._figure.clear()
+
+        ax = self._figure.add_subplot(111)
+
+        root = tree.root if hasattr(tree, "root") else tree
+        if root is None:
+            ax.text(0.5, 0.5, "Empty tree", transform=ax.transAxes, ha="center", fontsize=12)
+            self._canvas.draw()
+            return
+
+        # Layout: compute y positions (leaves evenly spaced) and x positions (depth)
+        leaves = root.get_leaves()
+        leaf_y = {id(leaf): i for i, leaf in enumerate(leaves)}
+        y_counter = [0]
+
+        def assign_y(node):
+            if node.is_leaf:
+                return leaf_y[id(node)]
+            child_ys = [assign_y(c) for c in node.children]
+            return sum(child_ys) / len(child_ys) if child_ys else 0
+
+        def get_depth(node, d=0):
+            return max((get_depth(c, d + (c.branch_length or 1.0)) for c in node.children), default=d)
+
+        assign_y(root)
+        max_depth = get_depth(root)
+
+        # Draw tree
+        def draw_node(node, x_start):
+            if node.is_leaf:
+                y = leaf_y[id(node)]
+                ax.plot([x_start, 0], [y, y], color="#2C3E50", linewidth=1)
+                label = node.name or ""
+                color = "#E74C3C" if trait_values and label in trait_values else "#2C3E50"
+                ax.text(-0.02 * max_depth, y, f" {label}", va="center", fontsize=8, color=color)
+                if trait_values and label in trait_values:
+                    val = trait_values[label]
+                    ax.plot(0, y, "o", color="#3498DB", markersize=6, alpha=0.7)
+                    ax.text(0.02 * max_depth, y, f"{val:.3f}", va="center", fontsize=7, color="#3498DB")
+                return y
+
+            child_ys = []
+            for child in node.children:
+                bl = child.branch_length or 1.0
+                child_x = x_start - bl
+                cy = draw_node(child, child_x)
+                child_ys.append(cy)
+                # Horizontal line from parent to child x
+                ax.plot([x_start, child_x], [cy, cy], color="#2C3E50", linewidth=1)
+
+            # Vertical connector
+            if child_ys:
+                y_min, y_max = min(child_ys), max(child_ys)
+                ax.plot([x_start, x_start], [y_min, y_max], color="#2C3E50", linewidth=1)
+                mid_y = (y_min + y_max) / 2
+                # Support value
+                if node.support is not None and node.support > 0:
+                    ax.text(x_start, mid_y + 0.3, f"{node.support:.0f}", ha="center", fontsize=6, color="#888")
+                return mid_y
+            return 0
+
+        draw_node(root, max_depth)
+
+        ax.set_xlim(-0.1 * max_depth, max_depth * 1.3)
+        ax.set_ylim(-0.5, len(leaves) - 0.5)
+        ax.set_xlabel("Branch length", fontsize=10)
+        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.set_yticks([])
+        ax.spines["left"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.grid(True, axis="x", linestyle="--", alpha=0.3)
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_eigenshape_scores(self, scores: np.ndarray, explained_var: np.ndarray,
+                               specimen_labels: list[str] | None = None) -> None:
+        """Plot Eigenshape score scatter plot (ES1 vs ES2).
+
+        Parameters:
+            scores: Score matrix (n_specimens, n_components)
+            explained_var: Explained variance per component
+            specimen_labels: Optional specimen labels
+        """
+        self._record_plot_call("plot_eigenshape_scores", scores)
+        self._current_plot_type = "eigenshape_scores"
+        self._figure.clear()
+
+        ax = self._figure.add_subplot(111)
+        x = scores[:, 0]
+        y = scores[:, 1] if scores.shape[1] > 1 else np.zeros_like(x)
+
+        ax.scatter(x, y, c="#9B59B6", s=60, alpha=0.7, edgecolors="white", linewidths=0.5)
+
+        if specimen_labels:
+            for i, label in enumerate(specimen_labels):
+                ax.annotate(label, (x[i], y[i]), fontsize=7, xytext=(4, 4), textcoords="offset points")
+
+        var1 = explained_var[0] * 100 if len(explained_var) > 0 else 0
+        var2 = explained_var[1] * 100 if len(explained_var) > 1 else 0
+        ax.set_xlabel(f"ES1 ({var1:.1f}%)", fontsize=10)
+        ax.set_ylabel(f"ES2 ({var2:.1f}%)" if scores.shape[1] > 1 else "ES2", fontsize=10)
+        ax.set_title(_("Eigenshape Score Plot"), fontsize=12, fontweight="bold")
+        ax.axhline(0, color="gray", linestyle="-", linewidth=0.5)
+        ax.axvline(0, color="gray", linestyle="-", linewidth=0.5)
+        ax.grid(True, linestyle="--", alpha=0.3)
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_markov_heatmap(self, transition_matrix: np.ndarray, facies_names: list[str],
+                            chi2_stat: float = 0.0, p_value: float = 1.0) -> None:
+        """Plot Markov chain transition probability matrix as heatmap.
+
+        Parameters:
+            transition_matrix: Raw transition counts (n_states, n_states)
+            facies_names: Names for each state/facies
+            chi2_stat: Chi-squared statistic
+            p_value: P-value for chi-squared test
+        """
+        self._record_plot_call("plot_markov_heatmap", transition_matrix)
+        self._current_plot_type = "markov_heatmap"
+        self._figure.clear()
+
+        ax = self._figure.add_subplot(111)
+
+        # Normalize to probabilities (row-wise)
+        row_sums = transition_matrix.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1
+        prob_matrix = transition_matrix / row_sums
+
+        n = len(facies_names)
+        im = ax.imshow(prob_matrix, cmap="YlOrRd", aspect="auto", vmin=0, vmax=1)
+
+        # Add text annotations
+        for i in range(n):
+            for j in range(n):
+                val = prob_matrix[i, j]
+                color = "white" if val > 0.5 else "black"
+                ax.text(j, i, f"{val:.2f}", ha="center", va="center", color=color, fontsize=9, fontweight="bold")
+
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
+        ax.set_xticklabels(facies_names, fontsize=9, rotation=45, ha="right")
+        ax.set_yticklabels(facies_names, fontsize=9)
+        ax.set_xlabel(_("To (next state)"), fontsize=10)
+        ax.set_ylabel(_("From (current state)"), fontsize=10)
+
+        sig = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else "ns"
+        ax.set_title(
+            _("Markov Transition Probabilities\nχ²={0:.1f}, p={1:.4f} {2}").format(chi2_stat, p_value, sig),
+            fontsize=12, fontweight="bold",
+        )
+
+        self._figure.colorbar(im, ax=ax, shrink=0.8, label=_("Probability"))
+        self._figure.tight_layout()
+        self._canvas.draw()
+
     # =========================================================================
     # Public API
     # =========================================================================

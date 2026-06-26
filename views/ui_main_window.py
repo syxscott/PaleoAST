@@ -2589,9 +2589,27 @@ class MainWindow(QMainWindow):
                 stack.removeWidget(widget)
                 widget.deleteLater()
 
+    # Keep the last N analysis results in the workspace so the user can
+    # switch between them.  Older results are evicted FIFO.
+    _MAX_RESULT_HISTORY = 8
+
     def _add_plot_to_workspace(self, plot: InteractivePlotCanvas, name: str) -> int:
-        """Remove old plots and add a new plot to the workspace."""
-        self._cleanup_plot_widgets()
+        """Add a new plot to the workspace, evicting the oldest if needed."""
+        # Count current result widgets (excluding the spreadsheet and placeholder)
+        stack = self._workspace._stack
+        result_widgets = []
+        for i in range(stack.count()):
+            w = stack.widget(i)
+            if w is self._spreadsheet or w is self._workspace._placeholder:
+                continue
+            result_widgets.append(w)
+
+        # Evict oldest results if we exceed the limit
+        while len(result_widgets) >= self._MAX_RESULT_HISTORY:
+            old = result_widgets.pop(0)
+            stack.removeWidget(old)
+            old.deleteLater()
+
         return self._workspace.addWidget(plot, name)
 
     def _embed_figure_in_workspace(
@@ -2645,7 +2663,19 @@ class MainWindow(QMainWindow):
         # (e.g. to call ``draw_idle`` from elsewhere).
         container.setProperty("figure_canvas", canvas)
 
-        self._cleanup_plot_widgets()
+        # Evict oldest results if we exceed the history limit
+        stack = self._workspace._stack
+        result_widgets = []
+        for i in range(stack.count()):
+            w = stack.widget(i)
+            if w is self._spreadsheet or w is self._workspace._placeholder:
+                continue
+            result_widgets.append(w)
+        while len(result_widgets) >= self._MAX_RESULT_HISTORY:
+            old = result_widgets.pop(0)
+            stack.removeWidget(old)
+            old.deleteLater()
+
         idx = self._workspace.addWidget(container, name)
         self._workspace.setCurrentIndex(idx)
         try:
@@ -2776,8 +2806,6 @@ class MainWindow(QMainWindow):
                     n_components=params["n_components"], method=params["method"]
                 )
 
-                self._status_bar.setProgress(100, 100)
-
                 # Create and display score plot
                 plot = InteractivePlotCanvas()
                 plot.plot_pca_scores(result)
@@ -2802,6 +2830,8 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 QMessageBox.critical(self, _("PCA Error"), format_user_error(e, "PCA"))
+            finally:
+                self._status_bar.setProgress(100, 100)
 
     def _on_run_pcoa(self) -> None:
         """Run Principal Coordinate Analysis."""
@@ -3429,7 +3459,16 @@ class MainWindow(QMainWindow):
                     data=self._state.data_matrix.data,
                     n_zones=params.get("n_zones", 4),
                 )
-                QMessageBox.information(self, _("CONISS Results"), result.summary())
+
+                # Plot dendrogram
+                sample_names = list(self._state.data_matrix.row_labels or [])
+                plot = InteractivePlotCanvas()
+                plot.plot_coniss_dendrogram(
+                    result.linkage_matrix, result.n_zones,
+                    sample_names=sample_names if sample_names else None,
+                )
+                plot_index = self._add_plot_to_workspace(plot, _("CONISS Dendrogram"))
+                self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
             except Exception as e:
                 QMessageBox.critical(self, _("CONISS Error"), format_user_error(e, "CONISS"))
@@ -3448,8 +3487,22 @@ class MainWindow(QMainWindow):
             try:
                 self._status_bar.setProgress(0, 0)
                 result = self._statistics_controller.analyze_markov()
-                QMessageBox.information(self, _("Markov Chain Analysis"), result.summary())
-                self._status_bar.setInfo(_("Markov analysis completed"))
+
+                # Plot transition probability heatmap
+                plot = InteractivePlotCanvas()
+                plot.plot_markov_heatmap(
+                    result.transition_matrix, result.facies_names,
+                    chi2_stat=result.chi_squared, p_value=result.p_value,
+                )
+                plot_index = self._add_plot_to_workspace(plot, _("Markov Transition Matrix"))
+                self._workspace.setCurrentIndex(plot_index)
+
+                sig = "Markovian" if result.is_markovian else "Random"
+                self._status_bar.setInfo(
+                    _("Markov: χ²={0:.1f}, p={1:.4f} ({2})").format(
+                        result.chi_squared, result.p_value, sig
+                    )
+                )
             except Exception as e:
                 QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "马尔可夫链"))
             finally:
@@ -3558,8 +3611,15 @@ class MainWindow(QMainWindow):
             eigenshape_analyzer = EigenshapeAnalyzer()
             es_result = eigenshape_analyzer.analyze(coefficients_list, n_components=min(5, data.shape[0] - 1))
 
-            msg = es_result.summary()
-            QMessageBox.information(self, _("Eigenshape Analysis"), msg)
+            # Plot eigenshape scores
+            plot = InteractivePlotCanvas()
+            labels = list(self._state.data_matrix.row_labels or [])
+            plot.plot_eigenshape_scores(
+                es_result.scores, es_result.explained_variance,
+                specimen_labels=labels if labels else None,
+            )
+            plot_index = self._add_plot_to_workspace(plot, _("Eigenshape Scores"))
+            self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(
                 _("Eigenshape: {0} specimens, {1} components").format(
                     es_result.n_specimens, es_result.n_components
