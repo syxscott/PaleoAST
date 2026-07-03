@@ -93,7 +93,7 @@ class DiversityDynamics:
 
             # 计算速率
             if i > 0:
-                dt = t_start - t_end
+                dt = abs(t_end - t_start)
                 if dt > 0:
                     dR = count - richness[i - 1]
                     if dR > 0:
@@ -102,8 +102,11 @@ class DiversityDynamics:
                     else:
                         orig_rate = 0.0
                         ext_rate = -dR / dt
-                    origination_rates.append(orig_rate)
-                    extinction_rates.append(ext_rate)
+                else:
+                    orig_rate = 0.0
+                    ext_rate = 0.0
+                origination_rates.append(orig_rate)
+                extinction_rates.append(ext_rate)
             else:
                 origination_rates.append(0.0)
                 extinction_rates.append(0.0)

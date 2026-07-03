@@ -167,14 +167,15 @@ class RipleyKAnalyzer:
             # Monte Carlo envelope
             envelope_upper, envelope_lower = self._compute_envelope(points, r_values, area, n_simulations)
 
-            # Determine interpretation
-            # Check if L(r) is predominantly above, below, or within envelope
-            l_mean = np.mean(l_values[len(r_values) // 4 :])  # Ignore very small r
-            envelope_range = np.mean(envelope_upper - envelope_lower)
+            # Determine interpretation by comparing observed L(r) against
+            # the Monte Carlo envelope over non-trivial radii.
+            window = slice(len(r_values) // 4, None)
+            above = np.mean(l_values[window] > envelope_upper[window])
+            below = np.mean(l_values[window] < envelope_lower[window])
 
-            if l_mean > envelope_range / 2:
+            if above > 0.5:
                 interpretation = _("Pattern: CLUSTERED (L(r) > envelope indicates clustering)")
-            elif l_mean < -envelope_range / 2:
+            elif below > 0.5:
                 interpretation = _("Pattern: REGULAR/DISPERSED (L(r) < envelope indicates regularity)")
             else:
                 interpretation = _("Pattern: RANDOM (L(r) within envelope indicates CSR)")

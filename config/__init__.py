@@ -43,6 +43,12 @@ from .i18n import (
     set_language,
 )
 
+# Eagerly register the built-in translation dictionaries so that
+# ``_()`` returns translated strings even before ``main.py`` has run
+# (unit tests, scripts, library use). ``register_translations`` is
+# idempotent.
+register_translations()
+
 __all__ = [
     "ACCENT_COLOR",
     "APP_AUTHOR",

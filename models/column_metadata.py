@@ -470,6 +470,42 @@ class ColumnMetadataManager:
                     units=meta_dict.get("units"),
                 )
 
+    def from_dict_by_label(
+        self,
+        metadata_dict: dict[int, dict[str, Any]],
+        new_labels: list[str],
+    ) -> None:
+        """Restore metadata whose *label* still exists in ``new_labels``.
+
+        ``metadata_dict`` is keyed by the *old* column index. For each
+        entry we look up the corresponding label in the manager's
+        ``_column_labels`` (the labels that existed when the metadata
+        was captured), then re-apply the metadata at the position of
+        the same label in ``new_labels`` if it survives.
+        """
+        if not metadata_dict:
+            return
+        with self._lock:
+            for old_idx, meta_dict in metadata_dict.items():
+                if old_idx >= len(self._column_labels):
+                    continue
+                old_label = self._column_labels[old_idx]
+                if old_label not in new_labels:
+                    continue
+                new_idx = new_labels.index(old_label)
+                if new_idx >= self._n_columns:
+                    continue
+                self._metadata[new_idx] = ColumnMetadata(
+                    column_index=new_idx,
+                    name=meta_dict.get("name", old_label),
+                    data_type=meta_dict.get("data_type", DataType.CONTINUOUS),
+                    group=meta_dict.get("group"),
+                    color=meta_dict.get("color", CHART_COLORS[new_idx % len(CHART_COLORS)]),
+                    marker=meta_dict.get("marker", CHART_MARKERS[new_idx % len(CHART_MARKERS)]),
+                    description=meta_dict.get("description"),
+                    units=meta_dict.get("units"),
+                )
+
     def validate(self) -> bool:
         """
         Validate all metadata entries.

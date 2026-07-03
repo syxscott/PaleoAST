@@ -118,6 +118,24 @@ class Quaternion:
         self.z = self.z / norm
         logger.debug(f"Quaternion created: w={self.w:.4f}, x={self.x:.4f}, y={self.y:.4f}, z={self.z:.4f}")
 
+    @classmethod
+    def from_raw(cls, w: float, x: float, y: float, z: float) -> Quaternion:
+        """Create a quaternion-like value without automatic normalization.
+
+        This is for intermediate linear algebra operations such as SLERP's
+        linear fallback. Public rotation constructors still return unit
+        quaternions through ``__post_init__``.
+        """
+        norm = np.sqrt(w**2 + x**2 + y**2 + z**2)
+        if norm < 1e-10:
+            raise ValueError("Quaternion magnitude too small")
+        q = cls.__new__(cls)
+        q.w = float(w)
+        q.x = float(x)
+        q.y = float(y)
+        q.z = float(z)
+        return q
+
     def normalized(self) -> Quaternion:
         """返回归一化后的四元数副本"""
         norm = np.sqrt(self.w**2 + self.x**2 + self.y**2 + self.z**2)
@@ -318,17 +336,17 @@ class Quaternion:
 
     def __rmul__(self, scalar: float) -> Quaternion:
         """标量乘法"""
-        return Quaternion(self.w * scalar, self.x * scalar, self.y * scalar, self.z * scalar)
+        return Quaternion.from_raw(self.w * scalar, self.x * scalar, self.y * scalar, self.z * scalar)
 
     def __add__(self, other: Quaternion) -> Quaternion:
         """四元数加法"""
         if not isinstance(other, Quaternion):
             return NotImplemented
-        return Quaternion(self.w + other.w, self.x + other.x, self.y + other.y, self.z + other.z)
+        return Quaternion.from_raw(self.w + other.w, self.x + other.x, self.y + other.y, self.z + other.z)
 
     def __neg__(self) -> Quaternion:
         """取负"""
-        return Quaternion(-self.w, -self.x, -self.y, -self.z)
+        return Quaternion.from_raw(-self.w, -self.x, -self.y, -self.z)
 
     def rotate_vector(self, v: np.ndarray) -> np.ndarray:
         """

@@ -411,6 +411,7 @@ class BinaryCache:
 
                     metadata = json.loads(metadata_bytes.decode("utf-8"))
                 else:
+                    metadata_bytes = b""
                     metadata = {}
 
                 # 验证CRC32 - 使用原始（可能压缩的）字节进行校验

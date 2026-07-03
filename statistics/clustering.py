@@ -89,6 +89,7 @@ class ClusteringAnalyzer:
         metric: str = "euclidean",
         n_clusters: int | None = None,
         threshold: float | None = None,
+        precomputed: bool = False,
     ) -> ClusteringResult:
         """
         Perform hierarchical clustering.
@@ -111,7 +112,11 @@ class ClusteringAnalyzer:
                 metric = "euclidean"
 
             # Compute distance matrix if needed
-            if data.shape[0] == data.shape[1] and self._is_distance_matrix(data):
+            if precomputed:
+                if data.shape[0] != data.shape[1]:
+                    raise MatrixDimensionError("Precomputed distance matrix must be square")
+                if not self._is_distance_matrix(data):
+                    raise MatrixDimensionError("Precomputed distance matrix must be symmetric with a zero diagonal")
                 dm = data
                 dist_condensed = squareform(dm, checks=False)
             else:
@@ -154,7 +159,7 @@ class ClusteringAnalyzer:
         if data.shape[0] != data.shape[1]:
             return False
         diag = np.diag(data)
-        return np.allclose(diag, 0, atol=1e-10)
+        return np.allclose(diag, 0, atol=1e-10) and np.allclose(data, data.T, atol=1e-10)
 
     @property
     def last_result(self) -> ClusteringResult | None:

@@ -211,10 +211,26 @@ class StateManager:
             self._data_matrix = matrix
             self._logger.info(f"set_data_matrix: shape=({matrix.n_samples} x {matrix.n_variables})")
             if _reset_metadata:
+                # Build a fresh metadata manager but carry over any
+                # existing per-column / per-row attributes whose
+                # *label* still exists in the new matrix. This avoids
+                # silently erasing user-defined group / colour / marker
+                # data when the dataset is replaced with a new one
+                # that happens to reuse some labels.
+                preserved_col = (
+                    self._column_metadata.to_dict() if self._column_metadata else {}
+                )
+                preserved_row = (
+                    self._row_metadata.to_dict() if self._row_metadata else {}
+                )
                 self._column_metadata = ColumnMetadataManager(
                     n_columns=matrix.n_variables, column_labels=matrix.col_labels
                 )
-                self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
+                self._column_metadata.from_dict_by_label(preserved_col, matrix.col_labels)
+                self._row_metadata = RowMetadataManager(
+                    n_rows=matrix.n_samples, row_labels=matrix.row_labels
+                )
+                self._row_metadata.from_dict_by_label(preserved_row, matrix.row_labels)
             self._analysis_cache.clear()
             self._modified = True
         get_event_bus().emit_data_changed(matrix)

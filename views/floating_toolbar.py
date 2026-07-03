@@ -164,7 +164,14 @@ class FloatingToolBar(QWidget):
         self._apply_stylesheet()
 
     def connect_signals(self, canvas) -> None:
-        """Connect toolbar buttons to canvas operations."""
+        """Connect toolbar buttons to canvas operations.
+
+        The toolbar talks to ``canvas`` through its *public* API
+        (``export_plot`` / ``zoom_in`` / ``reset_view``) so renaming
+        the private helpers used internally does not silently break
+        the toolbar. Buttons are disabled (rather than simply missing
+        the connection) when the canvas does not expose the action.
+        """
         # Disconnect previous connections
         try:
             self._btn_save.clicked.disconnect()
@@ -175,16 +182,30 @@ class FloatingToolBar(QWidget):
             pass
 
         if canvas is None:
+            for btn in (self._btn_save, self._btn_zoom, self._btn_pan, self._btn_reset):
+                btn.setEnabled(False)
             return
 
-        # Connect to canvas operations with existence checks
-        if hasattr(canvas, "_export_plot"):
-            self._btn_save.clicked.connect(canvas._export_plot)
-        if hasattr(canvas, "_zoom_in"):
-            self._btn_zoom.clicked.connect(canvas._zoom_in)
-        if hasattr(canvas, "_reset_view"):
-            self._btn_reset.clicked.connect(canvas._reset_view)
-        # Pan button logs info (actual pan mode would need canvas support)
+        if hasattr(canvas, "export_plot"):
+            self._btn_save.setEnabled(True)
+            self._btn_save.clicked.connect(canvas.export_plot)
+        else:
+            self._btn_save.setEnabled(False)
+
+        if hasattr(canvas, "zoom_in"):
+            self._btn_zoom.setEnabled(True)
+            self._btn_zoom.clicked.connect(canvas.zoom_in)
+        else:
+            self._btn_zoom.setEnabled(False)
+
+        if hasattr(canvas, "reset_view"):
+            self._btn_reset.setEnabled(True)
+            self._btn_reset.clicked.connect(canvas.reset_view)
+        else:
+            self._btn_reset.setEnabled(False)
+
+        # Pan button logs info (actual pan mode would need canvas support).
+        self._btn_pan.setEnabled(True)
         self._btn_pan.clicked.connect(lambda: self._logger.info("Pan mode - use mouse drag"))
 
     def showEvent(self, event) -> None:

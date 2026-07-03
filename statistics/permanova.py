@@ -159,7 +159,7 @@ class PERMANOVAAnalyzer:
                 permuted_F[i] = self._compute_F_statistic(D, permuted_groups, g, n)[0]
 
             # Calculate p-value
-            p_value = np.mean(permuted_F >= F_obs)
+            p_value = float((1 + np.sum(permuted_F >= F_obs)) / (n_permutations + 1))
 
             # Mean squares
             ms_between = ss_between / df_g if df_g > 0 else 0
@@ -201,8 +201,10 @@ class PERMANOVAAnalyzer:
         # Square distances
         D_sq = D**2
 
-        # Total sum of squares
-        SS_T = np.sum(D_sq) / n
+        # Total sum of squares (Anderson 2001): sum over unordered
+        # pairs only. The full squared distance matrix contains each
+        # pair twice, so use the upper triangle.
+        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
 
         # Within-group sum of squares
         ss_within = 0.0
@@ -215,7 +217,7 @@ class PERMANOVAAnalyzer:
             for i in range(len(grp_indices)):
                 for j in range(i + 1, len(grp_indices)):
                     grp_sum += D_sq[grp_indices[i], grp_indices[j]]
-            ss_within += (2.0 / n_g) * grp_sum
+            ss_within += (1.0 / n_g) * grp_sum
 
         # Between-group sum of squares
         ss_between = SS_T - ss_within

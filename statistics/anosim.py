@@ -144,7 +144,7 @@ class ANOSIMAnalyzer:
                 permuted_R[i] = self._compute_R_statistic(D, permuted_groups)
 
             # Calculate p-value
-            p_value = np.mean(permuted_R >= R_obs)
+            p_value = float((1 + np.sum(permuted_R >= R_obs)) / (n_permutations + 1))
 
             # Get unique groups
             unique_groups = sorted(set(groups), key=lambda x: str(x))

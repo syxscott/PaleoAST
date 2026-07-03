@@ -240,7 +240,7 @@ class NullModelAnalyzer:
             mean_sim = float(np.mean(simulated))
             std_sim = float(np.std(simulated))
             ses = (observed - mean_sim) / std_sim if std_sim > 0 else 0.0
-            p_value = float(np.mean(simulated >= observed))
+            p_value = float((1 + np.sum(simulated >= observed)) / (n_permutations + 1))
 
             result = NullModelResult(
                 observed_score=observed,
@@ -343,8 +343,9 @@ class NullModelAnalyzer:
         """
         Swap algorithm - preserves row and column sums.
 
-        Randomly select two rows and two columns.
-        If cells form a 2x2 submatrix [[a,b],[c,d]], swap to [[c,d],[a,b]]
+        Randomly select two rows and two columns. A valid fixed-fixed
+        swap only toggles checkerboard submatrices:
+        [[1, 0], [0, 1]] ↔ [[0, 1], [1, 0]].
         """
         result = matrix.copy()
         n_species, n_sites = result.shape
@@ -366,17 +367,16 @@ class NullModelAnalyzer:
             c = result[r2, c1]
             d = result[r2, c2]
 
-            # Check if swapping would change the matrix
-            # A valid swap exchanges 1s and 0s while preserving sums
-            if (a == c and b == d) or (a == b and c == d):
-                # Swapping doesn't change the pattern
-                continue
-
-            # Perform swap: [[a,b],[c,d]] -> [[c,d],[a,b]]
-            result[r1, c1] = c
-            result[r1, c2] = d
-            result[r2, c1] = a
-            result[r2, c2] = b
+            if a == 1 and b == 0 and c == 0 and d == 1:
+                result[r1, c1] = 0
+                result[r1, c2] = 1
+                result[r2, c1] = 1
+                result[r2, c2] = 0
+            elif a == 0 and b == 1 and c == 1 and d == 0:
+                result[r1, c1] = 1
+                result[r1, c2] = 0
+                result[r2, c1] = 0
+                result[r2, c2] = 1
 
         return result
 
@@ -504,13 +504,16 @@ def _swap_matrix_worker(matrix: npt.NDArray) -> npt.NDArray:
         c = result[r2, c1]
         d = result[r2, c2]
 
-        if (a == c and b == d) or (a == b and c == d):
-            continue
-
-        result[r1, c1] = c
-        result[r1, c2] = d
-        result[r2, c1] = a
-        result[r2, c2] = b
+        if a == 1 and b == 0 and c == 0 and d == 1:
+            result[r1, c1] = 0
+            result[r1, c2] = 1
+            result[r2, c1] = 1
+            result[r2, c2] = 0
+        elif a == 0 and b == 1 and c == 1 and d == 0:
+            result[r1, c1] = 1
+            result[r1, c2] = 0
+            result[r2, c1] = 0
+            result[r2, c2] = 1
 
     return result
 

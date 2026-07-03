@@ -160,11 +160,15 @@ class CoverageRarefactionResult:
             f"{_('Number of samples: {0}').format(len(self.sample_names))}\n",
             "",
         ]
+        final_richness = float(self.expected_richness[-1]) if len(self.expected_richness) else 0.0
+        final_coverage = float(self.coverage_levels[-1]) if len(self.coverage_levels) else 0.0
         for i, name in enumerate(self.sample_names):
+            sample_size = self.sample_sizes[i] if self.sample_sizes is not None and i < len(self.sample_sizes) else 0
+            asymptote = self.asymptote_estimate[i] if i < len(self.asymptote_estimate) else 0
             lines.append(
-                f"{name}: S={self.expected_richness[i]:.1f}, "
-                f"coverage={self.coverage_levels[i]:.1%}, "
-                f"asymptote={self.asymptote_estimate[i]:.1f}"
+                f"{name}: n={sample_size:.0f}, "
+                f"asymptote={asymptote:.1f}, "
+                f"aggregate S@{final_coverage:.1%}={final_richness:.1f}"
             )
         return "\n".join(lines)
 

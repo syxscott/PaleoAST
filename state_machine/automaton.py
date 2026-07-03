@@ -415,11 +415,14 @@ class DFA(FiniteAutomaton):
         # 获取字母表
         alphabet = self._get_alphabet()
 
-        # Step 2: 初始化工作集
+        # Step 2: 初始化工作队列。Partitions are mutable sets and
+        # therefore cannot be stored inside another set. Keep the work
+        # collection as a list and deduplicate by frozenset identity when
+        # adding newly split partitions.
         if len(partitions) == 2:
-            work_set = set(partitions)
+            work_set = list(partitions)
         else:
-            work_set = {partitions[-1]} if partitions else set()
+            work_set = [partitions[-1]] if partitions else []
 
         # 迭代细化
         changed = True
@@ -427,7 +430,8 @@ class DFA(FiniteAutomaton):
             changed = False
             new_partitions: list[set[State]] = []
             work_queue = list(work_set)
-            work_set = set()
+            work_set = []
+            work_keys: set[frozenset[State]] = set()
 
             for partition in work_queue:
                 if not partition:
@@ -456,7 +460,10 @@ class DFA(FiniteAutomaton):
                     if len(reverse_map) > 1:
                         for new_part in reverse_map.values():
                             new_partitions.append(new_part)
-                            work_set.add(new_part)
+                            key = frozenset(new_part)
+                            if key not in work_keys:
+                                work_set.append(new_part)
+                                work_keys.add(key)
                         split_done = True
                         changed = True
                         break

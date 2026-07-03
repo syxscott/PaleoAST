@@ -210,6 +210,7 @@ class KaplanMeierAnalyzer:
             std_error = np.zeros(n_unique)
 
             # Greenwood's formula for standard error
+            greenwood_sum = 0.0
             for i, t_i in enumerate(event_times):
                 # Number at risk just before this time
                 n_at_risk[i] = np.sum(t_sorted >= t_i)
@@ -222,18 +223,13 @@ class KaplanMeierAnalyzer:
                     survival_prob[i] = survival_prob[i - 1] if i > 0 else 1.0
                     survival_prob[i] *= 1 - n_events[i] / n_at_risk[i]
 
-                    # Greenwood's formula
-                    if n_at_risk[i] > n_events[i]:
-                        denom = n_at_risk[i] * (n_at_risk[i] - n_events[i])
-                        std_error[i] = (std_error[i - 1] ** 2 if i > 0 else survival_prob[i] ** 2) * (
-                            n_events[i] / denom
-                        )
-                    else:
-                        std_error[i] = std_error[i - 1] ** 2 if i > 0 else 0
+                    # Greenwood's formula:
+                    # Var(S_i) = S_i^2 * sum_j d_j / (n_j * (n_j - d_j))
+                    if n_events[i] > 0 and n_at_risk[i] > n_events[i]:
+                        greenwood_sum += n_events[i] / (n_at_risk[i] * (n_at_risk[i] - n_events[i]))
+                    std_error[i] = survival_prob[i] * np.sqrt(greenwood_sum)
                 else:
-                    std_error[i] = std_error[i - 1] ** 2 if i > 0 else 0
-
-            std_error = np.sqrt(std_error)
+                    std_error[i] = std_error[i - 1] if i > 0 else 0
 
             # Confidence intervals (log-log transform for bounded CIs)
             z = stats.norm.ppf(1 - (1 - confidence_level) / 2)
@@ -250,11 +246,8 @@ class KaplanMeierAnalyzer:
 
             # Find median survival time
             if survival_prob[-1] <= 0.5:
-                idx = np.searchsorted(survival_prob, 0.5, side="left")
-                if idx < len(event_times):
-                    median_survival = float(event_times[idx])
-                else:
-                    median_survival = None
+                below = np.where(survival_prob <= 0.5)[0]
+                median_survival = float(event_times[below[0]]) if len(below) > 0 else None
             else:
                 median_survival = None
 

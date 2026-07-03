@@ -405,6 +405,42 @@ class RowMetadataManager:
                     location=meta_dict.get("location"),
                 )
 
+    def from_dict_by_label(
+        self,
+        metadata_dict: dict[int, dict[str, Any]],
+        new_labels: list[str],
+    ) -> None:
+        """Restore metadata whose *label* still exists in ``new_labels``.
+
+        Mirrors :meth:`ColumnMetadataManager.from_dict_by_label`. Useful
+        when loading a new dataset that reuses some of the existing
+        row labels so the user does not silently lose group/colour
+        assignments.
+        """
+        if not metadata_dict:
+            return
+        with self._lock:
+            for old_idx, meta_dict in metadata_dict.items():
+                if old_idx >= len(self._row_labels):
+                    continue
+                old_label = self._row_labels[old_idx]
+                if old_label not in new_labels:
+                    continue
+                new_idx = new_labels.index(old_label)
+                if new_idx >= self._n_rows:
+                    continue
+                self._metadata[new_idx] = RowMetadata(
+                    row_index=new_idx,
+                    label=meta_dict.get("label", old_label),
+                    group=meta_dict.get("group"),
+                    color=meta_dict.get("color", CHART_COLORS[new_idx % len(CHART_COLORS)]),
+                    marker=meta_dict.get("marker", CHART_MARKERS[new_idx % len(CHART_MARKERS)]),
+                    size=meta_dict.get("size", 60.0),
+                    description=meta_dict.get("description"),
+                    age=meta_dict.get("age"),
+                    location=meta_dict.get("location"),
+                )
+
     def __repr__(self) -> str:
         with self._lock:
             n_groups = len(self.get_all_groups())

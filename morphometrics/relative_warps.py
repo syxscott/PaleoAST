@@ -145,18 +145,23 @@ class RelativeWarpsAnalyzer:
                 raise ComputationError("SVD failed during Relative Warps analysis", original_exception=e)
 
             # Eigenvalues from singular values
-            eigenvalues = (singular_values**2) / (n_specimens - 1)
+            all_eigenvalues = (singular_values**2) / (n_specimens - 1)
 
             # Select top components
-            eigenvalues = eigenvalues[:n_components]
+            eigenvalues = all_eigenvalues[:n_components]
             eigenvectors = Vt[:n_components].T
 
             # Compute relative warps (projections)
             relative_warps = flattened_centered @ eigenvectors
 
-            # Compute explained variance
-            total_variance = np.sum(eigenvalues)
-            explained_variance = (eigenvalues / total_variance) * 100
+            # Compute explained variance against the full variance, not only
+            # the retained components. Otherwise a truncated result always
+            # reports 100% cumulative variance.
+            total_variance = np.sum(all_eigenvalues)
+            if total_variance > 0:
+                explained_variance = (eigenvalues / total_variance) * 100
+            else:
+                explained_variance = np.zeros_like(eigenvalues)
             cumulative_variance = np.cumsum(explained_variance)
             self._logger.info(
                 f"Relative Warps analysis completed: {n_components} components, "

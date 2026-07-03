@@ -41,6 +41,7 @@ from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QFileDialog,
     QLabel,
     QMessageBox,
@@ -1919,6 +1920,10 @@ class InteractivePlotCanvas(QWidget):
 
     def _on_selection_mode_changed(self, index: int) -> None:
         """Handle selection mode change."""
+        if index in (1, 2) and hasattr(self, "_selector"):
+            self._selector.disconnect()
+            del self._selector
+
         if index == 1:  # Rectangle
             self._selector = RectangleSelector(
                 self._ax,
@@ -2368,54 +2373,91 @@ class InteractivePlotCanvas(QWidget):
         self._ax.autoscale()
         self._canvas.draw()
 
-    def _export_plot(self) -> None:
-        """
-        Export plot with high resolution.
+    # ------------------------------------------------------------------
+    # Public tool API used by FloatingToolBar. These are thin aliases for
+    # the private helpers above; keeping the public names explicit lets
+    # the toolbar depend on a stable contract that does not silently
+    # disappear when the private implementation is renamed.
+    # ------------------------------------------------------------------
 
-        Mathematical Context:
-            Export formats and DPI settings:
-                - Screen: 72-100 DPI
-                - Print/Publication: 300 DPI
-                - High-quality: 600 DPI
-                - Vector: SVG, PDF, EPS (infinite resolution)
-        """
-        # Show save dialog
-        filepath, _selected_filter = QFileDialog.getSaveFileName(
-            self, _("Export Plot"), "", "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps);;TIFF (*.tiff)"
-        )
+    def export_plot(self, options: object | None = None) -> None:
+        """Public entry point for the Save action.
 
-        if not filepath:
+        When ``options`` is ``None`` (legacy call sites or the
+        FloatingToolBar Save button) the canvas falls back to the
+        legacy "ask for path + write at default DPI" flow. When
+        ``options`` is provided (typically a
+        :class:`plot_export.PlotExportOptions` instance) the canvas
+        delegates to :func:`plot_export.export_figure` so callers
+        can fully control format / DPI / background / colour / size.
+        """
+        if options is None:
+            self._export_plot()
             return
-
-        # Get DPI from format
-        dpi_map = {"png": 300, "pdf": 300, "svg": 72, "eps": 300, "tiff": 600}
-
-        ext = filepath.split(".")[-1].lower()
-        dpi = dpi_map.get(ext, 300)
-
-        # Get size
-        size_dialog = QMessageBox(self)
-        size_dialog.setWindowTitle(_("Export Size"))
-        size_dialog.setText(_("Select export size:"))
-        size_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
-
-        # Calculate size based on DPI
-        width_inches = self._figure.get_figwidth()
-        height_inches = self._figure.get_figheight()
-        width_cm = width_inches * 2.54
-        height_cm = height_inches * 2.54
-
-        # Save figure
+        # New path: use the unified facade. The dialog already showed
+        # the Save dialog, so we write directly without further
+        # prompting.
         try:
-            self._figure.savefig(
-                filepath, dpi=dpi, bbox_inches="tight", facecolor=self._figure.get_facecolor(), edgecolor="none"
-            )
+            from plot_export import PlotExportOptions, export_figure
 
+            if not isinstance(options, PlotExportOptions):
+                raise TypeError(
+                    "export_plot(options=...) expects a PlotExportOptions"
+                )
+            path = options.metadata.pop("_target_path", None) if options.metadata else None
+            if not path:
+                # Fall back to asking the user when no path was threaded
+                # through. The PlotExportDialog always sets one.
+                from PyQt6.QtWidgets import QFileDialog
+
+                path, _ = QFileDialog.getSaveFileName(self, _("Export Plot"), "", "PNG (*.png)")
+                if not path:
+                    return
+            export_figure(self._figure, path, options)
+            QMessageBox.information(
+                self,
+                _("Export Successful"),
+                _("Plot saved to:\n{0}").format(path),
+            )
+        except Exception as e:
+            QMessageBox.critical(self, _("Export Error"), _("Failed to export plot:\n{0}").format(str(e)))
+
+    def zoom_in(self) -> None:
+        """Public entry point for the Zoom action."""
+        self._zoom_in()
+
+    def reset_view(self) -> None:
+        """Public entry point for the Reset action."""
+        self._reset_view()
+
+    def _export_plot(self) -> None:
+        """Legacy export flow kept for backward compatibility.
+
+        Modern callers should use :meth:`export_plot` with a
+        :class:`plot_export.PlotExportOptions` instance.
+        """
+        from plot_export import PlotExportOptions, export_figure
+
+        from views.ui_plot_export_dialog import PlotExportDialog
+
+        dialog = PlotExportDialog("plot.png", parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            options = dialog.get_options()
+        except ValueError as exc:
+            QMessageBox.critical(self, _("Export Error"), str(exc))
+            return
+        path = dialog.get_path()
+        try:
+            export_figure(self._figure, path, options)
+            width_cm = self._figure.get_figwidth() * 2.54
+            height_cm = self._figure.get_figheight() * 2.54
             QMessageBox.information(
                 self,
                 _("Export Successful"),
                 _("Plot saved to:\n{0}\n\nResolution: {1} DPI\nSize: {2:.1f} x {3:.1f} cm").format(
-                    filepath, dpi, width_cm, height_cm
+                    path, options.dpi, width_cm, height_cm
                 ),
             )
         except Exception as e:
@@ -2433,7 +2475,7 @@ class InteractivePlotCanvas(QWidget):
             col_names: Column/variable names
             stats_list: Optional list of ColumnStats objects for annotation
         """
-        self._record_plot_call("plot_summary_statistics", data)
+        self._record_plot_call("plot_summary_statistics", data, col_names, stats_list)
         self._current_plot_type = "summary_statistics"
         self._figure.clear()
 
@@ -2476,7 +2518,7 @@ class InteractivePlotCanvas(QWidget):
             col_names: Column names
             normality_results: Optional list of NormalityResult for annotation
         """
-        self._record_plot_call("plot_normality_qq", data)
+        self._record_plot_call("plot_normality_qq", data, col_names, normality_results)
         self._current_plot_type = "normality_qq"
         self._figure.clear()
 
@@ -2527,7 +2569,7 @@ class InteractivePlotCanvas(QWidget):
             test_name: Name of the statistical test (for title)
             p_values: Optional per-variable p-values for annotation
         """
-        self._record_plot_call("plot_group_comparison", data)
+        self._record_plot_call("plot_group_comparison", data, groups, col_names, test_name, p_values)
         self._current_plot_type = "group_comparison"
         self._figure.clear()
 
@@ -2592,7 +2634,7 @@ class InteractivePlotCanvas(QWidget):
             sample_names: Optional sample labels
             zone_boundaries: Optional zone boundary indices
         """
-        self._record_plot_call("plot_coniss_dendrogram", linkage_matrix)
+        self._record_plot_call("plot_coniss_dendrogram", linkage_matrix, n_zones, sample_names, zone_boundaries)
         self._current_plot_type = "coniss_dendrogram"
         self._figure.clear()
 
@@ -2636,7 +2678,7 @@ class InteractivePlotCanvas(QWidget):
             cumulative_var: Cumulative explained variance (%)
             method: Analysis method name for title
         """
-        self._record_plot_call("plot_scree", eigenvalues)
+        self._record_plot_call("plot_scree", eigenvalues, explained_var, cumulative_var, method)
         self._current_plot_type = "scree"
         self._figure.clear()
 
@@ -2772,7 +2814,7 @@ class InteractivePlotCanvas(QWidget):
             explained_var: Explained variance per component
             specimen_labels: Optional specimen labels
         """
-        self._record_plot_call("plot_eigenshape_scores", scores)
+        self._record_plot_call("plot_eigenshape_scores", scores, explained_var, specimen_labels)
         self._current_plot_type = "eigenshape_scores"
         self._figure.clear()
 
@@ -2808,7 +2850,7 @@ class InteractivePlotCanvas(QWidget):
             chi2_stat: Chi-squared statistic
             p_value: P-value for chi-squared test
         """
-        self._record_plot_call("plot_markov_heatmap", transition_matrix)
+        self._record_plot_call("plot_markov_heatmap", transition_matrix, facies_names, chi2_stat, p_value)
         self._current_plot_type = "markov_heatmap"
         self._figure.clear()
 

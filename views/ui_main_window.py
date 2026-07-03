@@ -1273,7 +1273,7 @@ class MainWindow(QMainWindow):
             new_matrix = DataMatrix(matrix_data, row_labels=row_labels, col_labels=col_labels)
 
             self._state.set_data_matrix(new_matrix)
-            self._spreadsheet.load_data(matrix_data, row_labels=row_labels, col_labels=col_labels)
+            self._spreadsheet.load_data(matrix_data, row_labels=row_labels, col_labels=col_labels, update_state=False)
 
             self._status_bar.setInfo(
                 _("Loaded: {0} rows x {1} columns").format(new_matrix.n_samples, new_matrix.n_variables)
@@ -1402,6 +1402,16 @@ class MainWindow(QMainWindow):
         # Univariate group
         univar_group = analysis_tab.addGroup(_("Univariate"))
         self._btn_univariate = univar_group.addButton("chart", _("Stats"), _("Univariate Statistics"))
+        # Add a combobox so users can pick the specific univariate test
+        # directly from the ribbon, rather than going through the
+        # generic dialog each time.
+        self._univar_combo = univar_group.addComboBox(
+            [_("Summary"), _("Normality"), _("t-test"), _("ANOVA"), _("Kruskal-Wallis")],
+            tooltip=_("Univariate test"),
+            on_change=self._on_run_univariate_by_index,
+        )
+        self._register_data_button(self._btn_univariate)
+        self._univar_combo._is_undo_button = False  # never used as undo marker
         self._btn_simper = univar_group.addButton("chart", "SIMPER", _("SIMPER Analysis"))
 
         # Diversity group
@@ -1479,8 +1489,8 @@ class MainWindow(QMainWindow):
         self._btn_redo.clicked.connect(self._on_redo)
         self._btn_transpose.clicked.connect(self._on_transpose)
         self._btn_imputation.clicked.connect(self._on_run_imputation)
-        self._register_data_button(self._btn_undo)
-        self._register_data_button(self._btn_redo)
+        self._register_data_button(self._btn_undo, kind="undo")
+        self._register_data_button(self._btn_redo, kind="redo")
         self._register_data_button(self._btn_transpose)
         self._register_data_button(self._btn_imputation)
 
@@ -1517,6 +1527,10 @@ class MainWindow(QMainWindow):
         self._register_data_button(self._btn_cca)
         self._btn_univariate.clicked.connect(self._on_run_univariate)
         self._register_data_button(self._btn_univariate)
+        # Disable the combobox alongside the rest of the data buttons
+        # until data is loaded.
+        self._data_buttons.append(self._univar_combo)
+        self._univar_combo.setEnabled(self._state.has_data)
         self._btn_simper.clicked.connect(self._on_run_simper)
         self._register_data_button(self._btn_simper)
         self._btn_diversity.clicked.connect(self._on_run_diversity)
@@ -1606,9 +1620,17 @@ class MainWindow(QMainWindow):
         for action in self._data_actions:
             action.setEnabled(has_data)
 
-        # Update all registered data-dependent buttons
+        # Update all registered data-dependent buttons. Undo/Redo
+        # buttons are registered as data buttons but their actual
+        # availability depends on the StateManager undo/redo stacks,
+        # not just on whether data is loaded.
         for button in self._data_buttons:
-            button.setEnabled(has_data)
+            if getattr(button, "_is_undo_button", False):
+                button.setEnabled(self._state.can_undo())
+            elif getattr(button, "_is_redo_button", False):
+                button.setEnabled(self._state.can_redo())
+            else:
+                button.setEnabled(has_data)
 
     def _register_data_action(self, action: QAction) -> None:
         """Register an action as data-dependent."""
@@ -1616,11 +1638,27 @@ class MainWindow(QMainWindow):
             self._data_actions.append(action)
             action.setEnabled(self._state.has_data)
 
-    def _register_data_button(self, button) -> None:
-        """Register a button as data-dependent."""
+    def _register_data_button(self, button, *, kind: str = "data") -> None:
+        """Register a button as data-dependent.
+
+        Parameters:
+            button: The button to register.
+            kind: One of "data", "undo", or "redo". "data" toggles
+                with ``has_data``; "undo" toggles with ``can_undo()``;
+                "redo" toggles with ``can_redo()``. Undo/Redo buttons
+                are therefore initially disabled until a state change
+                is performed.
+        """
         if button not in self._data_buttons:
             self._data_buttons.append(button)
-            button.setEnabled(self._state.has_data)
+            if kind == "undo":
+                button._is_undo_button = True
+                button.setEnabled(self._state.can_undo())
+            elif kind == "redo":
+                button._is_redo_button = True
+                button.setEnabled(self._state.can_redo())
+            else:
+                button.setEnabled(self._state.has_data)
 
     def _on_data_changed(self, matrix) -> None:
         """Handle data_changed event from EventBus."""
@@ -1685,6 +1723,13 @@ class MainWindow(QMainWindow):
         file_menu.addAction(export_action)
         self._register_data_action(export_action)
         self._export_action = export_action
+
+        export_plot_action = QAction(_("Export Plot as &Image..."), self)
+        export_plot_action.setShortcut(QKeySequence("Ctrl+Shift+E"))
+        export_plot_action.triggered.connect(self._on_export_current_plot)
+        file_menu.addAction(export_plot_action)
+        self._register_data_action(export_plot_action)
+        self._export_plot_action = export_plot_action
 
         file_menu.addSeparator()
 
@@ -2096,7 +2141,7 @@ class MainWindow(QMainWindow):
             self._state.set_data_matrix(matrix)
 
             # Load into spreadsheet
-            self._spreadsheet.load_data(data, row_labels=row_labels, col_labels=col_labels)
+            self._spreadsheet.load_data(data, row_labels=row_labels, col_labels=col_labels, update_state=False)
             self._workspace.setCurrentIndex(self._spreadsheet_index)
 
             # Update UI state now that we have data
@@ -2127,7 +2172,7 @@ class MainWindow(QMainWindow):
                 # Update state manager
                 self._state.set_data_matrix(matrix)
 
-                self._spreadsheet.load_data(matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels)
+                self._spreadsheet.load_data(matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels, update_state=False)
                 self._workspace.setCurrentIndex(self._spreadsheet_index)
 
                 # Update UI state now that we have data
@@ -2171,6 +2216,13 @@ class MainWindow(QMainWindow):
         self._status_bar.setDarkTheme(is_dark)
         self._workspace.setDarkTheme(is_dark)
         self._navigation.setDarkTheme(is_dark)
+        # DiagnosticConsole is a child dock widget and exposes its own
+        # ``setDarkTheme``; without this propagation the dock's text
+        # colour stays at the light-theme palette and clashes with the
+        # rest of the UI.
+        diagnostic_console = getattr(self, "_diagnostic_console", None)
+        if diagnostic_console is not None and hasattr(diagnostic_console, "setDarkTheme"):
+            diagnostic_console.setDarkTheme(is_dark)
         # Re-theme any embedded matplotlib Figure widgets that we
         # added via :meth:`_embed_figure_in_workspace`. These do not
         # implement ``setDarkTheme`` themselves; the helper applies
@@ -2285,6 +2337,9 @@ class MainWindow(QMainWindow):
         """Undo last state change and refresh spreadsheet."""
         if not self._state.has_data:
             return
+        if not self._state.can_undo():
+            self._status_bar.setInfo(_("Nothing to undo"))
+            return
         self._state.undo()
         matrix = self._state.data_matrix
         if matrix is not None:
@@ -2292,12 +2347,16 @@ class MainWindow(QMainWindow):
                 matrix.data,
                 row_labels=matrix.row_labels,
                 col_labels=matrix.col_labels,
+                update_state=False,
             )
             self._status_bar.setInfo(_("Undo"))
 
     def _on_redo(self) -> None:
         """Redo last undone change and refresh spreadsheet."""
         if not self._state.has_data:
+            return
+        if not self._state.can_redo():
+            self._status_bar.setInfo(_("Nothing to redo"))
             return
         self._state.redo()
         matrix = self._state.data_matrix
@@ -2306,6 +2365,7 @@ class MainWindow(QMainWindow):
                 matrix.data,
                 row_labels=matrix.row_labels,
                 col_labels=matrix.col_labels,
+                update_state=False,
             )
             self._status_bar.setInfo(_("Redo"))
 
@@ -2328,6 +2388,7 @@ class MainWindow(QMainWindow):
                 transposed_data,
                 row_labels=matrix.col_labels,
                 col_labels=matrix.row_labels,
+                update_state=False,
             )
             self._status_bar.setInfo(
                 _("Transposed: {0} samples x {1} variables").format(new_matrix.n_samples, new_matrix.n_variables)
@@ -2406,6 +2467,7 @@ class MainWindow(QMainWindow):
                     result.data,
                     row_labels=row_labels,
                     col_labels=col_labels,
+                    update_state=False,
                 )
 
                 self._status_bar.setInfo(result.summary)
@@ -2462,6 +2524,7 @@ class MainWindow(QMainWindow):
             data,
             row_labels=row_labels,
             col_labels=col_labels,
+            update_state=False,
         )
         self._workspace.setCurrentIndex(self._spreadsheet_index)
 
@@ -2497,6 +2560,7 @@ class MainWindow(QMainWindow):
                 transformed,
                 row_labels=self._state.data_matrix.row_labels,
                 col_labels=self._state.data_matrix.col_labels,
+                update_state=False,
             )
 
             self._status_bar.setInfo(_("{0} transformation applied").format(name))
@@ -2561,6 +2625,73 @@ class MainWindow(QMainWindow):
                 self._logger.error(f"Export failed: {e}")
                 QMessageBox.critical(self, _("Export Error"), str(e))
 
+    def _on_export_current_plot(self) -> None:
+        """Export the currently visible plot through the unified facade.
+
+        The function pulls the matplotlib ``Figure`` from the currently
+        visible workspace tab. It supports both ``InteractivePlotCanvas``
+        tabs and embedded figure-host widgets (``FigureHostWidget`` with
+        the ``figure_canvas`` dynamic property). When no plot is
+        visible, the user is told to run an analysis first.
+        """
+        try:
+            from views.ui_plot_export_dialog import PlotExportDialog
+
+            from plot_export import export_figure
+        except ImportError as exc:  # pragma: no cover - defensive
+            QMessageBox.critical(
+                self,
+                _("Export Error"),
+                _("Plot export is unavailable: {0}").format(exc),
+            )
+            return
+
+        figure = self._extract_current_figure()
+        if figure is None:
+            QMessageBox.information(
+                self,
+                _("No Plot"),
+                _("Run an analysis first, then export the resulting plot."),
+            )
+            return
+
+        dialog = PlotExportDialog("plot.png", parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            options = dialog.get_options()
+        except ValueError as exc:
+            QMessageBox.critical(self, _("Export Error"), str(exc))
+            return
+        path = dialog.get_path()
+        try:
+            export_figure(figure, path, options)
+        except Exception as exc:
+            self._logger.error(f"Plot export failed: {exc}")
+            QMessageBox.critical(self, _("Export Error"), str(exc))
+            return
+        QMessageBox.information(
+            self,
+            _("Export Successful"),
+            _("Plot saved to:\n{0}").format(path),
+        )
+
+    def _extract_current_figure(self):
+        """Return the matplotlib ``Figure`` in the active workspace tab."""
+        stack = self._workspace._stack
+        widget = stack.currentWidget()
+        if widget is None or widget is self._spreadsheet:
+            return None
+        if isinstance(widget, InteractivePlotCanvas):
+            return widget._figure
+        # Embedded figure host (FigureHostWidget). The canvas is stored
+        # under the dynamic ``figure_canvas`` property by
+        # :meth:`_embed_figure_in_workspace`.
+        canvas = widget.property("figure_canvas")
+        if canvas is not None and hasattr(canvas, "figure"):
+            return canvas.figure
+        return None
+
     def _cleanup_plot_widgets(self) -> None:
         """Remove all plot canvases from the workspace to prevent memory leaks.
 
@@ -2593,24 +2724,60 @@ class MainWindow(QMainWindow):
     # switch between them.  Older results are evicted FIFO.
     _MAX_RESULT_HISTORY = 8
 
-    def _add_plot_to_workspace(self, plot: InteractivePlotCanvas, name: str) -> int:
-        """Add a new plot to the workspace, evicting the oldest if needed."""
-        # Count current result widgets (excluding the spreadsheet and placeholder)
+    def _evict_excess_result_tabs(self) -> int:
+        """Evict oldest result tabs (FIFO) until we are under the limit.
+
+        Returns the number of tabs removed. The helper is shared by the
+        plot-canvas path and the embedded-figure path so the eviction
+        policy lives in one place. The caller is responsible for
+        ``deleteLater`` after the widget is removed from the stack;
+        here we also drop a ``FigureHostWidget``'s matplotlib Figure
+        reference so the underlying canvas + figure can be garbage
+        collected promptly.
+        """
         stack = self._workspace._stack
-        result_widgets = []
+        removed = 0
+        # Collect existing result widgets (excluding the spreadsheet
+        # and the placeholder).
+        result_widgets: list = []
         for i in range(stack.count()):
             w = stack.widget(i)
             if w is self._spreadsheet or w is self._workspace._placeholder:
                 continue
             result_widgets.append(w)
 
-        # Evict oldest results if we exceed the limit
         while len(result_widgets) >= self._MAX_RESULT_HISTORY:
             old = result_widgets.pop(0)
             stack.removeWidget(old)
+            # Drop the figure reference on figure host containers so
+            # the canvas + figure can be GC'd, not held alive by Qt.
+            canvas = old.property("figure_canvas") if hasattr(old, "property") else None
+            if canvas is not None and hasattr(canvas, "figure"):
+                try:
+                    canvas.figure = None  # type: ignore[attr-defined]
+                except Exception:  # pragma: no cover - defensive
+                    pass
             old.deleteLater()
+            removed += 1
+        return removed
 
+    def _add_plot_to_workspace(self, plot: InteractivePlotCanvas, name: str) -> int:
+        """Add a new plot to the workspace, evicting the oldest if needed."""
+        self._evict_excess_result_tabs()
         return self._workspace.addWidget(plot, name)
+
+    def _add_tab_to_workspace(self, widget: object, name: str) -> int:
+        """Add an additional result widget without evicting older tabs.
+
+        Unlike :meth:`_add_plot_to_workspace`, this is for secondary
+        result tabs (e.g. the PCA scree plot) that should appear next
+        to the primary result without triggering eviction. The widget is
+        added to the stack and the view is switched to the new tab so
+        the user actually sees the new content.
+        """
+        idx = self._workspace.addWidget(widget, name)
+        self._workspace.setCurrentIndex(idx)
+        return idx
 
     def _embed_figure_in_workspace(
         self,
@@ -2663,18 +2830,7 @@ class MainWindow(QMainWindow):
         # (e.g. to call ``draw_idle`` from elsewhere).
         container.setProperty("figure_canvas", canvas)
 
-        # Evict oldest results if we exceed the history limit
-        stack = self._workspace._stack
-        result_widgets = []
-        for i in range(stack.count()):
-            w = stack.widget(i)
-            if w is self._spreadsheet or w is self._workspace._placeholder:
-                continue
-            result_widgets.append(w)
-        while len(result_widgets) >= self._MAX_RESULT_HISTORY:
-            old = result_widgets.pop(0)
-            stack.removeWidget(old)
-            old.deleteLater()
+        self._evict_excess_result_tabs()
 
         idx = self._workspace.addWidget(container, name)
         self._workspace.setCurrentIndex(idx)
@@ -2826,7 +2982,7 @@ class MainWindow(QMainWindow):
                     result.eigenvalues_raw, result.explained_variance,
                     result.cumulative_variance, method="PCA",
                 )
-                self._workspace.addWidget(scree_plot, _("PCA Scree Plot"))
+                self._add_tab_to_workspace(scree_plot, _("PCA Scree Plot"))
 
             except Exception as e:
                 QMessageBox.critical(self, _("PCA Error"), format_user_error(e, "PCA"))
@@ -2912,13 +3068,14 @@ class MainWindow(QMainWindow):
             params = dialog.get_parameters()
 
             try:
-                sample_name = params.get("sample_name", "").strip() or "Sample 1"
-                # Resolve the sample-name to a row index. Previously the
-                # controller always used ``data[0]`` and only the
-                # ``sample_name`` field was used as a label, which gave
-                # misleading results when the user typed any other name.
+                sample_name = (params.get("sample_name") or "").strip()
                 matrix = self._state.data_matrix
-                sample_index = self._resolve_sample_index(sample_name, matrix)
+                # ``_resolve_sample_index`` used to fall back to row 0
+                # when the user-typed name could not be matched, which
+                # silently produced a wrong result for unknown labels.
+                # Now we surface that mismatch with a warning so the
+                # user can either pick a valid name or accept row 0.
+                sample_index = self._resolve_sample_index(sample_name, matrix) if sample_name else 0
                 if sample_index is None:
                     QMessageBox.warning(
                         self,
@@ -2926,6 +3083,15 @@ class MainWindow(QMainWindow):
                         _("No sample named '{0}' is loaded.").format(sample_name),
                     )
                     return
+                if sample_name and sample_name not in matrix.row_labels and not sample_name.isdigit():
+                    QMessageBox.warning(
+                        self,
+                        _("Sample Not Found"),
+                        _("'{0}' is not a loaded row label. Using the first sample.").format(sample_name),
+                    )
+                    sample_name = matrix.row_labels[0] if matrix.row_labels else "Sample 1"
+                if not sample_name:
+                    sample_name = matrix.row_labels[0] if matrix.row_labels else "Sample 1"
                 result = self._statistics_controller.analyze_diversity(
                     abundances=matrix.data[sample_index],
                     sample_name=sample_name,
@@ -3023,14 +3189,41 @@ class MainWindow(QMainWindow):
         return 0
 
     def _on_run_spectral(self) -> None:
-        """Run spectral analysis (power spectrum and periodogram analysis)."""
+        """Run spectral analysis (power spectrum and periodogram analysis).
+
+        Spectral analysis assumes the input is a univariate time series
+        (single ``(time, value)`` column pair). Multi-column ecological
+        or community matrices must not be passed in directly or the
+        result will be meaningless; surface a clear error in that case.
+        """
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
         try:
             self._status_bar.setProgress(0, 0)
-            result = self._statistics_controller.analyze_spectral(data=self._state.data_matrix.data)
+            data = self._state.data_matrix.data
+            if data.ndim != 2 or data.shape[1] < 2:
+                QMessageBox.warning(
+                    self,
+                    _("Insufficient Data"),
+                    _("Spectral analysis needs at least two columns (time + value)."),
+                )
+                return
+            if data.shape[1] > 2:
+                reply = QMessageBox.question(
+                    self,
+                    _("Multivariate Data"),
+                    _(
+                        "Spectral analysis expects a single time series. "
+                        "The loaded matrix has {0} columns — only the first two will be used."
+                    ).format(data.shape[1]),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+            result = self._statistics_controller.analyze_spectral(data=data[:, :2])
             plot = InteractivePlotCanvas()
             plot.plot_spectral(result)
             plot_index = self._add_plot_to_workspace(plot, _("Spectral Analysis"))
@@ -3548,8 +3741,35 @@ class MainWindow(QMainWindow):
             params = dialog.get_parameters()
             try:
                 self._status_bar.setProgress(0, 0)
+                data = self._state.data_matrix.data
+                # EFA expects one contour per row with at least a few
+                # (x, y) coordinates. The previous implementation
+                # silently used ``data[:, :2]`` which discards every
+                # extra column on multi-feature matrices and feeds
+                # unrelated columns to EFA on wide matrices.
+                if data.ndim != 2 or data.shape[1] < 2:
+                    QMessageBox.warning(
+                        self,
+                        _("Insufficient Data"),
+                        _("EFA needs at least 2 columns to form a contour."),
+                    )
+                    return
+                contour = data[:, :2]
+                if data.shape[1] != 2:
+                    reply = QMessageBox.question(
+                        self,
+                        _("Use First Two Columns"),
+                        _(
+                            "EFA treats each row as (x, y) coordinates of one contour.\n"
+                            "The loaded matrix has {0} columns. Use only the first two for EFA?"
+                        ).format(data.shape[1]),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
                 result = self._statistics_controller.analyze_efa(
-                    contour=self._state.data_matrix.data[:, :2],
+                    contour=contour,
                     n_harmonics=params.get("n_harmonics", 10),
                     n_points=params.get("n_points", 200),
                 )
@@ -4179,19 +4399,53 @@ class MainWindow(QMainWindow):
                 data=self._state.data_matrix.data,
             )
 
+            import numpy as _np  # local import keeps the module-level namespace tidy
             plot = InteractivePlotCanvas()
             # Plot GPA-aligned landmarks
             if hasattr(result, "aligned_configurations"):
-                coords = result.aligned_configurations
-                mean_shape = coords.mean(axis=0) if hasattr(coords, "mean") else coords
-                plot.plot_efa_contours(
-                    coords[0] if len(coords.shape) > 2 else coords,
-                    mean_shape,
-                    title=_("GPA Aligned Landmarks"),
-                )
+                coords = np.asarray(result.aligned_configurations)
+                if coords.ndim == 3:
+                    # Overlay all specimens + mean shape. The original
+                    # implementation only plotted the first specimen,
+                    # which made the visualisation misleading.
+                    from matplotlib.figure import Figure
 
-            plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
-            self._workspace.setCurrentIndex(plot_index)
+                    fig = Figure(figsize=(6, 6))
+                    ax = fig.add_subplot(111)
+                    for specimen in coords:
+                        ax.plot(
+                            specimen[:, 0],
+                            specimen[:, 1],
+                            "-o",
+                            color="#3498DB",
+                            alpha=0.3,
+                            markersize=3,
+                        )
+                    mean_shape = coords.mean(axis=0)
+                    ax.plot(
+                        mean_shape[:, 0],
+                        mean_shape[:, 1],
+                        "-o",
+                        color="#E74C3C",
+                        linewidth=2.0,
+                        markersize=5,
+                        label=_("Mean shape"),
+                    )
+                    ax.set_title(_("GPA Aligned Landmarks"))
+                    ax.set_aspect("equal")
+                    ax.legend(loc="best")
+                    ax.grid(True, linestyle="--", alpha=0.3)
+                    self._embed_figure_in_workspace(
+                        fig, _("GPA Alignment"), dark_theme=self._is_dark_theme
+                    )
+                else:
+                    plot.plot_efa_contours(coords, title=_("GPA Aligned Landmarks"))
+                    plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
+                    self._workspace.setCurrentIndex(plot_index)
+            else:
+                plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
+                self._workspace.setCurrentIndex(plot_index)
+
             self._status_bar.setInfo(_("GPA analysis completed"))
         except Exception as e:
             self._logger.error(f"GPA analysis failed: {e}")

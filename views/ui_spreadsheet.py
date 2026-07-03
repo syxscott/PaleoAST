@@ -670,6 +670,7 @@ class ScientificSpreadsheet(QWidget):
                     matrix.data,
                     row_labels=matrix.row_labels,
                     col_labels=matrix.col_labels,
+                    update_state=False,
                 )
             else:
                 # ``clear_data`` was previously referenced here but
@@ -699,7 +700,13 @@ class ScientificSpreadsheet(QWidget):
             self._row_metadata[index].update(metadata)
 
     def load_data(
-        self, data: np.ndarray, row_labels: list[str] | None = None, col_labels: list[str] | None = None
+        self,
+        data: np.ndarray,
+        row_labels: list[str] | None = None,
+        col_labels: list[str] | None = None,
+        *,
+        update_state: bool = True,
+        record_undo: bool = True,
     ) -> None:
         """
         Load data into spreadsheet.
@@ -763,10 +770,15 @@ class ScientificSpreadsheet(QWidget):
         self._delegate.set_data(self._data, self._row_labels, self._col_labels)
         self._delegate.set_metadata(self._row_metadata, self._col_metadata)
 
-        # Update state manager
-        self._state.set_data_matrix(
-            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
-        )
+        # Update state manager when this method is used as a data-entry
+        # seam. EventBus/UI refresh callers pass update_state=False to
+        # avoid creating synthetic undo entries and clearing redo state.
+        if update_state:
+            self._state.set_data_matrix(
+                DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+                _record_undo=record_undo,
+                _reset_metadata=record_undo,
+            )
 
         # Resize columns to content - skip for very wide tables (performance)
         MAX_COLS_FOR_RESIZE = 100
@@ -1000,9 +1012,12 @@ class ScientificSpreadsheet(QWidget):
         finally:
             self._table.blockSignals(False)
 
-        # Update state
+        # Update state. Forward the undo recording into StateManager so
+        # the Ribbon's Ctrl+Z can undo the transform too.
         self._state.set_data_matrix(
-            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+            _record_undo=_record_undo,
+            _reset_metadata=_record_undo,
         )
 
         # Emit signal
@@ -1058,7 +1073,9 @@ class ScientificSpreadsheet(QWidget):
 
         # Update state
         self._state.set_data_matrix(
-            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+            _record_undo=False,
+            _reset_metadata=False,
         )
         self.dataChanged.emit()
 
@@ -1102,9 +1119,12 @@ class ScientificSpreadsheet(QWidget):
         self._table.removeColumn(col)
         self._table.setHorizontalHeaderLabels(self._col_labels)
 
-        # Update state
+        # Update state. Forward undo into StateManager so the Ribbon
+        # Ctrl+Z can undo the deletion too.
         self._state.set_data_matrix(
-            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+            _record_undo=_record_undo,
+            _reset_metadata=_record_undo,
         )
         self.dataChanged.emit()
 
@@ -1154,13 +1174,13 @@ class ScientificSpreadsheet(QWidget):
         self._undo_stack.append(("cell", row, col, old_value))
         self._redo_stack.clear()
 
-        # Update state. We pass ``_record_undo=False`` because the
-        # spreadsheet already has its own undo entry, and
-        # ``_reset_metadata=False`` because a single cell edit must
-        # not discard the column / row metadata the user has set.
+        # Update state. Push the undo into StateManager so the Ribbon
+        # Ctrl+Z can undo the cell edit too; ``_reset_metadata=False``
+        # because a single cell edit must not discard the column / row
+        # metadata the user has set.
         self._state.set_data_matrix(
             DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
-            _record_undo=False,
+            _record_undo=True,
             _reset_metadata=False,
         )
         self.dataChanged.emit()
@@ -1274,7 +1294,9 @@ class ScientificSpreadsheet(QWidget):
             self._table.blockSignals(False)
 
         self._state.set_data_matrix(
-            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels)
+            DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),
+            _record_undo=False,
+            _reset_metadata=False,
         )
         self.dataChanged.emit()
 
@@ -1292,12 +1314,10 @@ class ScientificSpreadsheet(QWidget):
             self._apply_column_transform(col, transform, _record_undo=False)
 
         elif operation[0] == "delete_col":
-            # The redo entry already contains the column data and
-            # metadata, so re-running the deletion with the guard
-            # disabled is enough. We must *not* push anything onto
-            # the undo stack (we just popped this from the redo
-            # stack and the user expects a single logical action).
-            _, col = operation
+            # The redo entry already contains the column data and metadata.
+            # Re-run the deletion at the saved column index without adding
+            # another undo record.
+            col = operation[1]
             self._delete_column(col, _record_undo=False)
 
         elif operation[0] == "cell":

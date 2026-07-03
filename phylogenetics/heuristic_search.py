@@ -510,10 +510,12 @@ class HeuristicSearch:
                 if best_neighbor_score < self._best_score:
                     self._best_tree = self._deep_copy_tree(best_neighbor)
                     self._best_score = best_neighbor_score
+                    self._optimal_score = best_neighbor_score
+                    self._optimal_trees = [self._deep_copy_tree(best_neighbor)]
                     self._logger.info(f"Iteration {iteration}: New best score = {best_neighbor_score}")
 
                 # 检查是否等长
-                if abs(best_neighbor_score - self._optimal_score) < 1e-10:
+                elif abs(best_neighbor_score - self._optimal_score) < 1e-10:
                     self._optimal_trees.append(self._deep_copy_tree(best_neighbor))
 
             # 冷却

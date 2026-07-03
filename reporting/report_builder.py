@@ -55,6 +55,7 @@ class FigureReference:
     figure_id: str
     caption: str
     path: str  # 图片路径
+    width: str = "0.8\\textwidth"
 
 
 @dataclass
@@ -206,7 +207,7 @@ class ReportBuilder:
         self._counter_figure += 1
         figure_id = f"fig:{label or self._counter_figure}"
 
-        self._figures.append(FigureReference(figure_id=figure_id, caption=caption, path=figure_path))
+        self._figures.append(FigureReference(figure_id=figure_id, caption=caption, path=figure_path, width=width))
 
         return figure_id
 
@@ -307,6 +308,17 @@ class ReportBuilder:
         for section in self._sections:
             lines.extend(self._generate_section(section))
 
+        # 统计结果
+        if self._statistical_results:
+            lines.extend(self._generate_statistical_results())
+
+        # 图表
+        for figure in self._figures:
+            lines.extend(self._generate_figure(figure))
+
+        for table in self._tables:
+            lines.extend(self._generate_table(table))
+
         # 参考文献
         if self._references:
             lines.extend(self._generate_references())
@@ -391,6 +403,49 @@ class ReportBuilder:
 
         return lines
 
+    def _generate_statistical_results(self) -> list[str]:
+        """Generate statistical result table."""
+        lines = ["\\section{Statistical Results}", "", "\\begin{table}[htbp]", "\\centering"]
+        lines.append("\\begin{tabular}{llll}")
+        lines.append("\\toprule")
+        lines.append("Test & Statistic & p-value & Effect size \\\\")
+        lines.append("\\midrule")
+        for result in self._statistical_results:
+            statistic = self._format_statistic("stat", result.statistic, result.df)
+            p_value = self._format_pvalue(result.p_value) if result.p_value is not None else "--"
+            effect = f"{result.effect_size:.4f}" if result.effect_size is not None else "--"
+            lines.append(f"{result.test_name} & {statistic} & {p_value} & {effect} \\\\")
+        lines.append("\\bottomrule")
+        lines.append("\\end{tabular}")
+        lines.append("\\caption{Summary of statistical tests}")
+        lines.append("\\end{table}")
+        lines.append("")
+        return lines
+
+    def _generate_figure(self, figure: FigureReference) -> list[str]:
+        """Generate a figure block."""
+        return [
+            "\\begin{figure}[htbp]",
+            "\\centering",
+            f"\\includegraphics[width={figure.width}]{{{figure.path}}}",
+            f"\\caption{{{figure.caption}}}",
+            f"\\label{{{figure.figure_id}}}",
+            "\\end{figure}",
+            "",
+        ]
+
+    def _generate_table(self, table: TableReference) -> list[str]:
+        """Generate a table block."""
+        return [
+            "\\begin{table}[htbp]",
+            "\\centering",
+            table.content,
+            f"\\caption{{{table.caption}}}",
+            f"\\label{{{table.table_id}}}",
+            "\\end{table}",
+            "",
+        ]
+
     def _format_pvalue(self, p: float) -> str:
         """格式化p值"""
         if p < 0.001:
@@ -405,7 +460,6 @@ class ReportBuilder:
         if df is not None:
             return f"{name} = {value:.4f}, df = {df}"
         return f"{name} = {value:.4f}"
-
 
 class LatexCompiler:
     """

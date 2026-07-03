@@ -193,17 +193,15 @@ class ProcessPool:
         for i, result in enumerate(results):
             try:
                 chunk_result = result.get(timeout=300)
-                # _worker_map now returns None for individually failed items
-                # instead of crashing the entire chunk. Filter them out.
-                valid_items = [item for item in chunk_result if item is not None]
-                output.extend(valid_items)
+                output.extend(chunk_result)
 
                 if callback:
-                    for item in valid_items:
-                        callback(item)
+                    for item in chunk_result:
+                        if item is not None:
+                            callback(item)
 
                 # 更新进度
-                failed = len(chunk_result) - len(valid_items)
+                failed = sum(1 for item in chunk_result if item is None)
                 if failed > 0:
                     self._logger.warning(f"Chunk {i}: {failed}/{len(chunk_result)} items failed")
                 progress = (i + 1) / total
@@ -337,7 +335,9 @@ class ProcessPool:
 
         # 构建距离矩阵
         dist_matrix = np.zeros((n, n), dtype=np.float64)
-        for (i, j), d in zip(pairs, distances, strict=False):
+        for (i, j), d in zip(pairs, distances, strict=True):
+            if d is None:
+                raise RuntimeError(f"Distance computation failed for pair ({i}, {j})")
             dist_matrix[i, j] = d
             dist_matrix[j, i] = d
 

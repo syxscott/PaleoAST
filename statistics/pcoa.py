@@ -120,6 +120,9 @@ class PCoAAnalyzer:
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError("Distance matrix must be square", details={"shape": D.shape})
 
+            if n < 2:
+                raise MatrixDimensionError("PCoA requires at least 2 samples", details={"n_samples": n})
+
             # Determine number of components
             if n_components is None:
                 n_components = min(n - 1, 20)

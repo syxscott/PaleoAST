@@ -115,15 +115,21 @@ class MarkovAnalyzer:
         # empty rows in the transition matrix whenever the facies
         # codes are not contiguous (e.g. {0, 2, 5} would allocate
         # 6 states, three of which are unused).
-        n_states = len(np.unique(sequence))
+        unique_codes = sorted(np.unique(sequence).tolist())
+        n_states = len(unique_codes)
+        code_to_index = {code: i for i, code in enumerate(unique_codes)}
 
         if facies_names is None:
-            facies_names = [f"Facies_{i}" for i in range(n_states)]
+            facies_names = [f"Facies_{code}" for code in unique_codes]
+        elif len(facies_names) < n_states:
+            raise ValueError("facies_names must include one name for each unique facies code")
 
         # Build transition count matrix
         T = np.zeros((n_states, n_states), dtype=float)
         for i in range(len(sequence) - 1):
-            T[sequence[i], sequence[i + 1]] += 1
+            from_idx = code_to_index[sequence[i]]
+            to_idx = code_to_index[sequence[i + 1]]
+            T[from_idx, to_idx] += 1
 
         n_transitions = int(T.sum())
 
