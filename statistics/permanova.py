@@ -227,12 +227,16 @@ class PERMANOVAAnalyzer:
         df_res = n - g
 
         # F statistic
-        if df_res > 0 and df_g > 0:
+        if df_g <= 0:
+            # Single group - test not applicable
+            F = 0.0
+        elif df_res <= 0:
+            # Perfect separation (all within-group variance is zero)
+            F = float("inf")
+        else:
             MS_between = ss_between / df_g
             MS_within = ss_within / df_res
             F = MS_between / MS_within if MS_within > 0 else float("inf")
-        else:
-            F = 0.0
 
         return F, ss_between, ss_within, df_g, df_res
 

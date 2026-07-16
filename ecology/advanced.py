@@ -216,6 +216,9 @@ class AbundanceModelFitter:
         try:
             x = optimize.brentq(equation, 0.001, 0.999)
         except ValueError:
+            self._logger.warning(
+                f"Log-series brentq solver failed for S={S}, N={N}, using fallback x=0.5"
+            )
             x = 0.5
 
         alpha = S * (1 - x) / (-np.log(1 - x)) if abs(1 - x) > 1e-10 else S

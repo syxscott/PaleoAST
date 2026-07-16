@@ -896,9 +896,12 @@ class RASCAnalyzer:
 
     def _compute_ranking_score(self, ranking: list[int], dist: npt.NDArray) -> float:
         """Compute score for a given ranking (lower is better)."""
+        n = dist.shape[0]
         score = 0.0
         for i in range(len(ranking) - 1):
-            score += dist[ranking[i], ranking[i + 1]]
+            idx1, idx2 = ranking[i], ranking[i + 1]
+            if 0 <= idx1 < n and 0 <= idx2 < n:
+                score += dist[idx1, idx2]
         return score
 
     @property

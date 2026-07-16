@@ -302,10 +302,14 @@ class NullModelAnalyzer:
         """Run permutations in parallel using multiprocessing."""
         try:
             from multiprocessing import Pool
+            import os
 
             chunk_size = max(1, n_permutations // n_workers)
+            # Each worker gets a unique seed based on process ID to avoid
+            # identical random sequences
+            base_seed = np.random.randint(0, 2**31)
             args_list = [
-                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm, metric)
+                (matrix.copy(), min(chunk_size, n_permutations - i * chunk_size), algorithm, metric, base_seed + i)
                 for i in range(n_workers)
             ]
 
@@ -351,7 +355,8 @@ class NullModelAnalyzer:
         n_species, n_sites = result.shape
 
         # Number of swaps = total cells * swap_factor
-        n_swaps = int(n_species * n_sites * 0.1)
+        # Ensure at least 1 swap attempt for small matrices
+        n_swaps = max(1, int(n_species * n_sites * 0.1))
 
         for _ in range(n_swaps):
             # Select two random rows and columns
@@ -459,12 +464,18 @@ def _worker_permute(
     n_perms: int,
     algorithm: str,
     metric: str = "c_score",
+    seed: int | None = None,
 ) -> npt.NDArray:
     """
     Worker function for parallel permutation.
 
     This is a module-level function to allow pickling for multiprocessing.
+    Each worker gets a unique seed to ensure different random sequences.
     """
+    # Seed numpy random state for this worker
+    if seed is not None:
+        np.random.seed(seed)
+
     results = np.zeros(n_perms)
 
     for i in range(n_perms):

@@ -999,16 +999,17 @@ class ScientificSpreadsheet(QWidget):
         self._data[:, col] = new_data
 
         # Update table (block signals to prevent re-triggering itemChanged)
+        # Optimization: reuse existing items and update text instead of creating new ones
         self._table.blockSignals(True)
         try:
             for i in range(self._data.shape[0]):
                 value = new_data[i]
-                if np.isnan(value):
-                    item = QTableWidgetItem("")
-                else:
-                    item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self._table.setItem(i, col, item)
+                item = self._table.item(i, col)
+                if item is None:
+                    item = QTableWidgetItem()
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self._table.setItem(i, col, item)
+                item.setText("" if np.isnan(value) else str(value))
         finally:
             self._table.blockSignals(False)
 

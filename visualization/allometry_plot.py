@@ -153,7 +153,10 @@ class AllometryPlotter:
         mse = np.sum(residuals**2) / (n - 2) if n > 2 else 1.0
         se = np.sqrt(mse)
 
-        if show_confidence_band and n > 2:
+        # Guard against zero variance in x (would cause division by zero)
+        has_x_variance = ss_x > 0
+
+        if show_confidence_band and n > 2 and has_x_variance:
             # 95% confidence band for the regression line
             t_val = stats.t.ppf(0.975, n - 2)
             se_line = se * np.sqrt(1 / n + (x_range - x_mean) ** 2 / ss_x)
@@ -161,7 +164,7 @@ class AllometryPlotter:
             ci_upper = y_pred + t_val * se_line
             ax.fill_between(x_range, ci_lower, ci_upper, alpha=0.2, color="red", label="95% CI")
 
-        if show_prediction_band and n > 2:
+        if show_prediction_band and n > 2 and has_x_variance:
             # 95% prediction band for individual points
             t_val = stats.t.ppf(0.975, n - 2)
             se_pred = se * np.sqrt(1 + 1 / n + (x_range - x_mean) ** 2 / ss_x)

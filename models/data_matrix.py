@@ -737,7 +737,8 @@ class DataMatrix:
                 if np.sum(valid_cols) == 0:
                     # All values missing, use mean of complete rows
                     for j in np.where(row_nan)[0]:
-                        result[idx, j] = np.mean(complete_data[:, j])
+                        col_mean = np.nanmean(complete_data[:, j]) if complete_data.size > 0 else 0.0
+                        result[idx, j] = col_mean if not np.isnan(col_mean) else 0.0
                     continue
 
                 # Compute distances using valid columns only
@@ -749,7 +750,8 @@ class DataMatrix:
 
                 # Impute each missing column
                 for j in np.where(row_nan)[0]:
-                    result[idx, j] = np.mean(neighbors[:, j])
+                    col_mean = np.nanmean(neighbors[:, j])
+                    result[idx, j] = col_mean if not np.isnan(col_mean) else 0.0
 
             return DataMatrix(
                 data=result,

@@ -171,8 +171,10 @@ def _compute_fisher_alpha(S: int, N: int) -> float | None:
         alpha = alpha_new
 
         if alpha <= 0:
+            logger.warning(f"Fisher's alpha failed to converge for S={S}, N={N}")
             return None
 
+    logger.warning(f"Fisher's alpha did not converge within 100 iterations for S={S}, N={N}")
     return alpha
 
 

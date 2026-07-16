@@ -182,9 +182,29 @@ class ANOSIMAnalyzer:
         upper_tri_indices = np.triu_indices(n, k=1)
         sim_values = S[upper_tri_indices]
 
-        # Rank from largest to smallest
-        rank_order = np.argsort(-sim_values)
-        ranks[upper_tri_indices[0][rank_order], upper_tri_indices[1][rank_order]] = np.arange(1, len(sim_values) + 1)
+        # Rank from largest to smallest using stable sort to preserve order for ties
+        # Then assign ranks accounting for ties by averaging
+        order = np.argsort(-sim_values, kind="stable")
+        sorted_vals = sim_values[order]
+
+        # Compute ranks with tie-handling: assign average rank to tied values
+        n_vals = len(sorted_vals)
+        ranks_list = np.empty(n_vals, dtype=float)
+        i = 0
+        while i < n_vals:
+            val = sorted_vals[i]
+            j = i
+            while j < n_vals and sorted_vals[j] == val:
+                j += 1
+            # All values from i to j-1 are tied; assign average rank
+            avg_rank = (i + 1 + j) / 2.0
+            ranks_list[i:j] = avg_rank
+            i = j
+
+        # Reorder back to original positions
+        unranked_order = np.argsort(order)
+        final_ranks = ranks_list[unranked_order]
+        ranks[upper_tri_indices[0], upper_tri_indices[1]] = final_ranks
 
         # Make symmetric
         ranks = ranks + ranks.T

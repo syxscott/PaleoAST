@@ -1841,9 +1841,32 @@ class InteractivePlotCanvas(QWidget):
             return
 
         d1, d2 = self._current_dim1, self._current_dim2
-        distances = np.sqrt((self._scores[:, d1] - x) ** 2 + (self._scores[:, d2] - y) ** 2)
-        nearest_idx = np.argmin(distances)
-        min_dist = distances[nearest_idx]
+
+        # Optimization: filter to candidate points within extended bounding box first
+        # to avoid O(n) distance calculation on every mouse move
+        x_range = self._ax.get_xlim()
+        y_range = self._ax.get_ylim()
+        # Extend search box by 5% margin for better UX
+        x_margin = (x_range[1] - x_range[0]) * 0.05
+        y_margin = (y_range[1] - y_range[0]) * 0.05
+        candidates_mask = (
+            (self._scores[:, d1] >= x_range[0] - x_margin) &
+            (self._scores[:, d1] <= x_range[1] + x_margin) &
+            (self._scores[:, d2] >= y_range[0] - y_margin) &
+            (self._scores[:, d2] <= y_range[1] + y_margin)
+        )
+        candidate_indices = np.where(candidates_mask)[0]
+
+        if len(candidate_indices) == 0:
+            return
+
+        # Calculate distances only for filtered candidates
+        scores_d1 = self._scores[candidate_indices, d1]
+        scores_d2 = self._scores[candidate_indices, d2]
+        distances = np.sqrt((scores_d1 - x) ** 2 + (scores_d2 - y) ** 2)
+        nearest_cand_idx = np.argmin(distances)
+        nearest_idx = candidate_indices[nearest_cand_idx]
+        min_dist = distances[nearest_cand_idx]
 
         # Check threshold (relative to axis range)
         x_range = self._ax.get_xlim()[1] - self._ax.get_xlim()[0]

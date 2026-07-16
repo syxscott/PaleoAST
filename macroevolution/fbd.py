@@ -558,6 +558,10 @@ class FossilizedBirthDeathProcess:
         beta = (self._lambda + self._mu + self._psi - gamma) / (2.0 * self._lambda)
         r = 1.0 - rho
         # E(t) = (β(r-α) e^{γt} - α(r-β)) / ((r-α) e^{γt} - (r-β))
+        # Guard against overflow: np.exp(>709) overflows to inf for float64
+        if gamma * t > 700:
+            # For large t, E(t) approaches the smaller root (beta)
+            return float(max(0.0, min(1.0, beta)))
         e_gt = np.exp(gamma * t)
         num = beta * (r - alpha) * e_gt - alpha * (r - beta)
         den = (r - alpha) * e_gt - (r - beta)

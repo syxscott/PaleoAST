@@ -106,7 +106,9 @@ class DirectionalAnalyzer:
 
         # Circular variance and std
         V = 1 - R_bar
-        circ_std = np.sqrt(-2 * np.log(R_bar)) if R_bar > 0 else np.inf
+        # Clamp R_bar to [0, 1] to avoid NaN from floating-point rounding
+        R_bar_safe = min(max(R_bar, 0.0), 1.0)
+        circ_std = np.sqrt(-2 * np.log(R_bar_safe)) if R_bar_safe > 0 else np.inf
 
         # Rayleigh test
         Z = n * R_bar**2

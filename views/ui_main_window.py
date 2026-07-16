@@ -1214,7 +1214,7 @@ class MainWindow(QMainWindow):
         # Status update timer (retained only for memory monitoring)
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
-        self._status_timer.start(1000)
+        self._status_timer.start(5000)  # Update every 5s to reduce CPU overhead
 
         # Setup drag and drop
         self._setup_drag_drop()
