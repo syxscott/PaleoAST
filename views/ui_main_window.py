@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 import contextlib
 
-from PyQt6.QtCore import QPoint, QRect, QSettings, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QPoint, QRect, QRunnable, QSettings, Qt, QTimer, pyqtSignal, QThreadPool
 from PyQt6.QtGui import (
     QAction,
     QBrush,
@@ -1218,6 +1218,13 @@ class MainWindow(QMainWindow):
 
         # Setup drag and drop
         self._setup_drag_drop()
+
+        # Thread pool for long-running analysis tasks so the GUI stays responsive.
+        # Max 4 concurrent analysis workers to avoid saturating the CPU.
+        self._thread_pool = QThreadPool.globalInstance()
+        if self._thread_pool is None:
+            self._thread_pool = QThreadPool()
+        self._thread_pool.setMaxThreadCount(min(4, os.cpu_count() or 4))
 
     def _setup_drag_drop(self) -> None:
         """Setup drag and drop for file loading."""
@@ -2919,6 +2926,24 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
+    class _PCATask(QRunnable):
+        """Worker that runs PCA on the thread pool."""
+        result_ready = pyqtSignal(object)
+        error_raised = pyqtSignal(Exception)
+
+        def __init__(self, controller, n_components, method):
+            super().__init__()
+            self._controller = controller
+            self._n_components = n_components
+            self._method = method
+
+        def run(self):
+            try:
+                result = self._controller.run_pca(n_components=self._n_components, method=self._method)
+                self.result_ready.emit(result)
+            except Exception as e:
+                self.error_raised.emit(e)
+
     def _on_run_pca(self) -> None:
         """
         Run Principal Component Analysis.
@@ -2952,42 +2977,34 @@ class MainWindow(QMainWindow):
         dialog = PCADialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
 
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
 
-            try:
-                self._status_bar.setProgress(0, 0)  # Show indeterminate
+        params = dialog.get_parameters()
+        self._status_bar.setProgress(0, 0)  # indeterminate
 
-                result = self._statistics_controller.run_pca(
-                    n_components=params["n_components"], method=params["method"]
-                )
+        task = _PCATask(self._statistics_controller, params["n_components"], params["method"])
+        task.result_ready.connect(self._on_pca_result_ready)
+        task.error_raised.connect(self._on_pca_error)
+        self._thread_pool.start(task)
 
-                # Create and display score plot
-                plot = InteractivePlotCanvas()
-                plot.plot_pca_scores(result)
-                plot_index = self._add_plot_to_workspace(plot, _("PCA Score Plot"))
-                self._workspace.setCurrentIndex(plot_index)
+    def _on_pca_result_ready(self, result) -> None:
+        self._status_bar.setProgress(100, 100)
+        plot = InteractivePlotCanvas()
+        plot.plot_pca_scores(result)
+        idx = self._add_plot_to_workspace(plot, _("PCA Score Plot"))
+        self._workspace.setCurrentIndex(idx)
+        ev = result.explained_variance
+        cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
+        self._status_bar.setInfo(_("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(result.n_components, cum2))
 
-                ev = result.explained_variance
-                cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
-                self._status_bar.setInfo(
-                    _("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(
-                        result.n_components, cum2
-                    )
-                )
+        scree = InteractivePlotCanvas()
+        scree.plot_scree(result.eigenvalues_raw, result.explained_variance, result.cumulative_variance, method="PCA")
+        self._add_tab_to_workspace(scree, _("PCA Scree Plot"))
 
-                # Also show scree plot in workspace
-                scree_plot = InteractivePlotCanvas()
-                scree_plot.plot_scree(
-                    result.eigenvalues_raw, result.explained_variance,
-                    result.cumulative_variance, method="PCA",
-                )
-                self._add_tab_to_workspace(scree_plot, _("PCA Scree Plot"))
-
-            except Exception as e:
-                QMessageBox.critical(self, _("PCA Error"), format_user_error(e, "PCA"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+    def _on_pca_error(self, exc: Exception) -> None:
+        self._status_bar.setProgress(100, 100)
+        QMessageBox.critical(self, _("PCA Error"), format_user_error(exc, "PCA"))
 
     def _on_run_pcoa(self) -> None:
         """Run Principal Coordinate Analysis."""
