@@ -165,7 +165,15 @@ class CONISSAnalyzer:
                     best_increase = increase
                     best_merge = k
 
-            # Merge the best pair
+            # Merge the best pair. Guard against the theoretical case
+            # where the inner loop never finds a valid merge (e.g.
+            # all clusters are identical); ``best_merge`` is initialised
+            # to 0 but could in principle be ``None`` after edits.
+            if best_merge is None:
+                raise RuntimeError(
+                    "CONISS: failed to find a valid cluster merge — "
+                    "check that the input data contains at least 2 distinct rows."
+                )
             k = best_merge
             c1_id = cluster_order[k]
             c2_id = cluster_order[k + 1]

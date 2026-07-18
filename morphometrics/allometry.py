@@ -365,9 +365,20 @@ class AllometryAnalyzer:
 
     def _compute_centroid_sizes(self, configurations: npt.NDArray) -> npt.NDArray[np.float64]:
         """
-        Compute centroid size for each specimen.
+        Compute centroid size for each specimen using the Bookstein (1991)
+        definition:
 
-        CS = sqrt(sum_{i=1}^{k} sum_{j=1}^{m} x_{ij}²)
+            CS = sqrt( sum_i ||x_i - centroid||^2 )
+
+        where ``centroid`` is the mean landmark location of the specimen.
+
+        The previous implementation used the Frobenius norm
+        ``sqrt(sum(x^2))`` which is the distance from the *origin*, not
+        from the specimen's own centroid. The two coincide only when the
+        data happen to be centred at the origin, so any allometry /
+        PLS / integration analysis built on the old sizes was biased
+        toward specimens whose landmarks happened to be farther from
+        (0, 0).
 
         Parameters:
             configurations: 3D array (n_specimens, n_landmarks, n_dims)
@@ -379,8 +390,9 @@ class AllometryAnalyzer:
         centroid_sizes = np.zeros(n_specimens)
 
         for i in range(n_specimens):
-            # Flatten to 1D and compute norm
-            centroid_sizes[i] = np.sqrt(np.sum(configurations[i] ** 2))
+            centroid = configurations[i].mean(axis=0)
+            diff = configurations[i] - centroid
+            centroid_sizes[i] = np.sqrt(np.sum(diff ** 2))
 
         return centroid_sizes
 

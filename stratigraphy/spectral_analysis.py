@@ -302,7 +302,6 @@ class SpectralAnalyzer:
         Returns:
             npt.NDArray: Power at each frequency
         """
-        len(time)
         power = np.zeros(len(frequencies))
 
         # Precompute mean and variance
@@ -347,8 +346,16 @@ class SpectralAnalyzer:
             else:
                 power[i] = 0
 
-        # Normalize by variance
-        power = power / variance
+        # Normalise. The previous implementation divided by ``variance``
+        # only, which does not give the standard Lomb-Scargle
+        # normalised periodogram (Scargle 1982). The conventional
+        # form divides the squared magnitude by ``2 * n * variance``,
+        # which makes the spectrum dimensionless and comparable
+        # across different sample counts. ``n`` here is the number of
+        # time samples.
+        n = len(values_centered)
+        if variance > 0 and n > 0:
+            power = power / (2.0 * n * variance)
 
         return power
 

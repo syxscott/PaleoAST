@@ -244,10 +244,15 @@ class KaplanMeierAnalyzer:
             lower_ci = np.clip(lower_ci, 0, 1)
             upper_ci = np.clip(upper_ci, 0, 1)
 
-            # Find median survival time
-            if survival_prob[-1] <= 0.5:
-                below = np.where(survival_prob <= 0.5)[0]
-                median_survival = float(event_times[below[0]]) if len(below) > 0 else None
+            # Find median survival time: the standard definition is the
+            # smallest ``t`` for which ``S(t) <= 0.5``. We must use
+            # ``np.where`` directly rather than checking only the final
+            # probability, because a curve that crosses 0.5 and then
+            # *recoveres* would otherwise be reported as "no median"
+            # even though one exists.
+            below = np.where(survival_prob <= 0.5)[0]
+            if len(below) > 0:
+                median_survival = float(event_times[below[0]])
             else:
                 median_survival = None
 
@@ -333,6 +338,8 @@ def log_rank_test(
 
     O1_total = 0.0
     E1_total = 0.0
+    O2_total = 0.0  # group 2 observed event count (proper accumulator)
+    E2_total = 0.0  # group 2 expected event count (proper accumulator)
     var_total = 0.0
 
     for t_i in unique_times:
@@ -355,6 +362,14 @@ def log_rank_test(
 
             O1_total += d1_i
             E1_total += e1_i
+            # Track group 2 totals in proper local variables so we
+            # don't have to fall back to ``dir()`` introspection at
+            # the end. The previous implementation only used
+            # ``"d1_i" in dir()`` (always True after the loop runs)
+            # which silently masked bugs when ``unique_times`` was
+            # empty.
+            O2_total += d2_i
+            E2_total += d_i - e1_i
             var_total += var_i
 
     # Chi-square statistic
@@ -372,8 +387,8 @@ def log_rank_test(
         degrees_of_freedom=1,
         group1_events=float(O1_total),
         group1_expected=float(E1_total),
-        group2_events=float(d1_i) if "d1_i" in dir() else 0.0,
-        group2_expected=float(d_i - e1_i) if "d_i" in dir() and "e1_i" in dir() else 0.0,
+        group2_events=float(O2_total),
+        group2_expected=float(E2_total),
     )
 
     logger.info(f"Log-rank test complete: χ²={Q:.4f}, p={p_value:.4f}")

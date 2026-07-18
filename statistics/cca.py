@@ -235,7 +235,17 @@ class CCAAnalyzer:
         eigenvalues = eigenvalues[sorted_indices]
         eigenvectors = eigenvectors[:, sorted_indices]
 
-        # Ensure positive eigenvalues (numerical stability)
+        # Ensure positive eigenvalues (numerical stability).
+        # Warn the caller when eigenvalues have been clipped — silent
+        # truncation hides near-singular environmental matrices that
+        # the user should know about.
+        clipped = eigenvalues < 1e-10
+        if np.any(clipped):
+            n_clipped = int(np.sum(clipped))
+            self._logger.warning(
+                f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
+                "near-singular environmental matrix; check for collinear variables."
+            )
         eigenvalues = np.maximum(eigenvalues, 1e-10)
 
         # Step 5: Compute scores
@@ -366,7 +376,16 @@ class CCAAnalyzer:
         eigenvalues = eigenvalues[sorted_indices]
         eigenvectors = eigenvectors[:, sorted_indices]
 
-        # Ensure positive eigenvalues
+        # Ensure positive eigenvalues. Warn when any clipping happens so
+        # silent numerical issues (e.g. collinear env variables) are
+        # surfaced to the user instead of hidden behind a 1e-10 floor.
+        clipped = eigenvalues < 1e-10
+        if np.any(clipped):
+            n_clipped = int(np.sum(clipped))
+            self._logger.warning(
+                f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
+                "near-singular environmental matrix; check for collinear variables."
+            )
         eigenvalues = np.maximum(eigenvalues, 1e-10)
 
         # Compute scores

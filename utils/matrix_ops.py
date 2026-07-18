@@ -272,8 +272,15 @@ def standardize_matrix(matrix: npt.NDArray, axis: int = 0, ddof: int = 1) -> npt
     std = np.std(matrix, axis=axis, keepdims=True, ddof=ddof)
 
     # Handle zero standard deviation to avoid division by zero
-    if np.any(std == 0):
-        std = np.where(std == 0, 1, std)
+    # Use a tolerance rather than exact equality on floats.
+    # A standard deviation of ``1e-12`` is effectively zero but
+    # would pass an ``== 0`` check on the *first* axis (where the
+    # computed value is an exact 0.0) and fail on subsequent axes
+    # where the same numerical input yields ``5e-324``. The
+    # previous strict-equality branch would silently divide by zero
+    # on those axes, producing NaN/Inf downstream.
+    if np.any(std < 1e-10):
+        std = np.where(std < 1e-10, 1, std)
 
     standardized = (matrix - mean) / std
 

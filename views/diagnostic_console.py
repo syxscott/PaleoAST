@@ -12,7 +12,7 @@ version: 1.0.1
 import logging
 from datetime import datetime
 
-from PyQt6.QtCore import QMutex, QMutexLocker
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QDockWidget,
@@ -91,6 +91,11 @@ class ConsoleTextEdit(QTextEdit):
             cursor.deleteChar()
             self.setTextCursor(cursor)
             self._line_count -= 1
+        # NOTE: ``QTextCursor.SelectionType.LineUnderCursor`` is the
+        # canonical enum value in PyQt6. Older PyQt5 code paths used
+        # ``QTextCursor.LineUnderCursor`` (deprecated) which still
+        # works on some platforms but fails on others — keeping the
+        # enum-qualified form above is intentional.
 
         # Auto-scroll to bottom
         self.moveCursor(QTextCursor.MoveOperation.End)
@@ -303,32 +308,46 @@ class DiagnosticConsole(QDockWidget):
         self.append_message("ERROR", message)
 
 
-class ConsoleLogHandler(logging.Handler):
+class ConsoleLogHandler(QObject, logging.Handler):
     """
     Custom logging handler that sends logs to the diagnostic console.
 
-    This handler is thread-safe and buffers messages when the console
-    is paused.
+    This handler is thread-safe: worker threads emit a Qt signal
+    rather than touching the QTextEdit directly. Qt delivers the
+    signal on the GUI thread (the queue connection is the default
+    for cross-thread emits), so ``append_message`` runs only on the
+    thread that owns ``DiagnosticConsole``. The previous
+    implementation used ``QMutex`` to serialise concurrent calls
+    into the QTextEdit, but ``QTextEdit`` is not reentrant — a
+    mutex does not make it safe to call ``append`` from a worker
+    thread, it only makes it *seem* safe until a race window is
+    hit.
     """
 
+    # Signal emitted from worker threads; the slot lives on the GUI
+    # thread, so QTextEdit mutations happen there.
+    _message_signal = pyqtSignal(str, str)
+
     def __init__(self, console: DiagnosticConsole) -> None:
-        super().__init__()
+        QObject.__init__(self)
+        logging.Handler.__init__(self)
         self._console = console
-        self._mutex = QMutex()
+        # Connect the signal with the default (auto) connection.
+        # ``_console`` lives on the GUI thread, and because this
+        # QObject also lives there, Qt picks ``Qt.DirectConnection``
+        # automatically — which is correct for same-thread signal
+        # delivery. When the signal is emitted from a worker
+        # thread, Qt posts the slot to the receiver's thread.
+        self._message_signal.connect(self._console.append_message)
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Emit a log record to the console."""
+        """Emit a log record to the console (worker thread safe)."""
         try:
-            # Format the message
             msg = self.format(record)
-
-            # Get the level
             level = record.levelname
-
-            # Use mutex for thread safety
-            with QMutexLocker(self._mutex):
-                self._console.append_message(level, msg)
-
+            # Cross-thread safe: Qt queues the slot invocation on the
+            # GUI thread when called from a worker.
+            self._message_signal.emit(level, msg)
         except Exception:
             self.handleError(record)
 

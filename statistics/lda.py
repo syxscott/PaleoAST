@@ -150,7 +150,6 @@ class LDAAnalyzer:
             valid_mask = ~np.isnan(data).any(axis=1)
             data_clean = data[valid_mask]
             groups_clean = groups[valid_mask]
-            data_clean.shape[0]
 
             # Filter out ungrouped samples (if any sentinel value like -1)
             grouped_mask = groups_clean >= 0

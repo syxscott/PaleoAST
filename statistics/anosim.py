@@ -98,6 +98,7 @@ class ANOSIMAnalyzer:
         groups: list[Any],
         n_permutations: int | None = None,
         metric: str = "euclidean",
+        random_seed: int | None = None,
     ) -> ANOSIMResult:
         """
         Perform ANOSIM analysis.
@@ -107,6 +108,11 @@ class ANOSIMAnalyzer:
             groups: List of group assignments (integers or strings)
             n_permutations: Number of permutations for p-value
             metric: Distance metric used (for reference)
+            random_seed: Optional seed for the permutation RNG so the
+                p-value is reproducible. Without a seed the global
+                ``np.random`` state is used, which means successive
+                calls with identical inputs may return slightly
+                different p-values.
 
         Returns:
             ANOSIMResult: ANOSIM analysis results
@@ -118,7 +124,8 @@ class ANOSIMAnalyzer:
             n = D.shape[0]
             unique_groups = sorted(set(groups), key=lambda x: str(x))
             self._logger.info(
-                f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, n_permutations={n_permutations}"
+                f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
+                f"n_permutations={n_permutations}, random_seed={random_seed}"
             )
 
             if D.shape[0] != D.shape[1]:
@@ -133,13 +140,19 @@ class ANOSIMAnalyzer:
             # Compute observed R statistic
             R_obs = self._compute_R_statistic(D, groups)
 
-            # Permutation test
+            # Permutation test. Use a dedicated Generator when a seed
+            # is supplied so the test is reproducible.
+            if random_seed is not None:
+                rng = np.random.default_rng(random_seed)
+            else:
+                rng = np.random
+
             permuted_R = np.zeros(n_permutations)
             groups_array = np.array(groups)
 
             for i in range(n_permutations):
                 # Randomly permute group assignments
-                perm_indices = np.random.permutation(n)
+                perm_indices = rng.permutation(n)
                 permuted_groups = groups_array[perm_indices]
                 permuted_R[i] = self._compute_R_statistic(D, permuted_groups)
 

@@ -77,13 +77,18 @@ class MissingValueReport:
         }
 
     def summary(self) -> str:
+        # Use the i18n system for translatable strings instead of
+        # hardcoded Chinese — the previous version embedded Chinese
+        # text that English users could not localise.
+        from config.i18n import _
+
         lines = [
-            "缺失值报告",
+            _("Missing Value Report"),
             f"{'=' * 40}",
-            f"总 NaN 数量: {self.total_nan}",
-            f"NaN 占比: {self.nan_proportion * 100:.2f}%",
-            f"含 NaN 的行: {self.rows_with_nan}",
-            f"含 NaN 的列: {self.cols_with_nan}",
+            _("Total NaN count: {0}").format(self.total_nan),
+            _("NaN proportion: {0:.2f}%").format(self.nan_proportion * 100),
+            _("Rows with NaN: {0}").format(self.rows_with_nan),
+            _("Columns with NaN: {0}").format(self.cols_with_nan),
         ]
         return "\n".join(lines)
 

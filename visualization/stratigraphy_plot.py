@@ -693,6 +693,17 @@ class StratigraphyPlotter:
         n_b = len(h_b)
         if n_a == 0 or n_b == 0:
             return []
+        # Guard against OOM: the DP table is (n_a+1)*(n_b+1) float64
+        # values. Two 10k-sample sections would need ~800 MiB just for
+        # the cost matrix. Refuse and let the caller decide whether to
+        # subsample or use a banded variant.
+        max_dim = 5000  # 5000*5000*8 bytes ≈ 200 MiB
+        if n_a > max_dim or n_b > max_dim:
+            raise ValueError(
+                f"DTW input too large ({n_a}x{n_b}); "
+                f"max supported dimension is {max_dim}. "
+                "Subsample the input or use a banded DTW variant."
+            )
         # Vectorise the local cost matrix: |h_a[i] - h_b[j]|.
         local = np.abs(h_a[:, None] - h_b[None, :])
         cost = np.full((n_a + 1, n_b + 1), np.inf, dtype=np.float64)

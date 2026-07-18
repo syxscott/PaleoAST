@@ -121,18 +121,28 @@ def memoize(func: Callable[P, T]) -> Callable[P, T]:
                     return cache[key]
         except TypeError:
             # Arguments not hashable, skip cache
-            pass
+            logging.getLogger(__name__).debug(
+                "memoize: arguments unhashable, skipping cache lookup for %s",
+                getattr(func, "__qualname__", repr(func)),
+            )
 
         # Compute result
         result = func(*args, **kwargs)
 
-        # Store in cache
+        # Store in cache. Note: ``cache`` is a dict so the *key* (the
+        # tuple of arguments) is what needs to be hashable; the *value*
+        # can be any object, including numpy arrays. Silently skipping
+        # the store on TypeError here would mean unhashable results are
+        # never cached but the cache itself is fine. Only the key-side
+        # TypeError path needs to fall through.
         try:
             with cache_lock:
                 cache[key] = result
         except TypeError:
-            # Result not hashable, skip cache
-            pass
+            logging.getLogger(__name__).debug(
+                "memoize: key unhashable, skipping cache store for %s",
+                getattr(func, "__qualname__", repr(func)),
+            )
 
         return result
 
@@ -352,13 +362,25 @@ def cache_result(
 
             @functools.wraps(func)
             def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                cache_key = key_func(*args, **kwargs)
+                try:
+                    cache_key = key_func(*args, **kwargs)
+                except TypeError:
+                    logging.getLogger(__name__).debug(
+                        "cache_result: key_func raised TypeError for %s; "
+                        "computing result without caching",
+                        getattr(func, "__qualname__", repr(func)),
+                    )
+                    return func(*args, **kwargs)
                 if cache_key in _cache:
                     return _cache[cache_key]
                 result = func(*args, **kwargs)
                 if maxsize is not None and len(_cache) >= maxsize:
                     oldest = next(iter(_cache))
                     del _cache[oldest]
+                # ``cache_key`` only needs to be hashable; the value
+                # (``result``) may be any object including numpy
+                # arrays, which is fine because dict values aren't
+                # required to be hashable.
                 _cache[cache_key] = result
                 return result
 

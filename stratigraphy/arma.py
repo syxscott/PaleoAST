@@ -353,8 +353,32 @@ class ARMAAnalyzer:
 
                 forecasts[h] = forecast
 
-                # Standard error grows with horizon
-                stderr[h] = scale * np.sqrt(1 + h * 0.1)
+                # Recursive prediction variance. The previous
+                # implementation used an ad-hoc ``scale *
+                # sqrt(1 + h * 0.1)`` heuristic with an arbitrary
+                # growth factor of 0.1, which produced wildly
+                # inaccurate confidence intervals for moderate
+                # horizons. Use the standard AR(p) prediction
+                # variance recursion:
+                #     Var(forecast at h) = σ² * (1 + Σ ψ_i²)
+                # where ψ are the MA(∞) coefficients. We
+                # approximate ψ_i by iterating the AR recursion
+                # up to ``min(h, max(p, 5))``.
+                variance_h = scale**2
+                if h > 0:
+                    max_lag = min(h, max(len(result.ar_params), 5))
+                    psi_sum = 0.0
+                    # Initialise ψ with ψ_0 = 1, ψ_i = AR_i for i >= 1
+                    psi = np.zeros(max_lag + 1)
+                    psi[0] = 1.0
+                    for i in range(1, max_lag + 1):
+                        val = 0.0
+                        for j in range(1, min(i, len(result.ar_params)) + 1):
+                            val += result.ar_params[j - 1] * psi[i - j]
+                        psi[i] = val
+                        psi_sum += val**2
+                    variance_h = scale**2 * (1.0 + psi_sum)
+                stderr[h] = np.sqrt(max(variance_h, 0.0))
 
                 # Update recent values for next step
                 recent = np.append(recent[1:], forecast)

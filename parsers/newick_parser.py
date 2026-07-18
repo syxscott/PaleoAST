@@ -494,6 +494,12 @@ class NewickParser:
         self._input: str = ""
         self._pos: int = 0
         self._length: int = 0
+        # Track recursion depth for the descent parser; the public
+        # ``_parse_subtree_with_children`` increments / decrements it
+        # so that malicious or pathological input can't crash the
+        # interpreter with ``RecursionError``.
+        self._depth: int = 0
+        self._MAX_DEPTH: int = 1000
 
         # 正则表达式
         self._name_pattern = re.compile(r"^([^():,\s]+)")
@@ -574,6 +580,20 @@ class NewickParser:
         返回:
             NewickTree列表
         """
+        # Cap the file size at 50 MiB. Newick files are typically
+        # small (a few KB); anything larger is almost certainly
+        # malformed or an attempted resource exhaustion. Without this
+        # guard, a malicious 10 GiB file would consume all available
+        # memory before we even start parsing.
+        import os
+
+        size = os.path.getsize(filepath)
+        max_size = 50 * 1024 * 1024
+        if size > max_size:
+            raise ValueError(
+                f"Newick file too large: {size} bytes (limit {max_size}); "
+                "refusing to read to prevent memory exhaustion."
+            )
         with open(filepath, encoding="utf-8") as f:
             content = f.read()
 
@@ -639,6 +659,27 @@ class NewickParser:
         返回:
             TreeNode对象
         """
+        # Recursion-depth guard. Newick allows arbitrarily deep
+        # nesting of parentheses; without this cap a malicious or
+        # accidentally pathological input of ``((((...`` depth 10^5
+        # would crash the interpreter with ``RecursionError`` (or
+        # worse, exhaust the C stack). 1000 is well above any
+        # reasonable biological tree and matches the effective
+        # default Python recursion limit.
+        self._depth += 1
+        try:
+            if self._depth > self._MAX_DEPTH:
+                raise ValueError(
+                    f"Newick recursion depth exceeded {self._MAX_DEPTH}; "
+                    "tree is too deeply nested or malformed."
+                )
+            return self._parse_subtree_with_children_impl()
+        finally:
+            self._depth -= 1
+
+    def _parse_subtree_with_children_impl(self) -> TreeNode:
+        """Implementation of ``_parse_subtree_with_children``; the
+        public method wraps this in a depth counter."""
         # 消耗 '('
         self._advance()
 

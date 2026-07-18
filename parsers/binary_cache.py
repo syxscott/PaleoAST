@@ -108,8 +108,12 @@ class BinaryCacheHeader:
     metadata_length: int = 0
     crc32: int = 0
 
-    # 头部长度
+    # 头部长度 = 6*4 + 2*8 + 2*4 + 4(预留) = 48 + 4 = 52, 向上对齐到 64
+    # 之前 HEADER_SIZE 设为 64, 但 struct 格式 "!IIIIII QQII" 实际只
+    # 编码 48 字节, 剩余 16 字节全部为零填充。保留 64 字节的总长以
+    # 维持向后兼容, 但显式声明结构体实际占用的 48 字节。
     HEADER_SIZE: int = 64
+    HEADER_STRUCT_SIZE: int = 48  # 6*I + 2*Q + 2*I
 
     def to_bytes(self) -> bytes:
         """
@@ -118,10 +122,11 @@ class BinaryCacheHeader:
         返回:
             64字节的头部数据
         """
-        # 打包格式: !IIIIIQQQII
+        # 打包格式: !IIIIII QQII
         # ! = 网络字节序(大端)
         # I = unsigned int (4 bytes)
         # Q = unsigned long long (8 bytes)
+        # 实际编码 48 字节, 后续 16 字节为零填充 (保留字段)
 
         header_data = struct.pack(
             "!IIIIII QQII",
@@ -137,7 +142,7 @@ class BinaryCacheHeader:
             self.crc32,
         )
 
-        # 确保正好64字节
+        # 确保正好 HEADER_SIZE 字节
         if len(header_data) < self.HEADER_SIZE:
             header_data = header_data + b"\x00" * (self.HEADER_SIZE - len(header_data))
 
@@ -157,7 +162,11 @@ class BinaryCacheHeader:
         if len(data) < cls.HEADER_SIZE:
             raise ValueError(f"Header data too short: expected {cls.HEADER_SIZE}, got {len(data)}")
 
-        unpacked = struct.unpack("!IIIIII QQII", data[:48])
+        # Use ``cls`` (classmethod) rather than ``self`` — the previous
+        # code referenced ``self`` inside ``from_bytes`` and crashed
+        # with ``NameError: name 'self' is not defined`` whenever any
+        # code path tried to load a cached file.
+        unpacked = struct.unpack("!IIIIII QQII", data[: cls.HEADER_STRUCT_SIZE])
 
         return cls(
             magic=unpacked[0],
@@ -414,7 +423,14 @@ class BinaryCache:
                     metadata_bytes = b""
                     metadata = {}
 
-                # 验证CRC32 - 使用原始（可能压缩的）字节进行校验
+                # 验证CRC32 - 使用原始（可能压缩的）字节进行校验.
+                # NOTE: ``save`` computes the CRC over ``matrix_bytes`` *after*
+                # compression when ``use_compression=True``, so the on-disk
+                # ``raw_matrix_bytes`` matches what was CRCed. Reading
+                # ``row_labels`` / ``col_labels`` from disk and re-serialising
+                # them yields the same byte string as ``save`` did (labels are
+                # length-prefixed and never mutated), so this CRC matches the
+                # value stored in the header.
                 crc_data = (
                     raw_matrix_bytes
                     + self._serialize_labels(row_labels)
@@ -424,7 +440,10 @@ class BinaryCache:
                 expected_crc = zlib.crc32(crc_data) & 0xFFFFFFFF
 
                 if expected_crc != header.crc32:
-                    self._logger.warning(f"CRC32 mismatch: expected {header.crc32}, got {expected_crc}")
+                    self._logger.warning(
+                        f"CRC32 mismatch: stored {header.crc32}, computed {expected_crc} "
+                        f"(compression={bool(header.flags & 0x01)})"
+                    )
 
                 result = {
                     "matrix": matrix,

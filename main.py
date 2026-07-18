@@ -143,7 +143,7 @@ class ExceptionHandler:
             layout = QVBoxLayout(dialog)
 
             # 标题
-            title = QLabel("⚠️  " + _("Application Error"))
+            title = QLabel(_("Application Error"))
             title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
             title.setStyleSheet("color: #E74C3C; padding: 10px;")
 
@@ -235,9 +235,11 @@ class ExceptionHandler:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(tb_text)
                 QMessageBox.information(None, _("Exported"), _("Log saved to:\n{0}").format(path))
-        except Exception:
-            # 忽略导出失败，继续执行
-            pass
+        except Exception as e:
+            # Log the failure rather than swallowing it silently.
+            logging.getLogger("PaleoAST.ExceptionHandler").warning(
+                "Failed to export log file: %s", e
+            )
 
 
 # =============================================================================

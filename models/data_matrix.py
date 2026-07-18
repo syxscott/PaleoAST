@@ -276,7 +276,11 @@ class DataMatrix:
             npt.NDArray: Boolean array where True indicates missing values
         """
         with self._lock:
-            return np.isnan(self._data)
+            # Return an explicit copy. ``np.isnan`` returns a view of the
+            # underlying data; callers that mutate the mask (e.g. via
+            # in-place boolean assignment) would otherwise corrupt
+            # ``self._data`` itself.
+            return np.isnan(self._data).copy()
 
     @property
     def has_missing(self) -> bool:

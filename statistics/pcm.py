@@ -600,6 +600,7 @@ class PCMAnalyzer:
         tree: PhyloTree,
         trait_values: dict[str, float],
         n_randomizations: int | None = None,
+        random_seed: int | None = None,
     ) -> PhylogeneticSignalResult:
         """
         Measure phylogenetic signal using Blomberg's K.
@@ -618,12 +619,16 @@ class PCMAnalyzer:
             tree: Phylogenetic tree
             trait_values: {taxon_name: trait_value} dictionary
             n_randomizations: Number of permutations (defaults to constructor value)
+            random_seed: Optional seed for the permutation RNG so the
+                p-value and Z-score are reproducible.
 
         Returns:
             PhylogeneticSignalResult with K, Z-score, and p-value
         """
         n_r = n_randomizations or self._n_randomizations
-        self._logger.info(f"Computing Blomberg's K (n_perm={n_r})")
+        self._logger.info(
+            f"Computing Blomberg's K (n_perm={n_r}, random_seed={random_seed})"
+        )
 
         if tree.root is None:
             raise ValidationError(_("Tree has no root node"))
@@ -664,12 +669,18 @@ class PCMAnalyzer:
         v_sum = float(np.sum(v))
         K = float(np.sum(raw_ic_sq) / v_sum) if v_sum > 0 else 0.0
 
-        # Compute Z-score via permutations
+        # Compute Z-score via permutations. Use a dedicated Generator
+        # when a seed is supplied so the test is reproducible.
         tip_array = np.array([trait_values[l.name] for l in leaves], dtype=np.float64)
+        if random_seed is not None:
+            rng = np.random.default_rng(random_seed)
+        else:
+            rng = np.random
+
         perm_Ks: list[float] = []
 
         for _ in range(n_r):
-            perm_trait = np.random.permutation(tip_array)
+            perm_trait = rng.permutation(tip_array)
             perm_dict = {name: perm_trait[i] for i, name in enumerate(tip_names)}
             _, _, perm_ic_data, _ = _compute_contrasts_recursive(working_tree.root, perm_dict)
             if perm_ic_data:
@@ -706,6 +717,7 @@ class PCMAnalyzer:
         trait_values: dict[str, float],
         group_labels: dict[str, str],
         n_permutations: int | None = None,
+        random_seed: int | None = None,
     ) -> PhyloANOVAResult:
         """
         Phylogenetic ANOVA: test for trait differences between groups.
@@ -726,12 +738,16 @@ class PCMAnalyzer:
             trait_values: {taxon_name: trait_value} dictionary
             group_labels: {taxon_name: group_name} dictionary
             n_permutations: Number of permutations (defaults to constructor value)
+            random_seed: Optional seed for the permutation RNG so the
+                p-value is reproducible.
 
         Returns:
             PhyloANOVAResult with F-statistic, p-value, and ANOVA table
         """
         n_p = n_permutations or self._n_randomizations
-        self._logger.info(f"Phylogenetic ANOVA (n_perm={n_p})")
+        self._logger.info(
+            f"Phylogenetic ANOVA (n_perm={n_p}, random_seed={random_seed})"
+        )
 
         if tree.root is None:
             raise ValidationError(_("Tree has no root node"))
@@ -874,14 +890,20 @@ class PCMAnalyzer:
         F = ms_between / ms_within if ms_within > 0 else 0.0
 
         # Permutation test: shuffle trait values across tips, keep groups fixed
-        # This tests whether observed F is larger than chance given phylogeny and group structure
+        # This tests whether observed F is larger than chance given phylogeny and group structure.
+        # Use a dedicated Generator when a seed is supplied so the
+        # p-value is reproducible.
         perm_Fs: list[float] = []
         tip_names_list = [l.name for l in working_tree.root.get_leaves()]
         tip_array = np.array([trait_values[t] for t in tip_names_list], dtype=np.float64)
+        if random_seed is not None:
+            rng = np.random.default_rng(random_seed)
+        else:
+            rng = np.random
 
         for _ in range(n_p):
             # Shuffle ONLY trait values, keep groups fixed
-            perm_trait = np.random.permutation(tip_array)
+            perm_trait = rng.permutation(tip_array)
             perm_trait_dict = {tip_names_list[i]: perm_trait[i] for i in range(len(tip_names_list))}
 
             _, _, perm_ic_data, _ = _compute_contrasts_recursive(working_tree.root, perm_trait_dict)

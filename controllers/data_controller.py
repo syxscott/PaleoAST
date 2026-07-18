@@ -369,13 +369,21 @@ class DataController:
                 mean = np.mean(data, axis=0)
                 std = np.std(data, axis=0, ddof=1)
                 std = np.where(std == 0, 1, std)
-                return (data - mean) / std
+                # ``data`` may be a view of the caller's array. The
+                # ``-``/``/`` operators below allocate a fresh array, but
+                # when ``data`` is already a float view of an integer
+                # array the result is a *new* allocation. Be explicit
+                # and copy here so callers never see in-place
+                # modification of their input.
+                data_arr = np.asarray(data, dtype=float).copy()
+                return (data_arr - mean) / std
             elif method == "minmax":
                 min_val = np.min(data, axis=0)
                 max_val = np.max(data, axis=0)
                 range_val = max_val - min_val
                 range_val = np.where(range_val == 0, 1, range_val)
-                return (data - min_val) / range_val
+                data_arr = np.asarray(data, dtype=float).copy()
+                return (data_arr - min_val) / range_val
             else:
                 raise ValidationError(f"Unknown standardization method: {method}")
 
@@ -423,7 +431,10 @@ class DataController:
                 raise ValidationError("No data available")
 
             matrix = self._state.data_matrix
-            transposed = matrix.data.T
+            # ``matrix.data`` returns a copy, but ``.T`` is still a view
+            # of that copy. Force a contiguous copy so the returned
+            # DataMatrix cannot accidentally mutate the source array.
+            transposed = matrix.data.T.copy()
 
             return DataMatrix(data=transposed, row_labels=matrix.col_labels, col_labels=matrix.row_labels)
 
@@ -443,7 +454,11 @@ class DataController:
 
             matrix = self._state.data_matrix
 
-            new_data = matrix.data[indices]
+            # ``matrix.data`` returns a copy, but fancy indexing on it
+            # can still produce a view in some NumPy edge cases. Force
+            # an explicit copy so the returned DataMatrix owns its
+            # buffer.
+            new_data = matrix.data[indices].copy()
             new_labels = None
             if matrix.row_labels:
                 new_labels = [matrix.row_labels[i] for i in indices]
@@ -466,7 +481,7 @@ class DataController:
 
             matrix = self._state.data_matrix
 
-            new_data = matrix.data[:, indices]
+            new_data = matrix.data[:, indices].copy()
             new_labels = None
             if matrix.col_labels:
                 new_labels = [matrix.col_labels[i] for i in indices]

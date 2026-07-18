@@ -9,6 +9,7 @@ PaleoAST - Theme Manager
 """
 
 import logging
+import weakref
 from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -51,7 +52,12 @@ class ThemeManager(QObject):
         self._app = app
         self._current_theme = StyleMode.DARK
         self._styles_engine = PaleoASTStyles(self._current_theme)
-        self._change_callbacks: list = []
+        # Use a list of weak references so callbacks don't keep
+        # their owners alive indefinitely. The previous plain list
+        # was never cleaned up by ``unregister_change_callback`` for
+        # transient subscribers (e.g. dialogs), causing unbounded
+        # growth over the application's lifetime.
+        self._change_callbacks: list[weakref.ref] = []
 
         logger.info("ThemeManager initialized with dark theme")
 
@@ -90,11 +96,24 @@ class ThemeManager(QObject):
         # 通知回调
         self.theme_changed.emit(theme.value)
 
-        for callback in self._change_callbacks:
+        # Iterate over a snapshot so callbacks that unregister
+        # themselves during dispatch don't trip the iteration.
+        dead: list[weakref.ref] = []
+        for cb_ref in list(self._change_callbacks):
+            callback = cb_ref()
+            if callback is None:
+                dead.append(cb_ref)
+                continue
             try:
                 callback(theme)
             except Exception as e:
                 logger.error(f"Error in theme change callback: {e}")
+        # Reap dead refs
+        for d in dead:
+            try:
+                self._change_callbacks.remove(d)
+            except ValueError:
+                pass
 
         logger.info(f"Theme changed to {theme.value}")
 
@@ -103,14 +122,40 @@ class ThemeManager(QObject):
         new_theme = StyleMode.LIGHT if self._current_theme == StyleMode.DARK else StyleMode.DARK
         self.set_theme(new_theme)
 
-    def register_change_callback(self, callback: Callable[[StyleMode], None]) -> None:
+    def register_change_callback(
+        self,
+        callback: Callable[[StyleMode], None],
+        *,
+        owner: object | None = None,
+    ) -> None:
         """
         注册主题改变回调
 
+        The callback is held via a weak reference so that simply
+        forgetting to call ``unregister_change_callback`` does not
+        leak memory. For bound methods, pass the bound object as
+        ``owner`` so the weak reference can resolve it; otherwise
+        the callback is held by strong reference (legacy behaviour).
+
         参数:
             callback: 回调函数，签名为 callback(theme: StyleMode)
+            owner: Optional owning object. When provided, the
+                callback is dropped automatically once ``owner`` is
+                garbage-collected.
         """
-        self._change_callbacks.append(callback)
+        if owner is not None:
+            try:
+                ref = weakref.WeakMethod(callback) if hasattr(callback, "__self__") else weakref.ref(callback)
+            except TypeError:
+                ref = weakref.ref(callback)
+        else:
+            # No owner: hold a strong reference so the callback
+            # remains callable. Callers that omit ``owner`` must
+            # pair every register with an unregister, or accept
+            # the documented strong-reference semantics.
+            self._change_callbacks.append(_StrongRef(callback))
+            return
+        self._change_callbacks.append(ref)
 
     def unregister_change_callback(self, callback: Callable[[StyleMode], None]) -> None:
         """
@@ -119,8 +164,14 @@ class ThemeManager(QObject):
         参数:
             callback: 回调函数
         """
-        if callback in self._change_callbacks:
-            self._change_callbacks.remove(callback)
+        for ref in list(self._change_callbacks):
+            target = ref() if not isinstance(ref, _StrongRef) else ref.callback
+            if target is callback:
+                try:
+                    self._change_callbacks.remove(ref)
+                except ValueError:
+                    pass
+                return
 
     def apply_theme(self) -> None:
         """应用当前主题到应用"""
@@ -143,3 +194,16 @@ class ThemeManager(QObject):
 
         styles = PaleoASTStyles(theme)
         return styles.get_complete_stylesheet()
+
+
+class _StrongRef:
+    """Strong-reference wrapper so legacy ``register_change_callback``
+    callers that omit ``owner`` retain their callback lifetime."""
+
+    __slots__ = ("callback",)
+
+    def __init__(self, callback: Callable[[StyleMode], None]) -> None:
+        self.callback = callback
+
+    def __call__(self) -> Callable[[StyleMode], None] | None:
+        return self.callback

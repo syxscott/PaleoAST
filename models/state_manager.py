@@ -276,10 +276,23 @@ class StateManager:
         Parameters:
             col_index: Column index
             metadata_dict: Dictionary with metadata fields (color, group, data_type, etc.)
+
+        Raises:
+            IndexError: If ``col_index`` is out of range.
         """
         with self._read_write_lock:
             if self._column_metadata is None:
                 return
+            # Bounds check before delegating — otherwise an out-of-range
+            # index would raise ``IndexError`` deep inside the metadata
+            # manager with a confusing message.
+            if self._data_matrix is None:
+                return
+            if not (0 <= col_index < self._data_matrix.n_variables):
+                raise IndexError(
+                    f"set_col_metadata: col_index {col_index} out of range "
+                    f"[0, {self._data_matrix.n_variables})"
+                )
             if "data_type" in metadata_dict:
                 self._column_metadata.set_data_type(col_index, metadata_dict["data_type"])
             if "group" in metadata_dict:
@@ -297,10 +310,20 @@ class StateManager:
         Parameters:
             row_index: Row index
             metadata_dict: Dictionary with metadata fields (color, group, marker, etc.)
+
+        Raises:
+            IndexError: If ``row_index`` is out of range.
         """
         with self._read_write_lock:
             if self._row_metadata is None:
                 return
+            if self._data_matrix is None:
+                return
+            if not (0 <= row_index < self._data_matrix.n_samples):
+                raise IndexError(
+                    f"set_row_metadata: row_index {row_index} out of range "
+                    f"[0, {self._data_matrix.n_samples})"
+                )
             if "group" in metadata_dict:
                 self._row_metadata.set_group(row_index, metadata_dict["group"])
             if "color" in metadata_dict:

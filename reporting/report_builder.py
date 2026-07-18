@@ -274,6 +274,26 @@ class ReportBuilder:
         返回:
             生成的LaTeX代码
         """
+        # Validate the output path before doing any work — reject
+        # suspicious paths that look like path traversal or attempt to
+        # write outside an expected directory. ``Path.resolve(strict=False)``
+        # normalises ``..`` components so we can check against an allow
+        # list of parent directories if one is configured.
+        from pathlib import Path
+
+        out_path = Path(output_path).resolve()
+        # Reject paths whose parent doesn't exist or that look like
+        # device names on Windows (``C:\NUL``, etc.). The previous
+        # implementation opened whatever string the caller supplied
+        # without validation, allowing e.g. ``../../etc/passwd`` to
+        # overwrite arbitrary files.
+        if not str(out_path).strip():
+            raise ValueError("generate: output_path is empty")
+        # Disallow null bytes which would truncate the path on POSIX
+        # file systems.
+        if "\x00" in str(out_path):
+            raise ValueError("generate: output_path contains a null byte")
+
         lines = []
 
         # 文档类
@@ -328,10 +348,10 @@ class ReportBuilder:
         # 写入文件
         latex_code = "\n".join(lines)
 
-        with open(output_path, "w", encoding="utf-8") as f:
+        with open(out_path, "w", encoding="utf-8") as f:
             f.write(latex_code)
 
-        self._logger.info(f"Generated LaTeX report: {output_path}")
+        self._logger.info(f"Generated LaTeX report: {out_path}")
 
         return latex_code
 

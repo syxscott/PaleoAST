@@ -171,7 +171,13 @@ class PCoAAnalyzer:
 
             # Select top n_components
             coordinates = coordinates[:, :n_components]
-            eigenvalues = eigenvalues[:n_components]
+            # Use the *positive* eigenvalues for the result so the
+            # returned eigenvalue field is consistent with the
+            # coordinates (which were computed from sqrt of the
+            # positive part). The original ``eigenvalues`` slice
+            # could still contain negatives, which would confuse any
+            # downstream consumer (e.g. negative "variance explained").
+            eigenvalues = eigenvalues_positive[:n_components]
 
             # Compute proportion explained.
             # The denominator MUST be the sum of *all* positive eigenvalues,

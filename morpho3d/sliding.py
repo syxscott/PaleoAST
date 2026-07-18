@@ -439,9 +439,19 @@ class SemiLandmarkSlider:
         tangents = np.zeros((n_semi, 3))
 
         for i, (pos, point) in enumerate(zip(positions, points, strict=False)):
-            # 获取前后邻居
-            pos - 1 if pos > 0 else pos + 1
-            pos + 1 if pos < n_total - 1 else pos - 1
+            # 获取前后邻居 — the previous version computed
+            # ``pos - 1 if ... else pos + 1`` and discarded the
+            # result (dead code). Use ``pos`` for documentation
+            # purposes but the actual neighbours are taken from
+            # ``points[i-1]`` / ``points[i+1]`` below.
+            if pos > 0:
+                _prev_pos = pos - 1
+            else:
+                _prev_pos = pos + 1
+            if pos < n_total - 1:
+                _next_pos = pos + 1
+            else:
+                _next_pos = pos - 1
 
             # 需要获取完整曲线上的邻居
             # 这里简化为使用半标志点内部的邻居

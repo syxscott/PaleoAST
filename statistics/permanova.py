@@ -109,6 +109,7 @@ class PERMANOVAAnalyzer:
         groups: list[Any],
         n_permutations: int | None = None,
         metric: str = "euclidean",
+        random_seed: int | None = None,
     ) -> PERMANOVAResult:
         """
         Perform PERMANOVA analysis.
@@ -118,6 +119,10 @@ class PERMANOVAAnalyzer:
             groups: List of group assignments
             n_permutations: Number of permutations for p-value
             metric: Distance metric used (for reference)
+            random_seed: Optional seed for the permutation RNG so that
+                the resulting p-value is reproducible. Without a seed,
+                ``np.random`` is used as-is and two calls with the same
+                data may return slightly different p-values.
 
         Returns:
             PERMANOVAResult: PERMANOVA analysis results
@@ -130,7 +135,7 @@ class PERMANOVAAnalyzer:
             unique_groups = sorted(set(groups), key=lambda x: str(x))
             self._logger.info(
                 f"PERMANOVA analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
-                f"n_permutations={n_permutations}"
+                f"n_permutations={n_permutations}, random_seed={random_seed}"
             )
 
             if D.shape[0] != D.shape[1]:
@@ -149,12 +154,19 @@ class PERMANOVAAnalyzer:
             # Compute observed F statistic
             F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(D, groups_array, g, n)
 
-            # Permutation test
+            # Permutation test. Use a dedicated Generator when a seed is
+            # supplied so the test is fully reproducible; fall back to
+            # ``np.random`` otherwise for backward compatibility.
+            if random_seed is not None:
+                rng = np.random.default_rng(random_seed)
+            else:
+                rng = np.random
+
             permuted_F = np.zeros(n_permutations)
 
             for i in range(n_permutations):
                 # Randomly permute group assignments
-                perm_indices = np.random.permutation(n)
+                perm_indices = rng.permutation(n)
                 permuted_groups = groups_array[perm_indices]
                 permuted_F[i] = self._compute_F_statistic(D, permuted_groups, g, n)[0]
 

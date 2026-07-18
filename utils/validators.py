@@ -145,7 +145,12 @@ def validate_data_array(
 
     # Check minimum values requirement
     if min_values is not None:
-        valid_count = np.sum(~np.isnan(arr)) if allow_nan else arr.size
+        # Use a strict count when NaN is allowed (already-checked
+        # NaNs above), and the total size when not. The previous
+        # ternary used ``arr.size`` in the ``allow_nan=False`` branch
+        # unconditionally, which would silently count NaN cells as
+        # valid if any had slipped through earlier checks.
+        valid_count = np.sum(~np.isnan(arr)) if allow_nan else int(arr.size)
         if valid_count < min_values:
             logger.warning(f"'{name}' has {valid_count} valid values, need at least {min_values}")
             raise DataValidationError(

@@ -111,6 +111,7 @@ class RipleyKAnalyzer:
         r_max: float | None = None,
         n_r_values: int = 50,
         n_simulations: int = 99,
+        random_seed: int | None = None,
     ) -> SpatialResult:
         """
         Perform Ripley's K spatial analysis.
@@ -120,6 +121,9 @@ class RipleyKAnalyzer:
             r_max: Maximum distance for analysis. If None, auto-calculated
             n_r_values: Number of distance values to compute
             n_simulations: Number of Monte Carlo simulations for envelope
+            random_seed: Optional seed for the Monte Carlo envelope
+                RNG so the resulting confidence envelope is
+                reproducible.
 
         Returns:
             SpatialResult: Spatial analysis results
@@ -136,7 +140,10 @@ class RipleyKAnalyzer:
             if n_points < 3:
                 raise ComputationError("Need at least 3 points for spatial analysis")
 
-            self._logger.info(f"RipleyK analyze started: n_points={n_points}, n_simulations={n_simulations}")
+            self._logger.info(
+                f"RipleyK analyze started: n_points={n_points}, n_simulations={n_simulations}, "
+                f"random_seed={random_seed}"
+            )
 
             # Compute bounding box
             x_min, x_max = points[:, 0].min(), points[:, 0].max()
@@ -164,8 +171,11 @@ class RipleyKAnalyzer:
                 l_values = np.sqrt(k_values / np.pi) - r_values
                 l_values = np.nan_to_num(l_values, nan=0.0)
 
-            # Monte Carlo envelope
-            envelope_upper, envelope_lower = self._compute_envelope(points, r_values, area, n_simulations)
+            # Monte Carlo envelope. Propagate the seed so the envelope
+            # is reproducible when one is supplied.
+            envelope_upper, envelope_lower = self._compute_envelope(
+                points, r_values, area, n_simulations, random_seed=random_seed
+            )
 
             # Determine interpretation by comparing observed L(r) against
             # the Monte Carlo envelope over non-trivial radii.
@@ -254,6 +264,7 @@ class RipleyKAnalyzer:
         r_values: npt.NDArray,
         area: float,
         n_simulations: int,
+        random_seed: int | None = None,
     ) -> tuple[npt.NDArray, npt.NDArray]:
         """
         Compute Monte Carlo confidence envelope under CSR.
@@ -267,13 +278,19 @@ class RipleyKAnalyzer:
         x_min, x_max = points[:, 0].min(), points[:, 0].max()
         y_min, y_max = points[:, 1].min(), points[:, 1].max()
 
-        # Store L values from simulations
+        # Store L values from simulations. Use a dedicated Generator
+        # when a seed is supplied so the envelope is reproducible.
+        if random_seed is not None:
+            rng = np.random.default_rng(random_seed)
+        else:
+            rng = np.random
+
         l_simulations = np.zeros((n_simulations, len(r_values)))
 
         for sim in range(n_simulations):
             # Generate random points within bounding box
-            random_x = np.random.uniform(x_min, x_max, n)
-            random_y = np.random.uniform(y_min, y_max, n)
+            random_x = rng.uniform(x_min, x_max, n)
+            random_y = rng.uniform(y_min, y_max, n)
             random_points = np.column_stack([random_x, random_y])
 
             # Compute K for random points

@@ -381,9 +381,18 @@ class CrashReportDialog(QDialog):
                 QMessageBox.critical(self, _("Export Failed"), _("Failed to export report:\n{0}").format(e))
 
     def _quit_application(self) -> None:
-        """退出应用程序"""
+        """退出应用程序.
+
+        ``QApplication.quit()`` only schedules a quit event on the
+        event loop, which is harmless from the GUI thread but is
+        unreliable when invoked from a worker thread or from a
+        dialog's signal handler where the event loop is already
+        inside ``exec()``. Use ``QApplication.exit(1)`` instead so
+        the process tears down immediately and returns a non-zero
+        exit code to the OS.
+        """
         self.reject()
-        QApplication.quit()
+        QApplication.exit(1)
 
 
 class GlobalExceptionHandler(QObject):
