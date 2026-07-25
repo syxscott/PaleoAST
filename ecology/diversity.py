@@ -75,14 +75,19 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
 
     # Simpson Index (1-D): D = 1 - Σ p_i²
     simpson = 1 - np.sum(p**2)
+    if S == 1:
+        simpson_interpretation = "monospecific assemblage (S=1), Simpson=1 by definition - diversity indices are not meaningful for single-taxon samples"
+    else:
+        simpson_interpretation = f"Simpson index of {simpson:.4f} indicates {'high diversity' if simpson > 0.7 else 'moderate diversity'}"
     indices["simpson"] = DiversityIndexResult(
         index_name="Simpson Index (1-D)",
         value=float(simpson),
         formula=r"1 - D = 1 - \sum_{i=1}^{S} p_i^2",
-        interpretation=f"Simpson index of {simpson:.4f} indicates {'high diversity' if simpson > 0.7 else 'moderate diversity'}",
+        interpretation=simpson_interpretation,
     )
 
     # Pielou's Evenness: J = H' / ln(S)
+    # Omitted for S=1 because J = H'/ln(1) is undefined (division by zero)
     if S > 1:
         pielou = shannon / np.log(S)
         indices["pielou"] = DiversityIndexResult(
@@ -93,7 +98,8 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
         )
 
     # Margalef Index: (S-1) / ln(N)
-    if N > 1:
+    # Requires S >= 2 and N > 1 for meaningful diversity measurement
+    if N > 1 and S >= 2:
         margalef = (S - 1) / np.log(N)
         indices["margalef"] = DiversityIndexResult(
             index_name="Margalef Index",
@@ -101,6 +107,8 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
             formula=r"D_{Mg} = (S-1) / \ln(N)",
             interpretation=f"Margalef index of {margalef:.4f}",
         )
+    elif S < 2:
+        logger.debug("Margalef Index skipped: requires at least 2 taxa (S>=2) for meaningful measurement")
 
     # Fisher's Alpha
     fisher_alpha = _compute_fisher_alpha(S, N)
@@ -132,6 +140,14 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
             value=float(chao1),
             formula=r"\hat{S}_{Chao1} = S + \frac{f_1(f_1-1)}{2}",
             interpretation=f"Chao-1 estimate of {chao1:.1f} (S_obs={S})",
+        )
+    else:
+        # No rare species observed (f1=f2=0) - use observed richness as estimate
+        indices["chao1"] = DiversityIndexResult(
+            index_name="Chao-1 Estimator",
+            value=float(S),
+            formula=r"S_{obs} (no rare species observed)",
+            interpretation=f"No rare species found; observed richness S={S} used as estimate",
         )
 
     logger.info(
@@ -175,7 +191,7 @@ def _compute_fisher_alpha(S: int, N: int) -> float | None:
             return None
 
     logger.warning(f"Fisher's alpha did not converge within 100 iterations for S={S}, N={N}")
-    return alpha
+    return None
 
 
 def _compute_frequency_counts(abundances: npt.NDArray) -> dict[int, int]:

@@ -17,9 +17,12 @@ PaleoAST 3D Morphometrics - 3D Thin Plate Spline
 --------------------------------------------------------------------------------
 薄板样条使用径向基函数:
 
-    U(r) = |r|² ln(|r|)    (2D情况)
-    U(r) = |r|             (3D情况，距离核)
-    U(r) = |r|³            (3D情况，薄板核)
+    U(r) = |r|² ln(|r|)    (2D情况，biharmonic)
+    U(r) = |r|             (3D情况，Laplacian基本解，标准3D TPS)
+    U(r) = |r|³            (3D情况，biharmonic)
+
+注意: 文献中"3D TPS核"通常指U(r)=|r|（Laplacian基本解），
+因为它是三维拉普拉斯方程的基本解。U(r)=|r|³是双调和核。
 
 更一般的3D TPS核:
 
@@ -177,8 +180,11 @@ class TPS3D:
 
     实现基于径向基函数的3D空间变形。
 
+    标准3D TPS核函数为 U(r) = r (线性核)，
+    这是拉普拉斯方程在3D空间的基本解。
+
     使用示例:
-        >>> tps = TPS3D(kernel='cubic')
+        >>> tps = TPS3D(kernel='thin_plate')  # 标准3D TPS使用thin_plate核
         >>> source = np.array([[0,0,0], [1,0,0], [0,1,0], [0,0,1]])
         >>> target = np.array([[0,0,0], [1.1,0,0], [0,1.2,0], [0,0,0.9]])
         >>> tps.fit(source, target)
@@ -187,12 +193,15 @@ class TPS3D:
         >>> transformed = tps.transform(new_point)
     """
 
-    def __init__(self, kernel: str = "cubic", regularization: float = 0.0):
+    def __init__(self, kernel: str = "thin_plate", regularization: float = 0.0):
         """
         初始化3D TPS
 
         参数:
-            kernel: 核函数类型 ('cubic', 'thin_plate', 'multiquadric')
+            kernel: 核函数类型 ('thin_plate', 'cubic', 'multiquadric')
+                   'thin_plate': U(r)=r (标准3D TPS核函数，拉普拉斯方程基本解)
+                   'cubic': U(r)=r³ (用于2.5D表面插值，非标准3D TPS)
+                   'multiquadric': U(r)=√(r²+c²)
             regularization: 正则化参数
         """
         self._kernel = kernel
@@ -227,11 +236,18 @@ class TPS3D:
             self
 
         数学公式:
-            [K   P] [w]   [q - P·a]
-            [P^T 0] [a] = [   0   ]
+            [K   P] [w]   [q]
+            [P^T 0] [a] = [0]
 
             其中 K_ij = U(||p_i - p_j||)
                   P   = [1, p_i]
+                  q   = 目标坐标
+                  w   = 弹性权重
+                  a   = 仿射变换参数
+
+        注意: 增广系统的右端是[q; 0]，其中q是目标坐标，
+        不是[q - P·a; 0]。约束条件Σw_i = 0和Σw_i*p_i = 0
+        通过在系统底部添加[0; 0; 0; 0]行来实现。
         """
         source = np.asarray(source, dtype=np.float64)
         target = np.asarray(target, dtype=np.float64)
@@ -280,8 +296,9 @@ class TPS3D:
             params, _, _, _ = np.linalg.lstsq(A, y_aug, rcond=None)
 
         # 分离权重和仿射参数
-        self._weights = params[:n]  # (n,)
-        self._affine = params[n:]  # (4, 3)
+        # params shape: (n+4, 3) - 前n行是权重(每个控制点有x,y,z三个分量)，后4行是仿射参数
+        self._weights = params[:n]  # (n, 3) - 每行是一个控制点的x,y,z权重
+        self._affine = params[n:]  # (4, 3) - 仿射变换参数 [a0; a1; a2; a3]
         self._source = source
         self._target = target
 
@@ -353,15 +370,16 @@ class TPS3D:
             K: 核矩阵 (n, n)
 
         返回:
-            E = Σ_d w_d^T K w_d
+            E = Σ_d w_d^T K w_d  (对x,y,z三个分量求和)
         """
         if self._weights is None:
             return 0.0
 
         # weights shape: (n, 3), K shape: (n, n)
-        # E = trace(w^T K w) = Σ elementwise(w * (K @ w))
-        E = float(np.sum(self._weights * (K @ self._weights)))
-        return E
+        # For 3D TPS, bending energy is sum over dimensions: E = Σ_d w_d^T K w_d
+        # where w_d is the d-th column of weights (shape n,)
+        E = sum(self._weights[:, d] @ K @ self._weights[:, d] for d in range(3))
+        return float(E)
 
     def transform(self, points: np.ndarray) -> np.ndarray:
         """
@@ -436,10 +454,18 @@ class TPS3D:
             Jacobian矩阵 (m, 3, 3)
 
         数学公式:
-            J(x) = A_linear + Σᵢ wᵢ ∂U/∂x
+            J(x) = A_linear + Σᵢ wᵢ (∂U/∂x)
 
-            对于 |r|³ 核:
-            ∂U/∂x = 3r·r^T / ||r||  (当 r ≠ 0)
+        TPS映射 f_k(x) = a_k + Σ_j A_kj*x_j + Σ_i w_ik*U(||x-p_i||)
+        所以 J_kj = A_kj + Σ_i w_ik * ∂U/∂x_j
+
+        其中 ∂U/∂x = (x-p_i)/||x-p_i|| = r_vec/r (梯度向量)
+
+        核函数导数 (梯度向量):
+            - thin_plate (U(r)=r):    ∂U/∂x = r_vec/r = r_hat
+            - cubic (U(r)=r³):        ∂U/∂x = 3r * r_hat (因为 dU/dr=3r²)
+            - multiquadric:           ∂U/∂x = r_vec/sqrt(r²+c²)
+            - gaussian:               ∂U/∂x = -r_vec*exp(-r²/(2σ²))/σ²
         """
         if self._source is None:
             raise ValueError("TPS not fitted")
@@ -464,12 +490,28 @@ class TPS3D:
 
                 if r > 1e-10:
                     if self._kernel == "cubic":
-                        # ∂(|r|³)/∂x = 3|r|·r̂·r̂^T = 3r·r^T/|r|
-                        dU = 3 * np.outer(r_vec, r_vec) / r
+                        # U(r)=r³, dU/dr=3r², ∂U/∂x = (dU/dr)*(dr/dx) = 3r²*r_vec/r = 3r*r_hat
+                        # Jacobian贡献: w[:,None] * (∂U/∂x)[None,:] = w[:,None] * (3r*r_hat)[None,:]
+                        # = 3r * w[:,None] * r_hat[None,:]
+                        grad_U = 3 * r * r_vec / r
+                    elif self._kernel == "thin_plate":
+                        # U(r)=r, ∂U/∂x = r_vec/r = r_hat
+                        grad_U = r_vec / r
+                    elif self._kernel == "multiquadric":
+                        # U(r)=sqrt(r²+c²), ∂U/∂x = r_vec/sqrt(r²+c²)
+                        c = 1.0
+                        grad_U = r_vec / np.sqrt(r**2 + c**2)
+                    elif self._kernel == "gaussian":
+                        # U(r)=exp(-r²/(2σ²)), ∂U/∂x = -r_vec*exp(-r²/(2σ²))/σ²
+                        sigma = 1.0
+                        grad_U = -r_vec * np.exp(-(r**2) / (2 * sigma**2)) / (sigma**2)
                     else:
-                        dU = np.eye(3)  # 简化处理
+                        # 默认使用cubic核的导数
+                        grad_U = 3 * r * r_vec / r
 
-                    J += self._weights[j].reshape(3, 1) * dU
+                    # Jacobian贡献: w (shape 3) outer product with grad_U (shape 3)
+                    # Result: (3, 3) matrix
+                    J += self._weights[j].reshape(3, 1) * grad_U.reshape(1, 3)
 
             jacobians[i] = J
 
@@ -498,7 +540,7 @@ class TPS3D:
 
 
 def interpolate_tps3d(
-    source: np.ndarray, target: np.ndarray, query_points: np.ndarray, kernel: str = "cubic"
+    source: np.ndarray, target: np.ndarray, query_points: np.ndarray, kernel: str = "thin_plate"
 ) -> np.ndarray:
     """
     3D TPS插值的便捷函数
@@ -507,7 +549,7 @@ def interpolate_tps3d(
         source: 源点 (n, 3)
         target: 目标点 (n, 3)
         query_points: 查询点 (m, 3)
-        kernel: 核函数类型
+        kernel: 核函数类型 ('thin_plate'为标准3D TPS，'cubic'用于表面插值)
 
     返回:
         插值结果 (m, 3)

@@ -67,6 +67,32 @@ from .tree import NodeType, PhyloNode, PhyloTree
 logger = logging.getLogger(__name__)
 
 
+def _get_distance(dist: dict, t1: str, t2: str) -> float:
+    """
+    Safely get distance between two taxa, raising error if missing.
+
+    Parameters:
+        dist: Distance dictionary
+        t1: First taxon
+        t2: Second taxon
+
+    Returns:
+        Distance value
+
+    Raises:
+        KeyError: If distance is not found in matrix
+    """
+    if t1 == t2:
+        return 0.0
+    key = (t1, t2)
+    reverse_key = (t2, t1)
+    if key in dist:
+        return dist[key]
+    if reverse_key in dist:
+        return dist[reverse_key]
+    raise KeyError(f"Missing distance between '{t1}' and '{t2}' in distance matrix")
+
+
 @dataclass
 class DistanceMatrix:
     """
@@ -262,7 +288,7 @@ class UPGMA:
             for i in range(len(active_list)):
                 for j in range(i + 1, len(active_list)):
                     t1, t2 = active_list[i], active_list[j]
-                    d = dist.get((t1, t2), dist.get((t2, t1), float("inf")))
+                    d = _get_distance(dist, t1, t2)
 
                     if d < min_dist:
                         min_dist = d
@@ -287,10 +313,12 @@ class UPGMA:
             new_node = PhyloNode(name=new_name, node_type=NodeType.INTERNAL)
 
             # 设置枝长 = 合并高度 - 子节点已有高度
+            # 标准UPGMA公式: branch_length = height - child_height
+            # 使用max(0, ...)确保非负枝长，处理非超度量数据
             h1 = cluster1.get("height", 0.0)
             h2 = cluster2.get("height", 0.0)
-            cluster1["node"].branch_length = height - h1
-            cluster2["node"].branch_length = height - h2
+            cluster1["node"].branch_length = max(0.0, height - h1)
+            cluster2["node"].branch_length = max(0.0, height - h2)
 
             # 连接子节点
             new_node.add_child(cluster1["node"])
@@ -309,8 +337,8 @@ class UPGMA:
                 if other == new_name:
                     continue
 
-                d1 = dist.get((c1, other), dist.get((other, c1), 0.0))
-                d2 = dist.get((c2, other), dist.get((other, c2), 0.0))
+                d1 = _get_distance(dist, c1, other)
+                d2 = _get_distance(dist, c2, other)
 
                 # 加权平均
                 new_dist = (cluster1["size"] * d1 + cluster2["size"] * d2) / new_size
@@ -405,14 +433,14 @@ class NeighborJoining:
                 total = 0.0
                 for t2 in active:
                     if t1 != t2:
-                        total += dist.get((t1, t2), dist.get((t2, t1), 0.0))
+                        total += _get_distance(dist, t1, t2)
                 row_sums[t1] = total
 
             # 计算Q
             for i in range(len(active_list)):
                 for j in range(i + 1, len(active_list)):
                     t1, t2 = active_list[i], active_list[j]
-                    d_ij = dist.get((t1, t2), dist.get((t2, t1), float("inf")))
+                    d_ij = _get_distance(dist, t1, t2)
 
                     q_ij = (m - 2) * d_ij - row_sums[t1] - row_sums[t2]
 
@@ -426,7 +454,7 @@ class NeighborJoining:
             i, j = min_pair
 
             # 计算到新节点的距离
-            d_ij = dist.get((i, j), dist.get((j, i), 0.0))
+            d_ij = _get_distance(dist, i, j)
             sum_i = row_sums[i]
             sum_j = row_sums[j]
 
@@ -439,6 +467,18 @@ class NeighborJoining:
             u_node = PhyloNode(name=u_name, node_type=NodeType.INTERNAL)
 
             # 设置枝长并连接
+            if d_i_u < 0:
+                self._logger.warning(
+                    f"Negative branch length {d_i_u:.6f} for node '{i}' in NJ. "
+                    f"This indicates non-metric distances. Setting to 0.0."
+                )
+                d_i_u = 0.0
+            if d_j_u < 0:
+                self._logger.warning(
+                    f"Negative branch length {d_j_u:.6f} for node '{j}' in NJ. "
+                    f"This indicates non-metric distances. Setting to 0.0."
+                )
+                d_j_u = 0.0
             nodes[i].branch_length = d_i_u
             nodes[j].branch_length = d_j_u
             u_node.add_child(nodes[i])
@@ -456,11 +496,17 @@ class NeighborJoining:
                 if k == u_name:
                     continue
 
-                d_i_k = dist.get((i, k), dist.get((k, i), 0.0))
-                d_j_k = dist.get((j, k), dist.get((k, j), 0.0))
+                d_i_k = _get_distance(dist, i, k)
+                d_j_k = _get_distance(dist, j, k)
 
-                d_i_j = dist.get((i, j), dist.get((j, i), 0.0))
+                d_i_j = _get_distance(dist, i, j)
                 new_dist = 0.5 * (d_i_k + d_j_k - d_i_j)
+                if new_dist < 0:
+                    self._logger.warning(
+                        f"Negative distance computed for {u_name}-{k}: {new_dist:.6f} (triangle inequality violated). "
+                        f"Setting to 0.0. Consider using metric distances for NJ."
+                    )
+                    new_dist = 0.0
                 dist[(u_name, k)] = new_dist
                 dist[(k, u_name)] = new_dist
 
@@ -474,13 +520,25 @@ class NeighborJoining:
                 root.add_child(nodes[node_name])
 
             # 调整枝长 (NJ final 3-node formula)
-            d_01 = dist.get((final_nodes[0], final_nodes[1]), 0.0)
-            d_02 = dist.get((final_nodes[0], final_nodes[2]), 0.0)
-            d_12 = dist.get((final_nodes[1], final_nodes[2]), 0.0)
+            d_01 = _get_distance(dist, final_nodes[0], final_nodes[1])
+            d_02 = _get_distance(dist, final_nodes[0], final_nodes[2])
+            d_12 = _get_distance(dist, final_nodes[1], final_nodes[2])
 
-            root.children[0].branch_length = (d_01 + d_02 - d_12) / 2.0
-            root.children[1].branch_length = (d_01 + d_12 - d_02) / 2.0
-            root.children[2].branch_length = (d_02 + d_12 - d_01) / 2.0
+            bl0 = (d_01 + d_02 - d_12) / 2.0
+            bl1 = (d_01 + d_12 - d_02) / 2.0
+            bl2 = (d_02 + d_12 - d_01) / 2.0
+
+            # Warn if any branch length is negative (indicates non-metric data)
+            for idx, bl in enumerate([bl0, bl1, bl2]):
+                if bl < 0:
+                    self._logger.warning(
+                        f"Negative branch length {bl:.6f} for node {final_nodes[idx]} in final 3-node adjustment. "
+                        f"This indicates non-metric distance matrix."
+                    )
+
+            root.children[0].branch_length = max(0.0, bl0)
+            root.children[1].branch_length = max(0.0, bl1)
+            root.children[2].branch_length = max(0.0, bl2)
 
         elif len(final_nodes) == 2:
             root = PhyloNode(name="root", node_type=NodeType.INTERNAL)

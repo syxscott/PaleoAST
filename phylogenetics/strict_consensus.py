@@ -210,6 +210,11 @@ class StrictConsensusTree:
 
         Returns:
             一致性树
+
+        注意:
+            当threshold < 1.0且输入树有冲突拓扑时，
+            多数规则一致性可能产生不兼容的分割组合。
+            此时会发出警告，且结果树可能退化为星形树。
         """
         if not trees:
             raise ValueError("No input trees provided")
@@ -232,6 +237,21 @@ class StrictConsensusTree:
             if freq >= threshold:
                 split_obj = Split(set1=split_set.set1, set2=split_set.set2, frequency=freq)
                 majority_splits.append(split_obj)
+
+        # 检查分割兼容性
+        if len(majority_splits) > 1:
+            conflicts = []
+            for i, split1 in enumerate(majority_splits):
+                for split2 in majority_splits[i + 1 :]:
+                    if not split1.is_compatible_with(split2):
+                        conflicts.append((split1, split2))
+
+            if conflicts:
+                self._logger.warning(
+                    f"Majority rule consensus: found {len(conflicts)} incompatible split pairs. "
+                    f"The resulting tree may be unresolved (star tree) or invalid. "
+                    f"Consider using a higher threshold or checking input tree compatibility."
+                )
 
         return self._build_tree_from_splits(majority_splits, all_taxa)
 
@@ -261,6 +281,7 @@ class StrictConsensusTree:
         从单棵树提取所有分割
 
         对于每个内部边，其两侧的叶节点构成一个分割。
+        对于多叉节点，每个子节点与其余叶节点都构成一个有效分割。
 
         Parameters:
             tree: 输入树
@@ -279,23 +300,24 @@ class StrictConsensusTree:
             if node.is_leaf or len(node.children) < 2:
                 continue
 
-            # 获取该节点一侧的所有叶节点
-            # 使用第一个子节点的子树作为set1
-            child1_leaves = set(c.name for c in node.children[0].get_leaves())
-            set1 = frozenset(child1_leaves)
+            # 对于每个子节点，计算由该子节点定义的分割
+            # (该子节点的叶节点 vs 所有其他叶节点)
+            for child_idx, child in enumerate(node.children):
+                child_leaves = set(c.name for c in child.get_leaves())
+                set1 = frozenset(child_leaves)
 
-            # 其他所有叶节点作为set2
-            remaining_leaves = leaves - set1
-            set2 = frozenset(remaining_leaves)
+                # 其他所有叶节点作为set2
+                remaining_leaves = leaves - set1
+                set2 = frozenset(remaining_leaves)
 
-            if not set1 or not set2:
-                continue
+                if not set1 or not set2:
+                    continue
 
-            # 确保set1 < set2
-            if set1 > set2:
-                set1, set2 = set2, set1
+                # 确保set1 < set2 (保持唯一性)
+                if set1 > set2:
+                    set1, set2 = set2, set1
 
-            splits.append(Split(set1=set1, set2=set2))
+                splits.append(Split(set1=set1, set2=set2))
 
         return splits
 
@@ -336,11 +358,25 @@ class StrictConsensusTree:
         if not non_trivial:
             return self._build_star_tree(all_taxa)
 
-        # 选择最小的
-        min(non_trivial, key=lambda s: len(s.set1))
+        # 选择最小的非平凡分割
+        best_split = min(non_trivial, key=lambda s: len(s.set1))
 
-        # 递归构建
-        return self._build_recursive(splits, all_taxa)
+        # 使用选中的分割将taxa分组
+        set1 = best_split.set1 & all_taxa
+        set2 = best_split.set2 & all_taxa
+
+        # 递归构建左右子树
+        tree1 = self._build_recursive(splits, set1)
+        tree2 = self._build_recursive(splits, set2)
+
+        # 合并子树
+        root = PhyloNode(name="", node_type=NodeType.INTERNAL)
+        if tree1.root:
+            root.add_child(tree1.root)
+        if tree2.root:
+            root.add_child(tree2.root)
+
+        return PhyloTree(root=root)
 
     def _build_recursive(self, splits: list[Split], taxa: set[str]) -> PhyloTree:
         """

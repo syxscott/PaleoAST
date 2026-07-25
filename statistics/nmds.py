@@ -225,9 +225,11 @@ class NMDSAnalyzer:
             iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
             d_tilde = iso.fit_transform(d_target, d_hat)
 
-            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2))
+            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2))
+            # The denominator uses original distances (d_target), not configuration distances (d_hat)
+            # This matches standard NMDS stress formula (Kruskal 1964, Borg & Groenen 1997)
             numerator = np.sum((d_hat - d_tilde) ** 2)
-            denominator = np.sum(d_hat**2)
+            denominator = np.sum(d_target**2)
             stress = np.sqrt(numerator / denominator) if denominator > 0 else 0.0
             stress_history.append(stress)
 

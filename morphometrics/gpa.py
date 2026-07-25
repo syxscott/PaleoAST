@@ -135,16 +135,13 @@ class GPAAnalyzer:
             scales = np.ones(n_specimens)
             centroids = np.zeros((n_specimens, n_dims))
 
-            # Compute initial centroids and sizes
-            for i in range(n_specimens):
-                centroids[i] = np.mean(aligned[i], axis=0)
-
             # Iterative Procrustes superimposition
             prev_sse = float("inf")
 
             for iteration in range(n_iterations):
-                # Step 1: Translate to common origin
+                # Step 1: Translate to common origin (compute centroids first)
                 for i in range(n_specimens):
+                    centroids[i] = np.mean(aligned[i], axis=0)
                     aligned[i] = aligned[i] - centroids[i]
 
                 # Step 2: Scale to unit size
