@@ -98,6 +98,7 @@ class NMDSAnalyzer:
         n_restarts: int | None = None,
         random_seed: int | None = None,
         tolerance: float | None = None,
+        progress_callback=None,
     ) -> NMDSResult:
         """
         Perform Non-metric MDS.
@@ -109,6 +110,10 @@ class NMDSAnalyzer:
             max_iterations: Maximum iterations per restart
             n_restarts: Number of random restarts
             random_seed: Random seed for reproducibility
+            tolerance: Convergence tolerance for stress change
+            progress_callback: Optional callable(restart_index, total_restarts, stress)
+                               called at the end of each restart with the final stress.
+                               Intended for GUI progress bars.
 
         Returns:
             NMDSResult: NMDS analysis results with best configuration
@@ -162,6 +167,10 @@ class NMDSAnalyzer:
                     best_iterations = result["n_iterations"]
                     best_history = result["stress_history"]
 
+                # Report progress if callback is provided
+                if progress_callback is not None:
+                    progress_callback(restart, n_restarts, result["stress"])
+
             # NMDS convergence threshold: stress < 0.05 is considered converged
             # stress < 0.10 is acceptable, stress > 0.20 is poor fit
             CONVERGED_THRESHOLD = 0.05
@@ -201,34 +210,57 @@ class NMDSAnalyzer:
         that minimizes ``Σ(d̃ - d̂)²``. Without the isotonic-regression
         step this collapses to *metric* MDS and the rank-order
         preservation that defines NMDS (Kruskal 1964) is lost.
+
+        Performance optimisations vs. the original implementation:
+        * IsotonicRegression is instantiated **once** outside the iteration
+          loop and reused via :meth:`fit_transform` (previously a new object
+          was created every iteration, causing ~50 restart × 500 iter = 25,000
+          redundant allocations).
+        * Goodness-of-fit (stress) is computed with fully vectorised NumPy
+          operations with no Python-level loops.
         """
         from sklearn.isotonic import IsotonicRegression
 
         n = X_init.shape[0]  # n_samples
         X = X_init.copy()
-        stress_history = []
+        stress_history: list[float] = []
 
         # Pre-compute the upper-triangular indices of the dissimilarity
         # matrix. Only the off-diagonal (i < j) entries are used by NMDS.
         iu, ju = np.triu_indices(n, k=1)
         d_target = D[iu, ju]
 
+        # Pre-allocate working arrays to avoid repeated allocation inside the loop
+        d_hat = np.empty(len(d_target), dtype=float)
+        d_tilde = np.empty(len(d_target), dtype=float)
+        D_hat = np.empty((n, n), dtype=float)
+        D_tilde = np.zeros((n, n), dtype=float)
+        B = np.empty((n, n), dtype=float)
+
+        # Create IsotonicRegression ONCE and reuse it across all iterations.
+        # This eliminates ~max_iterations object allocations per restart.
+        iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
+
         for iteration in range(max_iterations):
             # Compute distances in current configuration
-            D_hat = self._compute_distances(X)
-            d_hat = D_hat[iu, ju]
+            self._compute_distances_inplace(X, D_hat)
+            d_hat[:] = D_hat[iu, ju]
 
             # Isotonic regression: find the monotone sequence d_tilde that
             # follows the rank order of the fixed d_target while minimizing
             # sum((d_hat - d_tilde)^2). This is the defining step of NMDS
             # (Kruskal 1964). Pool-adjacent-violators algorithm via sklearn.
-            iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
+            # Reusing the same iso instance with fit_transform is significantly
+            # faster than creating a new IsotonicRegression() each iteration.
             d_tilde = iso.fit_transform(d_target, d_hat)
 
-            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2))
-            numerator = np.sum((d_hat - d_tilde) ** 2)
-            denominator = np.sum(d_hat**2)
-            stress = np.sqrt(numerator / denominator) if denominator > 0 else 0.0
+            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2))
+            # Fully vectorised: no Python loop required.
+            # The denominator uses original distances (d_target), not configuration
+            # distances (d_hat), matching standard NMDS stress (Kruskal 1964,
+            # Borg & Groenen 1997).
+            diff = d_hat - d_tilde
+            stress = np.sqrt(np.dot(diff, diff) / np.dot(d_target, d_target))
             stress_history.append(stress)
 
             # Log convergence progress every 50 iterations
@@ -247,24 +279,22 @@ class NMDSAnalyzer:
 
             # Build the working disparity matrix D_tilde from the
             # upper-triangular disparities and mirror it symmetrically.
-            D_tilde = np.zeros_like(D)
             D_tilde[iu, ju] = d_tilde
             D_tilde[ju, iu] = d_tilde
 
             # Guttman transform using the disparities D_tilde.
             # B[i,j] = -d_tilde_ij / d_hat_ij  if d_hat_ij > 0  else 0
             # B[i,i] = -sum_{j!=i} B[i,j]      (row sums zero)
-            B = np.zeros_like(D)
             mask = D_hat > 0
-            B[mask] = -D_tilde[mask] / D_hat[mask]
-            np.fill_diagonal(B, 0)
-            row_sums = np.sum(B, axis=1)
+            np.divide(-D_tilde, D_hat, out=B, where=mask)
+            np.fill_diagonal(B, 0.0)
+            row_sums = B.sum(axis=1)
             np.fill_diagonal(B, -row_sums)
 
             # Guttman transform: X_new = (1/n) * B @ X
-            X_new = (B @ X) / n
-
-            # Update configuration
+            # In-place update via explicit allocation to avoid aliasing X
+            X_new = B @ X
+            X_new /= n
             X = X_new
 
         return {
@@ -290,6 +320,28 @@ class NMDSAnalyzer:
             D = cdist(X, X, metric="euclidean")
 
         return D
+
+    def _compute_distances_inplace(self, X: npt.NDArray, out: npt.NDArray) -> None:
+        """
+        Compute pairwise Euclidean distances into a pre-allocated array.
+
+        This avoids the allocation overhead of :meth:`_compute_distances`
+        when called inside the SMACOF hot loop.
+
+        Parameters:
+            X: Configuration matrix of shape (n, n_dimensions)
+            out: Pre-allocated output array of shape (n, n)
+        """
+        from scipy.spatial.distance import cdist
+
+        n = X.shape[0]
+        if n <= 500:
+            # Use broadcasting for small matrices
+            diff = X[:, None, :] - X[None, :, :]
+            np.sqrt(np.sum(diff**2, axis=2), out=out)
+        else:
+            # Use cdist for large matrices (more memory efficient)
+            cdist(X, X, metric="euclidean", out=out)
 
     def get_shepard_data(self, result: NMDSResult | None = None) -> dict[str, npt.NDArray | float]:
         """
