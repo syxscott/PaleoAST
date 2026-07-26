@@ -544,6 +544,15 @@ class FossilizedBirthDeathProcess:
         """
         rho = self._rho if self._rho is not None else 1.0
         # Degenerate cases.
+        # BUG FIX: Handle λ → 0 limit using Taylor expansion for numerical stability.
+        # When λ is very small but positive, the closed-form formula can produce
+        # numerical instability due to division by λ. The Taylor expansion
+        # E(t) ≈ exp(-(μ+ψ)*t) provides a stable approximation.
+        # In the pure-death limit (λ → 0, ψ → 0), this correctly gives exp(-μ*t).
+        if self._lambda < 1e-10:
+            # Use Taylor expansion: E(t) ≈ exp(-(μ+ψ)*t) for small λ
+            # This is the leading-order term when λ → 0
+            return max(0.0, min(1.0, np.exp(-(self._mu + self._psi) * t)))
         if self._lambda <= 0:
             # No speciation: lineage either dies (μ) or is sampled (ψ).
             # With λ = 0 the lineage cannot branch, so E(t) is governed by
@@ -614,7 +623,25 @@ class FossilizedBirthDeathProcess:
             return np.log(x) if x > 0 else NEG_INF
 
         # 1. 树拓扑似然：遍历所有分支
+        # BUG FIX: Node age direction was reversed. The original code computed
+        # node_age as cumulative branch length from node to root (which gives
+        # smaller values for older nodes), but we need actual node age (time
+        # from present to node), which should be larger for older nodes.
+        # For a properly calibrated tree: actual_node_age = tree_height - node_age_to_root.
         if tree_obj.root is not None:
+            # First pass: compute tree height (age of root) by finding maximum node_age_to_root
+            # node_age_to_root is the cumulative branch length from node to root
+            tree_height = 0.0
+            for node in tree_obj.root.preorder_traverse():
+                node_age_to_root = 0.0
+                cursor = node
+                while cursor is not None and cursor.parent is not None:
+                    node_age_to_root += cursor.branch_length or 0.0
+                    cursor = cursor.parent
+                if node_age_to_root > tree_height:
+                    tree_height = node_age_to_root
+
+            # Second pass: compute likelihood using correct node ages
             for node in tree_obj.root.preorder_traverse():
                 if node.parent is None:
                     continue  # 跳过根节点
@@ -623,15 +650,16 @@ class FossilizedBirthDeathProcess:
                     # 分支存活项: exp(-(λ + μ + ψ) × Δt)
                     log_lik += -(self._lambda + self._mu + self._psi) * branch_length
 
-                    # 节点年龄 = 从现时刻向上回溯的时间
-                    # 通过累积 branch_length 估计节点年龄
-                    node_age = 0.0
+                    # BUG FIX: Compute node_age_to_root (cumulative from node to root),
+                    # then convert to actual node age from present: tree_height - node_age_to_root
+                    # This ensures parent.age > child.age (parent is older)
+                    node_age_to_root = 0.0
                     cursor = node
                     while cursor is not None and cursor.parent is not None:
-                        node_age += cursor.branch_length or 0.0
+                        node_age_to_root += cursor.branch_length or 0.0
                         cursor = cursor.parent
-                    # node_age 此时是该节点到现存末端的累积分支长度，
-                    # 作为节点年龄 t 的近似。
+                    # node_age is actual age from present (larger for older nodes)
+                    node_age = tree_height - node_age_to_root
 
                     if node.is_leaf:
                         # 叶节点：现存采样或灭绝终止
