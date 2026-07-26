@@ -39,3 +39,5 @@ docs/superpowers/
 
 # uv cache / environment-specific lock files are NOT ignored
 # intentionally: lockfile keeps dependencies reproducible.
+.claude/worktrees/
+reconstruction_debug.png

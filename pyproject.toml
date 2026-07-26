@@ -203,7 +203,7 @@ ignore_errors = true
 # Pytest - Testing Configuration
 # =============================================================================
 [tool.pytest.ini_options]
-testpaths = ["tests_morpho3d_macroevolution", "."]
+testpaths = ["tests", "tests_morpho3d_macroevolution", "."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -211,10 +211,14 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
+    "--hypothesis-show-statistics",
 ]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: marks tests as slow (deselect with -m not slow)",
     "integration: marks tests as integration tests",
+    "unit: unit tests for individual functions",
+    "property: property-based tests using Hypothesis",
+    "cross_validation: cross-validation tests against R package gold standards",
 ]
 
 # =============================================================================

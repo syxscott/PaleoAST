@@ -23,6 +23,15 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+# =============================================================================
+# BLAS/OpenMP 线程限制 - 必须在 import numpy 之前设置
+# 防止与 QThreadPool oversubscription 导致 CPU 利用率下降
+# =============================================================================
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 # 防止在导入前就崩溃
 try:
     import numpy  # noqa: F401

@@ -218,17 +218,27 @@ class PERMANOVAAnalyzer:
         # pair twice, so use the upper triangle.
         SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
 
-        # Within-group sum of squares
+        # Within-group sum of squares (vectorized)
+        # For each group g with n_g samples, compute sum of squared distances
+        # ss_within = sum_g (1/n_g) * sum_{i<j in g} d_ij^2
+        # Use upper triangle of distance matrix for unordered pairs
         ss_within = 0.0
+        triu_idx = np.triu_indices(n, k=1)
+        D_sq_triu = D_sq[triu_idx]
         for grp in np.unique(groups):
-            grp_indices = np.where(groups == grp)[0]
+            grp_mask = groups == grp
+            grp_indices = np.where(grp_mask)[0]
             n_g = len(grp_indices)
             if n_g < 2:
                 continue
-            grp_sum = 0.0
-            for i in range(len(grp_indices)):
-                for j in range(i + 1, len(grp_indices)):
-                    grp_sum += D_sq[grp_indices[i], grp_indices[j]]
+            # Build index mask for pairs within this group
+            # Create boolean mask for upper triangle elements where both i and j are in group
+            idx_i = triu_idx[0]
+            idx_j = triu_idx[1]
+            in_grp_i = grp_mask[idx_i]
+            in_grp_j = grp_mask[idx_j]
+            grp_pair_mask = in_grp_i & in_grp_j
+            grp_sum = np.sum(D_sq_triu[grp_pair_mask])
             ss_within += (1.0 / n_g) * grp_sum
 
         # Between-group sum of squares
