@@ -204,6 +204,7 @@ ignore_errors = true
 # =============================================================================
 [tool.pytest.ini_options]
 testpaths = ["tests_morpho3d_macroevolution", "."]
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
