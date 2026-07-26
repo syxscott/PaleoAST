@@ -1,0 +1,14 @@
+species,group,body_mass_g,home_range_km2,litter_size,social_group_size,day_range_km,brain_vol_cm3,pelage_darkness,activity_cycle
+Homo_sapiens,Catarrhini,62000,258.0,1.0,52.0,11.6,1350.0,0.5,1.0
+Pan_troglodytes,Catarrhini,45000,125.0,1.0,35.0,7.8,400.0,0.4,1.0
+Gorilla_gorilla,Catarrhini,160000,850.0,1.0,12.0,3.8,490.0,0.9,1.0
+Hylobates_lar,Catarrhini,5600,42.0,1.0,4.5,2.3,115.0,0.3,1.0
+Colobus_guereza,Catarrhini,8500,75.0,1.0,8.5,2.1,72.0,0.1,0.0
+Cercocebus_galeritus,Catarrhini,10000,95.0,1.0,45.0,3.2,98.0,0.5,0.0
+Papio_anubis,Catarrhini,18000,210.0,1.0,68.0,5.8,180.0,0.6,1.0
+Macaca_mulatta,Catarrhini,8000,85.0,1.0,35.0,3.2,90.0,0.4,1.0
+Aotus_trivirgatus,Platyrrhini,1000,12.0,1.0,2.0,1.5,18.0,0.2,0.0
+Saimiri_sciureus,Platyrrhini,750,15.0,1.0,45.0,2.8,24.0,0.3,1.0
+Lemur_catta,Strepsirrhini,2700,28.0,1.0,15.0,2.5,25.0,0.5,1.0
+Propithecus_verreauxi,Strepsirrhini,3500,45.0,1.0,6.0,2.8,28.0,0.9,1.0
+Eulemur_fulvus,Strepsirrhini,2200,32.0,1.0,8.0,2.4,24.0,0.6,1.0

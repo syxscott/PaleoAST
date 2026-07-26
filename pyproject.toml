@@ -61,6 +61,7 @@ paleoast = "main:main"
 include = [
     "config*",
     "controllers*",
+    "data*",
     "ecology*",
     "hpc*",
     "macroevolution*",
@@ -131,7 +132,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "config", "controllers", "ecology", "models", "views",
+    "config", "controllers", "data", "ecology", "models", "views",
     "statistics", "morphometrics", "morpho3d", "stratigraphy",
     "visualization", "utils", "phylogenetics", "macroevolution",
     "parsers", "hpc", "reporting", "state_machine", "app_infrastructure",
@@ -225,6 +226,7 @@ markers = [
 source = [
     "config",
     "controllers",
+    "data",
     "ecology",
     "models",
     "statistics",
