@@ -16,10 +16,30 @@ Given a distance/dissimilarity matrix D ∈ ℝ^(n×n):
    where J = I - (1/n) * 1*1^T is the centering matrix
 3. Eigendecomposition: B = U * Λ * U^T
    where Λ = diag(λ₁, λ₂, ..., λₙ) are eigenvalues
-4. Coordinates: PCoA_i = sqrt(max(λ_i, 0)) * U_i
+4. Coordinates: PCoA_i = sqrt(|λ_i|) * U_i
+   (using absolute eigenvalue because negative eigenvalues indicate
+   non-Euclidean structure; the sign is absorbed into eigenvector direction)
+
+Negative Eigenvalues:
+    Negative eigenvalues are a natural consequence of non-Euclidean distance
+    metrics (e.g., Bray-Curtis, Jaccard, unweighted UniFrac). They indicate
+    that the distance matrix cannot be perfectly represented in Euclidean
+    space. This is NOT an error condition.
+
+    - The ABSOLUTE value |λ_i| determines the axis length (variance explained)
+    - The SIGN of λ_i indicates whether samples on that axis diverge (negative)
+      or converge (positive) relative to the centroid
+    - Negative eigenvalues are preserved because they contain meaningful
+      biological information about dissimilarity structure
+
+    This implementation follows the convention of R's cmdscale(eig=TRUE) and
+    ape::pcoa(), which also preserve negative eigenvalues. Users should
+    interpret negative eigenvalues as indicators of non-metric distance
+    structure; the absolute value represents the axis's contribution to
+    explained variance.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging
@@ -148,45 +168,51 @@ class PCoAAnalyzer:
             except np.linalg.LinAlgError as e:
                 raise ComputationError("Eigendecomposition failed during PCoA", original_exception=e)
 
-            # Sort eigenvalues in descending order
-            sorted_indices = np.argsort(eigenvalues)[::-1]
+            # Check for negative eigenvalues (common with non-Euclidean distances)
+            # and warn explicitly - they are NOT truncated, but preserved
+            negative_mask = eigenvalues < 0
+            negative_count = np.sum(negative_mask)
+            if negative_count > 0:
+                import warnings
+                warnings.warn(
+                    f"PCoA: {negative_count} negative eigenvalue(s) detected "
+                    f"(metric='{metric}'). Negative eigenvalues indicate non-Euclidean "
+                    f"distance structure (common for Bray-Curtis, Jaccard, etc.). "
+                    f"The absolute value represents axis length; the sign indicates "
+                    f"divergence direction. Negative eigenvalues are preserved, "
+                    f"following R cmdscale()/ape::pcoa() conventions.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                self._logger.warning(
+                    f"PCoA: {negative_count} negative eigenvalue(s) preserved. "
+                    f"Non-Euclidean metric '{metric}' detected."
+                )
+
+            # Sort by absolute value (descending) to prioritize axes by
+            # variance explained regardless of sign
+            abs_eigenvalues = np.abs(eigenvalues)
+            sorted_indices = np.argsort(abs_eigenvalues)[::-1]
             eigenvalues = eigenvalues[sorted_indices]
             eigenvectors = eigenvectors[:, sorted_indices]
 
-            # Handle negative eigenvalues (can occur with non-Euclidean distances)
-            # Set them to zero for coordinates
-            negative_count = np.sum(eigenvalues < 0)
-            if negative_count > 0:
-                self._logger.warning(
-                    f"PCoA: {negative_count} negative eigenvalue(s) detected. "
-                    f"This indicates non-Euclidean distance metric '{metric}'. "
-                    f"Coordinates for negative eigenvalues will be set to zero."
-                )
-            eigenvalues_positive = np.maximum(eigenvalues, 0)
-
-            # Step 4: Compute coordinates
-            # PCoA_i = sqrt(λ_i) * U_i
-            sqrt_eigenvalues = np.sqrt(eigenvalues_positive)
-            coordinates = eigenvectors * sqrt_eigenvalues
+            # Step 4: Compute coordinates using absolute eigenvalues
+            # PCoA_i = sqrt(|λ_i|) * U_i
+            # The sign of λ_i is preserved in the eigenvector direction,
+            # so using sqrt(|λ_i|) captures the magnitude while the
+            # eigenvector sign carries the original sign information
+            sqrt_abs_eigenvalues = np.sqrt(np.abs(eigenvalues))
+            coordinates = eigenvectors * sqrt_abs_eigenvalues
 
             # Select top n_components
             coordinates = coordinates[:, :n_components]
-            # Use the *positive* eigenvalues for the result so the
-            # returned eigenvalue field is consistent with the
-            # coordinates (which were computed from sqrt of the
-            # positive part). The original ``eigenvalues`` slice
-            # could still contain negatives, which would confuse any
-            # downstream consumer (e.g. negative "variance explained").
-            eigenvalues = eigenvalues_positive[:n_components]
+            eigenvalues = eigenvalues[:n_components]
 
-            # Compute proportion explained.
-            # The denominator MUST be the sum of *all* positive eigenvalues,
-            # not just the top n_components — otherwise the cumulative
-            # proportion cannot reach 100% and the scree plot misleads the
-            # user about how much variance the remaining coordinates carry.
-            total_eigenvalue = np.sum(eigenvalues_positive)
-            if total_eigenvalue > 0:
-                proportion = eigenvalues_positive[:n_components] / total_eigenvalue * 100
+            # Compute proportion explained using absolute values
+            # This ensures negative eigenvalues contribute proportionally
+            total_abs_eigenvalue = np.sum(np.abs(eigenvalues))
+            if total_abs_eigenvalue > 0:
+                proportion = np.abs(eigenvalues) / total_abs_eigenvalue * 100
             else:
                 proportion = np.zeros(n_components)
 

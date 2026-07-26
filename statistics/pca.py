@@ -208,7 +208,20 @@ class PCAAnalyzer:
             # by in-place NaN imputation below.
             X = X.copy()
 
+            # Ensure float64 for SVD numerical stability
+            # np.linalg.svd on integer arrays can produce incorrect results
+            X = np.asarray(X, dtype=np.float64)
+            if X.ndim == 1:
+                X = X.reshape(1, -1)
+
             n_samples, n_variables = X.shape
+
+            # PCA requires at least 2 samples to compute covariance
+            if n_samples < 2:
+                raise ValueError(
+                    f"PCA requires at least 2 samples, but data has {n_samples} sample(s). "
+                    "Ensure your dataset contains multiple specimens or observations."
+                )
             self._logger.info(
                 f"PCA analyze started: {n_samples} samples x {n_variables} variables, "
                 f"n_components={n_components}, method={method}"
