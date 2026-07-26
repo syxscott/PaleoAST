@@ -20,6 +20,7 @@ version: 1.0.1
 """
 
 import logging
+import math
 import threading
 
 import numpy as np
@@ -187,6 +188,115 @@ def _compute_frequency_counts(abundances: npt.NDArray) -> dict[int, int]:
     """
     unique, counts = np.unique(abundances, return_counts=True)
     return dict(zip(unique.astype(int), counts, strict=False))
+
+
+def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float = 0.95) -> tuple[float, float, float]:
+    """
+    Compute Chao1 richness estimator with confidence interval.
+
+    Implements the bias-corrected Chao1 estimator and its variance
+    following Chao (1987) and the log-transformation method for
+    confidence intervals.
+
+    Parameters
+    ----------
+    abundances : array-like
+        Vector of species abundances (counts). Zeros are ignored.
+    confidence_level : float, default=0.95
+        Confidence level for the interval (e.g., 0.95 for 95% CI).
+
+    Returns
+    -------
+    tuple[float, float, float]
+        (chao1_estimate, ci_lower, ci_upper)
+
+    Notes
+    -----
+    **Chao1 estimator** (Chao 1987):
+        S_hat_Chao1 = S_obs + f_1² / (2·f_2)
+
+    where f_1 = number of singletons and f_2 = number of doubletons.
+
+    **Variance** (Chao 1987, Eq. 5):
+        var(Chao1) = f_2 · [ (α/4)·(f_1/f_2)⁴ + (α²/2)·(f_1/f_2)³
+                        + (α²/2)·(f_1/f_2)² + (α²/4)·(f_1/f_2) ]
+
+    where α = 2·f_2 / ((n-1)·f_1 + 2·f_2), n = total individuals.
+
+    **95% Confidence interval** (log-transformation, Chao & Jost 2012):
+        K = exp(z_{α/2} · √(log(1 + var/Chao1²)))
+        CI = [Chao1 / K,  Chao1 · K]
+
+    References
+    ----------
+    Chao, A. (1987). Estimating the population size for capture-recapture
+        data with unequal catchability. Biometrics, 43(4), 783-791.
+
+    Chao, A., Chiu, C.-H., & Jost, L. (2014). Uncovering species diversity
+        in ecological communities. Methods in Ecology and Evolution, 5(7),
+        675-684.
+    """
+    # Validate and flatten input
+    abundances = np.asarray(abundances, dtype=np.float64).flatten()
+    abundances = abundances[abundances > 0]
+
+    if len(abundances) == 0:
+        return (0.0, 0.0, 0.0)
+
+    n = int(np.sum(abundances))  # total individuals
+    s_obs = len(abundances)  # observed richness
+
+    # Frequency counts
+    f1 = float(np.sum(abundances == 1))  # singletons
+    f2 = float(np.sum(abundances == 2))  # doubletons
+
+    # Handle edge cases
+    if n == 0:
+        return (float(s_obs), float(s_obs), float(s_obs))
+
+    # ---- Chao1 point estimate ----
+    if f2 > 0:
+        chao1 = s_obs + (f1**2) / (2 * f2)
+    elif f1 > 0:
+        # Bias-corrected form when f2 == 0 but f1 > 0
+        chao1 = s_obs + (f1 * (f1 - 1)) / 2
+    else:
+        chao1 = float(s_obs)
+
+    # ---- Variance estimation (Chao 1987) ----
+    if f2 > 0 and f1 > 0:
+        alpha = (2 * f2) / ((n - 1) * f1 + 2 * f2)
+        ratio = f1 / f2
+        var_chao1 = f2 * (
+            (alpha / 4) * ratio**4
+            + (alpha**2 / 2) * ratio**3
+            + (alpha**2 / 2) * ratio**2
+            + (alpha**2 / 4) * ratio
+        )
+    elif f1 > 1:
+        # When f2 == 0 but f1 > 1: use approximate variance
+        # var ≈ f1(f1-1)/2 (Chao 1987, Eq. 6)
+        var_chao1 = f1 * (f1 - 1) / 2
+    else:
+        var_chao1 = 0.0
+
+    # ---- Log-transformation CI ----
+    z = 1.96 if confidence_level == 0.95 else 2.576  # ~z for 95% / 99%
+
+    if var_chao1 > 0 and chao1 > 0:
+        log_ratio = math.log(1 + var_chao1 / (chao1**2))
+        if log_ratio > 0:
+            k = math.exp(z * math.sqrt(log_ratio))
+            ci_lower = chao1 / k
+            ci_upper = chao1 * k
+        else:
+            ci_lower = chao1
+            ci_upper = chao1
+    else:
+        ci_lower = chao1
+        ci_upper = chao1
+
+    return (float(chao1), float(ci_lower), float(ci_upper))
 
 
 class DiversityAnalyzer:
