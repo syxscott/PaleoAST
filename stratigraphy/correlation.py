@@ -249,6 +249,121 @@ class AgeModelAnalyzer:
         )
 
 
+def pyper_peterman_correction(
+    x: np.ndarray, y: np.ndarray, alpha: float = 0.05, max_lag: int | None = None
+) -> tuple[float, float, float, int]:
+    """
+    Pyper & Peterman 1998 有效自由度修正的 Pearson 相关检验。
+
+    地层和沉积记录天然具有时间自相关（成岩作用、沉积速率变化等），
+    传统 Pearson 相关假设独立样本，会显著高估显著性。
+    本函数使用 Pyper & Peterman (1998) 的方法估计有效样本量并修正 p 值。
+
+    Parameters
+    ----------
+    x, y : array-like
+        两个等长的时间序列。
+    alpha : float, default 0.05
+        显著性水平（未使用，保留 API 兼容）。
+    max_lag : int, optional
+        最大滞后阶数。默认为 n//2。
+
+    Returns
+    -------
+    r : float
+        Pearson 相关系数。
+    p_corrected : float
+        基于有效样本量的修正 p 值。
+    n_eff : int
+        有效样本量。
+    n_original : int
+        原始样本量（移除 NaN 后）。
+
+    Notes
+    -----
+    有效样本量估计（Pyper & Peterman 1998, Canadian Journal of Fisheries
+    and Aquatic Sciences）::
+
+        n_eff = n * (1 - sum_{k=1}^{m} rho_x(k) * rho_y(k))
+                / (1 + sum_{k=1}^{m} rho_x(k) * rho_y(k))
+
+    其中 m = max_lag，rho_x(k) 和 rho_y(k) 分别是 x 和 y 的
+    自相关函数（ACF）在滞后 k 处的值。
+
+    对于独立序列（白噪声），rho_x(k) = rho_y(k) = 0 (k>0)，
+    因此 n_eff = n。对于高度自相关的序列，n_eff << n。
+
+    该方法也被 R 包 ``modified.ttest`` 实现。
+
+    References
+    ----------
+    Pyper, C.J. & Peterman, R.M. (1998). "Reducing bias in estimates of
+    environmental change." Can. J. Fish. Aquat. Sci., 55: 2128-2143.
+    """
+    from scipy import stats
+
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+
+    # 移除 NaN
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x = x[mask]
+    y = y[mask]
+
+    n = len(x)
+    if n < 4:
+        return np.nan, np.nan, n, n
+
+    if max_lag is None:
+        max_lag = n // 2
+    max_lag = min(max_lag, n - 1)
+
+    # 计算自相关函数 ACF
+    def _acf(arr: np.ndarray, lag: int) -> float:
+        if lag == 0:
+            return 1.0
+        n_lag = len(arr) - lag
+        if n_lag <= 0:
+            return 0.0
+        return np.sum(arr[:-lag] * arr[lag:]) / np.sum(arr * arr)
+
+    x_centered = x - x.mean()
+    y_centered = y - y.mean()
+
+    # 计算 sum(rho_x(k) * rho_y(k)) for k=1..max_lag
+    sum_rho_product = 0.0
+    for k in range(1, max_lag + 1):
+        rho_x = _acf(x_centered, k)
+        rho_y = _acf(y_centered, k)
+        sum_rho_product += rho_x * rho_y
+
+    # Pyper-Peterman effective sample size
+    if 1 + sum_rho_product <= 0:
+        n_eff = 2
+    else:
+        n_eff = n * (1 - sum_rho_product) / (1 + sum_rho_product)
+        n_eff = max(2.0, min(n_eff, n))
+
+    n_eff_int = int(round(n_eff))
+
+    # Pearson r
+    r, _ = stats.pearsonr(x, y)
+
+    # 修正自由度
+    df = n_eff_int - 2
+    if df < 1:
+        df = 1
+
+    # t 统计量 -> p 值
+    if abs(r) >= 1.0:
+        p_corrected = 0.0
+    else:
+        t_stat = r * np.sqrt(df / (1 - r**2))
+        p_corrected = 2.0 * stats.t.sf(abs(t_stat), df)
+
+    return float(r), float(p_corrected), n_eff_int, int(n)
+
+
 class SedimentationRateAnalyzer:
     """沉积速率分析器"""
 

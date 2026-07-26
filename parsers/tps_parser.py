@@ -15,11 +15,61 @@ version: 1.0.1
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+class TPSParseError(Exception):
+    """Exception raised when TPS file parsing fails.
+
+    Attributes:
+        file_path: Path to the file that failed to parse
+        line_number: Line number where the error occurred (1-indexed)
+        line_content: The original line content that caused the error
+        message: Detailed error message
+    """
+
+    def __init__(self, message: str, file_path: str | None = None, line_number: int = 0, line_content: str = ""):
+        self.file_path = file_path
+        self.line_number = line_number
+        self.line_content = line_content
+        full_message = f"TPS Parse Error"
+        if file_path:
+            full_message += f" in {os.path.basename(file_path)}"
+        if line_number > 0:
+            full_message += f" at line {line_number}"
+        full_message += f": {message}"
+        if line_content:
+            full_message += f" (line: {line_content[:50]}{'...' if len(line_content) > 50 else ''})"
+        super().__init__(full_message)
+
+
+@dataclass
+class TPSParseErrorSummary:
+    """Container for aggregated TPS parse errors."""
+
+    errors: list[TPSParseError] = field(default_factory=list)
+    file_path: str | None = None
+
+    def add_error(self, error: TPSParseError) -> None:
+        self.errors.append(error)
+
+    def has_errors(self) -> bool:
+        return len(self.errors) > 0
+
+    def summary(self) -> str:
+        if not self.errors:
+            return "No parse errors"
+        lines = [f"TPS Parse Errors ({len(self.errors)} total):"]
+        for err in self.errors:
+            lines.append(f"  Line {err.line_number}: {err.message}")
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.summary()
 
 
 @dataclass
@@ -65,7 +115,14 @@ class TPSFile:
 class TPSParser:
     """Parser for TPS (Thin Plate Spline) format files."""
 
-    def __init__(self) -> None:
+    def __init__(self, strict_mode: bool = True) -> None:
+        """
+        Initialize TPS parser.
+
+        Parameters:
+            strict_mode: If True, raise TPSParseError on parse failures.
+                        If False, collect errors and continue (legacy behavior).
+        """
         self._logger = logging.getLogger(f"{__name__}.TPSParser")
         self.specimens: list[TPSSpecimen] = []
         self.n_landmarks: int = 0
@@ -74,6 +131,8 @@ class TPSParser:
         self._current_spec: TPSSpecimen | None = None
         self._current_landmarks: list = []
         self._in_curve: bool = False
+        self._strict_mode = strict_mode
+        self._parse_errors: TPSParseErrorSummary = TPSParseErrorSummary()
 
     def parse(self, file_path: str) -> TPSFile:
         """
@@ -87,7 +146,8 @@ class TPSParser:
 
         Raises:
             FileNotFoundError: If file doesn't exist
-            ValueError: If file format is invalid
+            TPSParseError: If file format is invalid (in strict mode)
+            ValueError: If file format is invalid (no specimens found)
         """
         self._logger.info(f"Parsing TPS file: {file_path}")
 
@@ -101,29 +161,45 @@ class TPSParser:
         # Reset instance state variables for re-use
         self.n_landmarks = 0
         self.n_dimensions = 0
+        self._parse_errors = TPSParseErrorSummary(file_path=file_path)
 
-        with open(file_path, encoding="utf-8", errors="replace") as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line or line.startswith("!"):
-                    # Comment line
-                    if line.startswith("!"):
-                        self.comments.append(line[1:].strip())
-                    continue
+        # Detect and handle BOM
+        with open(file_path, encoding="utf-8-sig", errors="replace") as f:
+            content = f.read()
 
-                try:
-                    self._parse_line(line)
-                except Exception as e:
-                    self._logger.warning(f"Error parsing line {line_num}: {e}")
+        for line_num, line in enumerate(content.splitlines(), 1):
+            original_line = line
+            line = line.strip()
+            if not line or line.startswith("!"):
+                # Comment line (comment char is '!')
+                if line.startswith("!"):
+                    self.comments.append(line[1:].strip())
+                continue
+
+            try:
+                self._parse_line(line, line_num)
+            except TPSParseError as e:
+                if self._strict_mode:
+                    raise
+                self._parse_errors.add_error(e)
+                self._logger.warning(f"Error parsing line {line_num}: {e}")
 
         # Handle last specimen if not added
         if self._current_spec is not None and self._current_landmarks:
             self._finalize_specimen()
 
         if len(self.specimens) == 0:
+            if self._parse_errors.has_errors():
+                raise TPSParseError(
+                    f"No valid specimens found. {self._parse_errors.summary()}",
+                    file_path=file_path,
+                )
             raise ValueError("No valid specimens found in TPS file")
 
         self._logger.info(f"Parsed {len(self.specimens)} specimens")
+
+        if self._parse_errors.has_errors():
+            self._logger.warning(f"Parse completed with {len(self._parse_errors.errors)} errors:\n{self._parse_errors.summary()}")
 
         return TPSFile(
             specimens=self.specimens,
@@ -133,7 +209,7 @@ class TPSParser:
             file_path=file_path,
         )
 
-    def _parse_line(self, line: str) -> None:
+    def _parse_line(self, line: str, line_num: int = 0) -> None:
         """Parse a single line of TPS format.
 
         Standard TPS files (as written by tpsDig/tpsUtil) use two line
@@ -145,6 +221,9 @@ class TPSParser:
         The previous implementation only handled the ``KEY=VALUE`` form
         and dropped plain coordinate lines, which meant no real-world
         TPS file would parse. This version accepts both styles.
+
+        Raises:
+            TPSParseError: If a coordinate line cannot be parsed
         """
         if "=" in line:
             parts = line.split("=", 1)
@@ -153,13 +232,44 @@ class TPSParser:
 
             if key == "LM":
                 # Number of landmarks
-                self.n_landmarks = int(value)
+                try:
+                    self.n_landmarks = int(value)
+                except ValueError as e:
+                    raise TPSParseError(
+                        f"Invalid LM value '{value}': {e}",
+                        file_path=self._parse_errors.file_path,
+                        line_number=line_num,
+                        line_content=line,
+                    )
             elif key == "DIM":
                 # Dimensions (2 or 3)
-                self.n_dimensions = int(value)
+                try:
+                    self.n_dimensions = int(value)
+                except ValueError as e:
+                    raise TPSParseError(
+                        f"Invalid DIM value '{value}': {e}",
+                        file_path=self._parse_errors.file_path,
+                        line_number=line_num,
+                        line_content=line,
+                    )
+                if self.n_dimensions not in (2, 3):
+                    raise TPSParseError(
+                        f"Invalid DIM value '{value}': must be 2 or 3",
+                        file_path=self._parse_errors.file_path,
+                        line_number=line_num,
+                        line_content=line,
+                    )
             elif key == "SCALE":
                 # Scale factor
-                scale = float(value)
+                try:
+                    scale = float(value)
+                except ValueError as e:
+                    raise TPSParseError(
+                        f"Invalid SCALE value '{value}': {e}",
+                        file_path=self._parse_errors.file_path,
+                        line_number=line_num,
+                        line_content=line,
+                    )
                 if self._current_spec is not None:
                     self._current_spec.scale = scale
             elif key == "ID":
@@ -177,14 +287,30 @@ class TPSParser:
                     if self._current_spec.curve_points is None:
                         self._current_spec.curve_points = {}
                     self._in_curve = True
-                    self._current_spec.curve_points["order"] = [int(x) for x in value.split()]
+                    try:
+                        self._current_spec.curve_points["order"] = [int(x) for x in value.split()]
+                    except ValueError as e:
+                        raise TPSParseError(
+                            f"Invalid CO (curve order) value '{value}': {e}",
+                            file_path=self._parse_errors.file_path,
+                            line_number=line_num,
+                            line_content=line,
+                        )
             elif key == "POINTS":
                 # Curve points for current curve
                 if self._current_spec is not None and self._in_curve:
                     if "points" not in self._current_spec.curve_points:
                         self._current_spec.curve_points["points"] = []
-                    coords = [float(x) for x in value.split()]
-                    self._current_spec.curve_points["points"].append(coords)
+                    try:
+                        coords = [float(x) for x in value.split()]
+                        self._current_spec.curve_points["points"].append(coords)
+                    except ValueError as e:
+                        raise TPSParseError(
+                            f"Invalid POINTS value '{value}': {e}",
+                            file_path=self._parse_errors.file_path,
+                            line_number=line_num,
+                            line_content=line,
+                        )
             elif key == "END":
                 # End of specimen
                 if self._current_spec is not None and self._current_landmarks:
@@ -197,11 +323,22 @@ class TPSParser:
             return
         try:
             coords = [float(t) for t in tokens]
-        except ValueError:
-            # Not a coordinate line; ignore silently.
-            return
+        except ValueError as e:
+            # This is likely not a coordinate line; check if it looks like one
+            # If the tokens look like they should be numbers but aren't, report error
+            raise TPSParseError(
+                f"Cannot parse coordinate line '{line}': {e}",
+                file_path=self._parse_errors.file_path,
+                line_number=line_num,
+                line_content=line,
+            )
         if len(coords) not in (2, 3):
-            return
+            raise TPSParseError(
+                f"Invalid coordinate dimension: expected 2 or 3, got {len(coords)}",
+                file_path=self._parse_errors.file_path,
+                line_number=line_num,
+                line_content=line,
+            )
 
         # If we don't yet have a specimen context, create one with an
         # auto-generated ID. Some TPS files don't include an ID line.
@@ -219,7 +356,12 @@ class TPSParser:
         if self.n_dimensions == 0:
             self.n_dimensions = len(coords)
         elif len(coords) != self.n_dimensions:
-            raise ValueError(f"Invalid coordinate dimension: expected {self.n_dimensions}, got {len(coords)}")
+            raise TPSParseError(
+                f"Invalid coordinate dimension: expected {self.n_dimensions}D, got {len(coords)}D",
+                file_path=self._parse_errors.file_path,
+                line_number=line_num,
+                line_content=line,
+            )
         self._current_landmarks.append(coords)
 
         # If we have all landmarks, finalize

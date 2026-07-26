@@ -530,47 +530,57 @@ class PhyloNode:
     # Newick格式
     # =========================================================================
 
-    def to_newick(self, include_lengths: bool = True, include_support: bool = False) -> str:
+    def to_newick(
+        self,
+        branch_lengths: bool = True,
+        internal_labels: bool = True,
+        precision: int = 6,
+    ) -> str:
         """
-        转换为Newick格式字符串
+        转换为Newick格式字符串。
 
         递归文法:
             Subtree → Name:Length
                     | (Subtree{,Subtree})Name:Length
 
+        Polytomy处理:
+            多个子节点（超过2个）用逗号分隔表示。
+
         Parameters:
-            include_lengths: 是否包含枝长
-            include_support: 是否包含支持率
+            branch_lengths: 是否包含枝长
+            internal_labels: 是否包含内部节点标签
+            precision: 枝长数值精度
 
         Returns:
             Newick格式字符串
         """
         if self.is_root:
             logger.debug(
-                f"Converting tree rooted at '{self.name}' to Newick format (lengths={include_lengths}, support={include_support})"
+                f"Converting tree rooted at '{self.name}' to Newick format "
+                f"(lengths={branch_lengths}, internal_labels={internal_labels})"
             )
         if self.is_leaf:
             name = self.name if self.name else ""
-            if include_lengths and self.branch_length is not None:
-                return f"{name}:{self.branch_length}"
+            if branch_lengths and self.branch_length is not None:
+                fmt = f"{{:.{precision}f}}"
+                return f"{name}:{fmt.format(self.branch_length)}"
             return name
 
         # 内部节点
         child_newicks = []
         for child in self.children:
-            child_newicks.append(child.to_newick(include_lengths, include_support))
+            child_newicks.append(child.to_newick(branch_lengths, internal_labels, precision))
 
         subtree = f"({','.join(child_newicks)})"
 
-        # 添加支持率
-        if include_support and self.support is not None:
-            subtree += f"{self.support}"
-        elif self.name:
+        # 添加内部节点标签
+        if internal_labels and self.name:
             subtree += self.name
 
         # 添加枝长
-        if include_lengths and self.branch_length is not None:
-            subtree += f":{self.branch_length}"
+        if branch_lengths and self.branch_length is not None:
+            fmt = f"{{:.{precision}f}}"
+            subtree += f":{fmt.format(self.branch_length)}"
 
         return subtree
 
@@ -773,19 +783,50 @@ class PhyloTree:
             return 0
         return len(self.root.get_all_nodes())
 
-    def to_newick(self, include_lengths: bool = True) -> str:
+    def to_newick(
+        self,
+        branch_lengths: bool = True,
+        internal_labels: bool = True,
+        precision: int = 6,
+    ) -> str:
         """
-        转换为Newick格式
+        转换为Newick格式字符串。
+
+        NEWICK格式规范:
+            Tree → (Subtree_list)RootName:RootLength;
+            Subtree → (Subtree_list)Name:Length
+                    | Name:Length
+                    | Name;
+
+        Polytomy处理:
+            三叉或更多叉节点用逗号分隔子节点表示，例如:
+                ((A,B,C)D,E)F;
 
         Parameters:
-            include_lengths: 是否包含枝长
+            branch_lengths: 是否包含枝长。默认为True。
+            internal_labels: 是否包含内部节点标签。默认为True。
+                当为True时，内部节点显示其name属性。
+            precision: 枝长数值精度。默认为6位小数。
 
         Returns:
-            Newick格式字符串
+            Newick格式字符串，以分号结尾。
+
+        Example:
+            >>> tree = PhyloTree.from_newick("(A:0.1,B:0.2)C:0.3;")
+            >>> tree.to_newick()
+            '(A:0.1,B:0.2)C:0.3;'
+            >>> tree.to_newick(branch_lengths=False)
+            '(A,B)C;'
+            >>> tree.to_newick(branch_lengths=False, internal_labels=False)
+            '(A,B);'
+
+        References:
+            - NEWICK tree format: https://evolution.genetics.washington.edu/phylip/newicktree.html
+            - Maddison et al. (1997) Syst. Biol. 46(4):590-621
         """
         if self.root is None:
             return ";"
-        return self.root.to_newick(include_lengths) + ";"
+        return self.root.to_newick(branch_lengths=branch_lengths, internal_labels=internal_labels, precision=precision) + ";"
 
     @classmethod
     def from_newick(cls, newick: str, name: str = "") -> PhyloTree:
