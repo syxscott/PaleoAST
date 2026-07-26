@@ -190,6 +190,63 @@ class CCAAnalyzer:
             )
             return result
 
+    def _solve_XtX(
+        self,
+        XtX: npt.NDArray,
+        method: str = "cca",
+        ridge_lambda: float = 1e-8,
+        cond_threshold: float = 1e10,
+    ) -> npt.NDArray:
+        """
+        Solve X'X beta = X'y for the constrained ordination.
+
+        Uses ridge-regularized least squares when X'X is near-singular
+        (ill-conditioned), which commonly occurs with collinear environmental
+        variables. This approach follows the numerical practices of R's vegan
+        package (see ?vegan::cca, which uses qr() decomposition).
+
+        Parameters:
+            XtX: The X'X matrix (n_env, n_env)
+            method: 'cca' or 'rda' (used in warning messages)
+            ridge_lambda: Ridge regularization parameter (default 1e-8).
+                Added to diagonal: X'X + lambda*I
+            cond_threshold: Condition number threshold for warning (default 1e10).
+
+        Returns:
+            XtX_inv: The inverse (or regularized inverse) of XtX
+
+        References:
+            - ter Braak (1986) Ecology 67:1167-1176
+            - Legendre & Legendre (2012) Numerical Ecology, 3rd ed., Elsevier
+            - R package vegan::cca() source code
+        """
+        cond = np.linalg.cond(XtX)
+        if cond > cond_threshold:
+            self._logger.warning(
+                f"{method.upper()}: X'X condition number = {cond:.2e} > {cond_threshold:.0e}. "
+                f"Environmental matrix is ill-conditioned (collinear variables?). "
+                f"Applying ridge regularization (lambda={ridge_lambda})."
+            )
+            # Ridge regularization: X'X + lambda*I, then solve via lstsq
+            XtX_ridge = XtX + ridge_lambda * np.eye(XtX.shape[0])
+            # Solve (X'X + lambda*I) @ XtX_inv = I using lstsq
+            identity = np.eye(XtX.shape[0])
+            XtX_inv, *_ = np.linalg.lstsq(XtX_ridge, identity, rcond=None)
+        else:
+            # Well-conditioned: use standard inverse for efficiency
+            try:
+                XtX_inv = np.linalg.inv(XtX)
+            except np.linalg.LinAlgError:
+                # Fallback to ridge-regularized lstsq if inv fails
+                self._logger.warning(
+                    f"{method.upper()}: np.linalg.inv(XtX) failed. "
+                    f"Falling back to ridge-regularized lstsq."
+                )
+                XtX_ridge = XtX + ridge_lambda * np.eye(XtX.shape[0])
+                identity = np.eye(XtX.shape[0])
+                XtX_inv, *_ = np.linalg.lstsq(XtX_ridge, identity, rcond=None)
+        return XtX_inv
+
     def _analyze_rda(
         self,
         Y: npt.NDArray,
@@ -216,11 +273,11 @@ class CCAAnalyzer:
         X_centered = X - X.mean(axis=0)
 
         # Step 2: Compute projection matrix Q = X(X'X)^-1 X'
+        # Use ridge-regularized lstsq for numerical stability when X'X is
+        # near-singular (collinear environmental variables). This follows
+        # the approach used in R's vegan package (qr() decomposition).
         XtX = X_centered.T @ X_centered
-        try:
-            XtX_inv = np.linalg.inv(XtX)
-        except np.linalg.LinAlgError:
-            raise ComputationError("Environmental matrix is singular or near-singular")
+        XtX_inv = self._solve_XtX(XtX, method="rda")
 
         Q = X_centered @ XtX_inv @ X_centered.T
 
@@ -330,22 +387,33 @@ class CCAAnalyzer:
         col_totals[col_totals == 0] = 1
         grand_total = max(grand_total, 1e-10)
 
-        # Chi-square standardization (ter Braak 1986).
+        # Chi-square standardization (ter Braak 1986, Ecology 67:1167-1176).
+        #
         # The canonical formulation uses unscaled counts Y directly:
         #   expected[i,k] = (row_total_i * col_total_k) / grand_total
         #   Q[i,k]        = (Y[i,k] - expected[i,k]) / sqrt(expected[i,k])
-        # which is equivalent to the p-based form up to a constant factor
-        # sqrt(grand_total). The earlier implementation divided Y by
-        # grand_total *before* subtracting the expected and then divided
-        # by sqrt(expected_p) — this drops the sqrt(grand_total) factor
-        # relative to ter Braak (1986) and makes the resulting eigenvalues
-        # scale-dependent on the total abundance. Use the count form here.
+        #
+        # IMPORTANT: Chi-square distance requires positive expected values.
+        # When expected == 0, the contribution to chi-square distance is
+        # mathematically undefined (0/0 yields no contribution when both
+        # observed==0 and expected==0, but is infinite when observed>0).
+        # We mark zero-expectation positions with NaN to exclude them from
+        # distance computations, preventing the spurious structure that
+        # arises from substituting an artificial value like 1.0.
+        #
+        # References:
+        #   - ter Braak (1986) Ecology 67:1167-1176
+        #   - Legendre & Legendre (2012) Numerical Ecology, 3rd ed., Elsevier
         p_row = row_totals / grand_total  # (n_samples, 1)
         p_col = col_totals / grand_total  # (1, n_species)
         expected = (row_totals @ col_totals) / grand_total  # (n_samples, n_species)
-        # Guard against zero expected values before taking sqrt / dividing.
-        expected_safe = np.where(expected > 0, expected, 1.0)
-        Y_std = (Y - expected) / np.sqrt(expected_safe)
+        # Compute standardized residuals only where expected > 0.
+        # Where expected == 0: set to NaN (undefined contribution).
+        # This correctly handles both cases:
+        #   - observed == 0, expected == 0: contribution = 0/0 = NaN (excluded)
+        #   - observed > 0, expected == 0: contribution = observed/sqrt(0) -> Inf (excluded)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Y_std = np.where(expected > 0, (Y - expected) / np.sqrt(expected), np.nan)
 
         # Center the environmental matrix
         X_centered = X - X.mean(axis=0)
@@ -357,11 +425,10 @@ class CCAAnalyzer:
         Y_weighted = Y_std * w[:, np.newaxis]
 
         # Compute projection matrix Q = X(X'X)^-1 X' (weighted)
+        # Use ridge-regularized lstsq for numerical stability when X'X is
+        # near-singular (collinear environmental variables).
         XtX = X_centered.T @ X_centered
-        try:
-            XtX_inv = np.linalg.inv(XtX)
-        except np.linalg.LinAlgError:
-            raise ComputationError("Environmental matrix is singular or near-singular")
+        XtX_inv = self._solve_XtX(XtX, method="cca")
 
         Q = X_centered @ XtX_inv @ X_centered.T
 
@@ -398,8 +465,9 @@ class CCAAnalyzer:
         scale_factor[scale_factor == 0] = 1
         biplot_scores = biplot_scores / scale_factor * np.sqrt(eigenvalues)
 
-        # Total inertia (chi-square distance)
-        total_inertia = np.sum(Y_std**2)
+        # Total inertia (chi-square distance).
+        # Use nansum to handle NaN values where expected == 0.
+        total_inertia = np.nansum(Y_std**2)
 
         # Proportions
         proportion_explained = (eigenvalues / total_inertia) * 100 if total_inertia > 0 else np.zeros_like(eigenvalues)
