@@ -113,13 +113,33 @@ class StateManager:
     @classmethod
     def get_instance(cls) -> "StateManager":
         """
-        Get the singleton instance.
+        Get the singleton instance with thread-safe double-checked locking.
+
+        This method uses the double-checked locking pattern to ensure
+        thread-safe singleton creation with minimal lock contention.
+
+        The double-check pattern:
+        1. First check without lock: fast path when instance exists
+        2. Acquire lock only when instance needs creation
+        3. Second check with lock held: prevent race between threads
+           that both passed the first check
 
         Returns:
             StateManager: The singleton instance
+
+        Thread Safety:
+            - Multiple threads can call get_instance() concurrently
+            - Only one thread will create the instance
+            - All threads receive the same instance reference
         """
+        # First check: fast path, no lock needed if instance exists
         if cls._instance is None:
-            cls._instance = cls()
+            # Acquire lock for instance creation
+            with cls._instance_lock:
+                # Second check: ensure instance wasn't created by
+                # another thread while waiting for the lock
+                if cls._instance is None:
+                    cls._instance = cls()
         return cls._instance
 
     @classmethod
@@ -587,9 +607,25 @@ class ReadLockContext:
     """
     Context manager for read lock acquisition.
 
-    Note: Uses the same exclusive RLock as WriteLockContext.
-    This is not a true read-write lock; both read and write
-    operations are mutually exclusive for thread safety.
+    Implementation Note:
+        This is a PSEUDO read-write lock using a single threading.RLock.
+        Read and write operations are mutually exclusive - a true RWLock
+        (which would allow multiple concurrent readers) is not used because
+        the 'readerwriterlock' package is not a project dependency.
+
+        Benefits of current approach:
+        - No external dependency required
+        - Provides thread-safe state access
+        - Prevents data races on shared state
+
+        Limitations:
+        - Multiple threads cannot read concurrently (throughput limited)
+        - For high-read-concurrency scenarios, consider adding
+          'readerwriterlock' to dependencies and using RWLock
+
+        Thread Safety:
+            Uses RLock for reentrant locking - the same thread can
+            acquire the read lock multiple times (nested calls).
     """
 
     def __init__(self, lock: threading.RLock) -> None:
@@ -607,9 +643,25 @@ class WriteLockContext:
     """
     Context manager for write lock acquisition.
 
-    Note: Uses the same exclusive RLock as ReadLockContext.
-    This is not a true read-write lock; both read and write
-    operations are mutually exclusive for thread safety.
+    Implementation Note:
+        This is a PSEUDO read-write lock using a single threading.RLock.
+        Read and write operations are mutually exclusive - a true RWLock
+        (which would allow multiple concurrent readers) is not used because
+        the 'readerwriterlock' package is not a project dependency.
+
+        Benefits of current approach:
+        - No external dependency required
+        - Provides exclusive access for writes
+        - Prevents data races on shared state
+
+        Limitations:
+        - All reads are blocked during a write (even if no writes occur)
+        - For high-read-concurrency scenarios, consider adding
+          'readerwriterlock' to dependencies and using RWLock
+
+        Thread Safety:
+            Uses RLock for reentrant locking - the same thread can
+            acquire the write lock multiple times (nested calls).
     """
 
     def __init__(self, lock: threading.RLock) -> None:
