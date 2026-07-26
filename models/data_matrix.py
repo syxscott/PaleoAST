@@ -14,8 +14,31 @@ Mathematical Context:
 
     Each element x_ij represents the value of variable j for sample i.
 
+Why Paleontological Data Requires Metadata:
+==============================================================================
+Paleontological specimens carry essential contextual information that cannot be
+captured in a simple numeric matrix alone. Each specimen (row) represents a
+fossil individual with unique provenance:
+
+    - Collector: Who collected the specimen (field researcher name)
+    - Stratigraphic position: Geological formation, age, and position within strata
+    - Specimen number: Museum/institution catalog number (e.g., "AMNH-F-12345")
+    - Taxonomic identification: Species name, with confidence levels
+    - Geographic location: Site name, GPS coordinates, paleocoordinates
+    - Taphonomic notes: Preservation state, diagenetic alterations
+
+This metadata is CRITICAL because:
+1. The same morphological character may vary due to ontogeny, geography, or preservation
+2. Phylogenetic analysis depends on correct taxon sampling
+3. Stratigraphic constraints inform divergence time estimation
+4. Museum specimen numbers enable reproducibility and museum visits
+
+References:
+    - Maddison et al. (1997) NEXUS format. Syst. Biol. 46(4):590-621
+    - DeQueiroz et al. (2001) The duties of the taxonomic journal. Syst. Biol. 50:847-849
+
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging
@@ -72,6 +95,9 @@ class DataMatrix:
         row_labels: list[str] | None = None,
         col_labels: list[str] | None = None,
         name: str = "Unnamed",
+        metadata: dict[str, Any] | None = None,
+        specimen_metadata: list[dict[str, Any]] | None = None,
+        column_metadata: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """
         Initialize a DataMatrix instance.
@@ -81,10 +107,25 @@ class DataMatrix:
             row_labels: Optional list of row labels (sample names)
             col_labels: Optional list of column labels (variable names)
             name: Name for this data matrix
+            metadata: Optional dictionary of general matrix metadata
+            specimen_metadata: Optional list of per-specimen metadata dicts.
+                Length must match n_samples. Each dict contains fields like
+                'collector', 'stratigraphy', 'specimen_number', 'taxonomy', etc.
+            column_metadata: Optional dict mapping column label to metadata dict.
+                Each column metadata dict may contain 'description', 'units',
+                'data_type', 'coding_scheme', etc.
 
         Raises:
             DataValidationError: If data validation fails
             MatrixDimensionError: If dimensions are invalid
+
+        Example:
+            >>> meta = {"project": "Cambrian Explosion", "analyst": "Dr. Smith"}
+            >>> spec_meta = [{"specimen_id": "AMNH-001", "formation": "Burgess Shale"}]
+            >>> col_meta = {"Var_1": {"description": "Carapace length", "units": "mm"}}
+            >>> matrix = DataMatrix([[1.0, 2.0]], metadata=meta,
+            ...                     specimen_metadata=spec_meta,
+            ...                     column_metadata=col_meta)
         """
         # Convert to numpy array and validate
         self._data = validate_data_array(data, allow_nan=True, allow_inf=False, name="data_matrix")
@@ -116,11 +157,48 @@ class DataMatrix:
         # Set name
         self._name = name
 
+        # Initialize metadata
+        self._metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
+        self._specimen_metadata: list[dict[str, Any]] = self._init_specimen_metadata(
+            n_samples, specimen_metadata
+        )
+        self._column_metadata: dict[str, dict[str, Any]] = self._init_column_metadata(
+            n_variables, column_metadata
+        )
+
         # Thread lock for concurrent access
         self._lock = threading.RLock()
 
         self._logger = logging.getLogger(f"{__name__}.DataMatrix")
         self._logger.info(f"DataMatrix initialized: shape=({n_samples} x {n_variables}), name='{name}'")
+
+    def _init_specimen_metadata(
+        self, n_samples: int, specimen_metadata: list[dict[str, Any]] | None
+    ) -> list[dict[str, Any]]:
+        """Initialize specimen metadata with validation."""
+        if specimen_metadata is None:
+            return [{} for _ in range(n_samples)]
+        if len(specimen_metadata) != n_samples:
+            raise MatrixDimensionError(
+                "Specimen metadata length must match number of samples",
+                details={"n_samples": n_samples, "n_spec_meta": len(specimen_metadata)},
+            )
+        return [dict(m) for m in specimen_metadata]  # Deep copy
+
+    def _init_column_metadata(
+        self, n_variables: int, column_metadata: dict[str, dict[str, Any]] | None
+    ) -> dict[str, dict[str, Any]]:
+        """Initialize column metadata with validation."""
+        if column_metadata is None:
+            return {label: {} for label in self._col_labels}
+        # Validate that all keys correspond to existing columns
+        result: dict[str, dict[str, Any]] = {}
+        for i, label in enumerate(self._col_labels):
+            if label in column_metadata:
+                result[label] = dict(column_metadata[label])
+            else:
+                result[label] = {}
+        return result
 
     # =========================================================================
     # Properties
@@ -305,6 +383,177 @@ class DataMatrix:
             return check_missing_values(self._data, report_positions=False)
 
     # =========================================================================
+    # Metadata Properties
+    # =========================================================================
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """
+        Get the general matrix metadata.
+
+        Returns:
+            Dict[str, Any]: Copy of matrix metadata
+        """
+        with self._lock:
+            return dict(self._metadata)
+
+    @metadata.setter
+    def metadata(self, metadata: dict[str, Any]) -> None:
+        """
+        Set the general matrix metadata.
+
+        Parameters:
+            metadata: New metadata dictionary
+        """
+        with self._lock:
+            self._metadata = dict(metadata)
+
+    @property
+    def specimen_metadata(self) -> list[dict[str, Any]]:
+        """
+        Get the per-specimen metadata.
+
+        Each entry corresponds to a row (sample) in the matrix.
+
+        Returns:
+            List[Dict[str, Any]]: Copy of specimen metadata list
+        """
+        with self._lock:
+            return [dict(m) for m in self._specimen_metadata]
+
+    @specimen_metadata.setter
+    def specimen_metadata(self, specimen_metadata: list[dict[str, Any]]) -> None:
+        """
+        Set the per-specimen metadata.
+
+        Parameters:
+            specimen_metadata: New list of metadata dicts
+
+        Raises:
+            MatrixDimensionError: If length doesn't match n_samples
+        """
+        with self._lock:
+            if len(specimen_metadata) != self._data.shape[0]:
+                raise MatrixDimensionError(
+                    "Specimen metadata length must match number of samples",
+                    details={"n_samples": self._data.shape[0], "n_spec_meta": len(specimen_metadata)},
+                )
+            self._specimen_metadata = [dict(m) for m in specimen_metadata]
+
+    @property
+    def column_metadata(self) -> dict[str, dict[str, Any]]:
+        """
+        Get the per-column (variable) metadata.
+
+        Returns:
+            Dict[str, Dict[str, Any]]: Copy of column metadata
+        """
+        with self._lock:
+            return {k: dict(v) for k, v in self._column_metadata.items()}
+
+    @column_metadata.setter
+    def column_metadata(self, column_metadata: dict[str, dict[str, Any]]) -> None:
+        """
+        Set the column metadata.
+
+        Parameters:
+            column_metadata: New column metadata dict
+
+        Raises:
+            MatrixDimensionError: If keys don't match column labels
+        """
+        with self._lock:
+            missing = set(self._col_labels) - set(column_metadata.keys())
+            extra = set(column_metadata.keys()) - set(self._col_labels)
+            if missing or extra:
+                raise MatrixDimensionError(
+                    "Column metadata keys must match existing column labels",
+                    details={"missing_columns": list(missing), "extra_columns": list(extra)},
+                )
+            self._column_metadata = {k: dict(v) for k, v in column_metadata.items()}
+
+    def get_specimen_metadata(self, specimen_id: Union[int, str]) -> dict[str, Any]:
+        """
+        Get metadata for a specific specimen.
+
+        Parameters:
+            specimen_id: Integer index or row label string
+
+        Returns:
+            Dict[str, Any]: Specimen metadata
+
+        Raises:
+            IndexError: If specimen_id is out of range
+            ValueError: If specimen_id is invalid string label
+        """
+        with self._lock:
+            if isinstance(specimen_id, int):
+                if 0 <= specimen_id < len(self._specimen_metadata):
+                    return dict(self._specimen_metadata[specimen_id])
+                raise IndexError(f"Specimen index {specimen_id} out of range [0, {len(self._specimen_metadata)}])")
+            else:
+                # Try as row label
+                try:
+                    idx = self._row_labels.index(specimen_id)
+                    return dict(self._specimen_metadata[idx])
+                except ValueError:
+                    raise ValueError(f"Specimen label '{specimen_id}' not found in row labels")
+
+    def set_specimen_metadata(
+        self, specimen_id: Union[int, str], key: str, value: Any
+    ) -> None:
+        """
+        Set a specific metadata field for a specimen.
+
+        Parameters:
+            specimen_id: Integer index or row label string
+            key: Metadata key to set
+            value: Metadata value
+
+        Raises:
+            IndexError: If specimen_id is out of range
+            ValueError: If specimen_id is invalid string label
+        """
+        with self._lock:
+            if isinstance(specimen_id, int):
+                if 0 <= specimen_id < len(self._specimen_metadata):
+                    self._specimen_metadata[specimen_id][key] = value
+                    return
+                raise IndexError(f"Specimen index {specimen_id} out of range [0, {len(self._specimen_metadata)}])")
+            else:
+                try:
+                    idx = self._row_labels.index(specimen_id)
+                    self._specimen_metadata[idx][key] = value
+                    return
+                except ValueError:
+                    raise ValueError(f"Specimen label '{specimen_id}' not found in row labels")
+
+    def get_column_metadata(self, column: Union[int, str]) -> dict[str, Any]:
+        """
+        Get metadata for a specific column (variable).
+
+        Parameters:
+            column: Integer index or column label string
+
+        Returns:
+            Dict[str, Any]: Column metadata
+
+        Raises:
+            IndexError: If column index is out of range
+            KeyError: If column label is not found
+        """
+        with self._lock:
+            if isinstance(column, int):
+                if 0 <= column < len(self._col_labels):
+                    label = self._col_labels[column]
+                    return dict(self._column_metadata[label])
+                raise IndexError(f"Column index {column} out of range [0, {len(self._col_labels)}])")
+            else:
+                if column in self._column_metadata:
+                    return dict(self._column_metadata[column])
+                raise KeyError(f"Column label '{column}' not found")
+
+    # =========================================================================
     # Data Access Methods
     # =========================================================================
 
@@ -442,15 +691,37 @@ class DataMatrix:
         Mathematical Operation:
             X^T where (X^T)_ij = X_ji
 
+        Note:
+            Transposition swaps rows and columns:
+            - Original specimen_metadata (per-row) becomes column_metadata (per-column)
+            - Original column_metadata (per-column) becomes specimen_metadata (per-row)
+
         Returns:
             DataMatrix: Transposed matrix
         """
         with self._lock:
+            # Original specimen_metadata (per-row) becomes new column_metadata (per-column)
+            # Original col_labels[i] becomes new column label, so use specimen_metadata[i]
+            new_column_meta: dict[str, dict[str, Any]] = {
+                row_label: dict(self._specimen_metadata[i])
+                for i, row_label in enumerate(self._row_labels)
+            }
+
+            # Original column_metadata (per-column) becomes new specimen_metadata (per-row)
+            # Original col_labels[i] becomes new row label
+            new_specimen_meta: list[dict[str, Any]] = [
+                dict(self._column_metadata.get(col_label, {}))
+                for col_label in self._col_labels
+            ]
+
             return DataMatrix(
                 data=self._data.T.copy(),
                 row_labels=self._col_labels.copy(),
                 col_labels=self._row_labels.copy(),
                 name=f"{self._name}_transposed",
+                metadata=self._metadata.copy(),
+                specimen_metadata=new_specimen_meta,
+                column_metadata=new_column_meta,
             )
 
     def subset_rows(self, indices: Union[list[int], npt.NDArray]) -> "DataMatrix":
@@ -461,7 +732,7 @@ class DataMatrix:
             indices: List or array of row indices to include
 
         Returns:
-            DataMatrix: Matrix with subset of rows
+            DataMatrix: Matrix with subset of rows, preserving specimen metadata
         """
         with self._lock:
             if isinstance(indices, list):
@@ -471,12 +742,16 @@ class DataMatrix:
 
             new_data = self._data[indices].copy()
             new_row_labels = [self._row_labels[i] for i in indices]
+            new_spec_meta = [self._specimen_metadata[i].copy() for i in indices]
 
             return DataMatrix(
                 data=new_data,
                 row_labels=new_row_labels,
                 col_labels=self._col_labels.copy(),
                 name=f"{self._name}_rows_subset",
+                metadata=self._metadata.copy(),
+                specimen_metadata=new_spec_meta,
+                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
             )
 
     def subset_columns(self, indices: Union[list[int], npt.NDArray]) -> "DataMatrix":
@@ -487,7 +762,7 @@ class DataMatrix:
             indices: List or array of column indices to include
 
         Returns:
-            DataMatrix: Matrix with subset of columns
+            DataMatrix: Matrix with subset of columns, preserving column metadata
         """
         with self._lock:
             if isinstance(indices, list):
@@ -497,12 +772,16 @@ class DataMatrix:
 
             new_data = self._data[:, indices].copy()
             new_col_labels = [self._col_labels[i] for i in indices]
+            new_col_meta = {self._col_labels[i]: self._column_metadata[self._col_labels[i]].copy() for i in indices}
 
             return DataMatrix(
                 data=new_data,
                 row_labels=self._row_labels.copy(),
                 col_labels=new_col_labels,
                 name=f"{self._name}_cols_subset",
+                metadata=self._metadata.copy(),
+                specimen_metadata=[m.copy() for m in self._specimen_metadata],
+                column_metadata=new_col_meta,
             )
 
     def remove_constant_columns(self) -> "DataMatrix":
@@ -650,6 +929,9 @@ class DataMatrix:
                 row_labels=self._row_labels.copy(),
                 col_labels=self._col_labels.copy(),
                 name=f"{self._name}_mean_imputed",
+                metadata=self._metadata.copy(),
+                specimen_metadata=[m.copy() for m in self._specimen_metadata],
+                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
             )
 
     def impute_median(self) -> "DataMatrix":
@@ -686,6 +968,9 @@ class DataMatrix:
                 row_labels=self._row_labels.copy(),
                 col_labels=self._col_labels.copy(),
                 name=f"{self._name}_median_imputed",
+                metadata=self._metadata.copy(),
+                specimen_metadata=[m.copy() for m in self._specimen_metadata],
+                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
             )
 
     def impute_knn(self, k: int = 5) -> "DataMatrix":
@@ -762,6 +1047,9 @@ class DataMatrix:
                 row_labels=self._row_labels.copy(),
                 col_labels=self._col_labels.copy(),
                 name=f"{self._name}_knn_imputed",
+                metadata=self._metadata.copy(),
+                specimen_metadata=[m.copy() for m in self._specimen_metadata],
+                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
             )
 
     # =========================================================================
@@ -772,6 +1060,8 @@ class DataMatrix:
         """
         Create a deep copy of this DataMatrix.
 
+        Preserves all metadata (matrix, specimen, and column).
+
         Returns:
             DataMatrix: Independent copy of this matrix
         """
@@ -781,6 +1071,9 @@ class DataMatrix:
                 row_labels=self._row_labels.copy(),
                 col_labels=self._col_labels.copy(),
                 name=self._name,
+                metadata=self._metadata.copy(),
+                specimen_metadata=[m.copy() for m in self._specimen_metadata],
+                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
             )
 
     def to_numpy(self) -> npt.NDArray:
@@ -797,8 +1090,20 @@ class DataMatrix:
         """
         Convert to dictionary representation.
 
+        Includes all data, labels, and metadata for complete serialization.
+
         Returns:
             Dict: Dictionary with all data and metadata
+
+        Example:
+            >>> matrix = DataMatrix([[1.0, 2.0]], row_labels=['A'],
+            ...                     metadata={'project': 'Test'},
+            ...                     specimen_metadata=[{'id': 'S1'}])
+            >>> d = matrix.to_dict()
+            >>> d['metadata']
+            {'project': 'Test'}
+            >>> d['specimen_metadata']
+            [{'id': 'S1'}]
         """
         with self._lock:
             return {
@@ -809,7 +1114,52 @@ class DataMatrix:
                 "shape": self._data.shape,
                 "has_missing": self.has_missing,
                 "missing_info": self.missing_info,
+                "metadata": dict(self._metadata),
+                "specimen_metadata": [dict(m) for m in self._specimen_metadata],
+                "column_metadata": {k: dict(v) for k, v in self._column_metadata.items()},
             }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DataMatrix":
+        """
+        Create a DataMatrix from a dictionary representation.
+
+        Parameters:
+            data: Dictionary with keys 'data', 'row_labels', 'col_labels',
+                  and optionally 'metadata', 'specimen_metadata', 'column_metadata'
+
+        Returns:
+            DataMatrix: New instance reconstructed from dict
+
+        Raises:
+            KeyError: If required keys are missing
+
+        Example:
+            >>> d = {
+            ...     'name': 'Test',
+            ...     'data': [[1.0, 2.0], [3.0, 4.0]],
+            ...     'row_labels': ['A', 'B'],
+            ...     'col_labels': ['X', 'Y'],
+            ...     'metadata': {'project': 'Test'},
+            ...     'specimen_metadata': [{'id': 'A'}, {'id': 'B'}],
+            ...     'column_metadata': {'X': {'units': 'mm'}}
+            ... }
+            >>> matrix = DataMatrix.from_dict(d)
+        """
+        required_keys = {"data", "row_labels", "col_labels"}
+        missing = required_keys - set(data.keys())
+        if missing:
+            raise KeyError(f"Missing required keys in dictionary: {missing}")
+
+        return cls(
+            data=data["data"],
+            row_labels=data["row_labels"],
+            col_labels=data["col_labels"],
+            name=data.get("name", "Unnamed"),
+            metadata=data.get("metadata"),
+            specimen_metadata=data.get("specimen_metadata"),
+            column_metadata=data.get("column_metadata"),
+        )
 
     def __repr__(self) -> str:
         """
