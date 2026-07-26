@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+title: "PaleoAST: Paleontological Advanced Statistical Toolkit"
+version: 1.0.1
+date-released: 2026-07-26
+authors:
+  - family-names: "PaleoAST Development Team"
+    given-names: ""
+    affiliation: ""
+    orcid: ""
+repository-code: "https://github.com/syxscott/PaleoAST"
+keywords:
+  - paleontology
+  - multivariate-statistics
+  - morphometrics
+  - phylogenetics
+  - macroevolution
+  - PyQt6
+  - python
+license: MIT
