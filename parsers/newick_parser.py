@@ -502,7 +502,7 @@ class NewickParser:
         self._MAX_DEPTH: int = 1000
 
         # 正则表达式
-        self._name_pattern = re.compile(r"^([^():,\s]+)")
+        self._name_pattern = re.compile(r"^([^():,\s;]+)")
         self._number_pattern = re.compile(r"^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)")
         self._whitespace_pattern = re.compile(r"^\s+")
 
@@ -753,10 +753,10 @@ class NewickParser:
         """
         self._skip_whitespace()
 
-        match = self._name_pattern.match(self._input, self._pos)
+        match = self._name_pattern.match(self._input[self._pos :])
         if match:
             name = match.group(1)
-            self._pos = match.end()
+            self._pos += match.end()
             return name
 
         return None
@@ -772,10 +772,10 @@ class NewickParser:
         """
         self._skip_whitespace()
 
-        match = self._number_pattern.match(self._input, self._pos)
+        match = self._number_pattern.match(self._input[self._pos :])
         if match:
             value = float(match.group(1))
-            self._pos = match.end()
+            self._pos += match.end()
             return value
 
         return None
@@ -855,18 +855,20 @@ class TreeComparator:
             splits.update(child_splits)
 
         # 当前节点的分割
-        leaves1 = node.children[0].get_leaves() if node.children else []
-        leaves2 = node.children[1].get_leaves() if len(node.children) > 1 else []
-
-        set(node.get_leaves())
-        group1 = frozenset(leaf.name for leaf in leaves1)
-        group2 = frozenset(leaf.name for leaf in leaves2)
-
-        # 确保group1 < group2以保持唯一性
-        if group1 > group2:
-            group1, group2 = group2, group1
-
-        splits.add((group1, group2))
+        # 处理 polytomy (多叉树): 为每个子节点生成一个分割
+        # 分割 = (该子节点的叶节点, 所有其他子节点的叶节点)
+        if len(node.children) >= 2:
+            all_leaves = node.get_leaves()
+            for i, child in enumerate(node.children):
+                child_leaves = frozenset(leaf.name for leaf in child.get_leaves())
+                other_leaves = frozenset(leaf.name for leaf in all_leaves if leaf not in child.get_leaves())
+                # 确保 group1 < group2 以保持唯一性
+                if child_leaves > other_leaves:
+                    child_leaves, other_leaves = other_leaves, child_leaves
+                splits.add((child_leaves, other_leaves))
+        elif len(node.children) == 1:
+            # 单子节点: 无分割 (退化情况)
+            pass
 
         return splits
 

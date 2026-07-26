@@ -146,8 +146,7 @@ class NexusLexer(BaseLexer):
         super().__init__(skip_whitespace=True, skip_newlines=False, case_sensitive=False)
         self._logger = logging.getLogger(f"{__name__}.NexusLexer")
 
-        # 嵌套注释深度计数
-        self._comment_depth = 0
+        # 嵌套注释状态 (用于tokenize循环优化)
         self._in_nested_comment = False
 
         # NEXUS关键字集合 (大小写不敏感)
@@ -259,31 +258,22 @@ class NexusLexer(BaseLexer):
         # 重置状态
         self._line = 1
         self._column = 1
-        self._comment_depth = 0
         self._in_nested_comment = False
 
         self._logger.debug(f"Tokenizing NEXUS source of length {length}")
 
         while position < length:
-            # 处理嵌套注释
-            if self._in_nested_comment:
-                result = self._scan_comment(source, position)
-                if result:
-                    comment_token, new_pos = result
-                    tokens.append(comment_token)
-                    position = new_pos
-                    self._update_position(source, position - len(comment_token.value), position)
-                continue
-
-            # 检查是否在注释内
+            # 检查注释开始 (包括嵌套注释 [[ )
             if position < length and source[position : position + 1] == "[":
-                # 检查是否嵌套注释开始
-                if position + 1 < length and source[position + 1 : position + 2] == "[":
-                    # 嵌套注释开始
-                    self._in_nested_comment = True
-                    self._comment_depth = 1
-                    position += 2
-                    self._update_position(source, position - 2, position)
+                # 检查是否是嵌套注释开始 [[ (需要看当前位置和下一位置)
+                if position + 2 <= length and source[position : position + 2] == "[[":
+                    # 嵌套注释: 调用_scan_comment处理完整的嵌套结构
+                    result = self._scan_comment(source, position)
+                    if result:
+                        comment_token, new_pos = result
+                        tokens.append(comment_token)
+                        position = new_pos
+                        self._update_position(source, position - len(comment_token.value), position)
                     continue
                 elif self._is_comment_start(source, position):
                     # 普通注释
@@ -359,76 +349,65 @@ class NexusLexer(BaseLexer):
 
         参数:
             source: 源代码
-            position: 起始位置
+            position: 起始位置 (指向注释开始的 '[')
 
         返回:
             (注释Token, 新位置) 或 None
+
+        嵌套注释语法:
+            - 普通注释: [...]  (不嵌套)
+            - 嵌套注释: [[ ... ]]  (可多重嵌套)
+            - 混合: [ outer [[ nested ]] still_outer ]
         """
         start_line = self._line
         start_column = self._column
         comment_start = position
         length = len(source)
 
-        # 如果已经在嵌套注释中
-        if self._in_nested_comment:
-            while position < length:
-                if position + 1 < length:
-                    two_chars = source[position : position + 2]
-                    if two_chars == "[[":
-                        self._comment_depth += 1
-                        position += 2
-                        continue
-                    elif two_chars == "]]":
-                        self._comment_depth -= 1
-                        position += 2
-                        if self._comment_depth == 0:
-                            self._in_nested_comment = False
-                            break
-                        continue
+        # 嵌套深度计数: 进入第一层 [
+        depth = 1
+        pos = position + 1
 
-                # 计数换行
-                if source[position] == "\n":
-                    self._line += 1
-                    self._column = 1
-                else:
-                    self._column += 1
-                position += 1
-
-            value = source[comment_start:position]
-            return (
-                Token(type=NexusTokenType.NESTED_COMMENT, value=value, line=start_line, column=start_column),
-                position,
-            )
-
-        # 普通注释
-        while position < length:
-            char = source[position]
-
-            if char == "[":
-                # 检查嵌套注释
-                if position + 1 < length and source[position + 1] == "[":
-                    # 嵌套注释开始
-                    self._in_nested_comment = True
-                    self._comment_depth = 1
-                    position += 2
-                    return self._scan_comment(source, comment_start)
-
-            if char == "]":
-                position += 1
-                value = source[comment_start:position]
-                return (Token(type=NexusTokenType.COMMENT, value=value, line=start_line, column=start_column), position)
+        while pos < length and depth > 0:
+            # 检查嵌套注释开始 [[
+            if source[pos : pos + 2] == "[[":
+                depth += 1
+                pos += 2
+                continue
+            # 检查嵌套注释结束 ]]
+            elif source[pos : pos + 2] == "]]":
+                depth -= 1
+                pos += 2
+                continue
 
             # 计数换行
-            if char == "\n":
+            if source[pos] == "\n":
                 self._line += 1
                 self._column = 1
             else:
                 self._column += 1
-            position += 1
+            pos += 1
 
-        # 注释未关闭
-        value = source[comment_start:position]
-        return (Token(type=NexusTokenType.COMMENT, value=value, line=start_line, column=start_column), position)
+        # 构建注释token
+        end_pos = pos if depth == 0 else length
+        value = source[comment_start:end_pos]
+
+        # 检查是否未关闭
+        if depth > 0:
+            self._in_nested_comment = False
+            return (
+                Token(type=NexusTokenType.COMMENT, value=value, line=start_line, column=start_column),
+                end_pos,
+            )
+
+        # 检查是否包含嵌套标记
+        if "[[" in value or "]]" in value:
+            token_type = NexusTokenType.NESTED_COMMENT
+        else:
+            token_type = NexusTokenType.COMMENT
+
+        self._in_nested_comment = False
+        return (Token(type=token_type, value=value, line=start_line, column=start_column), pos)
 
     def _is_comment_start(self, source: str, position: int) -> bool:
         """
@@ -510,11 +489,9 @@ class NexusLexer(BaseLexer):
                 position += 1
                 continue
 
-            # 检查注释开始
+            # 检查注释开始 - 返回 None 让 tokenize 处理
             if char == "[":
-                if position + 1 < len(source) and source[position + 1] == "[":
-                    break  # 嵌套注释由tokenize处理
-                break  # 注释也由tokenize处理
+                return None
 
             # 跳过换行
             if char == "\n" or char == "\r":
