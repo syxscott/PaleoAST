@@ -190,10 +190,14 @@ class DataLoadTask:
                 keep_default_na=True,
                 encoding="utf-8",
                 encoding_errors="replace",
-                float_precision="high",
-                dtype=float,
                 low_memory=False,
             )
+            # If has_row_labels is True, exclude the first (label) column from data
+            if has_row_labels:
+                row_labels = df.iloc[:, 0].astype(str).tolist()
+                df = df.iloc[:, 1:]
+            else:
+                row_labels = None
 
             # Check cancellation before returning a result
             if self._task.is_cancelled:
@@ -203,18 +207,13 @@ class DataLoadTask:
 
             rows_processed = len(df)
 
-            # Extract row labels if requested (first column)
-            if has_row_labels:
-                row_labels = df.iloc[:, 0].astype(str).tolist()
-                df = df.iloc[:, 1:]
-            else:
-                row_labels = None
+            # Row labels already extracted above (if has_row_labels)
 
             # Extract column labels (header row already consumed by pandas)
             col_labels = df.columns.astype(str).tolist() if has_header else None
 
             # Convert to numpy array
-            data = df.values.astype(float)
+            data = df.to_numpy(dtype=float, na_value=np.nan)
             rows_processed = data.shape[0]
 
             # Emit final progress
@@ -329,6 +328,7 @@ class DataController:
                     na_values.add(missing_value)
 
                 # Use pandas for vectorised parsing - 10-100x faster than csv.reader
+                # Read with dtype=object first so we can auto-detect string columns
                 df = pd.read_csv(
                     path,
                     sep=delimiter,
@@ -338,8 +338,6 @@ class DataController:
                     keep_default_na=True,
                     encoding="utf-8",
                     encoding_errors="replace",
-                    float_precision="high",
-                    dtype=float,
                     low_memory=False,
                 )
 
@@ -353,11 +351,30 @@ class DataController:
                 else:
                     row_labels = None
 
-                # Extract column labels (header row already consumed by pandas)
-                col_labels = df.columns.astype(str).tolist() if has_header else None
+                # Auto-detect string (non-numeric) columns and treat them as
+                # row labels if the user didn't explicitly set has_row_labels.
+                if not has_row_labels and row_labels is None:
+                    # Check if the first column is non-numeric
+                    first_col = df.iloc[:, 0]
+                    try:
+                        pd.to_numeric(first_col, errors="raise")
+                        first_col_is_numeric = True
+                    except (ValueError, TypeError):
+                        first_col_is_numeric = False
+                    # Also check: if first column has all unique string-like values
+                    if not first_col_is_numeric or (first_col.dtype == object and first_col.nunique() == len(first_col)):
+                        row_labels = first_col.astype(str).tolist()
+                        df = df.iloc[:, 1:]
 
-                # Convert to numpy array
-                data = df.values.astype(float)
+                # Extract column labels (header row already consumed by pandas)
+                if has_header:
+                    col_labels = df.columns.astype(str).tolist()
+                else:
+                    # When no header, use pandas-generated integer column names
+                    col_labels = [str(c) for c in df.columns.tolist()]
+
+                # Convert remaining columns to float (coerce errors to NaN)
+                data = df.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
 
                 # Create DataMatrix
                 matrix = DataMatrix(data=data, row_labels=row_labels, col_labels=col_labels)
@@ -375,6 +392,10 @@ class DataController:
                 raise
             except Exception as e:
                 self._logger.error(f"Failed to load CSV from '{filepath}': {e!s}")
+                # Provide clearer error for empty files
+                msg = str(e)
+                if "No columns to parse" in msg or "empty" in msg.lower():
+                    raise FileOperationError(f"File is empty or has no columns: {filepath}")
                 raise FileOperationError(f"Failed to load CSV: {e!s}")
 
     # =========================================================================

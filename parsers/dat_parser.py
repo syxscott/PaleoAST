@@ -175,7 +175,11 @@ class DATParser:
             # Use has_found_header_or_data to track whether we've processed
             # the header line (regardless of line number in file)
             if not has_found_header_or_data and self._looks_like_header(parts):
-                col_labels = parts
+                # If first column is a label, exclude it from col_labels
+                if self._is_label(parts[0]):
+                    col_labels = parts[1:]
+                else:
+                    col_labels = parts
                 expected_field_count = len(parts) - 1 if self._is_label(parts[0]) else len(parts)
                 has_found_header_or_data = True
                 continue

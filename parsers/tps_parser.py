@@ -36,6 +36,7 @@ class TPSParseError(Exception):
         self.file_path = file_path
         self.line_number = line_number
         self.line_content = line_content
+        self.message = message
         full_message = f"TPS Parse Error"
         if file_path:
             full_message += f" in {os.path.basename(file_path)}"
@@ -129,6 +130,9 @@ class TPSParser:
         self.n_dimensions: int = 0
         self.comments: list[str] = []
         self._current_spec: TPSSpecimen | None = None
+        self._current_scale: float | None = None
+        self._current_line_number: int = 0
+        self._current_line_content: str = ""
         self._current_landmarks: list = []
         self._in_curve: bool = False
         self._strict_mode = strict_mode
@@ -163,9 +167,16 @@ class TPSParser:
         self.n_dimensions = 0
         self._parse_errors = TPSParseErrorSummary(file_path=file_path)
 
-        # Detect and handle BOM
-        with open(file_path, encoding="utf-8-sig", errors="replace") as f:
-            content = f.read()
+        # Read raw bytes to detect BOM
+        with open(file_path, "rb") as f:
+            raw_bytes = f.read()
+        # Detect BOM and decode accordingly
+        if raw_bytes.startswith(b"\xff\xfe") or raw_bytes.startswith(b"\xfe\xff"):
+            content = raw_bytes.decode("utf-16", errors="replace")
+        elif raw_bytes.startswith(b"\xef\xbb\xbf"):
+            content = raw_bytes.decode("utf-8-sig", errors="replace")
+        else:
+            content = raw_bytes.decode("utf-8", errors="replace")
 
         for line_num, line in enumerate(content.splitlines(), 1):
             original_line = line
@@ -176,6 +187,8 @@ class TPSParser:
                     self.comments.append(line[1:].strip())
                 continue
 
+            self._current_line_number = line_num
+            self._current_line_content = original_line
             try:
                 self._parse_line(line, line_num)
             except TPSParseError as e:
@@ -260,7 +273,7 @@ class TPSParser:
                         line_content=line,
                     )
             elif key == "SCALE":
-                # Scale factor
+                # Scale factor (persists across specimens until changed)
                 try:
                     scale = float(value)
                 except ValueError as e:
@@ -270,6 +283,7 @@ class TPSParser:
                         line_number=line_num,
                         line_content=line,
                     )
+                self._current_scale = scale
                 if self._current_spec is not None:
                     self._current_spec.scale = scale
             elif key == "ID":
@@ -278,7 +292,7 @@ class TPSParser:
                     self._finalize_specimen()
 
                 self._current_spec = TPSSpecimen(
-                    id=value, landmarks=np.array([]), scale=None, curve_points=None, raw_data={"id": value}
+                    id=value, landmarks=np.array([]), scale=self._current_scale, curve_points=None, raw_data={"id": value}
                 )
                 self._current_landmarks = []
             elif key == "CO":
@@ -379,6 +393,25 @@ class TPSParser:
             self.n_dimensions = self._current_spec.landmarks.shape[1]
         if self.n_landmarks == 0:
             self.n_landmarks = self._current_spec.landmarks.shape[0]
+        elif self._current_spec.landmarks.shape[0] != self.n_landmarks:
+            err = TPSParseError(
+                f"Specimen '{self._current_spec.id}': expected {self.n_landmarks} landmarks, "
+                f"got {self._current_spec.landmarks.shape[0]}",
+                file_path=self._parse_errors.file_path,
+                line_number=self._current_line_number,
+                line_content=self._current_line_content,
+            )
+            if self._strict_mode:
+                raise err
+            # In non-strict mode: append with padding/truncation, log error
+            self._parse_errors.add_error(err)
+            n_expected = self.n_landmarks
+            n_actual = self._current_spec.landmarks.shape[0]
+            if n_actual < n_expected:
+                pad = np.full((n_expected - n_actual, self._current_spec.landmarks.shape[1]), np.nan)
+                self._current_spec.landmarks = np.vstack([self._current_spec.landmarks, pad])
+            else:
+                self._current_spec.landmarks = self._current_spec.landmarks[:n_expected]
 
         self.specimens.append(self._current_spec)
         self._current_spec = None

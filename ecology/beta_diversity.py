@@ -419,6 +419,8 @@ def coverage_rarefaction_hill(
     abundance_matrix = np.asarray(abundance_matrix, dtype=np.float64)
     if abundance_matrix.ndim != 2:
         raise ValidationError(_("Abundance matrix must be 2D"))
+    if abundance_matrix.shape[0] == 0 or abundance_matrix.shape[1] == 0:
+        raise ValidationError(_("Abundance matrix cannot be empty"))
 
     n_samples, n_species = abundance_matrix.shape
 
@@ -500,7 +502,7 @@ def coverage_rarefaction_hill(
 
         # ---- Rarefaction/extrapolation at each coverage level ----
         bootstrap_curves = []
-        for _ in range(n_bootstrap):
+        for _bootstrap_idx in range(n_bootstrap):
             boot_curve = np.zeros(n_points)
             for j, c_level in enumerate(coverage_levels):
                 if c_level <= coverage_i:

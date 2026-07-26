@@ -170,7 +170,7 @@ class TestPrimateTreeDataset:
         tree = load_primate_tree()
 
         # Check that tree can be converted to Newick with lengths
-        newick = tree.to_newick(include_lengths=True)
+        newick = tree.to_newick(branch_lengths=True)
         assert ":" in newick, "Tree Newick representation lacks branch lengths"
 
 

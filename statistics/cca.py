@@ -222,6 +222,13 @@ class CCAAnalyzer:
         """
         cond = np.linalg.cond(XtX)
         if cond > cond_threshold:
+            import warnings as _warnings
+            _warnings.warn(
+                f"{method.upper()}: X'X condition number = {cond:.2e} > {cond_threshold:.0e}. "
+                f"Environmental matrix is ill-conditioned (collinear variables?). "
+                f"Applying ridge regularization (lambda={ridge_lambda}).",
+                stacklevel=2,
+            )
             self._logger.warning(
                 f"{method.upper()}: X'X condition number = {cond:.2e} > {cond_threshold:.0e}. "
                 f"Environmental matrix is ill-conditioned (collinear variables?). "
@@ -299,6 +306,11 @@ class CCAAnalyzer:
         clipped = eigenvalues < 1e-10
         if np.any(clipped):
             n_clipped = int(np.sum(clipped))
+            import warnings as _warnings
+            _warnings.warn(
+                f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — near-singular environmental matrix; check for collinear variables.",
+                stacklevel=2,
+            )
             self._logger.warning(
                 f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
                 "near-singular environmental matrix; check for collinear variables."
@@ -449,6 +461,12 @@ class CCAAnalyzer:
         clipped = eigenvalues < 1e-10
         if np.any(clipped):
             n_clipped = int(np.sum(clipped))
+            import warnings as _warnings
+            _warnings.warn(
+                f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
+                "near-singular environmental matrix; check for collinear variables.",
+                stacklevel=2,
+            )
             self._logger.warning(
                 f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
                 "near-singular environmental matrix; check for collinear variables."

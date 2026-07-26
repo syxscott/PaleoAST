@@ -68,12 +68,13 @@ class StateManager:
 
         This ensures only one StateManager exists throughout the
         application lifecycle.
+
+        Note: This method does NOT acquire the instance lock. Locking
+        is handled in get_instance() to avoid re-entrant deadlocks.
         """
         if cls._instance is None:
-            with cls._instance_lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self) -> None:

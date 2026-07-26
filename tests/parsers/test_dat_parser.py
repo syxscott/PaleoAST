@@ -272,9 +272,11 @@ Specimen2	12.3	6.1
 
         try:
             result = parse_dat_file(filepath)
+            # First column ("Name") becomes row label; data is the numeric columns
             assert result.data.shape == (2, 2)
             assert result.row_labels == ["Specimen1", "Specimen2"]
-            assert result.col_labels == ["Name", "Length", "Width"]
+            # col_labels: header minus the first (row label) column
+            assert result.col_labels == ["Length", "Width"]
         finally:
             Path(filepath).unlink()
 
@@ -290,7 +292,8 @@ Specimen2	12.3	6.1
 
         try:
             result = parse_dat_file(filepath)
-            assert result.data.shape == (2, 3)
+            # Without header, first column is treated as row label, rest as data
+            assert result.data.shape == (2, 2)
             assert result.row_labels == ["Specimen1", "Specimen2"]
         finally:
             Path(filepath).unlink()

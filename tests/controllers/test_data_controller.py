@@ -190,10 +190,11 @@ def _get_qapp():
     return app
 
 
+@pytest.mark.integration
 def test_load_csv_async_emits_result_ready(sample_csv):
-    """load_csv_async emits result_ready with a valid DataMatrix."""
+    """load_csv_async emits result_ready with a valid DataMatrix (integration)."""
     pyqt6 = pytest.importorskip("PyQt6")
-    from PyQt6.QtCore import QSignalSpy
+    from PyQt6.QtTest import QSignalSpy
 
     from controllers.data_controller import DataController
 
@@ -201,20 +202,22 @@ def test_load_csv_async_emits_result_ready(sample_csv):
     ctrl = DataController()
     task = ctrl.load_csv_async(str(sample_csv))
 
-    spy_result = QSignalSpy(task.result_ready, qapp)
-    spy_error = QSignalSpy(task.error_raised, qapp)
+    spy_result = QSignalSpy(task.result_ready)
+    spy_error = QSignalSpy(task.error_raised)
 
     # Wait up to 30 s for the result
     assert spy_result.wait(30000), "result_ready was never emitted"
     assert len(spy_error) == 0, "error_raised was unexpectedly emitted"
 
     matrix = spy_result[0][0]
+    assert matrix is not None
     assert matrix.n_samples == 3
     assert matrix.n_variables == 3
 
 
+@pytest.mark.integration
 def test_load_csv_async_does_not_block_main_thread(large_csv):
-    """The async task must emit progress signals before completion.
+    """The async task must emit progress signals before completion (integration).
 
     If load_csv_async ran on the main thread, the progress signal would only
     be emitted after the entire file is parsed, not during parsing.
@@ -222,7 +225,7 @@ def test_load_csv_async_does_not_block_main_thread(large_csv):
     least two distinct progress signals are received.
     """
     pytest.importorskip("PyQt6")
-    from PyQt6.QtCore import QSignalSpy
+    from PyQt6.QtTest import QSignalSpy
 
     from controllers.data_controller import DataController
 
@@ -230,7 +233,7 @@ def test_load_csv_async_does_not_block_main_thread(large_csv):
     ctrl = DataController()
     task = ctrl.load_csv_async(str(large_csv))
 
-    spy_progress = QSignalSpy(task.progress, qapp)
+    spy_progress = QSignalSpy(task.progress)
 
     # Wait up to 60 s for at least 2 progress signals (start + partial update)
     assert spy_progress.wait(60000), "progress signal was never emitted"
@@ -247,10 +250,11 @@ def test_load_csv_async_does_not_block_main_thread(large_csv):
         assert sig[1] > 0, "Later progress signals should have real total row count"
 
 
+@pytest.mark.integration
 def test_load_csv_async_cancelled_before_submit():
-    """Cancelling before submit prevents result_ready from firing with data."""
+    """Cancelling before submit prevents result_ready from firing with data (integration)."""
     pytest.importorskip("PyQt6")
-    from PyQt6.QtCore import QSignalSpy
+    from PyQt6.QtTest import QSignalSpy
 
     from controllers.data_controller import DataController
 
@@ -260,8 +264,8 @@ def test_load_csv_async_cancelled_before_submit():
     task = ctrl.load_csv_async("/tmp/never_load.csv")
     task.task.cancel()  # mark cancelled before submit
 
-    spy_result = QSignalSpy(task.result_ready, qapp)
-    spy_cancelled = QSignalSpy(task.cancelled, qapp)
+    spy_result = QSignalSpy(task.result_ready)
+    spy_cancelled = QSignalSpy(task.cancelled)
 
     # The synchronous fallback path fires cancelled immediately
     assert spy_cancelled.wait(5000), "cancelled signal should be emitted"
