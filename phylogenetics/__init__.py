@@ -9,7 +9,8 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 - 启发式树搜索 (NNI, TBR)
 - 严格一致性树
 - 距离法 (UPGMA, NJ)
-- 最大似然估计
+- 系统发育独立对比 (PIC, Felsenstein 1985)
+- 系统发育信号 (Blomberg's K, Pagel's λ)
 - Bootstrap分析
 
 作者: PaleoAST Development Team
@@ -19,6 +20,20 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 from .distance_methods import UPGMA, NeighborJoining
 from .fitch import FitchAlgorithm
 from .heuristic_search import HeuristicSearch, NNIOperation, TBROperation
+from .pic import (
+    PICNodeData,
+    compute_pic,
+    compute_pic_with_ancestral_states,
+    validate_pic_assumptions,
+)
+from .signal import (
+    PhylogeneticSignalResult,
+    blomberg_k,
+    lambda_interpretation,
+    pagel_lambda,
+    phylogenetic_signal,
+    simulate_brownian_motion,
+)
 from .strict_consensus import StrictConsensusTree
 from .tree import PhyloNode, PhyloTree
 
@@ -32,4 +47,16 @@ __all__ = [
     "PhyloTree",
     "StrictConsensusTree",
     "TBROperation",
+    # PIC (Felsenstein 1985)
+    "PICNodeData",
+    "compute_pic",
+    "compute_pic_with_ancestral_states",
+    "validate_pic_assumptions",
+    # Phylogenetic signal (Blomberg et al. 2003, Pagel 1999)
+    "PhylogeneticSignalResult",
+    "blomberg_k",
+    "pagel_lambda",
+    "phylogenetic_signal",
+    "simulate_brownian_motion",
+    "lambda_interpretation",
 ]
