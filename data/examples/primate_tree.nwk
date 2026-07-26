@@ -1,0 +1,11 @@
+!Primate phylogeny with branch lengths
+!Based on composite phylogeny from:
+!Springer et al. (2012). Macroevolutionary dynamics and historical
+!biogeography of primate diversification inferred from a species supermatrix.
+!PLoS ONE 7(11): e49521.
+!
+!Tree structure: 13 primate species representing major primate groups
+!Branch lengths in millions of years
+!Purpose: Testing PIC, phylogenetic signal (K, lambda), and FBD analyses
+!
+((((Homo_sapiens:0.0045,Pan_troglodytes:0.0058):0.0142,Gorilla_gorilla:0.0083):0.0125,Hylobates_lar:0.0182):0.0213,((Colobus_guereza:0.0156,Cercocebus_galeritus:0.0178):0.0224,(Papio_anubis:0.0123,Macaca_mulatta:0.0145):0.0189):0.0256,((Aotus_trivirgatus:0.0289,Saimiri_sciureus:0.0256):0.0356,(Lemur_catta:0.0456,(Propithecus_verreauxi:0.0389,Eulemur_fulvus:0.0412):0.0289):0.0523):0.0389);
