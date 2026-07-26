@@ -26,8 +26,10 @@ The Fourier coefficients capture shape at different spatial frequencies:
 Reference: Kuhl & Giardina (1982) "Elliptic Fourier features of a
 closed contour." Computer Graphics and Image Processing, 18, 236-258.
 
+Reference: Rohlf & Archie 1984; Haines & Crampton 2000
+
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging
@@ -40,6 +42,114 @@ from config.i18n import _
 from utils.exceptions import ComputationError
 
 logger = logging.getLogger(__name__)
+
+
+# Reference: Rohlf & Archie 1984; Haines & Crampton 2000
+def normalize_starting_point(
+    coefficients: npt.NDArray,
+    a0: float,
+    c0: float,
+) -> tuple[npt.NDArray, float, float]:
+    """
+    Normalize EFD coefficients using the Haines-Crampton starting point
+    normalization (Rohlf & Archie 1984; Haines & Crampton 2000).
+
+    This function applies three normalization steps to make EFD coefficients
+    comparable across specimens with different starting points, sizes, and
+    orientations:
+
+    1. **First harmonic rotation**: Rotates all harmonics so that the first
+       harmonic a1 lies on the positive x-axis. This eliminates translation
+       and rotation dependence by using the phase of a1 as the reference.
+
+       For harmonic n, the rotation angle is n * phi1 where phi1 = atan2(b1, a1).
+       The rotation matrix applied to (a_n, b_n) is:
+           a_n' = a_n * cos(n*phi1) + b_n * sin(n*phi1)
+           b_n' = -a_n * sin(n*phi1) + b_n * cos(n*phi1)
+       Similarly for (c_n, d_n).
+
+    2. **Size normalization**: Divides all coefficients by |a1|, ensuring
+       the first harmonic has unit amplitude. This makes the representation
+       scale-invariant.
+
+    3. **Direction normalization**: If a1 < 0 after rotation, flips the
+       signs of all a_n and c_n coefficients (equivalently, reverses the
+       direction of contour traversal). This ensures the contour is not
+       reflected along the major axis.
+
+    Parameters
+    ----------
+    coefficients : ndarray of shape (n_harmonics, 4)
+        EFD coefficients with rows (a_n, b_n, c_n, d_n) for n = 1..N.
+    a0, c0 : float
+        DC offsets from the EFA computation.
+
+    Returns
+    -------
+    tuple[ndarray, float, float]
+        Normalized (coefficients, a0, c0). The a0 and c0 are set to 0 and 0
+        respectively after normalization (translation invariance).
+
+    References
+    ----------
+    - Rohlf, F.J. & Archie, J.W. (1984). A comparison of Fourier methods
+      for the description of wing shape in mosquitoes (Diptera: Culicidae).
+      Evolution, 38(6), 1169-1180.
+    - Haines, A.J. & Crampton, J.S. (2000). Improvements to the methods
+      for generating and assessing confidence intervals for the
+      elliptic Fourier shape descriptors. PaleoBiology, 26(2), 208-218.
+    """
+    if coefficients.size == 0:
+        return coefficients, a0, c0
+
+    n_harmonics = coefficients.shape[0]
+    efd = coefficients.copy()
+
+    # -------------------------------------------------------------------------
+    # Step 1: First harmonic rotation (translation + rotation invariance)
+    # -------------------------------------------------------------------------
+    # phi1 is the phase angle of the first harmonic
+    a1, b1 = efd[0, 0], efd[0, 1]
+    phi1 = np.arctan2(b1, a1)
+
+    for n in range(n_harmonics):
+        n_phi1 = (n + 1) * phi1
+        cos_n_phi1 = np.cos(n_phi1)
+        sin_n_phi1 = np.sin(n_phi1)
+
+        # Rotate (a_n, b_n) by -n*phi1 (rotate so a1 aligns with x-axis)
+        a_n_old = efd[n, 0]
+        b_n_old = efd[n, 1]
+        efd[n, 0] = a_n_old * cos_n_phi1 + b_n_old * sin_n_phi1
+        efd[n, 1] = -a_n_old * sin_n_phi1 + b_n_old * cos_n_phi1
+
+        # Rotate (c_n, d_n) similarly
+        c_n_old = efd[n, 2]
+        d_n_old = efd[n, 3]
+        efd[n, 2] = c_n_old * cos_n_phi1 + d_n_old * sin_n_phi1
+        efd[n, 3] = -c_n_old * sin_n_phi1 + d_n_old * cos_n_phi1
+
+    # -------------------------------------------------------------------------
+    # Step 2: Size normalization (scale invariance)
+    # -------------------------------------------------------------------------
+    a1_normalized = efd[0, 0]
+    a1_magnitude = np.abs(a1_normalized)
+    if a1_magnitude > 0:
+        efd = efd / a1_magnitude
+
+    # -------------------------------------------------------------------------
+    # Step 3: Direction normalization (ensure a1 > 0, i.e., along +x axis)
+    # -------------------------------------------------------------------------
+    if efd[0, 0] < 0:
+        # Flip signs of a_n and c_n for all harmonics to reverse direction
+        efd[:, 0] = -efd[:, 0]
+        efd[:, 2] = -efd[:, 2]
+
+    # After normalization, translation is eliminated: set DC offsets to 0
+    a0_normalized = 0.0
+    c0_normalized = 0.0
+
+    return efd, a0_normalized, c0_normalized
 
 
 @dataclass
@@ -183,16 +293,30 @@ class EFAAnalyzer:
 
         coefficients = np.array(coefficients)
 
-        # Reconstruct contour
-        reconstructed = self._reconstruct(a0, c0, harmonics, t, T, n_points)
+        # -------------------------------------------------------------------------
+        # Apply Haines-Crampton starting point normalization (Rohlf & Archie 1984;
+        # Haines & Crampton 2000). This makes EFD coefficients comparable across
+        # specimens by eliminating dependence on starting point, size, and orientation.
+        # -------------------------------------------------------------------------
+        coefficients, a0_norm, c0_norm = normalize_starting_point(coefficients, a0, c0)
+
+        # Update harmonics list with normalized coefficients
+        harmonics = []
+        for n in range(n_harmonics):
+            a_n, b_n, c_n, d_n = coefficients[n]
+            harmonics.append(EFAHarmonic(n=n + 1, a=a_n, b=b_n, c=c_n, d=d_n))
+
+        # Reconstruct contour using normalized coefficients and original T
+        # a0_norm and c0_norm are 0 after normalization (translation invariance)
+        reconstructed = self._reconstruct(a0_norm, c0_norm, harmonics, t, T, n_points)
 
         return EFAResult(
             harmonics=harmonics,
             coefficients=coefficients,
             n_harmonics=n_harmonics,
             n_points=n_points,
-            a0=a0,
-            c0=c0,
+            a0=a0_norm,
+            c0=c0_norm,
             reconstructed=reconstructed,
             original=resampled,
         )
