@@ -186,7 +186,8 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
                     end_j = min(j + chunk_size, n)
                     chunk = X[i:end_i, None, :] - X[None, j:end_j, :]
                     num = np.sum(np.abs(chunk), axis=2)
-                    den = np.sum(np.abs(X[i:end_i, None, :]) + np.abs(X[None, j:end_j, :]), axis=2)
+                    # Standard Bray-Curtis denominator (consistent with small matrix path)
+                    den = np.sum(X[i:end_i, None, :] + X[None, j:end_j, :], axis=2)
                     den = np.where(den == 0, 1, den)
                     D[i:end_i, j:end_j] = num / den
                     D[j:end_j, i:end_i] = (num / den).T
@@ -196,7 +197,7 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
         for i in range(n):
             for j in range(i + 1, n):
                 numerator = np.sum(np.abs(X[i] - X[j]))
-                denominator = np.sum(np.abs(X[i]) + np.abs(X[j]))
+                denominator = np.sum(X[i] + X[j])
                 if denominator > 0:
                     bc = numerator / denominator
                 else:
