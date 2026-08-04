@@ -167,15 +167,16 @@ def compute_pic(
             return contrast, node_var
 
         elif k == 2:
-            # 标准二叉情况
+            # 标准二叉情况 (Felsenstein 1985)
             c0, v0, bl0, name0 = child_results[0]
             c1, v1, bl1, name1 = child_results[1]
             var_sum = v0 + v1
             if var_sum <= 0:
                 var_sum = 1e-10  # 避免除零
             contrast = (c0 - c1) / np.sqrt(var_sum)
-            # 节点方差 = 两个子节点方差之和 + 父节点枝长
-            node_var = v0 + v1 + bl0 + bl1
+            # 节点方差 = 两个子节点方差之和 (v0/v1 已包含 bl0/bl1)
+            # Felsenstein 1985: Var(recon_A - recon_B | P) = v_A + v_B
+            node_var = v0 + v1
             node.data = PICNodeData(variance=node_var, contrast=contrast)
             contrasts.append(contrast)
             contrast_pairs.append((name0, name1))
@@ -196,7 +197,8 @@ def compute_pic(
                 var01 = 1e-10
             contrast01 = (c0 - c1) / np.sqrt(var01)
             running_contrast = contrast01
-            running_var = v0 + v1 + bl0 + bl1  # 不含父节点枝长
+            # v0/v1 已包含 bl0/bl1, 不需要重复加
+            running_var = v0 + v1  # Felsenstein 1985
 
             first_pair = (name0, name1)
             contrasts.append(contrast01)
@@ -212,7 +214,7 @@ def compute_pic(
                 contrasts.append(new_contrast)
                 contrast_pairs.append((f"_combined_{idx-1}", name_i))
                 running_contrast = new_contrast
-                running_var = new_var + bl_i  # 累积方差
+                running_var = new_var  # 不再加 bl_i, 因为 new_var 已包含
 
             node.data = PICNodeData(variance=running_var, contrast=running_contrast)
             return running_contrast, running_var
@@ -351,7 +353,8 @@ def validate_pic_assumptions(tree) -> dict[str, Any]:
     }
 
     if polytomy_count > 0:
-        results['assumptions_satisfied'] = True
+        # Polytomy violates standard PIC binary-tree assumptions
+        results['assumptions_satisfied'] = False
         warnings.append(
             f"Tree has {polytomy_count} polytomy(ies). "
             "Using Pagel (1992) iterative combination method."

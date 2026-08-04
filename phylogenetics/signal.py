@@ -98,7 +98,8 @@ class PhylogeneticSignalResult:
 
 def _compute_variance_covariance_matrix(tree, lambda_: float = 1.0) -> np.ndarray:
     """
-    计算树对应的方差-协方差矩阵
+    [DEPRECATED - 使用 _compute_vcv_matrix 替代]
+    计算树对应的方差-协方差矩阵 (使用错误的距离形式)
 
     在 Brown 运动进化模型下，节点 i 和 j 之间的协方差等于
     它们到最近公共祖先 (LCA) 的枝长之和。
@@ -327,6 +328,10 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
 
     返回:
         log_likelihood: 对数似然值
+
+    注意:
+        使用标准 Pagel λ 变换: V_ij(λ) = λ × V_ij (i ≠ j), V_ii(λ) = V_ii
+        参考: Pagel (1999) Nature
     """
     if hasattr(tree, 'root'):
         root = tree.root
@@ -336,8 +341,15 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
     leaves = root.get_leaves()
     n = len(leaves)
 
-    # 构建方差-协方差矩阵
-    V = _compute_variance_covariance_matrix(tree, lambda_)
+    # 使用标准 BM VCV 矩阵 (Felsenstein 1985)
+    V = _compute_vcv_matrix(tree)
+
+    # 应用 Pagel λ 变换: V_ij(λ) = λ × V_ij for i ≠ j
+    # 对角线保持不变
+    if lambda_ != 1.0:
+        diag = np.diag(V).copy()  # 保存原始对角线
+        V = V * lambda_
+        np.fill_diagonal(V, diag)
 
     # 添加小的正则化项确保矩阵正定
     V = V + np.eye(n) * 1e-10
