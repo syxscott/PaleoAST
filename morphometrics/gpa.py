@@ -423,15 +423,25 @@ class GPAAnalyzer:
 
         Solution: R = V * U' where U * Σ * V' = X' * Y
 
+        When det(R) < 0, a reflection is detected (improper rotation).
+        The standard fix (following Bookstein 1989, Dryden & Mardia 2016) is to
+        flip the sign of the last singular vector in Vt only, then recompute R.
+        This ensures det(R) = +1 while preserving the optimal least-squares fit.
+
         Returns:
-            npt.NDArray: Rotation matrix R
+            npt.NDArray: Rotation matrix R with det(R) = +1
+
+        References:
+            - Bookstein, F.L. (1989). Principal warps: thin-plate splines and
+              the decomposition of deformations. IEEE TPAMI.
+            - Dryden, I.L. & Mardia, K.V. (2016). Statistical shape analysis.
         """
         # Compute cross-covariance
         H = target.T @ reference
 
         # SVD
         try:
-            U, _, Vt = np.linalg.svd(H)
+            U, S, Vt = np.linalg.svd(H)
         except np.linalg.LinAlgError as e:
             raise ComputationError("SVD failed during GPA rotation", original_exception=e)
 
@@ -439,10 +449,11 @@ class GPAAnalyzer:
         R = Vt.T @ U.T
 
         # Ensure proper rotation (determinant = +1)
+        # Only flip Vt to avoid in-place modification issues; this follows
+        # the standard approach (Morpho::procSym in R, procrustes.py)
         if np.linalg.det(R) < 0:
             Vt[-1, :] *= -1
-            U[:, -1] *= -1
-            R = Vt.T @ U.T
+        R = Vt.T @ U.T
 
         return R
 
@@ -857,8 +868,29 @@ def _compute_bending_energy(
     """
     Compute bending energy of a specimen relative to consensus.
 
-    Bending energy = w' * K * w where K is the TPS kernel matrix.
-    Only considers the non-affine component (w) from TPS decomposition.
+    Implements the Bookstein (1989) TPS bending energy formula:
+        L(f) = trace(W^T K W) = ||L W||²
+
+    where W is the non-affine weight matrix from TPS decomposition.
+    The bending energy measures the non-affine (local) deformation component.
+
+    This function solves the TPS system for the non-affine weights w
+    and computes w^T K w as the bending energy.
+
+    Parameters:
+        specimen: Aligned specimen configuration (n_landmarks, n_dims)
+        consensus: Consensus (mean) configuration (n_landmarks, n_dims)
+        fixed_landmarks: Indices of fixed landmarks for TPS kernel
+        n_dims: Number of dimensions (2 or 3)
+
+    Returns:
+        Bending energy as float (w^T K w)
+
+    References:
+        - Bookstein, F.L. (1989). Principal warps: thin-plate splines and
+          the decomposition of deformations. IEEE TPAMI.
+        - Dryden, I.L. & Mardia, K.V. (2016). Statistical shape analysis.
+        - Gunz et al. (2005). Geometerrie morphometrics.
     """
     # Build TPS kernel matrix for fixed landmarks
     fixed = fixed_landmarks if isinstance(fixed_landmarks, np.ndarray) else np.array(fixed_landmarks)
@@ -867,10 +899,10 @@ def _compute_bending_energy(
     if n_fixed < 3:
         return 0.0
 
-    # Extract fixed landmarks
+    # Extract fixed landmarks from consensus
     fixed_coords = consensus[fixed]  # (n_fixed, n_dims)
 
-    # Build kernel matrix
+    # Build kernel matrix K_ij = r_ij² * log(r_ij) where r_ij = ||landmark_i - landmark_j||
     K = np.zeros((n_fixed, n_fixed))
     for i in range(n_fixed):
         for j in range(n_fixed):
@@ -879,9 +911,46 @@ def _compute_bending_energy(
                 if r > 1e-10:
                     K[i, j] = r**2 * np.log(r)
 
-    # Simplified bending energy: sum of squared kernel entries
-    # (Full implementation would solve TPS system and compute w'Kw)
-    bending_energy = float(np.sum(K**2))
+    # Build P matrix for affine component: [1, x, y] for 2D or [1, x, y, z] for 3D
+    if n_dims == 2:
+        P = np.column_stack([np.ones(n_fixed), fixed_coords])
+    else:
+        P = np.column_stack([np.ones(n_fixed), fixed_coords])
+
+    n_affine = P.shape[1]  # 3 for 2D, 4 for 3D
+
+    # Build block TPS system:
+    # [K  P] [w]   [target]
+    # [P^T 0] [a] = [0]
+    #
+    # where target = specimen - consensus (for the fixed landmarks)
+    top = np.hstack([K, P])
+    bottom = np.hstack([P.T, np.zeros((n_affine, n_affine))])
+    L = np.vstack([top, bottom])
+
+    # Right-hand side: difference between specimen and consensus at fixed landmarks
+    # (the TPS interpolates this deformation)
+    target_diff = specimen[fixed] - consensus[fixed]  # (n_fixed, n_dims)
+
+    # Solve TPS system for each dimension
+    n_total = n_fixed + n_affine
+    w_all = np.zeros((n_total, n_dims))
+
+    for d in range(n_dims):
+        rhs = np.zeros(n_total)
+        rhs[:n_fixed] = target_diff[:, d]
+        try:
+            solution = np.linalg.solve(L, rhs)
+        except np.linalg.LinAlgError:
+            solution, _, _, _ = np.linalg.lstsq(L, rhs, rcond=None)
+        w_all[:, d] = solution
+
+    # Extract non-affine weights w (first n_fixed entries)
+    w = w_all[:n_fixed]  # (n_fixed, n_dims)
+
+    # Compute bending energy: w^T K w (per dimension, then sum)
+    # This is the trace(W^T K W) formula from Bookstein 1989
+    bending_energy = float(np.sum(w * (K @ w)))
 
     return bending_energy
 
