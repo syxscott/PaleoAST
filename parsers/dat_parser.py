@@ -94,8 +94,16 @@ class DATParser:
         (r"^\{(.+)\}$", re.compile(r"^\{(.+)\}$")),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, decimal_comma: bool = False) -> None:
+        """
+        Initialize DAT parser.
+
+        Parameters:
+            decimal_comma: If True, treat comma as decimal separator (European format).
+                           If False (default), comma is treated as thousand separator.
+        """
         self._logger = logging.getLogger(f"{__name__}.DATParser")
+        self._decimal_comma = decimal_comma
 
     def parse(self, file_path: str) -> PASTData:
         """
@@ -354,6 +362,11 @@ class DATParser:
         if len(parts) == 0:
             return False
 
+        # Skip lines that are purely numbers with thousand separators
+        # (these are data rows, not headers)
+        if self._is_all_thousands_separated_numbers(parts):
+            return False
+
         # Count numeric vs non-numeric
         numeric_count = 0
         for part in parts:
@@ -365,6 +378,56 @@ class DATParser:
 
         # If more than half are non-numeric, it's likely a header
         return numeric_count < len(parts) / 2
+
+    def _is_all_thousands_separated_numbers(self, parts: list[str]) -> bool:
+        """
+        Check if all parts are numbers with thousand separators (comma/dot as thousands sep).
+
+        Such lines should not be treated as headers even though they are all numeric.
+        Examples: "1,234" or "1.234" (when comma is thousands sep, dot would also be thousands sep)
+        """
+        if len(parts) == 0:
+            return False
+
+        for part in parts:
+            # Remove sign if present
+            clean = part.strip().lstrip("+-")
+            # Must have at least one separator to be thousands format
+            comma_count = clean.count(",")
+            dot_count = clean.count(".")
+            # If both separators present or multiple of one, likely thousands format
+            if comma_count == 0 and dot_count == 0:
+                return False
+            if comma_count > 0 and dot_count > 0:
+                # Could be European decimal (1.234,56) - not thousands
+                if self._decimal_comma:
+                    # In decimal_comma mode, dot is thousands sep
+                    continue
+                else:
+                    # In default mode, we can't easily tell - be conservative
+                    continue
+            if comma_count > 1 or dot_count > 1:
+                # Multiple separators = definitely thousands format
+                continue
+            # Single separator - check if it's surrounded by 3 digits
+            # "123" no sep, "1,234" or "1.234" thousands, "12,34" decimal
+            if comma_count == 1:
+                sep = ","
+                sep_pos = clean.find(",")
+            else:
+                sep = "."
+                sep_pos = clean.find(".")
+            before = clean[:sep_pos]
+            after = clean[sep_pos + 1 :]
+            # If both sides are 1-3 digits, could be decimal; if >3 on left, thousands
+            if len(before) > 3:
+                continue  # thousands format
+            if len(before) <= 3 and len(after) == 3:
+                # Could be decimal like "12,345" or "12.345" - be conservative
+                return False
+            return False
+
+        return True
 
     def _is_label(self, value: str) -> bool:
         """Check if a value looks like a label (non-numeric)."""

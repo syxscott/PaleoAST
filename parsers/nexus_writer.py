@@ -104,6 +104,29 @@ class NEXUSWriter:
         self._missing_char = missing_char
         self._title: str | None = None
 
+    @staticmethod
+    def _quote_if_needed(name: str) -> str:
+        """
+        Quote taxon/name string if it contains special characters.
+
+        Names containing space, comma, double-quote, parentheses, or
+        other special characters must be enclosed in single quotes.
+        Internal single quotes are escaped by doubling them.
+
+        Parameters:
+            name: The taxon or name string to potentially quote
+
+        Returns:
+            Quoted string if needed, otherwise the original name
+        """
+        # Characters that require quoting in NEXUS taxa names
+        special_chars = {" ", ",", '"', "'", "(", ")", "[", "]", "{", "}", "=", ";", ":"}
+        if not any(c in name for c in special_chars):
+            return name
+        # Escape internal single quotes by doubling them
+        escaped = name.replace("'", "''")
+        return f"'{escaped}'"
+
     def set_title(self, title: str) -> None:
         """设置文件标题"""
         self._title = title
@@ -205,11 +228,7 @@ class NEXUSWriter:
         # TAXLABELS
         lines.append("    TAXLABELS")
         for taxon in self._taxa:
-            # 处理带空格的分类单元名称
-            if " " in taxon or "-" in taxon or "'" in taxon:
-                lines.append(f"        '{taxon}'")
-            else:
-                lines.append(f"        {taxon}")
+            lines.append(f"        {self._quote_if_needed(taxon)}")
         lines.append("    ;")
         lines.append("END;")
         return "\n".join(lines)
@@ -259,11 +278,7 @@ class NEXUSWriter:
         lines: list[str] = []
         for i, taxon in enumerate(self._taxa):
             sequence = "".join(str(c) for c in self._data[i])
-            # 处理带空格的分类单元名称
-            if " " in taxon or "-" in taxon or "'" in taxon:
-                taxon_str = f"'{taxon}'"
-            else:
-                taxon_str = taxon
+            taxon_str = self._quote_if_needed(taxon)
             lines.append(f"        {taxon_str} {sequence}")
         return lines
 
@@ -280,10 +295,7 @@ class NEXUSWriter:
             # 每个taxon一行片段
             for i, taxon in enumerate(self._taxa):
                 fragment = "".join(str(c) for c in self._data[i][start:end])
-                if " " in taxon or "-" in taxon or "'" in taxon:
-                    taxon_str = f"'{taxon}'"
-                else:
-                    taxon_str = taxon
+                taxon_str = self._quote_if_needed(taxon)
 
                 if start == 0:
                     lines.append(f"        {taxon_str} {fragment}")
@@ -305,11 +317,8 @@ class NEXUSWriter:
         lines.append("    FORMAT NEWICK;")
 
         for tree_name, newick in self._trees:
-            # 处理树名称中的空格
-            if " " in tree_name or "'" in tree_name:
-                lines.append(f"    TREE '{tree_name}' = {newick};")
-            else:
-                lines.append(f"    TREE {tree_name} = {newick};")
+            tree_name_str = self._quote_if_needed(tree_name)
+            lines.append(f"    TREE {tree_name_str} = {newick};")
 
         lines.append("END;")
         return "\n".join(lines)

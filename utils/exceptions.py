@@ -351,6 +351,23 @@ Alias for DataValidationError for backward compatibility.
 """
 
 
+class CorruptedCacheError(PaleoASTError):
+    """
+    Exception raised when binary cache file is corrupted.
+
+    This exception is raised when CRC checksum validation fails
+    or when cache file structure is invalid.
+
+    Example:
+        >>> raise CorruptedCacheError(
+        ...     "CRC checksum mismatch in cache file",
+        ...     details={"file": "matrix.pastx", "expected_crc": 12345}
+        ... )
+    """
+
+    pass
+
+
 # File Operation Error
 class FileOperationError(PaleoASTError):
     """

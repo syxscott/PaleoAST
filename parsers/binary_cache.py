@@ -51,8 +51,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, BinaryIO
 
+from utils.exceptions import CorruptedCacheError
+
 logger = logging.getLogger(__name__)
 
+# Current cache version for migration support
+VERSION = 2
 
 # ================================================================================
 # 常量和枚举
@@ -98,7 +102,7 @@ class BinaryCacheHeader:
     """
 
     magic: int = 0x50415354  # "PAST"
-    version: int = 1
+    version: int = VERSION
     flags: int = 0
     nrow: int = 0
     ncol: int = 0
@@ -158,6 +162,9 @@ class BinaryCacheHeader:
 
         返回:
             BinaryCacheHeader对象
+
+        抛出:
+            ValueError: 如果数据长度不足或版本不匹配
         """
         if len(data) < cls.HEADER_SIZE:
             raise ValueError(f"Header data too short: expected {cls.HEADER_SIZE}, got {len(data)}")
@@ -168,9 +175,16 @@ class BinaryCacheHeader:
         # code path tried to load a cached file.
         unpacked = struct.unpack("!IIIIII QQII", data[: cls.HEADER_STRUCT_SIZE])
 
+        version = unpacked[1]
+        if version != VERSION:
+            raise ValueError(
+                f"Cache version mismatch: file version is {version}, expected {VERSION}. "
+                f"Please migrate your cache file or use a compatible version."
+            )
+
         return cls(
             magic=unpacked[0],
-            version=unpacked[1],
+            version=version,
             flags=unpacked[2],
             nrow=unpacked[3],
             ncol=unpacked[4],
@@ -192,8 +206,8 @@ class BinaryCacheHeader:
             logger.error(f"Invalid magic number: {hex(self.magic)}")
             return False
 
-        if self.version > 1:
-            logger.error(f"Unsupported version: {self.version}")
+        if self.version > VERSION:
+            logger.error(f"Unsupported version: {self.version} (max supported: {VERSION})")
             return False
 
         if self.nrow <= 0 or self.ncol <= 0:
@@ -440,9 +454,12 @@ class BinaryCache:
                 expected_crc = zlib.crc32(crc_data) & 0xFFFFFFFF
 
                 if expected_crc != header.crc32:
-                    self._logger.warning(
-                        f"CRC32 mismatch: stored {header.crc32}, computed {expected_crc} "
-                        f"(compression={bool(header.flags & 0x01)})"
+                    raise CorruptedCacheError(
+                        f"CRC32 checksum mismatch: stored={hex(header.crc32)}, computed={hex(expected_crc)}",
+                        details={
+                            "file": filepath,
+                            "compression": bool(header.flags & 0x01),
+                        },
                     )
 
                 result = {
