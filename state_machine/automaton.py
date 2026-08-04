@@ -886,11 +886,25 @@ class _NFABuilder:
         return (start, end)
 
     def _build_charclass(self, chars: str) -> tuple[State, State]:
-        """构建字符类NFA片段"""
+        """构建字符类NFA片段
+
+        Supports negation via leading '^' character (e.g. '\\D' from the
+        escape_map is represented as '^0123456789'). When the leading '^'
+        is present, the NFA accepts any character NOT in the subsequent set.
+        """
         start = self._new_state()
         end = self._new_state()
-        for char in chars:
-            self._nfa.add_transition(start, char, end)
+        negated = chars.startswith("^")
+        if negated:
+            forbidden = set(chars[1:])
+            # Accept any printable ASCII char NOT in forbidden
+            for code in range(32, 127):
+                ch = chr(code)
+                if ch not in forbidden:
+                    self._nfa.add_transition(start, ch, end)
+        else:
+            for char in chars:
+                self._nfa.add_transition(start, char, end)
         return (start, end)
 
     def _build_concat(self, children: tuple[RegexNode, ...]) -> tuple[State, State]:
