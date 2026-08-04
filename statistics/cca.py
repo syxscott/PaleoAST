@@ -401,9 +401,13 @@ class CCAAnalyzer:
 
         # Chi-square standardization (ter Braak 1986, Ecology 67:1167-1176).
         #
+        # Chi-square distance: d²_ij = Σ (x_ik - x_jk)² / x_.k
+        # where x_.k = col_total_k (column marginal).
+        # Weight = 1 / col_total_k (LINEAR, not sqrt).
+        #
         # The canonical formulation uses unscaled counts Y directly:
         #   expected[i,k] = (row_total_i * col_total_k) / grand_total
-        #   Q[i,k]        = (Y[i,k] - expected[i,k]) / sqrt(expected[i,k])
+        #   residual[i,k] = (Y[i,k] - expected[i,k]) / col_total_k
         #
         # IMPORTANT: Chi-square distance requires positive expected values.
         # When expected == 0, the contribution to chi-square distance is
@@ -419,13 +423,10 @@ class CCAAnalyzer:
         p_row = row_totals / grand_total  # (n_samples, 1)
         p_col = col_totals / grand_total  # (1, n_species)
         expected = (row_totals @ col_totals) / grand_total  # (n_samples, n_species)
-        # Compute standardized residuals only where expected > 0.
+        # Compute standardized residuals with LINEAR weight (1/col_total).
         # Where expected == 0: set to NaN (undefined contribution).
-        # This correctly handles both cases:
-        #   - observed == 0, expected == 0: contribution = 0/0 = NaN (excluded)
-        #   - observed > 0, expected == 0: contribution = observed/sqrt(0) -> Inf (excluded)
         with np.errstate(divide='ignore', invalid='ignore'):
-            Y_std = np.where(expected > 0, (Y - expected) / np.sqrt(expected), np.nan)
+            Y_std = np.where(expected > 0, (Y - expected) / col_totals, np.nan)
 
         # Center the environmental matrix
         X_centered = X - X.mean(axis=0)

@@ -501,26 +501,87 @@ def coverage_rarefaction_hill(
                 asymptote[i] = s_obs + n0
 
         # ---- Rarefaction/extrapolation at each coverage level ----
+        # True non-parametric bootstrap: resample from multinomial (Chao & Jost 2012)
         bootstrap_curves = []
         for _bootstrap_idx in range(n_bootstrap):
+            # Multinomial resampling: sample N individuals from p_hat
+            boot_counts = _multinomial_resample(species_counts, total_n, rng)
+            boot_N = int(np.sum(boot_counts))
+            boot_species = boot_counts[boot_counts > 0] if boot_N > 0 else np.array([])
+
+            if boot_N == 0 or len(boot_species) == 0:
+                # Empty resample: use observed curve
+                boot_curve = np.zeros(n_points)
+                for j, c_level in enumerate(coverage_levels):
+                    if c_level <= coverage_i:
+                        m = max(1, int(total_n * c_level / coverage_i)) if coverage_i > 0 else 1
+                        m = min(m, total_n - 1)
+                        if q == 0:
+                            boot_curve[j] = _rarefaction_species(species_counts, m)
+                        elif q == 1:
+                            boot_curve[j] = _rarefaction_shannon(species_counts, m, total_n)
+                        else:
+                            boot_curve[j] = _rarefaction_simpson(species_counts, m, total_n)
+                    else:
+                        ratio = c_level / coverage_i if coverage_i > 0 else 1.0
+                        boot_curve[j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
+                        boot_curve[j] = min(boot_curve[j], asymptote[i])
+                bootstrap_curves.append(boot_curve)
+                continue
+
+            # Compute coverage for resampled data
+            boot_f1 = float(np.sum(boot_species == 1))
+            boot_f2 = float(np.sum(boot_species == 2))
+            boot_s_obs = len(boot_species)
+
+            if boot_f1 > 0 and boot_N > 1:
+                boot_gamma = ((boot_N - 1) * boot_f1) / ((boot_N - 1) * boot_f1 + 2 * boot_f2)
+            else:
+                boot_gamma = 0.0
+            boot_coverage = 1.0 - (boot_f1 / boot_N) * boot_gamma if boot_N > 0 else 0.0
+
+            # Compute asymptotic estimator for resampled data
+            if q == 0:
+                if boot_f2 > 0:
+                    boot_asymptote = boot_s_obs + (boot_f1**2) / (2 * boot_f2)
+                elif boot_f1 > 1:
+                    boot_asymptote = boot_s_obs + boot_f1 * (boot_f1 - 1) / 2
+                else:
+                    boot_asymptote = float(boot_s_obs)
+            elif q == 1:
+                if boot_f1 > 0 and boot_f2 >= 0:
+                    boot_asymptote = boot_s_obs + boot_f1 * boot_gamma
+                else:
+                    p = boot_species / boot_N
+                    boot_asymptote = boot_s_obs - np.sum(p * np.log(p))
+            else:  # q == 2
+                if boot_f1 > 0 and boot_f2 >= 0:
+                    boot_asymptote = boot_s_obs + boot_f1 * (boot_gamma**2)
+                else:
+                    p = boot_species / boot_N
+                    boot_asymptote = boot_s_obs - np.sum(p**2)
+
+            # Rarefaction/extrapolation curve for this resample
             boot_curve = np.zeros(n_points)
             for j, c_level in enumerate(coverage_levels):
-                if c_level <= coverage_i:
+                if c_level <= boot_coverage and boot_coverage > 0:
                     # Interpolation (rarefaction)
-                    # Sample size that gives this coverage
-                    m = max(1, int(total_n * c_level / coverage_i)) if coverage_i > 0 else 1
-                    m = min(m, total_n - 1)
+                    m = max(1, int(boot_N * c_level / boot_coverage))
+                    m = min(m, boot_N - 1)
                     if q == 0:
-                        boot_curve[j] = _rarefaction_species(species_counts, m)
+                        boot_curve[j] = _rarefaction_species(boot_species, m)
                     elif q == 1:
-                        boot_curve[j] = _rarefaction_shannon(species_counts, m, total_n)
+                        boot_curve[j] = _rarefaction_shannon(boot_species, m, boot_N)
                     else:
-                        boot_curve[j] = _rarefaction_simpson(species_counts, m, total_n)
+                        boot_curve[j] = _rarefaction_simpson(boot_species, m, boot_N)
                 else:
                     # Extrapolation toward asymptote
-                    ratio = c_level / coverage_i if coverage_i > 0 else 1.0
-                    boot_curve[j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
-                    boot_curve[j] = min(boot_curve[j], asymptote[i])
+                    if boot_coverage > 0:
+                        ratio = c_level / boot_coverage
+                        boot_curve[j] = boot_s_obs + (boot_asymptote - boot_s_obs) * (ratio - 1)
+                        boot_curve[j] = min(boot_curve[j], boot_asymptote)
+                    else:
+                        boot_curve[j] = boot_s_obs
             bootstrap_curves.append(boot_curve)
 
         bootstrap_curves = np.array(bootstrap_curves)
@@ -686,6 +747,50 @@ def _rarefaction_simpson(species_counts: npt.NDArray, n: int, N: int) -> float:
         D_n = D_N * n / N
 
     return max(0.0, D_n)
+
+
+def _multinomial_resample(species_counts: npt.NDArray, N: int, rng: np.random.Generator) -> npt.NDArray:
+    """
+    Resample species abundances via multinomial bootstrap (Chao & Jost 2012).
+
+    For abundance-based bootstrap, we sample N individuals from a multinomial
+    distribution with probabilities proportional to the observed species
+    proportions p_hat = species_counts / N.
+
+    This is the standard non-parametric bootstrap for species abundance data,
+    as implemented in the R iNEXT package.
+
+    Parameters
+    ----------
+    species_counts : array-like
+        Observed species abundances (counts).
+    N : int
+        Total number of individuals (sample size).
+    rng : np.random.Generator
+        Local random number generator for reproducibility.
+
+    Returns
+    -------
+    np.ndarray
+        Resampled species abundances (counts).
+
+    References
+    ----------
+    Chao, A., & Jost, L. (2012). Coverage-based rarefaction and
+        extrapolation: sampling and projecting species diversity.
+        Methods in Ecology and Evolution, 3(5), 873-882.
+    """
+    if N <= 0:
+        return np.zeros_like(species_counts)
+
+    # Species proportions
+    p_hat = species_counts / N
+
+    # Multinomial resampling: sample N individuals
+    # Result is counts for each species
+    resampled = rng.multinomial(N, p_hat)
+
+    return np.asarray(resampled, dtype=np.float64)
 
 
 def _lgamma(x: float) -> float:
