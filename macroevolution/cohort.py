@@ -105,10 +105,15 @@ class IntervalData(NamedTuple):
 
     t_start: float
     t_end: float
-    n_fb: int  # 起始边界交叉者
-    n_lb: int  # 终止边界交叉者
-    n_surv: int  # 存活者
+    n_fb: int  # 起始边界交叉者 (Foote 2000): 区间内起源, 存活到区间后
+    n_lb: int  # 终止边界交叉者 (Foote 2000): 区间前已存在, 区间内灭绝
+    n_surv: int  # 存活者: 区间前已存在, 存活到区间后
     n_total: int  # 总数
+    # Foote 1997 cohort variables
+    n_bt: int  # 向后存续: 在C中存在且在C之前已知的分类单元数
+    n_bl: int  # 向后灭绝: 在C中首次出现且在C之前未知的分类单元数
+    n_ft: int  # 向前存续: 在C中存活到其后的分类单元数
+    n_fl: int  # 向前灭绝: 在C中首次出现且在C之后灭绝的分类单元数
 
 
 @dataclass
@@ -123,6 +128,11 @@ class SurvivorshipResult:
         extinction_rates: 灭绝率
         confidence_intervals: 置信区间
         extinction_probs: 灭绝概率
+        # Foote 1997 cohort rates
+        foote97_origination: np.ndarray  # Foote 1997 p = -ln(N_bt/N_t)/Δt
+        foote97_extinction: np.ndarray   # Foote 1997 q = -ln(N_bL/N_t)/Δt
+        foote00_origination: np.ndarray  # Foote 2000 p_F = N_Ft/N_t
+        foote00_extinction: np.ndarray   # Foote 2000 q_F = N_FL/N_t
     """
 
     intervals: list[IntervalData]
@@ -131,6 +141,20 @@ class SurvivorshipResult:
     extinction_rates: np.ndarray
     confidence_intervals: list[tuple[float, float]]
     extinction_probs: np.ndarray
+    foote97_origination: np.ndarray = None
+    foote97_extinction: np.ndarray = None
+    foote00_origination: np.ndarray = None
+    foote00_extinction: np.ndarray = None
+
+    def __post_init__(self):
+        if self.foote97_origination is None:
+            self.foote97_origination = np.zeros(len(self.intervals))
+        if self.foote97_extinction is None:
+            self.foote97_extinction = np.zeros(len(self.intervals))
+        if self.foote00_origination is None:
+            self.foote00_origination = np.zeros(len(self.intervals))
+        if self.foote00_extinction is None:
+            self.foote00_extinction = np.zeros(len(self.intervals))
 
     def get_rate_ratio(self) -> np.ndarray:
         """获取λ/μ比率"""
@@ -198,25 +222,75 @@ class CohortSurvivorshipAnalysis:
         extinction_rates = np.zeros(len(intervals))
         confidence_intervals = []
         extinction_probs = np.zeros(len(intervals))
+        # Foote 1997 cohort rates
+        foote97_origination = np.zeros(len(intervals))
+        foote97_extinction = np.zeros(len(intervals))
+        foote00_origination = np.zeros(len(intervals))
+        foote00_extinction = np.zeros(len(intervals))
 
         for i, (t_start, t_end) in enumerate(intervals):
-            # 统计边界交叉者
+            # 统计边界交叉者 (Foote 2000)
             n_fb = 0  # 起始边界交叉者: o < t_start, L > t_end
             n_lb = 0  # 终止边界交叉者: L < t_end, o > t_start
             n_surv = 0  # 存活者: o < t_start, L > t_end
 
+            # Foote 1997 cohort counts
+            # N_bt = 向后存续: 在C中存在且在C之前已知
+            # N_bL = 向后灭绝: 在C中首次出现且在C之前未知
+            # N_Ft = 向前存续: 在C中存活到其后
+            # N_FL = 向前灭绝: 在C中首次出现且在C之后灭绝
+            n_bt = 0  # backward persistence
+            n_bl = 0  # backward extinction (originated in interval)
+            n_ft = 0  # forward persistence (survived past interval)
+            n_fl = 0  # forward extinction
+
             for o, L in records:
-                if o < t_start and t_end < L:
-                    n_surv += 1  # through-timer: spans entire interval
-                elif o >= t_start and o < t_end and t_end < L:
-                    n_fb += 1  # boundary crosser: originated in interval
-                elif t_start <= L and t_end > L and o < t_start:
-                    n_lb += 1  # boundary crosser: went extinct in interval
+                # Check temporal relationships
+                started_before = o < t_start
+                started_in = t_start <= o < t_end
+                started_after = o >= t_end
+                ended_before = L < t_start
+                ended_in = t_start <= L < t_end
+                ended_after = L >= t_end
+
+                if started_before and ended_after:
+                    # Through-timer: existed before interval, survived past interval
+                    n_surv += 1
+                    n_bt += 1  # Backward persistence
+                    n_ft += 1  # Forward persistence
+                elif started_before and ended_in:
+                    # Existed before, went extinct during interval
+                    n_lb += 1
+                    n_bt += 1  # Backward persistence
+                    n_fl += 1  # Forward extinction
+                elif started_in and ended_after:
+                    # Originated in interval, survived past
+                    n_fb += 1
+                    n_bl += 1  # Backward extinction
+                    n_ft += 1  # Forward persistence
+                elif started_in and ended_in:
+                    # Originated and went extinct in same interval
+                    n_bl += 1  # Backward extinction
+                    n_fl += 1  # Forward extinction
+                elif started_before and ended_before:
+                    # Entirely before interval - not counted
+                    pass
+                elif started_after and ended_after:
+                    # Entirely after interval - not counted
+                    pass
 
             n_total = n_fb + n_lb + n_surv
 
+            # N_t = total taxa in cohort (appearing in interval)
+            # = n_bt + n_bl = n_ft + n_fl
+            n_t = n_bt + n_bl
+
             interval_data_list.append(
-                IntervalData(t_start=t_start, t_end=t_end, n_fb=n_fb, n_lb=n_lb, n_surv=n_surv, n_total=n_total)
+                IntervalData(
+                    t_start=t_start, t_end=t_end,
+                    n_fb=n_fb, n_lb=n_lb, n_surv=n_surv, n_total=n_total,
+                    n_bt=n_bt, n_bl=n_bl, n_ft=n_ft, n_fl=n_fl
+                )
             )
 
             if n_total > 0:
@@ -238,13 +312,7 @@ class CohortSurvivorshipAnalysis:
                 # 起源率 λ 与灭绝率 μ (Foote 1999 per-capita rates)
                 dt = t_start - t_end
                 if dt > 0:
-                    # p = 该区间的存活率 S。
-                    # 若 P(存活) = exp(-μ·Δt)，则 μ = -ln(S) / Δt。
-                    # 若 P(起源) = 1 - exp(-λ·Δt) = 1 - S（在二项解释下），
-                    # 则 λ = -ln(1 - S) / Δt。
-                    # 旧实现把两条公式标签互换：origination_rates 写入
-                    # 了 μ 的公式、extinction_rates 写入了 λ 的公式，
-                    # 任何下游演化速率分析、平衡态检验全部用反。
+                    # 修正: 公式正确,origination = -ln(1-p)/dt, extinction = -ln(p)/dt
                     if p < 1:
                         origination_rates[i] = -np.log(1 - p) / dt
                     else:
@@ -255,11 +323,34 @@ class CohortSurvivorshipAnalysis:
                     else:
                         # p = 0 ⇒ 无人存活 ⇒ μ → ∞
                         extinction_rates[i] = float("inf")
+
+                    # Foote 1997 cohort rates (Marshall 1990 style)
+                    # p = -ln(N_bt / N_t) / Δt
+                    # q = -ln(N_bL / N_t) / Δt
+                    if n_t > 0 and n_bt > 0:
+                        foote97_origination[i] = -np.log(n_bt / n_t) / dt
+                    else:
+                        foote97_origination[i] = np.nan
+                    if n_t > 0 and n_bl > 0:
+                        foote97_extinction[i] = -np.log(n_bl / n_t) / dt
+                    else:
+                        foote97_extinction[i] = np.nan
+
+                    # Foote 2000 simplified rates (without sampling correction)
+                    # p_F = N_Ft / N_t
+                    # q_F = N_FL / N_t
+                    if n_t > 0:
+                        foote00_origination[i] = n_ft / n_t
+                        foote00_extinction[i] = n_fl / n_t
             else:
                 survival_rates[i] = np.nan
                 extinction_probs[i] = np.nan
                 origination_rates[i] = np.nan
                 extinction_rates[i] = np.nan
+                foote97_origination[i] = np.nan
+                foote97_extinction[i] = np.nan
+                foote00_origination[i] = np.nan
+                foote00_extinction[i] = np.nan
                 confidence_intervals.append((np.nan, np.nan))
 
         return SurvivorshipResult(
@@ -269,6 +360,10 @@ class CohortSurvivorshipAnalysis:
             extinction_rates=extinction_rates,
             confidence_intervals=confidence_intervals,
             extinction_probs=extinction_probs,
+            foote97_origination=foote97_origination,
+            foote97_extinction=foote97_extinction,
+            foote00_origination=foote00_origination,
+            foote00_extinction=foote00_extinction,
         )
 
     def foote_analysis(self, n_surv: int, n_total: int, dt: float) -> dict[str, float]:
