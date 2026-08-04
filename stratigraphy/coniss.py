@@ -79,7 +79,9 @@ class CONISSAnalyzer:
         data: npt.NDArray,
         n_zones: int = 4,
         depths: npt.NDArray | None = None,
-    ) -> CONISSResult:
+        compute_broken_stick: bool = False,
+        n_permutations: int = 999,
+    ) -> tuple[CONISSResult, dict | None]:
         """
         Perform CONISS zonation.
 
@@ -87,9 +89,12 @@ class CONISSAnalyzer:
             data: Abundance matrix (n_levels x n_variables)
             n_zones: Number of zones to extract
             depths: Depth/age for each level (optional)
+            compute_broken_stick: If True, compute broken-stick significance test
+            n_permutations: Number of permutations for broken-stick test
 
         Returns:
-            CONISSResult
+            Tuple of (CONISSResult, broken_stick_significance)
+            broken_stick_significance is None if compute_broken_stick=False
         """
         n_levels, _n_vars = data.shape
 
@@ -115,7 +120,7 @@ class CONISSAnalyzer:
             iss_by_zone.append(float(zone_iss))
             iss_total += zone_iss
 
-        return CONISSResult(
+        result = CONISSResult(
             linkage_matrix=linkage_matrix,
             zone_labels=labels,
             n_zones=len(set(labels)),
@@ -123,6 +128,15 @@ class CONISSAnalyzer:
             iss_by_zone=iss_by_zone,
             depth_levels=depths,
         )
+
+        # Compute broken-stick significance if requested
+        broken_stick_sig = None
+        if compute_broken_stick:
+            # BD values are the ISS increases (third column of linkage matrix)
+            bd_values = linkage_matrix[:, 2]
+            broken_stick_sig = broken_stick_test(bd_values, n_permutations)
+
+        return result, broken_stick_sig
 
     def _constrained_linkage(self, data: npt.NDArray) -> npt.NDArray:
         """
@@ -192,3 +206,108 @@ class CONISSAnalyzer:
             current_iss += best_increase
 
         return linkage
+
+
+def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict:
+    """
+    Broken-stick model significance test for CONISS zone selection.
+
+    Determines the optimal number of zones by comparing the observed
+    within-group inertia (BD values from linkage matrix) to the
+    expected distribution under a broken-stick model.
+
+    The broken-stick model (Bennett 1996 / Grimm 1987) assumes that
+    a stick of unit length is randomly broken into n segments.
+    Each segment represents a zone, with expected length = 1/n.
+
+    Parameters
+    ----------
+    bd_values : array-like
+        BD (Barton-David) inertia values from CONISS linkage matrix
+        (typically the ISS increase at each merge step, third column
+        of linkage matrix).
+    n_permutations : int, default 999
+        Number of Monte Carlo permutations for significance testing.
+
+    Returns
+    -------
+    dict with keys:
+        - 'significant_zones': int, number of statistically significant zones
+        - 'p_values': list of float, p-value for each zone boundary
+        - 'broken_stick_expectation': list of float, expected contribution
+          under broken-stick model for each zone
+
+    Notes
+    -----
+    The broken-stick model:
+
+    1. Randomly assign 1 unit length to n segments (expected length = 1/n)
+    2. Compare observed group inertia to broken-stick expectation
+    3. A zone is significant when its contribution > broken-stick expectation
+
+    References
+    ----------
+    Bennett, K.D. (1996). "Determination of the number of zones in a
+        biostratigraphical sequence." New Phytologist, 132: 155-170.
+
+    Grimm, E.C. (1987). "CONISS: A FORTRAN 78 program for
+        stratigraphically constrained cluster analysis." Computers &
+        Geosciences, 13: 13-35.
+    """
+    bd_values = np.asarray(bd_values, dtype=float)
+    n_levels = len(bd_values) + 1  # n zones = n_levels - 1 merges possible
+
+    # Compute broken-stick expected values
+    # For n segments, expected length of segment i (sorted descending) is:
+    # E[i] = 1/(n) + 1/(n-1) + ... + 1/(n-i+1)
+    broken_stick_expectation = []
+    for k in range(1, n_levels):
+        # Expected contribution of zone k under broken-stick
+        expected = 1.0 / (n_levels - k + 1)
+        broken_stick_expectation.append(expected)
+
+    # Normalize BD values to sum to 1 (proportion of total inertia)
+    total_bd = np.sum(bd_values)
+    if total_bd == 0:
+        return {
+            "significant_zones": 0,
+            "p_values": [1.0] * (n_levels - 1),
+            "broken_stick_expectation": broken_stick_expectation,
+        }
+
+    normalized_bd = bd_values / total_bd
+
+    # Monte Carlo permutation test
+    # Under null hypothesis, zone contributions are randomly distributed
+    n_permutations = max(n_permutations, 99)  # minimum 99 for valid p-values
+    permutation_max = np.zeros(n_permutations)
+
+    for perm in range(n_permutations):
+        # Random permutation of normalized BD values
+        perm_bd = np.random.permutation(normalized_bd)
+        # Compute maximum deviation from broken-stick expectation
+        perm_max = np.max(np.abs(np.cumsum(perm_bd) - np.array(broken_stick_expectation)))
+        permutation_max[perm] = perm_max
+
+    # Compute p-values for each zone boundary
+    observed_cumsum = np.cumsum(normalized_bd)
+    p_values = []
+    significant_zones = 0
+
+    for k in range(len(normalized_bd)):
+        observed_dev = np.abs(observed_cumsum[k] - broken_stick_expectation[k])
+        # p-value = proportion of permutations with larger deviation
+        p_val = np.mean(permutation_max >= observed_dev)
+        p_values.append(float(p_val))
+        if p_val < 0.05 and k + 1 > significant_zones:
+            significant_zones = k + 1
+
+    # Number of significant zones = number of boundaries where p < 0.05
+    # But we need at least 1 zone
+    significant_zones = max(1, sum(1 for p in p_values if p < 0.05))
+
+    return {
+        "significant_zones": significant_zones,
+        "p_values": p_values,
+        "broken_stick_expectation": broken_stick_expectation,
+    }

@@ -41,6 +41,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from scipy import stats
 
 from config.i18n import _
 from utils.exceptions import ValidationError
@@ -315,18 +316,34 @@ class ExtinctionIntervalAnalyzer:
             # Marshall (1990) confidence interval construction:
             # The true extinction can only be older than the LAD (no younger
             # side, so the lower bound collapses to the LAD itself).
-            # The upper bound (older) is determined by the inverse of the
-            # Poisson survival function, scaled by the effective sample size.
+            # The upper bound (older) is determined by the chi-square
+            # distribution of the Poisson survival function.
             #
-            #   upper_offset = -ln(q) / n_eff
+            # Marshall 1990, Paleobiology 16, 1-24, Eq. (3)-(4):
+            #   t_upper = t_LAD + chi2_{2*alpha, 2} / (2 * r)
+            # where r is the Poisson sampling rate (per layer), and
+            # chi2_{2*alpha, 2} is the upper-alpha quantile of the chi-square
+            # distribution with 2 degrees of freedom.
+            # For alpha = 0.05 (95% CI), chi2_{0.10, 2} = 4.605.
             #
-            # The previous implementation used math.log(q) which is negative
-            # (q in (0,1)), producing ci_lower > lad_sorted and making the
-            # interval degenerate (ci_lower == ci_upper).
+            # The previous implementation used `-log(q) / n_eff` which is
+            # only an inverse-survival approximation valid as n_eff -> infinity.
+            # For finite sample sizes (n_eff < 30), this systematically
+            # underestimates the true CI width.
             ci_lower[i] = lad_sorted[i]
 
-            if n_eff > 0:
-                ci_upper[i] = lad_sorted[i] - math.log(q) / n_eff
+            if n_eff > 0 and detection_prob > 0:
+                # Sampling rate r = effective sample size per layer
+                r = n_eff
+                # Marshall 1990 Eq. (3)-(4): chi-square upper-tail quantile
+                # at 2*alpha level for 2 degrees of freedom. This is the
+                # chi-square value such that P(chi2 > X) = 2*alpha, i.e.
+                # ppf(1 - 2*alpha, df=2).
+                # For alpha = 0.05 (95% CI): ppf(0.90, df=2) = 4.605.
+                # (NOT chi2_{0.95, 2} = 5.991 which is for two-sided 5% test.)
+                chi2_quantile = stats.chi2.ppf(1.0 - 2.0 * q, df=2)
+                upper_offset = chi2_quantile / (2.0 * r)
+                ci_upper[i] = lad_sorted[i] + upper_offset
             else:
                 ci_upper[i] = lad_sorted[i]
 

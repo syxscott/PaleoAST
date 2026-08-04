@@ -469,6 +469,85 @@ class IsotopeAnalyzer:
         """获取上次分析结果"""
         return self._last_result
 
+    @staticmethod
+    def compute_paleotemperature_erez_luz(delta18O_sw: float, delta18O_c: float) -> float:
+        """
+        Erez & Luz (1983) 古温度方程 - 海水 δ¹⁸O → 古温度
+
+        公式: T(°C) = 17.0 - 4.52 × (δc - δw) + 0.03 × (δc - δw)²
+        适用范围: 16-25°C
+
+        参数:
+            delta18O_sw: 海水 δ¹⁸O (‰ VSMOW)
+            delta18O_c: 碳酸盐 δ¹⁸O (‰ VPDB)
+
+        返回:
+            古温度 (°C)
+        """
+        delta_diff = delta18O_c - delta18O_sw
+        T = 17.0 - 4.52 * delta_diff + 0.03 * (delta_diff ** 2)
+        return float(T)
+
+    @staticmethod
+    def compute_paleotemperature_bemis(delta18O_c: float, genus: str = "generic") -> float:
+        """
+        Bemis et al. (1998) 古温度方程 - Genus-specific 校准
+
+        公式: T(°C) = 16.998 - 4.52 × (δc - δw)
+        包含 genus-specific 修正
+
+        参数:
+            delta18O_c: 碳酸盐 δ¹⁸O (‰ VPDB)
+            genus: 有孔虫属名 ('G. ruber', 'G. sacculifer', 'generic')
+
+        返回:
+            古温度 (°C)
+        """
+        # Genus-specific 水δ¹⁸O 修正值 (相对于标准海水)
+        genus_corrections = {
+            "G. ruber": 0.27,  # 浅层混合层
+            "G. sacculifer": 0.22,  # 次表层
+            "generic": 0.0,
+        }
+        delta18O_sw_correction = genus_corrections.get(genus, genus_corrections["generic"])
+
+        # 假设标准海水 δ¹⁸O = 0 (可调整为实际值)
+        delta18O_sw = delta18O_sw_correction
+
+        delta_diff = delta18O_c - delta18O_sw
+        T = 16.998 - 4.52 * delta_diff
+        return float(T)
+
+    @staticmethod
+    def compute_paleotemperature_kim_oneil(delta18O_sw: float, delta18O_c: float) -> float:
+        """
+        Kim & O'Neil (1997) 古温度方程 - 碳酸盐 δ¹⁸O
+
+        公式: 1000 ln α = 18.03 × (10³/T) - 32.42
+        其中 α = (1 + δc/1000) / (1 + δw/1000)
+        T 单位: Kelvin
+
+        参数:
+            delta18O_sw: 海水 δ¹⁸O (‰ VSMOW)
+            delta18O_c: 碳酸盐 δ¹⁸O (‰ VPDB)
+
+        返回:
+            古温度 (°C)
+        """
+        # 转换为 alpha
+        alpha = (1 + delta18O_c / 1000) / (1 + delta18O_sw / 1000)
+
+        # 求解温度 (T in Kelvin)
+        # 1000 ln α = 18.03 * (1000/T) - 32.42
+        # => 1000 ln α + 32.42 = 18.03 * (1000/T)
+        # => T = 18030 / (1000 ln α + 32.42)
+        ln_alpha = np.log(alpha)
+        T_kelvin = 18030.0 / (1000.0 * ln_alpha + 32.42)
+
+        # 转换为 Celsius
+        T_celsius = T_kelvin - 273.15
+        return float(T_celsius)
+
 
 def block_bootstrap_ci(
     data: np.ndarray,
