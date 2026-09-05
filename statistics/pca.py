@@ -30,6 +30,7 @@ version: 1.0.1
 
 import logging
 import threading
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -356,6 +357,14 @@ class PCAAnalyzer:
         std_vector = np.std(X, axis=0, ddof=1)
 
         # Handle zero standard deviation
+        zero_var_idx = np.where(std_vector == 0)[0]
+        if zero_var_idx.size > 0:
+            warnings.warn(
+                f"Column(s) {zero_var_idx.tolist()} have zero variance; "
+                f"results may be misleading",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         std_vector = np.where(std_vector == 0, 1.0, std_vector)
 
         # Standardize: Z = (X - μ) / σ

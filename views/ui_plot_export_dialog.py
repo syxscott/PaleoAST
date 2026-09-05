@@ -225,7 +225,10 @@ class PlotExportDialog(QDialog):
         # Default to whatever extension the caller passed in. We use
         # ``itemData`` rather than ``setCurrentText`` because the latter
         # is text-based and would only match the *current* language.
-        default_fmt = default_path.suffix.lower().lstrip("")
+        # ``.lstrip("")`` stripped nothing (empty separator is a no-op),
+        # so the dot survived and the combo always fell back to PNG.
+        # Strip the dot so e.g. ``report.svg`` selects the SVG entry.
+        default_fmt = default_path.suffix.lower().lstrip(".")
         if default_fmt not in self.FORMAT_LABELS:
             default_fmt = "png"
         idx = next(

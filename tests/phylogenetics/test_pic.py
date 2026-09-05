@@ -140,12 +140,18 @@ class TestPICPolytomy:
 
         根据 Pagel 1992 / Felsenstein 2008，k=3 个子节点应产生 k-1 = 2 个独立对比
 
-        迭代组合法:
-        1. contrast1 = (A-B)/sqrt(v_A+v_B) = (1-2)/sqrt(1+1) = -1/sqrt(2)
-        2. contrast2 = (contrast1-C)/sqrt(v_combined+v_C)
-           其中 v_combined = v_A + v_B + branch_length_Root = 1+1+1 = 3
-           v_C = 1
-           contrast2 = (-0.707 - 3)/sqrt(3+1) = -3.707/2 = -1.854
+        规范处理 (Felsenstein 1985; 与 ape::pic 及 statistics/pcm.py
+        的单一参考实现一致): 向上传递的是逆方差加权重建值, 而非
+        标准化对比值。
+
+        迭代组合:
+        1. contrast1 = (A-B)/sqrt(v_A+v_B) = (1-2)/sqrt(1+1) = -0.7071
+           重建值 x_AB = (1+2)/2 = 1.5, pooled var = 1*1/(1+1) = 0.5
+        2. contrast2 = (x_AB - C)/sqrt(pooled + bl_AB + v_C)
+                      = (1.5 - 3)/sqrt(0.5 + 1 + 1) = -1.5/sqrt(2.5)
+                      = -0.9487
+           (旧期望 -1.5134 把标准化对比 contrast1 与原始值 C=3 相减,
+            量纲不一致, 无统计意义)
         """
         tree = PhyloTree.from_newick("(A:1,B:1,C:1)Root:0;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0}
@@ -159,17 +165,10 @@ class TestPICPolytomy:
         expected_c1 = (1.0 - 2.0) / np.sqrt(1 + 1)
         np.testing.assert_almost_equal(contrasts[0], expected_c1, decimal=10)
 
-        # 第二个对比: combined vs C
-        # v_combined = v_A + v_B + branch_length_Root = 1 + 1 + 0 = 2 (不含 Root 枝长)
-        # 但在实现中 v_combined = 2 + 1 = 3 (加上 Root 自己的 branch_length)
-        v_combined = 1 + 1 + 0  # v_A + v_B + branch_length_Root = 2
-        # 重新检查实现...
-        # 实际上第一个对比的 variance 是 v_A + v_B = 2
-        # 第二个对比使用 running_var = v_A + v_B + bl_A + bl_B = 2 + 1 + 1 = 4
-        # 然后 new_var = running_var + v_C + bl_C = 4 + 1 + 1 = 6
-        # 所以 contrast2 = (contrast1 - 3) / sqrt(6)
-
-        expected_c2 = (expected_c1 - 3.0) / np.sqrt(6)
+        # 第二个对比: 重建值 vs C
+        # pooled(=0.5) 已包含 A、B 的枝长; combined 伪节点位于 Root
+        # (到 Root 枝长 0); v_C = 0 + 1
+        expected_c2 = (1.5 - 3.0) / np.sqrt(0.5 + 1)
         np.testing.assert_almost_equal(contrasts[1], expected_c2, decimal=10)
 
     def test_quadfurcation_4_children(self):
@@ -225,8 +224,10 @@ class TestPICValidation:
         assert result['has_branch_lengths'] is True
         assert result['polytomy_count'] == 1
         assert len(result['warnings']) > 0
-        # Polytomy 使用迭代组合法仍可计算
-        assert result['assumptions_satisfied'] is True  # 仍可计算
+        # Poltomy 违反 PIC 的严格二叉假设: 不满足假设 (仍可用迭代组合
+        # 法计算, 见 test_trichotomy_3_children)。与
+        # TestPICVariancePolytomy::test_polytomy_detected 的断言一致。
+        assert result['assumptions_satisfied'] is False
 
 
 class TestPICEdgeCases:

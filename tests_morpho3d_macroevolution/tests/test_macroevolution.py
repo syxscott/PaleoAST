@@ -39,13 +39,23 @@ class TestCohortSurvivorshipBasics(unittest.TestCase):
         self.assertTrue(np.all(np.isnan(result.survival_rates)))
 
     def test_all_survive(self):
-        """测试全部存活"""
+        """测试全部存活
+
+        区间 (5,10) 内三个类群均起源自区间内部 (8、6 Ma) 或恰在年老
+        边界 (10 Ma, 按半开约定属更老 bin), 且都存活至今 (L=0)。
+        Foote cohort 语义下"幸存者"指贯穿整个区间的类群
+        (started_before & ended_after), 区间内起源者是起源事件而非
+        幸存事件, 因此 p(5-10) = 0/2 = 0 是正确值。
+        """
         records = [(10.0, 0.0), (8.0, 0.0), (6.0, 0.0)]
         intervals = [(0, 5), (5, 10)]
 
         result = analyze_cohort_survivorship(records, intervals)
 
-        self.assertTrue(np.isnan(result.survival_rates[1]) or result.survival_rates[1] == 1.0)
+        # 全部存活至今: 年轻区间 (0,5) 的幸存率应为 1.0
+        self.assertEqual(result.survival_rates[0], 1.0)
+        # 年老区间内均为起源者: 幸存率 0 (cohort 语义)
+        self.assertEqual(result.survival_rates[1], 0.0)
 
     def test_all_dead(self):
         """测试全部死亡"""
@@ -213,33 +223,33 @@ class TestFBDEFunction(unittest.TestCase):
     """
 
     def test_e_small_lambda_taylor_expansion(self):
-        """Test that _E(t) uses Taylor expansion for λ < 1e-10.
+        """Test _E(t) in the λ→0 limit (λ < 1e-10 path).
 
-        When λ is very small, the closed-form formula can be numerically
-        unstable. The Taylor expansion E(t) ≈ exp(-(μ+ψ)*t) should be used.
+        λ→0 时 ODE 退化为线性方程 dE/dt = −(μ+ψ)E + μ (E(0)=1−ρ),
+        精确解为 E(t) = μ/(μ+ψ) + (1−ρ−μ/(μ+ψ))·exp(−(μ+ψ)t),
+        而非旧的 exp(-(μ+ψ)·t) (它随 t→∞ 衰减到 0, 违反 E(∞)=μ/(μ+ψ))。
+        ρ 默认为 1: E = (μ/(μ+ψ))·(1 − exp(−(μ+ψ)t))。
         """
-        # Very small lambda (should trigger Taylor expansion)
         fbd = FossilizedBirthDeathProcess(lambda_=1e-15, mu=0.1, psi=0.05)
 
         t = 2.0
-        # Taylor expansion result: exp(-(μ+ψ)*t) = exp(-0.15*2) = exp(-0.3)
-        expected = np.exp(-(0.1 + 0.05) * t)
+        ratio = 0.1 / 0.15
+        expected = ratio * (1.0 - np.exp(-0.15 * t))  # 0.1727878529
         actual = fbd._E(t)
 
-        # Should be close to the Taylor expansion result
         self.assertAlmostEqual(actual, expected, places=10)
 
     def test_e_lambda_zero_pure_death_limit(self):
         """Test _E(t) in pure-death limit (λ=0, ψ=0).
 
-        In the pure-death limit, E(t) should approach exp(-μ*t).
+        λ=0, ψ=0 时精确解: E(t) = 1 − exp(−μt) (E(0)=1−ρ=0,
+        E(∞)=μ/μ=1), 而非 exp(−μt) (那是 1−E)。
         """
         # Set lambda exactly to 0
         fbd = FossilizedBirthDeathProcess(lambda_=0.0, mu=0.2, psi=0.0)
 
         t = 1.5
-        # In pure-death with ψ=0, E(t) = exp(-μ*t) via the Taylor path
-        expected = np.exp(-0.2 * t)
+        expected = 1.0 - np.exp(-0.2 * t)  # 0.2591817793
         actual = fbd._E(t)
 
         self.assertAlmostEqual(actual, expected, places=10)
@@ -247,14 +257,14 @@ class TestFBDEFunction(unittest.TestCase):
     def test_e_lambda_zero_with_fossilization(self):
         """Test _E(t) when λ=0 but ψ>0 (death+sampling process).
 
-        When λ=0, the code takes the Taylor expansion path (λ < 1e-10)
-        and returns exp(-(μ+ψ)*t).
+        λ=0, ψ>0 的精确极限: E(t) = (μ/(μ+ψ))·(1 − exp(−(μ+ψ)t)),
+        E(∞) = μ/(μ+ψ) = 2/3, 而非衰减到 0 的 exp(−(μ+ψ)t)。
         """
         fbd = FossilizedBirthDeathProcess(lambda_=0.0, mu=0.2, psi=0.1)
 
         t = 1.0
-        # When λ=0 (< 1e-10), uses Taylor expansion: exp(-(μ+ψ)*t)
-        expected = np.exp(-(0.2 + 0.1) * t)
+        ratio = 0.2 / 0.3
+        expected = ratio * (1.0 - np.exp(-0.3 * t))  # 0.1727878529
         actual = fbd._E(t)
 
         self.assertAlmostEqual(actual, expected, places=10)

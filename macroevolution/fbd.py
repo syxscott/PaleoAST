@@ -62,7 +62,11 @@ PaleoAST Macroevolution - Fossilized Birth-Death Process
 
 7. 采样比例 (Sample Proportion)
 --------------------------------------------------------------------------------
-    ρ = ψ / (λ + μ)
+    ρ = 现存谱系在当前时刻 (present) 的采样比例
+        (sampling fraction of extant lineages at the present),
+        取值范围 (0, 1]。ρ 是独立的过程参数,与 ψ、λ、μ 之间
+        不存在固定的函数关系 (旧文档中 ρ = ψ/(λ+μ) 的定义在
+        量纲上不成立,已废弃)。
 
 8. 系统发育树的先验
 --------------------------------------------------------------------------------
@@ -525,7 +529,7 @@ class FossilizedBirthDeathProcess:
         ``(λ, μ, ψ)`` and extant sampling fraction ``ρ``.
 
         ``E(t)`` satisfies the Riccati ODE
-        ``dE/dt = λ E² − (λ + μ + ψ) E + (μ + ψ)`` with boundary
+        ``dE/dt = λ E² − (λ + μ + ψ) E + μ`` with boundary
         condition ``E(0) = 1 − ρ``. For constant rates the closed-form
         solution is
 
@@ -541,24 +545,35 @@ class FossilizedBirthDeathProcess:
         each branching event, fossil find, and extinct terminal branch
         must be weighted by the probability that the *unobserved* side
         of the event left no sampled descendants.
+
+        In the λ → 0 limit the ODE degenerates to the linear equation
+        ``dE/dt = −(μ + ψ) E + μ`` whose solution is the
+        reconstructed-tree sampling formula
+
+            E(t) = μ/(μ+ψ) + (1 − ρ − μ/(μ+ψ))·exp(−(μ+ψ)t)
+
+        with E(0) = 1 − ρ and E(∞) = μ/(μ+ψ); the closed form above
+        divides by λ (through α and β) and is therefore evaluated via
+        this exact limit whenever λ is (near) zero.
         """
         rho = self._rho if self._rho is not None else 1.0
         # Degenerate cases.
-        # BUG FIX: Handle λ → 0 limit using Taylor expansion for numerical stability.
-        # When λ is very small but positive, the closed-form formula can produce
-        # numerical instability due to division by λ. The Taylor expansion
-        # E(t) ≈ exp(-(μ+ψ)*t) provides a stable approximation.
-        # In the pure-death limit (λ → 0, ψ → 0), this correctly gives exp(-μ*t).
+        # λ → 0 (or λ = 0 exactly): the closed form divides by λ, so use
+        # the exact analytical limit — the reconstructed-tree sampling
+        # formula μ/(μ+ψ) + (1−ρ−μ/(μ+ψ))·exp(−(μ+ψ)t). It satisfies
+        # E(0) = 1−ρ (verified numerically for the main closed form).
+        # The previous ``exp(-(μ+ψ)·t)`` special case was simply wrong:
+        # it gave E(0) = 1 instead of 1−ρ and E(∞) = 0 instead of
+        # μ/(μ+ψ).
         if self._lambda < 1e-10:
-            # Use Taylor expansion: E(t) ≈ exp(-(μ+ψ)*t) for small λ
-            # This is the leading-order term when λ → 0
-            return max(0.0, min(1.0, np.exp(-(self._mu + self._psi) * t)))
-        if self._lambda <= 0:
-            # No speciation: lineage either dies (μ) or is sampled (ψ).
-            # With λ = 0 the lineage cannot branch, so E(t) is governed by
-            # the simpler death-plus-sampling process. Fall back to the
-            # extant-sampling-only case E(t) = 1 − ρ e^{−(μ+ψ) t}.
-            return max(0.0, min(1.0, 1.0 - rho * np.exp(-(self._mu + self._psi) * t)))
+            mu_plus_psi = self._mu + self._psi
+            if mu_plus_psi <= 0:
+                # μ = ψ = 0: nothing can terminate or sample the
+                # lineage, so E stays at its boundary value 1 − ρ.
+                return max(0.0, min(1.0, 1.0 - rho))
+            equilibrium = self._mu / mu_plus_psi
+            val = equilibrium + (1.0 - rho - equilibrium) * np.exp(-mu_plus_psi * t)
+            return float(max(0.0, min(1.0, val)))
         if t <= 0:
             return max(0.0, min(1.0, 1.0 - rho))
 
@@ -590,7 +605,7 @@ class FossilizedBirthDeathProcess:
                   + Σ_internal_nodes  [log λ + log E(t_node)]
                   + Σ_fossils         [log ψ + log E(t_fossil)]
                   + Σ_extant_leaves   [log ρ]
-                  + Σ_extinct_leaves  [log μ + log E(t_leaf)]
+                  + Σ_extinct_leaves  [log μ (+ log E(t_leaf))]
 
         其中 ``E(t)`` 是一条存在于时刻 ``t`` 的谱系不留任何采样
         后代的概率（见 :meth:`_E`）。
@@ -605,6 +620,17 @@ class FossilizedBirthDeathProcess:
           录里），因此需要 ``E(age)`` 因子。
         - 旧代码完全缺失内部节点与灭绝叶节点的 ``E(t)`` 因子，
           导致似然对采样比例 ρ 与化石采样率 ψ 的依赖被忽略。
+        - 旧代码直接跳过根节点，n 个叶节点的树只计入 n−2 个物种
+          形成事件；根分化事件也贡献 ``log λ``（共 n−1 个）。
+
+        ``complete_tree`` 参数的语义：
+
+        - ``True``（完全观测树，所有事件都被直接观测）：灭绝叶
+          节点的死亡事件本身已被观测，只贡献 ``log μ``，**不再**
+          乘以 ``E(t)`` 因子（E 因子描述的是"未观测"侧支留下无
+          采样后代的概率，与完全观测假设矛盾）。
+        - ``False``（重建树）：灭绝叶节点贡献 ``log μ + log E(t)``，
+          与未处理该参数时的历史行为一致。
         """
         # 解析树
         from ..phylogenetics.tree import PhyloTree
@@ -644,7 +670,12 @@ class FossilizedBirthDeathProcess:
             # Second pass: compute likelihood using correct node ages
             for node in tree_obj.root.preorder_traverse():
                 if node.parent is None:
-                    continue  # 跳过根节点
+                    # 根节点：物种形成事件本身。旧实现直接跳过，导致
+                    # n 个叶节点的树只计入 n−2 个 λ 事件；n 个叶节点
+                    # 共有 n−1 次物种形成，根事件贡献 ``log λ``。根的
+                    # 两个子谱系都在树中被观测到，因此没有 E 因子。
+                    log_lik += safe_log(self._lambda)
+                    continue  # 根节点无入射分支，无存活项
                 branch_length = node.branch_length if node.branch_length is not None else 0.0
                 if branch_length > 0:
                     # 分支存活项: exp(-(λ + μ + ψ) × Δt)
@@ -667,8 +698,14 @@ class FossilizedBirthDeathProcess:
                             # 现存采样叶：贡献 ρ（λ 已在父节点分支事件计入）
                             log_lik += safe_log(rho)
                         else:
-                            # 灭绝叶：死亡事件 + 此后无采样后代
-                            log_lik += safe_log(self._mu) + safe_log(self._E(node_age))
+                            # 灭绝叶：死亡事件
+                            log_lik += safe_log(self._mu)
+                            if not complete_tree:
+                                # 重建树：该侧支未被观测，需要 E 因子
+                                # 表示其未留下其他采样后代。
+                                log_lik += safe_log(self._E(node_age))
+                            # complete_tree=True：死亡事件已被直接观测，
+                            # 不再乘 E 因子（见方法 docstring）。
                     else:
                         # 内部分支节点：物种形成事件 + 侧支无采样后代
                         log_lik += safe_log(self._lambda) + safe_log(self._E(node_age))

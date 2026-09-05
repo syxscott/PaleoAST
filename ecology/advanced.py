@@ -312,17 +312,21 @@ class SHEAnalyzer:
         Perform SHE analysis on cumulative sample subsets.
 
         Parameters:
-            abundance_matrix: (n_samples x n_species) abundance data
+            abundance_matrix: (n_samples x n_species) abundance data.
+                Row order is meaningful: samples are accumulated in the
+                order supplied (typically stratigraphic/temporal order),
+                as required by SHE analysis (Hayek & Buzas 1997). Rows
+                are NOT sorted by abundance.
 
         Returns:
             SHEResult
         """
         n_samples, _n_species = abundance_matrix.shape
 
-        # Sort samples by total abundance (most abundant first)
-        totals = np.nansum(abundance_matrix, axis=1)
-        sort_idx = np.argsort(-totals)
-        sorted_data = abundance_matrix[sort_idx]
+        # Accumulate samples in input (stratigraphic) order. SHE analysis
+        # (Hayek & Buzas 1997) tracks how S, H and E change along the
+        # accumulation sequence, so the row order must be preserved.
+        data = np.asarray(abundance_matrix)
 
         sample_sizes = []
         s_vals = []
@@ -330,7 +334,7 @@ class SHEAnalyzer:
         e_vals = []
 
         for k in range(2, n_samples + 1):
-            subset = sorted_data[:k]
+            subset = data[:k]
             pooled = np.nansum(subset, axis=0)
             pooled = pooled[pooled > 0]
 

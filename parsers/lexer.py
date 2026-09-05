@@ -367,18 +367,27 @@ class BaseLexer(ABC):
         """
         # 确定匹配的规则
         matched_rule = None
-        for rule_id, rule in self._rule_map.items():
-            group_name = f"_{rule_id}"
-            if match.group(group_name) is not None:
-                matched_rule = rule
-                break
-
-        # 备用方法: 遍历规则检查
-        if matched_rule is None:
-            for rule in self._rules:
-                if rule.pattern.match(match.string, position) == match:
+        try:
+            for rule_id, rule in self._rule_map.items():
+                group_name = f"_{rule_id}"
+                if match.group(group_name) is not None:
                     matched_rule = rule
                     break
+        except IndexError:
+            # 匹配对象不含命名组 (基类 _try_match 逐规则匹配, 无组合模式),
+            # 走下方备用路径——此前这里直接抛 IndexError, 使任何使用默认
+            # 匹配路径的子类在第一个 token 上崩溃。
+            pass
+
+        # 备用方法: 遍历规则检查 (按匹配 span 一致 + 优先级决胜)
+        if matched_rule is None:
+            fallback: LexerRule | None = None
+            for rule in self._rules:
+                m = rule.pattern.match(match.string, position)
+                if m is not None and m.span() == match.span():
+                    if fallback is None or rule.priority < fallback.priority:
+                        fallback = rule
+            matched_rule = fallback
 
         token_type = matched_rule.token_type if matched_rule else TokenType.ERROR
         value = match.group()

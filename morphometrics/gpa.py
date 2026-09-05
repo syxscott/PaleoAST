@@ -63,6 +63,7 @@ class GPAResult:
     rotations: list[npt.NDArray]  # Rotation matrices
     scales: npt.NDArray  # Scale factors
     centroids: npt.NDArray  # Original centroids
+    centroid_sizes: npt.NDArray  # Original centroid size per specimen (n,)
     n_iterations: int
     converged: bool
     final_sse: float  # Sum of squared errors
@@ -186,6 +187,8 @@ class GPAAnalyzer:
             rotations = []
             scales = np.ones(n_specimens)
             original_centroids = np.zeros((n_specimens, n_dims))
+            # Pre-compute original centroid size for each specimen
+            original_sizes = self._compute_sizes(X)
 
             # Iterative Procrustes superimposition
             prev_sse = float("inf")
@@ -244,6 +247,7 @@ class GPAAnalyzer:
                         rotations=rotations,
                         scales=scales,
                         centroids=original_centroids,
+                        centroid_sizes=original_sizes,
                         n_iterations=iteration + 1,
                         converged=True,
                         final_sse=sse,
@@ -262,6 +266,7 @@ class GPAAnalyzer:
                 rotations=rotations,
                 scales=scales,
                 centroids=original_centroids,
+                centroid_sizes=original_sizes,
                 n_iterations=n_iterations,
                 converged=False,
                 final_sse=prev_sse,
@@ -902,14 +907,19 @@ def _compute_bending_energy(
     # Extract fixed landmarks from consensus
     fixed_coords = consensus[fixed]  # (n_fixed, n_dims)
 
-    # Build kernel matrix K_ij = r_ij² * log(r_ij) where r_ij = ||landmark_i - landmark_j||
+    # Build kernel matrix. 2D: K_ij = r² log r (biharmonic, Bookstein 1989);
+    # 3D: U(r) = r (Laplacian 基本解, 与 morpho3d.tps3d 的 thin_plate 核
+    # 一致)。旧实现对 3D 误用 r² log r。
     K = np.zeros((n_fixed, n_fixed))
     for i in range(n_fixed):
         for j in range(n_fixed):
             if i != j:
                 r = np.linalg.norm(fixed_coords[i] - fixed_coords[j])
                 if r > 1e-10:
-                    K[i, j] = r**2 * np.log(r)
+                    if n_dims == 2:
+                        K[i, j] = r**2 * np.log(r)
+                    else:
+                        K[i, j] = r
 
     # Build P matrix for affine component: [1, x, y] for 2D or [1, x, y, z] for 3D
     if n_dims == 2:
@@ -962,14 +972,53 @@ def _compute_local_bending_energy(
     fixed_landmarks: npt.NDArray,
 ) -> float:
     """
-    Compute local bending energy contribution from a single semilandmark.
+    Compute the TPS bending energy of the warp consensus → config.
 
-    Uses the TPS bending energy formulation measuring how much the
-    deformation is non-affine (purely local deformation vs. global stretch).
+    这是滑动半标志点的 Bookstein (1997) 弯曲能判据: 最小化 consensus 到
+    标本形变的薄板样条弯曲能 wᵀKw。旧实现返回
+    ||config[lm] - consensus[lm]||², 惩罚任何偏离共识的位移, 会把半标志
+    点全部拉到共识点上, 抹掉真实形状变异 (实测方差 0.160 → 0.001)。
+    真正的弯曲能判据允许半标志点沿曲线光滑滑动 (能量低), 只惩罚造成
+    局部"折痕"的偏离。
+
+    Parameters:
+        config: 候选标本配置 (n_landmarks, n_dims)
+        consensus: 共识配置 (形状不变, 作为 TPS 源)
+        lm_idx: 被滑动的半标志点索引 (仅为 API 兼容保留)
+        fixed_landmarks: 固定标志点索引 (仅为 API 兼容保留)
+
+    Returns:
+        bending energy w^T K w (>= 0)
     """
-    fixed = fixed_landmarks if isinstance(fixed_landmarks, np.ndarray) else np.array(fixed_landmarks)
+    n_landmarks = config.shape[0]
+    n_dims = config.shape[1]
+    if n_landmarks < 3:
+        return 0.0
 
-    # Compute bending energy contribution
-    # Simplified: measures local distortion based on deviation from consensus
-    deviation = np.linalg.norm(config[lm_idx] - consensus[lm_idx])
-    return float(deviation**2)
+    # Kernel matrix over the consensus configuration (warp source)
+    K = np.zeros((n_landmarks, n_landmarks))
+    for i in range(n_landmarks):
+        for j in range(i + 1, n_landmarks):
+            r = np.linalg.norm(consensus[i] - consensus[j])
+            if r > 1e-10:
+                val = r * r * np.log(r)
+                K[i, j] = val
+                K[j, i] = val
+
+    P = np.column_stack([np.ones(n_landmarks), consensus])
+    n_affine = P.shape[1]
+    L = np.vstack([np.hstack([K, P]), np.hstack([P.T, np.zeros((n_affine, n_affine))])])
+
+    diff = config - consensus
+    energy = 0.0
+    for d in range(n_dims):
+        rhs = np.zeros(n_landmarks + n_affine)
+        rhs[:n_landmarks] = diff[:, d]
+        try:
+            solution = np.linalg.solve(L, rhs)
+        except np.linalg.LinAlgError:
+            solution, _, _, _ = np.linalg.lstsq(L, rhs, rcond=None)
+        w = solution[:n_landmarks]
+        energy += float(w @ (K @ w))
+
+    return max(energy, 0.0)

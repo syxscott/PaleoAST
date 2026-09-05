@@ -210,6 +210,49 @@ def _compute_vcv_matrix(tree) -> np.ndarray:
     return V
 
 
+def _blomberg_k_from_vcv(y: np.ndarray, V: np.ndarray) -> float:
+    """
+    Canonical Blomberg et al. (2003) K statistic from a trait vector and
+    an ape-convention VCV matrix (diag = root-to-tip distance,
+    off-diag = shared path length).
+
+        K = s²_ord / (σ̂²_GLS · tr(V) / n)
+
+    where s²_ord = Σ(yᵢ−ȳ)²/(n−1) is the ordinary mean square and
+    σ̂²_GLS = (y−1â)ᵀV⁻¹(y−1â)/(n−1) is the Brownian-rate estimate with
+    the GLS intercept â = (1ᵀV⁻¹1)⁻¹ 1ᵀV⁻¹y. Under BM, K ≈ 1; the
+    statistic is invariant to linear rescaling of the trait.
+
+    Returns 0.0 when the computation is degenerate (singular VCV,
+    zero variance).
+    """
+    n = len(y)
+    if n < 3:
+        return 0.0
+    V = np.asarray(V, dtype=float) + np.eye(n) * 1e-10
+    try:
+        V_inv = np.linalg.inv(V)
+    except np.linalg.LinAlgError:
+        return 0.0
+
+    ones = np.ones(n)
+    one_vi_one = float(ones @ V_inv @ ones)
+    if one_vi_one <= 0:
+        return 0.0
+
+    a_hat = float(ones @ V_inv @ y) / one_vi_one
+    resid = y - a_hat
+    sigma2_gls = float(resid @ V_inv @ resid) / (n - 1)
+
+    y_mean = float(np.mean(y))
+    s2_ord = float(np.sum((y - y_mean) ** 2)) / (n - 1)
+
+    denom = sigma2_gls * float(np.trace(V)) / n
+    if denom <= 0:
+        return 0.0
+    return float(s2_ord / denom)
+
+
 def blomberg_k(
     tree,
     traits: dict[str, float],
@@ -228,11 +271,12 @@ def blomberg_k(
     返回:
         PhylogeneticSignalResult 对象，包含 K 值和 p 值
 
-    算法 (Blomberg et al. 2003):
-        1. 计算观察到的性状方差 Σ_obs = Σ (x_i - x̄)²
-        2. 计算 BM 期望方差 Σ_exp (基于树拓扑和枝长)
-        3. K = (Σ_obs / Σ_exp) / n
-        4. 置换检验: 随机打乱性状值，重新计算 K，比较观察 K 与置换分布
+    算法 (Blomberg, Garland & Ives 2003, 规范定义):
+        K = [Σ(yᵢ−ȳ)²/(n−1)] / [σ̂²_GLS · tr(V)/n]
+        其中 σ̂²_GLS 为广义最小二乘 Brownian 速率估计。BM 下 K ≈ 1,
+        K > 1 表示性状更保守 (系统发育信号强), K < 1 表示信号弱。
+        K 对性状量纲不变 (此前实现随单位缩放, 已修正)。
+        置换 p 值采用 add-one 修正: p = (1 + #{K_perm >= K}) / (n_perm + 1)。
 
     示例:
         >>> from phylogenetics import PhyloTree
@@ -258,50 +302,18 @@ def blomberg_k(
     # 计算 VCV 矩阵
     V = _compute_vcv_matrix(tree)
 
-    # 添加小的正则化项确保矩阵正定
-    V = V + np.eye(n) * 1e-10
+    # 规范 K 统计量 (量纲不变)
+    K = _blomberg_k_from_vcv(trait_values, V)
 
-    try:
-        # 计算 V 的逆矩阵
-        V_inv = np.linalg.inv(V)
-
-        # 计算二次型: y' * V^(-1) * y
-        y_centered = trait_values - np.mean(trait_values)
-        quad_form = y_centered @ V_inv @ y_centered
-
-        # sigma.y = (y' * V^(-1) * y) / (n-1)
-        sigma_y = quad_form / (n - 1)
-
-        # V_exp = sum(diag(V^(-1))) / n
-        V_exp = np.trace(V_inv) / n
-
-        # K = sigma.y / V_exp
-        K = sigma_y / V_exp if V_exp > 0 else 0.0
-
-    except np.linalg.LinAlgError:
-        logger.warning("VCV matrix is singular, cannot compute K")
-        K = 0.0
-        sigma_y = 0.0
-        V_exp = 0.0
-
-    # 置换检验
+    # 置换检验: 打乱性状在端元间的分配, 重算 K
     permuted_Ks = np.zeros(n_permutations)
-
     for i in range(n_permutations):
-        # 随机置换性状
         perm_traits = trait_values.copy()
         np.random.shuffle(perm_traits)
+        permuted_Ks[i] = _blomberg_k_from_vcv(perm_traits, V)
 
-        try:
-            perm_centered = perm_traits - np.mean(perm_traits)
-            perm_quad = perm_centered @ V_inv @ perm_centered
-            perm_sigma_y = perm_quad / (n - 1)
-            permuted_Ks[i] = perm_sigma_y / V_exp if V_exp > 0 else 0.0
-        except np.linalg.LinAlgError:
-            permuted_Ks[i] = 0.0
-
-    # 计算 p 值: 置换 K 大于等于观察 K 的比例
-    p_value = np.mean(permuted_Ks >= K) if K > 0 else 1.0
+    # add-one 修正的 p 值
+    p_value = float((np.sum(permuted_Ks >= K) + 1.0) / (n_permutations + 1.0))
 
     result = PhylogeneticSignalResult(
         K=K,
@@ -361,22 +373,33 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
         # 如果不正定，添加更大的正则化
         V = V + np.eye(n) * 1e-6
 
-    # 构建性向导量
+    # 构建性向向量, 用 GLS/ML 均值中心化 (算术均值会使 λ̂ 系统性偏移)
     trait_values = np.array([traits.get(leaf.name, 0.0) for leaf in leaves])
-    mean_trait = np.mean(trait_values)
-    y = trait_values - mean_trait  # 中心化
 
-    # 对数似然 (多元正态分布):
-    # log L = -0.5 * [n*log(2π) + log|V| + y^T * V^(-1) * y]
     try:
         sign, logdet = np.linalg.slogdet(V)
         if sign <= 0:
-            logdet = 0.0
+            return -np.inf
 
         V_inv = np.linalg.inv(V)
-        quad_form = y @ V_inv @ y
+        ones = np.ones(n)
+        one_vi_one = float(ones @ V_inv @ ones)
+        if one_vi_one > 0:
+            a_hat = float(ones @ V_inv @ trait_values) / one_vi_one
+        else:
+            a_hat = float(np.mean(trait_values))
+        y = trait_values - a_hat
 
-        log_lik = -0.5 * (n * np.log(2 * np.pi) + logdet + quad_form)
+        quad_form = float(y @ V_inv @ y)
+
+        # BM 多元正态对数似然, 剖出速率参数 σ² (关键: 此前实现缺失
+        # -(n/2)·log σ̂² 项, log|V| 随 λ 增大的效应主导似然, 使 λ̂ 恒
+        # 塌缩到 0)。σ̂² = yᵀV⁻¹y / n, 剖面似然为
+        #   logL = -n/2 · [log(2π σ̂²) + 1 + log|V| / n]
+        if quad_form <= 0:
+            return -np.inf
+        sigma2 = quad_form / n
+        log_lik = -0.5 * (n * np.log(2.0 * np.pi * sigma2) + logdet + n)
     except np.linalg.LinAlgError:
         log_lik = -np.inf
 
@@ -446,17 +469,18 @@ def pagel_lambda(
     lambda_fitted = result.x
     log_lik_fitted = -result.fun
 
-    # 似然比检验: λ=0 vs λ=λ̂
-    # LR = 2 * (log_lik_fitted - log_lik_0)
-    # LR 服从 χ²(1) 分布 (一个参数约束)
+    # 似然比检验: H0: λ=0。λ=0 位于参数空间边界, 零分布不是 χ²(1)
+    # 而是 0.5·χ²₀ + 0.5·χ²₁ 混合 (Self & Liang 1987), 即
+    # p = 0.5·P(χ²₁ > LR)。
     if log_lik_fitted > log_lik_0:
         LR = 2 * (log_lik_fitted - log_lik_0)
-        # p 值
-        p_value = 1 - stats.chi2.cdf(LR, df=1)
+        # p 值 (边界校正)
+        p_value = float(0.5 * stats.chi2.sf(max(LR, 0.0), df=1))
     else:
-        # 如果优化后似然更小，使用 1.0 作为 λ̂
-        LR = 2 * (log_lik_1 - log_lik_0)
-        p_value = 1 - stats.chi2.cdf(LR, df=1)
+        # 优化似然不超过 λ=0: λ̂ 取 0, LR=0, p=1
+        LR = 0.0
+        p_value = 1.0
+        lambda_fitted = 0.0
 
     # 计算 AIC (可选)
     AIC = None
@@ -560,7 +584,12 @@ def simulate_brownian_motion(
             for child in node.children:
                 simulate(child, node_value)
 
-    simulate(root, root_value)
+    # 根节点状态恰为 root_value, 不叠加根自身枝长的噪声
+    # (标准 BM 模拟约定; 旧实现从根开始加噪)
+    for child in root.children:
+        simulate(child, root_value)
+    if not root.children and root.name:
+        traits[root.name] = root_value
     return traits
 
 

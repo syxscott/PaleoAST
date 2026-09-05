@@ -128,11 +128,18 @@ class TestINEXTBootstrapResampling:
             abundance, q=0, n_points=10, n_bootstrap=30, seed=222
         )
 
-        # Results should generally differ (with high probability)
-        # This is a sanity check that random sampling is actually happening
+        # 点估计来自观测数据 (Chao et al. 2014), 必须与种子完全无关;
+        # bootstrap 只用于置信区间, 因此不同种子的 CI 端点应当不同。
+        # (旧断言期望点估计随种子变化——那正是"点估计取 bootstrap
+        # 中位数"这一缺陷的症状, 2026-09 修复后语义反转。)
+        assert np.allclose(
+            result1.expected_richness, result2.expected_richness, rtol=1e-12
+        ), "Point estimate must be seed-independent (derived from observed data)"
         assert not np.allclose(
-            result1.expected_richness, result2.expected_richness, rtol=1e-2
-        ), "Different seeds produced identical results - random sampling may not be working"
+            result1.confidence_lower, result2.confidence_lower, rtol=1e-3
+        ) or not np.allclose(
+            result1.confidence_upper, result2.confidence_upper, rtol=1e-3
+        ), "Different seeds should produce different bootstrap CI bounds"
 
 
 class TestINEXTBootstrapCoverageLevels:

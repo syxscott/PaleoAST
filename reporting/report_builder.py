@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 
+from .figure_handler import _escape_latex
 from .latex_preamble import DocumentClass, LatexPreamble
 
 logger = logging.getLogger(__name__)
@@ -400,7 +401,11 @@ class ReportBuilder:
         section_cmd = {1: "\\section", 2: "\\subsection", 3: "\\subsubsection"}.get(section.level, "\\section")
 
         label_part = f"\\label{{{section.label}}}" if section.label else ""
-        lines.append(f"{section_cmd}{{{section.title}}}{label_part}")
+        # Caller-supplied title must be escaped (figure_handler and
+        # table_generator do the same for their captions); previously a
+        # title such as ``Body_mass & 95%`` was interpolated raw and
+        # broke (or injected) LaTeX.
+        lines.append(f"{section_cmd}{{{_escape_latex(section.title)}}}{label_part}")
         lines.append("")
 
         # 内容
@@ -434,7 +439,10 @@ class ReportBuilder:
             statistic = self._format_statistic("stat", result.statistic, result.df)
             p_value = self._format_pvalue(result.p_value) if result.p_value is not None else "--"
             effect = f"{result.effect_size:.4f}" if result.effect_size is not None else "--"
-            lines.append(f"{result.test_name} & {statistic} & {p_value} & {effect} \\\\")
+            # Test names are caller-supplied free text (e.g. "Mann-Whitney U
+            # (body_mass ~ group)") and may contain LaTeX-significant
+            # characters such as ``_`` or ``&`` — escape them.
+            lines.append(f"{_escape_latex(result.test_name)} & {statistic} & {p_value} & {effect} \\\\")
         lines.append("\\bottomrule")
         lines.append("\\end{tabular}")
         lines.append("\\caption{Summary of statistical tests}")
@@ -448,8 +456,11 @@ class ReportBuilder:
             "\\begin{figure}[htbp]",
             "\\centering",
             f"\\includegraphics[width={figure.width}]{{{figure.path}}}",
-            f"\\caption{{{figure.caption}}}",
-            f"\\label{{{figure.figure_id}}}",
+            # ``path`` stays verbatim (\\includegraphics needs the real
+            # path); caption and label are caller-supplied text and must
+            # be escaped, matching FigureHandler.include_figure.
+            f"\\caption{{{_escape_latex(figure.caption)}}}",
+            f"\\label{{{_escape_latex(figure.figure_id)}}}",
             "\\end{figure}",
             "",
         ]
@@ -460,8 +471,8 @@ class ReportBuilder:
             "\\begin{table}[htbp]",
             "\\centering",
             table.content,
-            f"\\caption{{{table.caption}}}",
-            f"\\label{{{table.table_id}}}",
+            f"\\caption{{{_escape_latex(table.caption)}}}",
+            f"\\label{{{_escape_latex(table.table_id)}}}",
             "\\end{table}",
             "",
         ]
@@ -541,10 +552,17 @@ class LatexCompiler:
                 return False, ""
 
         # 确定输出文件
-        if output_format == "pdf":
-            output_path = tex_basename + ".pdf"
-        else:
-            output_path = tex_basename + ".dvi"
+        # pdflatex is executed with cwd=self._output_dir, so the PDF/DVI
+        # is written into the output directory. The previous code
+        # resolved ``tex_basename + ".pdf"`` against the *process* CWD,
+        # reporting failure even though compilation succeeded whenever
+        # output_dir differed from the CWD. Join the output directory
+        # instead (falling back to the tex file's directory or ".")
+        # and only compare basenames, because pdflatex writes the
+        # output next to the job under its own name.
+        out_dir = self._output_dir or os.path.dirname(self._tex_path) or "."
+        extension = "pdf" if output_format == "pdf" else "dvi"
+        output_path = os.path.join(out_dir, os.path.basename(tex_basename) + "." + extension)
 
         success = os.path.exists(output_path)
 

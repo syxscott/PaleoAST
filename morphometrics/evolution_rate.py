@@ -457,6 +457,10 @@ class EvolutionRateAnalyzer:
 
         dx = -alpha*(theta - x_prev)*dt + sigma*dW
 
+        Note: alpha = -ln(lag-1 autocorrelation) assumes even sampling
+        spacing (constant dt); for unevenly spaced series the estimate
+        is only approximate.
+
         Returns:
             (log_likelihood, sigma, theta, alpha)
         """
@@ -480,10 +484,12 @@ class EvolutionRateAnalyzer:
         else:
             alpha = 0.1
 
-        # Sigma (rate) estimate
+        # Sigma (rate) estimate. Under the stasis model the residuals are
+        # heteroscedastic, res_i ~ N(0, sigma^2 * dt_i), so the weighted
+        # estimate of sigma^2 divides by sum(dt_i) (not sum(dt_i^2)).
         residuals = dx + alpha * (trait_series[:-1] - theta) * dt
-        dt2_sum = float(np.sum(dt**2))
-        sigma_sq = float(np.sum(residuals**2)) / dt2_sum if dt2_sum > 0 else 0.0
+        dt_sum = float(np.sum(dt))
+        sigma_sq = float(np.sum(residuals**2)) / dt_sum if dt_sum > 0 else 0.0
         sigma = math.sqrt(max(sigma_sq, 1e-10))
 
         # Log-likelihood (Gaussian approximation)

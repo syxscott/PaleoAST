@@ -187,11 +187,11 @@ class KaplanMeierAnalyzer:
         t_sorted = t[sort_idx]
         e_sorted = e[sort_idx]
 
-        # Get unique event times (where event occurred)
-        unique_times, first_idx = np.unique(t_sorted, return_index=True)
-        event_mask = e_sorted[first_idx] == 1
-
-        event_times = unique_times[event_mask]
+        # Get event times: every distinct time at which at least one event
+        # occurred. The previous implementation took the event indicator of
+        # the FIRST observation at each tied time, so a censored observation
+        # sorting before its tied deaths silently dropped those deaths.
+        event_times = np.unique(t_sorted[e_sorted == 1])
         n_unique = len(event_times)
 
         if n_unique == 0:
@@ -208,9 +208,11 @@ class KaplanMeierAnalyzer:
             n_events = np.zeros(n_unique, dtype=int)
             survival_prob = np.ones(n_unique)
             std_error = np.zeros(n_unique)
+            greenwood = np.zeros(n_unique)
 
             # Greenwood's formula for standard error
             greenwood_sum = 0.0
+            prev_s = 1.0
             for i, t_i in enumerate(event_times):
                 # Number at risk just before this time
                 n_at_risk[i] = np.sum(t_sorted >= t_i)
@@ -220,25 +222,32 @@ class KaplanMeierAnalyzer:
 
                 if n_at_risk[i] > 0:
                     # Kaplan-Meier product limit estimator
-                    survival_prob[i] = survival_prob[i - 1] if i > 0 else 1.0
-                    survival_prob[i] *= 1 - n_events[i] / n_at_risk[i]
+                    prev_s *= 1 - n_events[i] / n_at_risk[i]
+                    survival_prob[i] = prev_s
 
                     # Greenwood's formula:
                     # Var(S_i) = S_i^2 * sum_j d_j / (n_j * (n_j - d_j))
                     if n_events[i] > 0 and n_at_risk[i] > n_events[i]:
                         greenwood_sum += n_events[i] / (n_at_risk[i] * (n_at_risk[i] - n_events[i]))
+                    greenwood[i] = greenwood_sum
                     std_error[i] = survival_prob[i] * np.sqrt(greenwood_sum)
                 else:
                     std_error[i] = std_error[i - 1] if i > 0 else 0
+                    greenwood[i] = greenwood_sum
 
-            # Confidence intervals (log-log transform for bounded CIs)
+            # Confidence intervals (log-minus-log transform, bounded in [0,1]).
+            # With θ = log(-log S): se(θ) = z·√G/|log S|. The previous
+            # implementation divided by S·log(S) (negative), which made
+            # se(θ) ≤ 0 and swapped the reported bounds.
             z = stats.norm.ppf(1 - (1 - confidence_level) / 2)
-            log_log_surv = np.log(-np.log(survival_prob + 1e-10))
-            log_log_se = z * std_error / ((survival_prob + 1e-10) * np.log(survival_prob + 1e-10))
+            eps = 1e-12
+            s_safe = np.clip(survival_prob, eps, 1.0 - 1e-12)
+            theta = np.log(-np.log(s_safe))
+            se_theta = z * np.sqrt(greenwood) / np.abs(np.log(s_safe))
 
             with np.errstate(divide="ignore", invalid="ignore"):
-                lower_ci = np.exp(-np.exp(log_log_surv + log_log_se))
-                upper_ci = np.exp(-np.exp(log_log_surv - log_log_se))
+                lower_ci = np.exp(-np.exp(theta + se_theta))
+                upper_ci = np.exp(-np.exp(theta - se_theta))
 
             # Clip to valid range
             lower_ci = np.clip(lower_ci, 0, 1)
@@ -308,10 +317,10 @@ def log_rank_test(
 
         Under H₀, Q follows χ²(1) distribution.
     """
-    t1 = validate_data_array(times1, allow_nan=False, name="times1")
-    e1 = validate_data_array(events1, allow_nan=False, name="events1")
-    t2 = validate_data_array(times2, allow_nan=False, name="times2")
-    e2 = validate_data_array(events2, allow_nan=False, name="events2")
+    t1 = validate_data_array(times1, allow_nan=False, name="times1", preserve_dimensions=True)
+    e1 = validate_data_array(events1, allow_nan=False, name="events1", preserve_dimensions=True)
+    t2 = validate_data_array(times2, allow_nan=False, name="times2", preserve_dimensions=True)
+    e2 = validate_data_array(events2, allow_nan=False, name="events2", preserve_dimensions=True)
 
     if t1.shape != e1.shape:
         raise ComputationError("Group 1 times and events shape mismatch")
@@ -541,7 +550,9 @@ def _compute_concordance(
     if total_pairs == 0:
         return 0.5
 
-    c_index = (concordant + tied_risk) / total_pairs
+    # 风险得分并列的对按 0.5 计 (标准 C-index 约定),
+    # 之前整对计入 concordant 会使恒定协变量也得到 C = 1.0。
+    c_index = (concordant + 0.5 * tied_risk) / total_pairs
     return float(np.clip(c_index, 0, 1))
 
 
@@ -574,8 +585,8 @@ def _cox_ph_lifelines(
     """Cox PH using lifelines library."""
     from lifelines import CoxPHFitter
 
-    t = validate_data_array(durations, allow_nan=False, name="durations")
-    e = validate_data_array(events, allow_nan=False, name="events").astype(int)
+    t = validate_data_array(durations, allow_nan=False, name="durations", preserve_dimensions=True)
+    e = validate_data_array(events, allow_nan=False, name="events", preserve_dimensions=True).astype(int)
     X = np.asarray(covariates)
 
     if X.ndim == 1:
@@ -634,8 +645,8 @@ def _cox_ph_scipy(
     """Cox PH using scipy optimization (fallback when lifelines unavailable)."""
     from scipy import optimize, stats
 
-    t = validate_data_array(durations, allow_nan=False, name="durations")
-    e = validate_data_array(events, allow_nan=False, name="events").astype(int)
+    t = validate_data_array(durations, allow_nan=False, name="durations", preserve_dimensions=True)
+    e = validate_data_array(events, allow_nan=False, name="events", preserve_dimensions=True).astype(int)
     X = np.asarray(covariates)
 
     if X.ndim == 1:
@@ -709,16 +720,41 @@ def _cox_ph_scipy(
 
     beta = result.x
 
-    # Compute standard errors via numerical Hessian
-    eps = 1e-5
+    # Standard errors via the observed information (Hessian of the negative
+    # partial log-likelihood), estimated with central second differences.
+    # The previous first-difference scheme produced values ~ε·f'' (≈ 0),
+    # so inv(Hessian) yielded garbage standard errors.
+    eps = 1e-4
     hessian = np.zeros((p, p))
+    f0 = neg_partial_log_likelihood(beta)
     for i in range(p):
         for j in range(i, p):
-            beta_ij = beta.copy()
-            beta_ij[i] += eps
-            beta_ij[j] += eps
-            hessian[i, j] = (neg_partial_log_likelihood(beta_ij) - neg_partial_log_likelihood(beta)) / eps
-            hessian[j, i] = hessian[i, j]
+            if i == j:
+                beta_p = beta.copy()
+                beta_p[i] += eps
+                beta_m = beta.copy()
+                beta_m[i] -= eps
+                hessian[i, i] = (neg_partial_log_likelihood(beta_p) - 2 * f0 + neg_partial_log_likelihood(beta_m)) / eps**2
+            else:
+                beta_pp = beta.copy()
+                beta_pp[i] += eps
+                beta_pp[j] += eps
+                beta_pm = beta.copy()
+                beta_pm[i] += eps
+                beta_pm[j] -= eps
+                beta_mp = beta.copy()
+                beta_mp[i] -= eps
+                beta_mp[j] += eps
+                beta_mm = beta.copy()
+                beta_mm[i] -= eps
+                beta_mm[j] -= eps
+                hessian[i, j] = (
+                    neg_partial_log_likelihood(beta_pp)
+                    - neg_partial_log_likelihood(beta_pm)
+                    - neg_partial_log_likelihood(beta_mp)
+                    + neg_partial_log_likelihood(beta_mm)
+                ) / (4 * eps**2)
+                hessian[j, i] = hessian[i, j]
 
     try:
         info_inv = np.linalg.inv(hessian)

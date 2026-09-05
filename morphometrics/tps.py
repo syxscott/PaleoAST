@@ -277,8 +277,11 @@ class TPSAnalyzer:
             # Non-affine contribution
             non_affine_vals = U
 
-            # Combine
-            combined = np.concatenate([affine_vals, non_affine_vals])
+            # Combine: full_coefficients 存储顺序为 [w (n_landmarks); a
+            # (n_affine)] (见 fit()), 因此求值向量必须同样按 [U; 1,x,y(,z)]
+            # 拼接。旧实现把 affine 放在前面, 权重与基函数错位配对,
+            # 所有形变网格都是错的 (在源地标处应精确插值, 误差却达 O(1))。
+            combined = np.concatenate([non_affine_vals, affine_vals])
 
             warped[p] = coeffs.T @ combined
 

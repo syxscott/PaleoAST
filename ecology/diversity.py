@@ -25,6 +25,7 @@ import threading
 
 import numpy as np
 import numpy.typing as npt
+from scipy.stats import norm
 
 from models.diversity_result import DiversityIndexResult, DiversityResult
 from utils.exceptions import ComputationError
@@ -297,7 +298,7 @@ def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float =
         var_chao1 = 0.0
 
     # ---- Log-transformation CI ----
-    z = 1.96 if confidence_level == 0.95 else 2.576  # ~z for 95% / 99%
+    z = float(norm.ppf(1.0 - (1.0 - confidence_level) / 2.0))
 
     if var_chao1 > 0 and chao1 > 0:
         log_ratio = math.log(1 + var_chao1 / (chao1**2))

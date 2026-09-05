@@ -273,86 +273,52 @@ class ExtinctionIntervalAnalyzer:
         """
         Compute Marshall (1990) confidence intervals.
 
-        Marshall's model assumes fossil recovery follows a Poisson process.
-        The probability of k fossil occurrences at a given level is:
-            P(k) = exp(-lambda * t) * (lambda * t)^k / k!
+        Signor-Lipps 效应下, 真灭绝时间只能位于 LAD 处或其更年轻一侧。
+        本模块层坐标约定为"位置自剖面顶向下计, 数值越大越深越老",
+        因此更年轻 = 更小的位置数值, 100(1−α)% 区间为 [LAD − gap, LAD]:
 
-        Confidence intervals are based on the inverse survival function.
+            gap = -ln(q) / r,   r = -ln(1 - p)
+
+        其中 q = 1 − confidence_level, p 为每层检出概率
+        (P(m 层间隙内均未检出) = (1-p)^m = e^{-r·m}, r 即等效泊松恢复率)。
+        由恒等式 chi2.ppf(1-q, 2) = -2·ln(q) 可知这与 Marshall (1990,
+        Paleobiology 16(1)) 的 χ² 形式一致: 95% 时 gap = 2.996/r
+        (= χ²_{0.95,2}/2)。此前的实现 (a) 方向反了 (区间向更老端延伸),
+        (b) 分位数用 ppf(1-2q, 2) 实为 90% 区间, (c) 恢复率取自其他
+        分类单元 LAD 的排名而非该分类单元自身的检出过程, (d) 最顶部
+        (最年轻) LAD —— 恰是最需要 CI 的对象 —— 反而无区间。均已修正。
 
         Parameters:
-            lad_sorted: Sorted LAD positions
-            n_layers_above: Layers above each LAD
-            detection_prob: Detection probability
+            lad_sorted: Sorted LAD positions (descending; larger = older)
+            n_layers_above: Layers above each LAD (unused; retained for API
+                            compatibility — the Marshall rate comes from the
+                            taxon's own detection process, not its rank)
+            detection_prob: Per-layer detection probability (0, 1]
             confidence_level: Confidence level (e.g., 0.95)
 
         Returns:
-            (ci_lower, ci_upper, true_extinction_layer)
+            (ci_lower_younger, ci_upper_lad, true_extinction_layer)
         """
-        q = 1.0 - confidence_level  # Significance level
+        q = 1.0 - confidence_level
 
         n_taxa = len(lad_sorted)
         ci_lower = np.zeros(n_taxa)
         ci_upper = np.zeros(n_taxa)
         true_extinction = np.zeros(n_taxa)
 
+        # 等效泊松恢复率 (每层)。p=1 (必然检出) 时 r=inf → gap=0,
+        # 即无间隙检出时真灭绝就在 LAD 处。
+        if 0.0 < detection_prob < 1.0:
+            r = -np.log(1.0 - detection_prob)
+        else:
+            r = np.inf
+
+        gap = -np.log(q) / r if np.isfinite(r) and r > 0 else 0.0
+
         for i in range(n_taxa):
-            # Number of layers above this LAD
-            k = n_layers_above[i]
-
-            if k == 0:
-                # LAD is at the top layer - no CI possible
-                ci_lower[i] = lad_sorted[i]
-                ci_upper[i] = lad_sorted[i]
-                true_extinction[i] = lad_sorted[i]
-                continue
-
-            # Marshall's formula for confidence bounds
-            # Lower bound: the true extinction is older than the LAD
-            # Upper bound: based on the probability of missing the taxon
-
-            # Effective sample size considering detection probability
-            n_eff = k / detection_prob
-
-            # Marshall (1990) confidence interval construction:
-            # The true extinction can only be older than the LAD (no younger
-            # side, so the lower bound collapses to the LAD itself).
-            # The upper bound (older) is determined by the chi-square
-            # distribution of the Poisson survival function.
-            #
-            # Marshall 1990, Paleobiology 16, 1-24, Eq. (3)-(4):
-            #   t_upper = t_LAD + chi2_{2*alpha, 2} / (2 * r)
-            # where r is the Poisson sampling rate (per layer), and
-            # chi2_{2*alpha, 2} is the upper-alpha quantile of the chi-square
-            # distribution with 2 degrees of freedom.
-            # For alpha = 0.05 (95% CI), chi2_{0.10, 2} = 4.605.
-            #
-            # The previous implementation used `-log(q) / n_eff` which is
-            # only an inverse-survival approximation valid as n_eff -> infinity.
-            # For finite sample sizes (n_eff < 30), this systematically
-            # underestimates the true CI width.
-            ci_lower[i] = lad_sorted[i]
-
-            if n_eff > 0 and detection_prob > 0:
-                # Sampling rate r = effective sample size per layer
-                r = n_eff
-                # Marshall 1990 Eq. (3)-(4): chi-square upper-tail quantile
-                # at 2*alpha level for 2 degrees of freedom. This is the
-                # chi-square value such that P(chi2 > X) = 2*alpha, i.e.
-                # ppf(1 - 2*alpha, df=2).
-                # For alpha = 0.05 (95% CI): ppf(0.90, df=2) = 4.605.
-                # (NOT chi2_{0.95, 2} = 5.991 which is for two-sided 5% test.)
-                chi2_quantile = stats.chi2.ppf(1.0 - 2.0 * q, df=2)
-                upper_offset = chi2_quantile / (2.0 * r)
-                ci_upper[i] = lad_sorted[i] + upper_offset
-            else:
-                ci_upper[i] = lad_sorted[i]
-
-            # Point estimate for true extinction (MLE)
+            ci_upper[i] = lad_sorted[i]
             true_extinction[i] = lad_sorted[i]
-
-            # Ensure non-negative bounds
-            ci_lower[i] = max(0, ci_lower[i])
-            ci_upper[i] = max(0, ci_upper[i])
+            ci_lower[i] = max(0.0, lad_sorted[i] - gap)
 
         return ci_lower, ci_upper, true_extinction
 
@@ -367,19 +333,27 @@ class ExtinctionIntervalAnalyzer:
         npt.NDArray[np.float64],
     ]:
         """
-        Compute Strauss & Sadler (1989) confidence intervals.
+        Compute Strauss & Sadler (1989) endpoint confidence intervals.
 
-        The Strauss-Sadler model uses order statistics.
-        For n taxa with LADs at positions k_1 < k_2 < ... < k_n,
-        the (1-alpha)% CI for true extinction at position k_i is:
+        在只有各分类单元 LAD 位置 (无种内逐层发现记录) 的输入下, "末间距"
+        H − H₂ 取为该 LAD 与下一个更年轻 LAD 的距离 (最年轻 LAD 则取其到
+        剖面顶的距离)。按 Strauss & Sadler (1989) 指数模型端点区间, 真灭绝
+        相对 LAD 向更年轻一侧延伸
+
+            gap = (H − H₂) · (q^{-1/2} − 1) / 2
+
+        (50%: 0.207·(H−H₂); 95%: 1.736·(H−H₂))。层坐标下区间为
+        [LAD − gap, LAD]。此前的 "Beta(rank, n−rank+1) 分位数 + 期望位次"
+        构造没有任何次序统计量依据, 且方向反了, 已按 2026-09 复审修正。
 
         Parameters:
-            lad_sorted: Sorted LAD positions
-            n_layers_above: Layers above each LAD
+            lad_sorted: Sorted LAD positions (descending; larger = older)
+            n_layers_above: Layers above each LAD (unused; retained for API
+                            compatibility)
             confidence_level: Confidence level
 
         Returns:
-            (ci_lower, ci_upper, true_extinction_layer)
+            (ci_lower_younger, ci_upper_lad, true_extinction_layer)
         """
         q = 1.0 - confidence_level
 
@@ -388,64 +362,19 @@ class ExtinctionIntervalAnalyzer:
         ci_upper = np.zeros(n_taxa)
         true_extinction = np.zeros(n_taxa)
 
+        g = (q ** (-0.5) - 1.0) / 2.0
+
+        # lad_sorted 为降序 (最老在前); 元素 i 的下一个更年轻 LAD 在 i+1。
         for i in range(n_taxa):
-            k = n_layers_above[i]
-            # 1-indexed rank of this LAD in the descending (old→young)
-            # sorted order. k=0 means the LAD sits at the top of the
-            # section (no deeper observation), so no upward CI can be
-            # computed.
-            rank = k + 1
-
-            if k == 0:
-                ci_lower[i] = lad_sorted[i]
-                ci_upper[i] = lad_sorted[i]
-                true_extinction[i] = lad_sorted[i]
-                continue
-
-            # Strauss & Sadler (1990) confidence interval, derived from
-            # the beta distribution of order statistics. Under a uniform
-            # sampling model, the rank ``rank`` of the LAD out of
-            # ``n_taxa`` observed positions follows a Beta(rank, n_taxa -
-            # rank + 1) distribution on the normalised extent
-            # [0, 1]. The true extinction can only be *older* (deeper)
-            # than the observed LAD, so the CI is one-sided: the lower
-            # bound collapses to the LAD itself, and the upper (older)
-            # bound is the (1 - q) quantile of the beta distribution
-            # scaled into layer coordinates.
-            #
-            # The previous implementation used an ad-hoc
-            # ``delta = k * sqrt(log(1/q)/n_taxa)`` formula that has no
-            # basis in the order-statistic literature and produced
-            # two-sided intervals (subtracting from the LAD) even though
-            # the Strauss-Sadler CI is intrinsically one-sided. Use the
-            # canonical beta-quantile form instead.
-            from scipy.stats import beta as beta_dist
-
-            n = n_taxa
-            a = rank
-            b = n - rank + 1
-            # Upper quantile in normalised [0, 1] coordinates.
-            upper_norm = beta_dist.ppf(1.0 - q, a, b)
-            # Scale normalised coordinate into layer-offset units. We
-            # treat the full section depth as the relevant range; using
-            # ``lad_sorted.max()`` (with a floor of 1) gives a per-layer
-            # scale that matches the input units.
-            scale = max(1.0, float(lad_sorted.max()))
-            # Offset (in layers) by which the true extinction is older
-            # than the observed LAD. Subtract the expected normalised
-            # position (rank / (n + 1)) to centre the offset on the LAD.
-            expected_norm = rank / (n + 1.0)
-            delta_upper = max(0.0, (upper_norm - expected_norm) * scale)
-
-            ci_lower[i] = lad_sorted[i]
-            ci_upper[i] = lad_sorted[i] + delta_upper
-
-            # Point estimate
-            true_extinction[i] = lad_sorted[i]
-
-            # Ensure non-negative bounds
-            ci_lower[i] = max(0, ci_lower[i])
-            ci_upper[i] = max(0, ci_upper[i])
+            lad = float(lad_sorted[i])
+            if i + 1 < n_taxa:
+                spacing = lad - float(lad_sorted[i + 1])
+            else:
+                spacing = lad  # 最年轻 LAD: 到剖面顶 (位置 0) 的距离
+            gap = max(0.0, spacing * g)
+            ci_lower[i] = max(0.0, lad - gap)
+            ci_upper[i] = lad
+            true_extinction[i] = lad
 
         return ci_lower, ci_upper, true_extinction
 

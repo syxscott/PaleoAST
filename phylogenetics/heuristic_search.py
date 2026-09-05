@@ -233,15 +233,19 @@ class NNIOperation(TreeOperation):
         return copy_node(root, None)
 
     def _build_node_map(self, old_root: PhyloNode, new_root: PhyloNode) -> dict[PhyloNode, PhyloNode]:
-        """构建新旧节点映射"""
+        """构建新旧节点映射 (按先序位置一一对应)。
+
+        旧实现按 (name, 子节点数) 匹配: Newick 树的内部节点通常全部
+        空名, 所有内部节点都映射到第一个命中者 (根), NNI 变换因此
+        会输出重复子节点的损坏树 (如 ((C,D),(C,D)))。
+        新旧树来自同一棵树的同一变换, 先序位置一一对应。"""
         mapping = {}
-
-        for old_node in old_root.preorder_traverse():
-            # 尝试通过名称和位置匹配
-            new_node = self._find_matching_node(new_root, old_node)
-            if new_node:
-                mapping[old_node] = new_node
-
+        old_nodes = list(old_root.preorder_traverse())
+        new_nodes = list(new_root.preorder_traverse())
+        if len(old_nodes) != len(new_nodes):
+            return mapping
+        for old_node, new_node in zip(old_nodes, new_nodes):
+            mapping[old_node] = new_node
         return mapping
 
     def _find_matching_node(self, root: PhyloNode, target: PhyloNode) -> PhyloNode | None:

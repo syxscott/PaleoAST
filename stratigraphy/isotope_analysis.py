@@ -143,8 +143,12 @@ def compute_moving_average(values: np.ndarray, window: int = 5, mode: str = "cen
         window += 1  # 必须奇数
 
     if mode == "center":
-        # 中心移动平均
-        smoothed = np.convolve(values, np.ones(window) / window, mode="same")
+        # 中心移动平均: 边缘按实际重叠窗口归一化。
+        # 旧实现 np.convolve(mode="same") 在两端仍除以完整窗口,
+        # 导致序列两端被系统性压低。
+        smoothed = np.convolve(values, np.ones(window), mode="same")
+        counts = np.convolve(np.ones_like(values), np.ones(window), mode="same")
+        smoothed = smoothed / counts
     else:
         # 右对齐
         smoothed = np.zeros_like(values)
@@ -524,8 +528,14 @@ class IsotopeAnalyzer:
         Kim & O'Neil (1997) 古温度方程 - 碳酸盐 δ¹⁸O
 
         公式: 1000 ln α = 18.03 × (10³/T) - 32.42
-        其中 α = (1 + δc/1000) / (1 + δw/1000)
+        其中 α = (1 + δc_VSMOW/1000) / (1 + δw/1000)
         T 单位: Kelvin
+
+        注意: 分馏方程要求碳酸盐与海水处于同一标尺 (VSMOW)。
+            δc 以 VPDB 报告时须先转换:
+            δc_VSMOW = 1.03091 × δc_VPDB + 30.91
+            (缺此换算会得到 ~300 °C 的荒谬结果——2026-09 复审
+            发现的标尺混用缺陷)
 
         参数:
             delta18O_sw: 海水 δ¹⁸O (‰ VSMOW)
@@ -534,8 +544,11 @@ class IsotopeAnalyzer:
         返回:
             古温度 (°C)
         """
+        # VPDB -> VSMOW 标尺转换
+        delta18O_c_vsmow = 1.03091 * delta18O_c + 30.91
+
         # 转换为 alpha
-        alpha = (1 + delta18O_c / 1000) / (1 + delta18O_sw / 1000)
+        alpha = (1 + delta18O_c_vsmow / 1000) / (1 + delta18O_sw / 1000)
 
         # 求解温度 (T in Kelvin)
         # 1000 ln α = 18.03 * (1000/T) - 32.42

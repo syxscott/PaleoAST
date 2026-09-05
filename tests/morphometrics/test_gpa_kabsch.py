@@ -158,7 +158,18 @@ class TestKabschRotation(unittest.TestCase):
 
         GPA first scales to unit centroid size, so the rotation
         should only need to handle rotation, not scaling.
+
+        Note on the Kabsch sign convention used here: with
+            H = ref_scaled.T @ tgt_scaled,    SVD H = U Σ Vt,
+            R = Vt.T @ U.T,
+        the recovered R is the rotation that aligns the rows of tgt_scaled
+        with the rows of ref_scaled. If the data were generated as
+            target = scale * (reference @ R_true),
+        then the Kabsch algorithm returns R = R_true.T, so we compare
+        R @ R_true.T against the identity.
         """
+        # Use a deterministic seed so the test does not depend on RNG state
+        np.random.seed(0)
         # Create reference
         reference = np.random.randn(8, 2)
 
@@ -169,7 +180,7 @@ class TestKabschRotation(unittest.TestCase):
             [np.cos(angle), -np.sin(angle)],
             [np.sin(angle), np.cos(angle)]
         ])
-        target = (reference * scale) @ R_true.T
+        target = (reference * scale) @ R_true
 
         # GPA analyzer handles scaling separately; here we just test rotation
         # by centering both and doing Kabsch
@@ -183,9 +194,16 @@ class TestKabschRotation(unittest.TestCase):
         tgt_scaled = tgt_centered / tgt_size
 
         # Kabsch
-        H = tgt_scaled.T @ ref_scaled
+        H = ref_scaled.T @ tgt_scaled
         U, S, Vt = np.linalg.svd(H)
         R = Vt.T @ U.T
+
+        # Kabsch's SVD has an inherent sign ambiguity: the recovered rotation
+        # may be a reflection. The standard fix (Bookstein 1989, Dryden &
+        # Mardia 2016) is to flip Vt's last row when det(R) < 0.
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
 
         # Verify det = +1
         self.assertAlmostEqual(
@@ -193,8 +211,13 @@ class TestKabschRotation(unittest.TestCase):
             msg=f"Rotation with scaling should have det=+1, got {np.linalg.det(R)}"
         )
 
-        # Verify it's close to true rotation
-        angle_diff = np.arccos(np.clip((np.trace(R_true.T @ R) - 1) / 2, -1, 1))
+        # Verify the recovered R composes correctly with R_true. With the
+        # convention target = reference @ R_true, Kabsch returns R ≈ R_true.T
+        # (the inverse of the applied rotation), so we expect R_true @ R ≈ I
+        # equivalently R @ R_true ≈ I. The 2D rotation angle formula is
+        # arccos(trace(M) / 2) where M is the 2x2 rotation; the original test
+        # used a buggy (trace - 1) / 2 variant.
+        angle_diff = np.arccos(np.clip(np.trace(R_true @ R) / 2, -1, 1))
         self.assertLess(
             abs(angle_diff), 0.01,
             msg=f"Recovered angle differs by {angle_diff:.4f} rad"

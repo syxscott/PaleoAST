@@ -562,7 +562,8 @@ class PaleoASTApplication:
         from PyQt6.QtCore import QSettings
 
         settings = QSettings("PaleoAST", "PaleoAST")
-        saved_lang = settings.value("language", "en")
+        # 默认简体中文 (中文平台定位); 用户切换后由 QSettings 记忆
+        saved_lang = settings.value("language", "zh")
         if saved_lang in ("en", "zh"):
             translator.set_language(saved_lang)
 

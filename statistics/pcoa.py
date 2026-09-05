@@ -16,9 +16,9 @@ Given a distance/dissimilarity matrix D ∈ ℝ^(n×n):
    where J = I - (1/n) * 1*1^T is the centering matrix
 3. Eigendecomposition: B = U * Λ * U^T
    where Λ = diag(λ₁, λ₂, ..., λₙ) are eigenvalues
-4. Coordinates: PCoA_i = sqrt(|λ_i|) * U_i
-   (using absolute eigenvalue because negative eigenvalues indicate
-   non-Euclidean structure; the sign is absorbed into eigenvector direction)
+4. Coordinates: PCoA_i = sqrt(max(λ_i, 0)) * U_i
+   (only positive eigenvalues contribute coordinates, following the
+   R cmdscale convention; eigenvalues are sorted by λ descending)
 
 Negative Eigenvalues:
     Negative eigenvalues are a natural consequence of non-Euclidean distance
@@ -26,17 +26,12 @@ Negative Eigenvalues:
     that the distance matrix cannot be perfectly represented in Euclidean
     space. This is NOT an error condition.
 
-    - The ABSOLUTE value |λ_i| determines the axis length (variance explained)
-    - The SIGN of λ_i indicates whether samples on that axis diverge (negative)
-      or converge (positive) relative to the centroid
-    - Negative eigenvalues are preserved because they contain meaningful
-      biological information about dissimilarity structure
-
-    This implementation follows the convention of R's cmdscale(eig=TRUE) and
-    ape::pcoa(), which also preserve negative eigenvalues. Users should
-    interpret negative eigenvalues as indicators of non-metric distance
-    structure; the absolute value represents the axis's contribution to
-    explained variance.
+    Following the R cmdscale(eig=TRUE) convention, coordinates are built
+    only from the positive eigenvalues (sqrt(max(λ, 0))), axes are sorted
+    by eigenvalue (descending), and the sum of the negative eigenvalues is
+    reported separately (result field `negative_eigenvalue_sum` and the
+    summary text). A large negative eigenvalue therefore cannot displace
+    genuine (positive) axes from the ordination.
 
 Author: PaleoAST Development Team
 version: 1.1.0
@@ -69,6 +64,7 @@ class PCoAResult:
     distance_matrix: npt.NDArray
     n_components: int
     metric: str
+    negative_eigenvalue_sum: float = 0.0
 
     def get_coordinates(self, n_components: int | None = None) -> npt.NDArray:
         """Get coordinates for specified number of components."""
@@ -92,6 +88,12 @@ class PCoAResult:
                 f"PC{i + 1:4d} | {self.eigenvalues[i]:10.4f} | "
                 f"{self.proportion_explained[i]:10.4f} | "
                 f"{self.cumulative_proportion[i]:10.4f}"
+            )
+        if self.negative_eigenvalue_sum < 0:
+            lines.append("")
+            lines.append(
+                _("Sum of negative eigenvalues (non-Euclidean variation, "
+                  "excluded from coordinates): {0:.4f}").format(self.negative_eigenvalue_sum)
             )
         return "\n".join(lines)
 
@@ -169,50 +171,54 @@ class PCoAAnalyzer:
                 raise ComputationError("Eigendecomposition failed during PCoA", original_exception=e)
 
             # Check for negative eigenvalues (common with non-Euclidean distances)
-            # and warn explicitly - they are NOT truncated, but preserved
+            # and warn explicitly - following R's cmdscale, they are excluded
+            # from the coordinates and reported through their sum instead.
             negative_mask = eigenvalues < 0
-            negative_count = np.sum(negative_mask)
+            negative_count = int(np.sum(negative_mask))
+            negative_sum = float(np.sum(eigenvalues[negative_mask])) if negative_count > 0 else 0.0
             if negative_count > 0:
                 import warnings
                 warnings.warn(
                     f"PCoA: {negative_count} negative eigenvalue(s) detected "
                     f"(metric='{metric}'). Negative eigenvalues indicate non-Euclidean "
-                    f"distance structure (common for Bray-Curtis, Jaccard, etc.). "
-                    f"The absolute value represents axis length; the sign indicates "
-                    f"divergence direction. Negative eigenvalues are preserved, "
-                    f"following R cmdscale()/ape::pcoa() conventions.",
+                    f"distance structure (common for Bray-Curtis, Jaccard, etc.); "
+                    f"their sum is {negative_sum:.6g}. Following the R cmdscale "
+                    f"convention, coordinates are computed only from the positive "
+                    f"eigenvalues (sqrt(max(lambda, 0))).",
                     UserWarning,
                     stacklevel=2,
                 )
                 self._logger.warning(
-                    f"PCoA: {negative_count} negative eigenvalue(s) preserved. "
+                    f"PCoA: {negative_count} negative eigenvalue(s) "
+                    f"(sum={negative_sum:.6g}) excluded from coordinates. "
                     f"Non-Euclidean metric '{metric}' detected."
                 )
 
-            # Sort by absolute value (descending) to prioritize axes by
-            # variance explained regardless of sign
-            abs_eigenvalues = np.abs(eigenvalues)
-            sorted_indices = np.argsort(abs_eigenvalues)[::-1]
+            # Sort by eigenvalue (descending) - the R cmdscale convention.
+            # Axes are ranked by their signed eigenvalues so that a large
+            # negative eigenvalue cannot displace genuine positive axes.
+            sorted_indices = np.argsort(eigenvalues)[::-1]
             eigenvalues = eigenvalues[sorted_indices]
             eigenvectors = eigenvectors[:, sorted_indices]
 
-            # Step 4: Compute coordinates using absolute eigenvalues
-            # PCoA_i = sqrt(|λ_i|) * U_i
-            # The sign of λ_i is preserved in the eigenvector direction,
-            # so using sqrt(|λ_i|) captures the magnitude while the
-            # eigenvector sign carries the original sign information
-            sqrt_abs_eigenvalues = np.sqrt(np.abs(eigenvalues))
-            coordinates = eigenvectors * sqrt_abs_eigenvalues
+            # Step 4: Compute coordinates from positive eigenvalues only:
+            # PCoA_i = sqrt(max(lambda_i, 0)) * U_i
+            # (negative eigenvalues contribute no coordinates; their total
+            # magnitude is reported separately as `negative_eigenvalue_sum`)
+            coords_sqrt = np.sqrt(np.maximum(eigenvalues, 0.0))
+            coordinates = eigenvectors * coords_sqrt
 
             # Select top n_components
             coordinates = coordinates[:, :n_components]
             eigenvalues = eigenvalues[:n_components]
 
-            # Compute proportion explained using absolute values
-            # This ensures negative eigenvalues contribute proportionally
-            total_abs_eigenvalue = np.sum(np.abs(eigenvalues))
-            if total_abs_eigenvalue > 0:
-                proportion = np.abs(eigenvalues) / total_abs_eigenvalue * 100
+            # Compute proportion explained from the (truncated, positive-part)
+            # eigenvalues, following the cmdscale convention in which negative
+            # eigenvalues are excluded
+            positive_part = np.maximum(eigenvalues, 0.0)
+            total_positive = float(np.sum(positive_part))
+            if total_positive > 0:
+                proportion = positive_part / total_positive * 100
             else:
                 proportion = np.zeros(n_components)
 
@@ -226,6 +232,7 @@ class PCoAAnalyzer:
                 distance_matrix=D,
                 n_components=n_components,
                 metric=metric,
+                negative_eigenvalue_sum=negative_sum,
             )
 
             self._last_result = result

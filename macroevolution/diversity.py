@@ -61,57 +61,83 @@ class DiversityDynamics:
         """
         从化石记录估计多样性曲线
 
+        时间采用 Ma 约定: 数值越大越老。区间 (t_start, t_end) 中
+        t_start 为年轻边界, t_end 为年老边界 (t_start <= t_end,
+        输入顺序相反时自动纠正)。分类单元 (起源年龄 o, 灭绝年龄 L):
+        o >= L, 输入顺序相反时自动纠正。
+
         参数:
             fossil_records: 化石记录 [(起源时间, 灭绝时间), ...]
             intervals: 时间区间
 
         返回:
-            DiversityCurve
+            DiversityCurve (origination/extinction_rates 为 Foote 式
+            边界穿越者 per-capita 估计, 相邻区间无重叠数据时为 nan)
         """
         self._logger.info(
             f"Estimating diversity from {len(fossil_records)} fossil records across {len(intervals)} intervals"
         )
+
+        # 统一约定: o = 起源年龄 (更老), L = 灭绝年龄 (更年轻)
+        records = []
+        for o, L in fossil_records:
+            o, L = float(o), float(L)
+            if o < L:
+                o, L = L, o
+            records.append((o, L))
+
+        # 统一区间方向: t_start 年轻边界 <= t_end 年老边界
+        norm_intervals = []
+        for t_start, t_end in intervals:
+            t_start, t_end = float(t_start), float(t_end)
+            if t_start > t_end:
+                t_start, t_end = t_end, t_start
+            norm_intervals.append((t_start, t_end))
+
+        # 存在性 = 寿命区间 [L, o] 与时间区间 [t_start, t_end] 有重叠:
+        #   o >= t_start (起源不晚于年老侧) 且 L <= t_end (灭绝不早于年轻侧)。
+        # 此前条件 o <= t_start 且 L >= t_end 在 Ma 约定下几何上几乎
+        # 不可满足, 导致 richness 恒为 0 (2026-09 复审)。
+        def _present(idx: int) -> set[int]:
+            t_s, t_e = norm_intervals[idx]
+            return {k for k, (o, L) in enumerate(records) if o >= t_s and L <= t_e}
+
+        present = [_present(i) for i in range(len(norm_intervals))]
+
         times = []
         richness = []
         origination_rates = []
         extinction_rates = []
 
-        records = fossil_records
-
-        for i, (t_start, t_end) in enumerate(intervals):
+        # 区间按从年轻到老的输入顺序处理: i-1 为更年轻邻区, i+1 为更老邻区
+        for i, (t_start, t_end) in enumerate(norm_intervals):
             times.append((t_start + t_end) / 2)
+            richness.append(len(present[i]))
 
-            # 计算该区间内存在的物种数。
-            # 物种 (o, L) 在区间 [t_start, t_end] 内存在 ⇔
-            #   起源早于或等于区间起点 (o <= t_start) 且
-            #   灭绝晚于或等于区间终点 (L >= t_end)
-            # 旧条件 `o >= t_end and t_start >= L` 意为
-            # "起源晚于区间终点 且 灭绝早于区间起点"，几乎不可能满足，
-            # 导致 richness 恒为 0。
-            count = sum(1 for o, L in records if o <= t_start and L >= t_end)
-            richness.append(count)
+            dt = t_end - t_start
+            n_t = len(present[i])
 
-            # 计算速率
-            if i > 0:
-                dt = abs(t_end - t_start)
-                if dt > 0:
-                    dR = count - richness[i - 1]
-                    if dR > 0:
-                        orig_rate = dR / dt
-                        ext_rate = 0.0
-                    else:
-                        orig_rate = 0.0
-                        ext_rate = -dR / dt
-                else:
-                    orig_rate = 0.0
-                    ext_rate = 0.0
-                origination_rates.append(orig_rate)
-                extinction_rates.append(ext_rate)
+            # Foote (1999, 2000) per-capita 率 (边界穿越者估计):
+            #   起源 p = -ln(Nbt/Nt)/dt, Nbt = 本区与更老邻区均出现
+            #   灭绝 q = -ln(Nft/Nt)/dt, Nft = 本区与更年轻邻区均出现
+            # 此前的实现把净变化 dR 整体记为起源或灭绝, 在起源与灭绝
+            # 并发时两者都被掩盖, 不是任何 per-capita 估计量。
+            if i + 1 < len(norm_intervals) and dt > 0 and n_t > 0:
+                n_bt = len(present[i] & present[i + 1])
+                origination_rates.append(-np.log(n_bt / n_t) / dt if n_bt > 0 else float("inf"))
             else:
-                origination_rates.append(0.0)
-                extinction_rates.append(0.0)
+                origination_rates.append(float("nan"))
 
-        turnover = np.array(extinction_rates) / (np.array(origination_rates) + np.array(extinction_rates) + 1e-10)
+            if i > 0 and dt > 0 and n_t > 0:
+                n_ft = len(present[i] & present[i - 1])
+                extinction_rates.append(-np.log(n_ft / n_t) / dt if n_ft > 0 else float("inf"))
+            else:
+                extinction_rates.append(float("nan"))
+
+        orig_arr = np.array(origination_rates, dtype=float)
+        ext_arr = np.array(extinction_rates, dtype=float)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            turnover = ext_arr / (orig_arr + ext_arr)
 
         self._logger.info(
             f"Diversity estimation complete: {len(times)} intervals, max richness = {max(richness) if richness else 0}"
@@ -119,8 +145,8 @@ class DiversityDynamics:
         return DiversityCurve(
             times=np.array(times),
             richness=np.array(richness),
-            origination_rates=np.array(origination_rates),
-            extinction_rates=np.array(extinction_rates),
+            origination_rates=orig_arr,
+            extinction_rates=ext_arr,
             turnover_rate=turnover,
         )
 

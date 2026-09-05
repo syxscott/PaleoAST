@@ -119,8 +119,12 @@ class NEXUSWriter:
         Returns:
             Quoted string if needed, otherwise the original name
         """
-        # Characters that require quoting in NEXUS taxa names
-        special_chars = {" ", ",", '"', "'", "(", ")", "[", "]", "{", "}", "=", ";", ":"}
+        # Characters that require quoting in NEXUS taxa names. Tab and
+        # newline are whitespace like space: an unquoted name containing
+        # them would silently split into multiple tokens / rows.
+        special_chars = {
+            " ", "\t", "\n", ",", '"', "'", "(", ")", "[", "]", "{", "}", "=", ";", ":"
+        }
         if not any(c in name for c in special_chars):
             return name
         # Escape internal single quotes by doubling them
@@ -262,6 +266,7 @@ class NEXUSWriter:
             lines[-1] = lines[-1].rstrip(",") + ";"  # 最后一个逗号改分号
 
         # MATRIX
+        self._validate_matrix_cells()
         lines.append("    MATRIX")
 
         if self._interleaved:
@@ -272,6 +277,29 @@ class NEXUSWriter:
         lines.append("    ;")
         lines.append("END;")
         return "\n".join(lines)
+
+    def _validate_matrix_cells(self) -> None:
+        """Reject multi-character MATRIX cell values.
+
+        The STANDARD datatype writes each cell as a single character:
+        cells are simply concatenated, so a two-character value such as
+        ``"01"`` produces corrupt, unparseable rows like ``T1 01 2``
+        (the reader cannot tell where one cell ends and the next
+        begins). Single-character cells (digits, state letters, gap and
+        missing symbols) keep working exactly as before; anything longer
+        must be re-encoded.
+        """
+        for i, row in enumerate(self._data):
+            for j, cell in enumerate(row):
+                if len(str(cell)) != 1:
+                    raise ValueError(
+                        f"Invalid MATRIX cell {str(cell)!r} at taxon row {i}, "
+                        f"character {j}: NEXUS STANDARD format requires every "
+                        "cell to be exactly one character. Re-encode the data "
+                        "with single-symbol states (use the gap symbol '-' or "
+                        "missing '?'), or export as DATATYPE=CONTINUOUS for "
+                        "multi-character / numeric values."
+                    )
 
     def _write_non_interleaved_matrix(self) -> list[str]:
         """生成非交错格式的MATRIX块"""

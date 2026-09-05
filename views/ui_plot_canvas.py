@@ -2430,10 +2430,14 @@ class InteractivePlotCanvas(QWidget):
             path = options.metadata.pop("_target_path", None) if options.metadata else None
             if not path:
                 # Fall back to asking the user when no path was threaded
-                # through. The PlotExportDialog always sets one.
-                from PyQt6.QtWidgets import QFileDialog
-
-                path, _ = QFileDialog.getSaveFileName(self, _("Export Plot"), "", "PNG (*.png)")
+                # through. The PlotExportDialog always sets one. Build
+                # the filter from the requested format instead of a
+                # hardcoded PNG filter (svg/pdf exports previously
+                # showed "PNG (*.png)" only).
+                fmt = str(getattr(options, "format", "png") or "png")
+                path, _selected_filter = QFileDialog.getSaveFileName(
+                    self, _("Export Plot"), "", f"{fmt.upper()} (*.{fmt})"
+                )
                 if not path:
                     return
             export_figure(self._figure, path, options)

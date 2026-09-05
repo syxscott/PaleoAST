@@ -2,133 +2,147 @@
 # Test: Marshall 1990 CI (stratigraphy/extinction.py)
 # =============================================================================
 """
-Tests for Marshall (1990) confidence interval implementation.
+Tests for Marshall (1990) and Strauss & Sadler (1989) confidence intervals.
 
-Reference:
-    Marshall, C.R. (1990). Confidence intervals on stratigraphic ranges:
-    constraining the position of origin and extinction of taxa by
-    avoiding biases of fossil recovery. Paleobiology, 16(1), 1-24.
+Coordinate convention (stratigraphy/extinction.py):
+    LAD positions are counted from the TOP of the section; larger numbers
+    are deeper/older. The true extinction lies at or YOUNGER than the LAD
+    (Signor-Lipps), so the confidence interval is [LAD - gap, LAD] in
+    these coordinates (ci_lower = younger bound).
 
-Formula:
-    t_upper = t_LAD + chi2_{2*alpha, df=2} / (2 * r)
-where r = Poisson sampling rate (per layer),
-      chi2_{0.10, 2} = 4.605 (for 95% CI, alpha=0.05)
+References:
+    Marshall, C.R. (1990). Confidence intervals on stratigraphic ranges.
+        Paleobiology, 16(1), 1-24.
+    Strauss, D. & Sadler, P.M. (1989). Classical confidence intervals and
+        Bayesian probability estimates for ends of local taxon ranges.
+        Mathematical Geology, 21(4), 411-427.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from scipy import stats
 
 from stratigraphy.extinction import ExtinctionIntervalAnalyzer
 
 
 class TestMarshallCI:
-    """Verify Marshall 1990 CI uses chi-square formula correctly."""
+    """Verify Marshall (1990) CI direction, width and level."""
 
-    def test_chi2_quantile_95(self):
-        """Verify chi-square 95% CI quantile value (4.605 for 2 df).
-        Marshall 1990 Eq. (3) uses chi-square upper-tail quantile at 2*alpha
-        level: ppf(1 - 2*alpha, df=2). For alpha=0.05, this is ppf(0.90, df=2)
-        = 4.605. (NOT chi2_{0.95, 2} = 5.991 which is two-sided 5% critical.)"""
-        q = 0.05  # 95% CI -> alpha = 0.05, 2*alpha = 0.10 upper tail
-        chi2_val = stats.chi2.ppf(1.0 - 2.0 * q, df=2)
-        assert abs(chi2_val - 4.605) < 0.01, f"Expected ~4.605, got {chi2_val}"
-
-    def test_marshall_upper_offset_positive(self):
-        """Upper bound offset must be positive (CI extends older than LAD)."""
-        # Toy data: 5 taxa, last appearing at LAD layer 10
+    def test_ci_extends_younger_not_older(self):
+        """CI must extend toward the YOUNGER side (smaller layer numbers)."""
         analyzer = ExtinctionIntervalAnalyzer()
-        lad_positions = np.array([10.0, 10.0, 10.0, 10.0, 10.0])
-        n_layers_above = np.array([5, 5, 5, 5, 5])
-        detection_prob = 0.5
-        confidence_level = 0.95
+        lad = np.array([10.0, 12.0, 15.0])
+        n_above = np.array([2, 1, 0])
 
-        ci_lower, ci_upper, true_ext = analyzer._marshall_ci(
-            lad_positions, n_layers_above, detection_prob, confidence_level
-        )
+        ci_low, ci_up, _ = analyzer._marshall_ci(lad, n_above, 0.5, 0.95)
 
-        # Upper bound must be strictly greater than LAD
-        assert np.all(ci_upper > lad_positions), (
-            f"CI upper must extend older than LAD. "
-            f"lad={lad_positions}, ci_upper={ci_upper}"
-        )
+        assert np.all(ci_up == lad), "Upper bound must equal the LAD"
+        assert np.all(ci_low < lad), "Lower bound must be younger than the LAD"
+        assert np.all(ci_low >= 0), "Bounds must stay within the section"
 
-    def test_marshall_n_eff_dependence(self):
-        """Higher effective sample size should give narrower CI."""
+    def test_known_gap_value(self):
+        """95% gap = -ln(0.05) / -ln(1 - 0.5) = 4.321 layers."""
         analyzer = ExtinctionIntervalAnalyzer()
         lad = np.array([10.0])
-        n_above_high = np.array([100])  # Many layers above
-        n_above_low = np.array([5])     # Few layers above
+        n_above = np.array([0])
 
-        ci_low_h, ci_up_h, _ = analyzer._marshall_ci(
-            lad, n_above_high, detection_prob=0.5, confidence_level=0.95
-        )
-        ci_low_l, ci_up_l, _ = analyzer._marshall_ci(
-            lad, n_above_low, detection_prob=0.5, confidence_level=0.95
-        )
+        ci_low, ci_up, _ = analyzer._marshall_ci(lad, n_above, 0.5, 0.95)
 
-        # More samples -> narrower CI (smaller offset)
-        offset_high = ci_up_h[0] - lad[0]
-        offset_low = ci_up_l[0] - lad[0]
-        assert offset_high < offset_low, (
-            f"High n_eff should give narrower CI. "
-            f"offset_high={offset_high}, offset_low={offset_low}"
-        )
+        expected_gap = -np.log(0.05) / -np.log(0.5)
+        assert abs((ci_up[0] - ci_low[0]) - expected_gap) < 1e-6
 
-    def test_marshall_zero_layers_returns_degenerate_ci(self):
-        """When k=0 (taxon at top layer), CI should be degenerate at LAD."""
+    def test_perfect_detection_gives_degenerate_ci(self):
+        """With p = 1 (certain detection) the gap is 0: extinction = LAD."""
         analyzer = ExtinctionIntervalAnalyzer()
         lad = np.array([10.0])
-        n_layers_above = np.array([0])
+        ci_low, ci_up, _ = analyzer._marshall_ci(lad, np.array([0]), 1.0, 0.95)
+        assert ci_low[0] == lad[0] == ci_up[0]
 
-        ci_low, ci_up, true_ext = analyzer._marshall_ci(
-            lad, n_layers_above, detection_prob=0.5, confidence_level=0.95
-        )
+    def test_higher_detection_narrower_ci(self):
+        """Better recovery should narrow the interval."""
+        analyzer = ExtinctionIntervalAnalyzer()
+        lad = np.array([10.0])
+        n_above = np.array([3])
 
-        # Degenerate: ci_upper == ci_lower == lad
-        assert ci_up[0] == lad[0]
-        assert ci_low[0] == lad[0]
+        ci_low_hi, ci_up_hi, _ = analyzer._marshall_ci(lad, n_above, 0.9, 0.95)
+        ci_low_lo, ci_up_lo, _ = analyzer._marshall_ci(lad, n_above, 0.3, 0.95)
+
+        gap_hi = ci_up_hi[0] - ci_low_hi[0]
+        gap_lo = ci_up_lo[0] - ci_low_lo[0]
+        assert gap_hi < gap_lo
+
+    def test_99_wider_than_95(self):
+        """99% CI should be wider than 95% CI."""
+        analyzer = ExtinctionIntervalAnalyzer()
+        lad = np.array([10.0])
+        n_above = np.array([3])
+
+        ci_low_95, ci_up_95, _ = analyzer._marshall_ci(lad, n_above, 0.5, 0.95)
+        ci_low_99, ci_up_99, _ = analyzer._marshall_ci(lad, n_above, 0.5, 0.99)
+
+        assert (ci_up_99[0] - ci_low_99[0]) > (ci_up_95[0] - ci_low_95[0])
+
+    def test_youngest_lad_gets_ci(self):
+        """The topmost (youngest) LAD must receive an interval - it is the
+        classic Marshall use case and previously got a degenerate CI."""
+        analyzer = ExtinctionIntervalAnalyzer()
+        lad = np.array([10.0])
+        n_above = np.array([0])
+
+        ci_low, ci_up, true_ext = analyzer._marshall_ci(lad, n_above, 0.5, 0.95)
+
+        assert ci_low[0] < ci_up[0]
         assert true_ext[0] == lad[0]
 
-    def test_marshall_99_vs_95_ci(self):
-        """99% CI should be wider than 95% CI (more conservative)."""
+    def test_analyze_end_to_end_direction(self):
+        """End-to-end analyze(): intervals at or younger of the LAD."""
         analyzer = ExtinctionIntervalAnalyzer()
-        lad = np.array([10.0])
-        n_above = np.array([20])
-
-        ci_low_95, ci_up_95, _ = analyzer._marshall_ci(
-            lad, n_above, detection_prob=0.5, confidence_level=0.95
+        result = analyzer.analyze(
+            lad_positions=np.array([3.0, 7.0, 12.0]),
+            detection_probability=0.5,
+            confidence_level=0.95,
+            method="marshall",
         )
-        ci_low_99, ci_up_99, _ = analyzer._marshall_ci(
-            lad, n_above, detection_prob=0.5, confidence_level=0.99
-        )
+        assert np.all(result.confidence_interval_upper == result.lad_positions)
+        assert np.all(result.confidence_interval_lower <= result.confidence_interval_upper)
 
-        offset_95 = ci_up_95[0] - lad[0]
-        offset_99 = ci_up_99[0] - lad[0]
-        assert offset_99 > offset_95, (
-            f"99% CI should be wider than 95% CI. "
-            f"offset_95={offset_95}, offset_99={offset_99}"
-        )
 
-    def test_marshall_known_numerical(self):
-        """Verify exact chi-square computation."""
-        # Manual computation:
-        # r = n_eff = 20 (layers above) / 0.5 (detection prob) = 40
-        # chi2_{0.10, 2} = 4.605
-        # offset = 4.605 / (2 * 40) = 0.0576
-        # ci_upper = 10 + 0.0576 = 10.0576
+class TestStraussSadlerCI:
+    """Verify Strauss & Sadler (1989) endpoint CI (last-spacing form)."""
+
+    def test_95_multiplier(self):
+        """95% gap = 1.736 x last spacing, toward the younger side."""
         analyzer = ExtinctionIntervalAnalyzer()
-        lad = np.array([10.0])
-        n_above = np.array([20])
-        det_prob = 0.5
+        # Subject is the middle LAD (35): last spacing to the next younger
+        # LAD (20) is 15.
+        lad = np.array([40.0, 35.0, 20.0])
+        n_above = np.array([2, 1, 0])
 
-        ci_low, ci_up, _ = analyzer._marshall_ci(
-            lad, n_above, detection_prob=det_prob, confidence_level=0.95
-        )
+        ci_low, ci_up, _ = analyzer._strauss_sadler_ci(lad, n_above, 0.95)
 
-        expected_offset = stats.chi2.ppf(0.90, df=2) / (2.0 * 40)
-        expected_upper = 10.0 + expected_offset
-        assert abs(ci_up[0] - expected_upper) < 1e-6, (
-            f"Expected upper={expected_upper}, got {ci_up[0]}"
-        )
+        expected_gap = (0.05 ** (-0.5) - 1.0) / 2.0 * 15.0  # 1.736 * 15
+        assert abs((ci_up[1] - ci_low[1]) - expected_gap) < 1e-9
+        assert abs(ci_low[1] - (35.0 - expected_gap)) < 1e-9
+
+    def test_50_multiplier(self):
+        """50% gap = 0.207 x last spacing."""
+        analyzer = ExtinctionIntervalAnalyzer()
+        lad = np.array([40.0, 35.0, 20.0])
+        n_above = np.array([2, 1, 0])
+
+        ci_low, ci_up, _ = analyzer._strauss_sadler_ci(lad, n_above, 0.50)
+
+        expected_gap = (0.50 ** (-0.5) - 1.0) / 2.0 * 15.0  # 0.207 * 15
+        assert abs((ci_up[1] - ci_low[1]) - expected_gap) < 1e-9
+
+    def test_younger_direction(self):
+        """All intervals must lie at or younger than the LAD."""
+        analyzer = ExtinctionIntervalAnalyzer()
+        lad = np.array([14.0, 9.0, 4.0])
+        n_above = np.array([2, 1, 0])
+
+        ci_low, ci_up, _ = analyzer._strauss_sadler_ci(lad, n_above, 0.95)
+
+        assert np.all(ci_up == lad)
+        assert np.all(ci_low <= lad)
+        assert np.all(ci_low >= 0)

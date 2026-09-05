@@ -246,12 +246,16 @@ class CohortSurvivorshipAnalysis:
 
             for o, L in records:
                 # Check temporal relationships
-                started_before = o < t_start
+                # 半开区间 [t_start, t_end): 恰在共享边界上的年龄只计入
+                # 一侧, 避免相邻 bin 重复计数 (此前双端闭合会重复计入)。
+                # 灭绝恰在年轻边界 (含 L=0 的现生存哨兵) 记为"存活过"
+                # —— 否则现生存类群会被误判为区间内灭绝 (p 归零)。
+                started_before = o > t_end
                 started_in = t_start <= o < t_end
-                started_after = o >= t_end
-                ended_before = L < t_start
+                started_after = o < t_start
+                ended_before = L > t_end
                 ended_in = t_start <= L < t_end
-                ended_after = L >= t_end
+                ended_after = L <= t_start
 
                 if started_before and ended_after:
                     # Through-timer: existed before interval, survived past interval
@@ -309,39 +313,38 @@ class CohortSurvivorshipAnalysis:
                 ci_upper = (center + width) / (1 + z**2 / n)
                 confidence_intervals.append((ci_lower, ci_upper))
 
-                # 起源率 λ 与灭绝率 μ (Foote 1999 per-capita rates)
-                dt = t_start - t_end
+                # 起源率与灭绝率 (Foote per-capita 边界穿越者估计)
+                # 时间从新到老: t_start (年轻边界) < t_end (年老边界),
+                # dt = t_end - t_start (正的时间跨度)。
+                dt = t_end - t_start
                 if dt > 0:
-                    # 修正: 公式正确,origination = -ln(1-p)/dt, extinction = -ln(p)/dt
-                    if p < 1:
-                        origination_rates[i] = -np.log(1 - p) / dt
-                    else:
-                        # p = 1 ⇒ 无人起源 ⇒ λ = 0
-                        origination_rates[i] = 0.0
-                    if p > 0:
-                        extinction_rates[i] = -np.log(p) / dt
-                    else:
-                        # p = 0 ⇒ 无人存活 ⇒ μ → ∞
-                        extinction_rates[i] = float("inf")
-
-                    # Foote 1997 cohort rates (Marshall 1990 style)
-                    # p = -ln(N_bt / N_t) / Δt
-                    # q = -ln(N_bL / N_t) / Δt
-                    if n_t > 0 and n_bt > 0:
-                        foote97_origination[i] = -np.log(n_bt / n_t) / dt
-                    else:
+                    # Foote (1997, 2000) cohort / per-capita rates:
+                    #   起源 p = -ln(Nbt/Nt)/dt   Nbt = 向后存续者份额
+                    #     (P(在区间之前已存在) = e^{-p·dt})
+                    #   灭绝 q = -ln(Nft/Nt)/dt   Nft = 向前存续者份额
+                    #     (P(存活出年轻边界) = e^{-q·dt})
+                    # 边界情形: Nt=0 → 未定义 (nan); Nbt=0 或 Nft=0 → inf。
+                    # 旧实现 origination = -ln(1-p)/dt 以存活份额推起源率、
+                    # 灭绝率用向后计数 Nbl, 均非任何标准估计量 (2026-09
+                    # 复审; birth-death 模拟显示旧灭绝估计偏差 +191%)。
+                    if n_t == 0:
                         foote97_origination[i] = np.nan
-                    if n_t > 0 and n_bl > 0:
-                        foote97_extinction[i] = -np.log(n_bl / n_t) / dt
-                    else:
                         foote97_extinction[i] = np.nan
+                    else:
+                        foote97_origination[i] = -np.log(n_bt / n_t) / dt if n_bt > 0 else float("inf")
+                        foote97_extinction[i] = -np.log(n_ft / n_t) / dt if n_ft > 0 else float("inf")
 
-                    # Foote 2000 simplified rates (without sampling correction)
-                    # p_F = N_Ft / N_t
-                    # q_F = N_FL / N_t
+                    # Foote 2000 简化概率 (非率):
+                    #   起源概率 = 区间内起源者份额 Nbl/Nt (旧实现误用 Nft,
+                    #   即向前存活份额 = 1 - 灭绝概率)
+                    #   灭绝概率 = 区间内灭绝者份额 Nfl/Nt
                     if n_t > 0:
-                        foote00_origination[i] = n_ft / n_t
+                        foote00_origination[i] = n_bl / n_t
                         foote00_extinction[i] = n_fl / n_t
+
+                    # 主率输出与 Foote cohort 估计保持一致
+                    origination_rates[i] = foote97_origination[i]
+                    extinction_rates[i] = foote97_extinction[i]
             else:
                 survival_rates[i] = np.nan
                 extinction_probs[i] = np.nan

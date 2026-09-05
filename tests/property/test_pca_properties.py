@@ -101,7 +101,10 @@ def test_pca_loadings_diagonal_gramian(data):
     expected_diag = np.diag(result.eigenvalues)
     diag_str = np.array2string(np.diag(result.eigenvalues), precision=4)
     gramian_str = np.array2string(gramian, precision=4)
-    assert np.allclose(gramian, expected_diag, atol=1e-10), (
+    # 量级感知容差: 特征值大时 (如 5.9e5) 浮点舍入的绝对残差可达
+    # 1e-10 以上, 固定 atol=1e-10 会随数据量级偶然失败。
+    tol = 1e-10 + 1e-9 * float(np.max(np.abs(expected_diag)))
+    assert np.allclose(gramian, expected_diag, atol=tol), (
         f"Loadings Gramian is not diagonal. Gramian: {gramian_str}, Expected diagonal: {diag_str}"
     )
 
@@ -126,17 +129,26 @@ def test_pca_covariance_reconstruction(data):
     except Exception:
         return
     analyzer = PCAAnalyzer()
-    result = analyzer.analyze(X, method="covariance")
-    n_samples = X.shape[0]
+    n_samples, n_features = X.shape
+    # 显式请求全部主成分: 全成分下 V·Λ·Vᵀ 必须精确重建协方差矩阵。
+    # 旧测试用默认截断的 n_components, 丢弃尾部成分后重建误差可以
+    # 任意大, "<2.0" 的宽容差掩盖不了病态样例 (稀疏 4x3 矩阵即失败)。
+    result = analyzer.analyze(X, n_components=min(n_samples - 1, n_features), method="covariance")
     X_centered = X - result.mean_vector
     S_original = (X_centered.T @ X_centered) / (n_samples - 1)
-    V = result.loadings
-    Lambda = np.diag(result.eigenvalues)
-    S_reconstructed = V @ Lambda @ V.T
-    total_var = np.sum(np.diag(S_original))
-    error = np.linalg.norm(S_original - S_reconstructed, "fro")
-    relative_error = error / total_var if total_var > 0 else error
-    assert relative_error < 2.0  # Allow up to 200% error for pathological data  # Allow up to 50% reconstruction error
+    # 本代码的 loadings 约定为 U·√Λ (见 pca.py: loadings[:,k] =
+    # eigenvector_k * sqrt(eigenvalue_k)), 因此 S = L·Lᵀ;
+    # 旧写法 L·Λ·Lᵀ 隐含 loadings 为单位特征向量, 与约定不符。
+    L = result.loadings
+    S_reconstructed = L @ L.T
+    # 全成分重建: 相对 Frobenius 误差应接近机器精度
+    denom = np.linalg.norm(S_original, "fro")
+    if denom < 1e-12:
+        return
+    relative_error = np.linalg.norm(S_original - S_reconstructed, "fro") / denom
+    assert relative_error < 1e-8, (
+        f"Full-component covariance reconstruction failed: relative_error={relative_error}"
+    )
 
 
 @given(data=_2d_small_data)

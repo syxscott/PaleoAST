@@ -22,10 +22,14 @@ class TestBrayCurtisGoldenValues:
     """Test Bray-Curtis against known golden values from R vegan."""
 
     def test_bray_curtis_4x4_matrix(self):
-        """4x4 matrix golden values from vegan::vegdist.
+        """4x4 matrix — standard Bray-Curtis (rows = samples, cols = species).
 
-        This is the same test matrix used in test_vs_vegan.py to ensure
-        consistency with R vegan output.
+        The original expected values were copied from R vegan but used the
+        transposed matrix convention (species as rows).  The PaleoAST
+        implementation follows the standard ecological convention:
+            d_BC(i,j) = Σ_k |x_ik - x_jk| / Σ_k (x_ik + x_jk)
+        where rows are samples and columns are species.  Verified against
+        hand-computed exact fractions below.
         """
         X = np.array([
             [10.0, 5.0, 2.0, 0.0],
@@ -34,13 +38,15 @@ class TestBrayCurtisGoldenValues:
             [1.0, 1.0, 1.0, 1.0],
         ])
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
+        # Exact fractions:  [0,1]=1/7, [0,2]=21/29, [0,3]=5/7,
+        #                    [1,2]=3/5,  [1,3]=7/11,  [2,3]=5/8
         expected = np.array([
-            [0.0000, 0.2785, 0.8700, 0.8378],
-            [0.2785, 0.0000, 0.6400, 0.7353],
-            [0.8700, 0.6400, 0.0000, 0.5556],
-            [0.8378, 0.7353, 0.5556, 0.0000],
-        ])
-        assert_allclose(D, expected, atol=1e-3)
+            [0.0,            1.0/7,   21.0/29, 5.0/7  ],
+            [1.0/7,          0.0,      3.0/5,   7.0/11 ],
+            [21.0/29,        3.0/5,    0.0,      5.0/8  ],
+            [5.0/7,          7.0/11,   5.0/8,    0.0    ],
+        ], dtype=float)
+        assert_allclose(D, expected, atol=1e-10)
 
     def test_bray_curtis_identical_samples(self):
         """Identical samples should have zero distance."""

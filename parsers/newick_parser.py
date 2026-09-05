@@ -213,7 +213,8 @@ class TreeNode:
 
             def copy_subtree(node: TreeNode, parent: TreeNode | None) -> TreeNode:
                 new_node = TreeNode(
-                    name=node.name, branch_length=node.branch_length, parent=parent, support=node.support
+                    name=node.name, branch_length=node.branch_length, parent=parent, support=node.support,
+                    metadata=dict(node.metadata),
                 )
                 for child in node.children:
                     new_child = copy_subtree(child, new_node)
@@ -266,7 +267,9 @@ class TreeNode:
                     if i > 0 and child is path[i - 1]:
                         # 路径上的前一个节点，已处理
                         if prev_node is not None:
-                            prev_node.branch_length = child.branch_length if child.branch_length else None
+                            prev_node.branch_length = (
+                                child.branch_length if child.branch_length is not None else None
+                            )
                             rerooted.children.append(prev_node)
                             prev_node.parent = rerooted
                     else:
@@ -283,7 +286,9 @@ class TreeNode:
                     elif i > 0 and child is path[i - 1]:
                         # 路径上的前一个节点
                         if prev_node is not None:
-                            prev_node.branch_length = child.branch_length if child.branch_length else None
+                            prev_node.branch_length = (
+                                child.branch_length if child.branch_length is not None else None
+                            )
                             new_node.children.append(prev_node)
                             prev_node.parent = new_node
                     else:
@@ -295,11 +300,28 @@ class TreeNode:
 
     def _copy_subtree_full(self, node: TreeNode, parent: TreeNode | None) -> TreeNode:
         """完整复制子树"""
-        new_node = TreeNode(name=node.name, branch_length=node.branch_length, parent=parent, support=node.support)
+        new_node = TreeNode(
+            name=node.name, branch_length=node.branch_length, parent=parent, support=node.support,
+            metadata=dict(node.metadata),
+        )
         for child in node.children:
             new_child = self._copy_subtree_full(child, new_node)
             new_node.children.append(new_child)
         return new_node
+
+    @staticmethod
+    def _format_label(name: str) -> str:
+        """
+        将节点标签格式化为合法 Newick token。
+
+        含空白或特殊字符的标签用单引号包裹 (内部单引号翻倍),
+        与解析器的引号标签支持配对, 保证 to_newick → parse 往返一致。
+        """
+        if not name:
+            return ""
+        if any(ch in name for ch in "()[],;:'\" \t\n\r"):
+            return "'" + name.replace("'", "''") + "'"
+        return name
 
     def to_newick(self, include_lengths: bool = True) -> str:
         """
@@ -312,9 +334,10 @@ class TreeNode:
             Newick格式字符串
         """
         if self.is_leaf:
+            label = self._format_label(self.name)
             if include_lengths and self.branch_length is not None:
-                return f"{self.name}:{self.branch_length}"
-            return self.name
+                return f"{label}:{self.branch_length}"
+            return label
 
         # 内部节点
         children_strs = []
@@ -324,7 +347,7 @@ class TreeNode:
         subtree = f"({','.join(children_strs)})"
 
         if self.name:
-            subtree += self.name
+            subtree += self._format_label(self.name)
 
         if include_lengths and self.branch_length is not None:
             subtree += f":{self.branch_length}"
@@ -502,9 +525,13 @@ class NewickParser:
         self._MAX_DEPTH: int = 1000
 
         # 正则表达式
-        self._name_pattern = re.compile(r"^([^():,\s;]+)")
+        # 注: 中括号/引号不属于未加引号的名字——'[' 开启注释或 NHX 元数据,
+        # 否则 "[&&NHX:..." 会被吞进节点名并使后续解析错位 (曾引发死循环)。
+        self._name_pattern = re.compile(r"^([^():,\[\]'\"\s;]+)")
         self._number_pattern = re.compile(r"^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)")
         self._whitespace_pattern = re.compile(r"^\s+")
+        # 括号配对计数: parse() 结束时非零说明括号不匹配
+        self._paren_balance: int = 0
 
     def parse(self, newick_string: str) -> NewickTree:
         """
@@ -526,6 +553,7 @@ class NewickParser:
         self._input = newick_string.strip()
         self._pos = 0
         self._length = len(self._input)
+        self._paren_balance = 0
 
         self._logger.debug(f"Parsing Newick: {self._input[:50]}...")
 
@@ -543,6 +571,18 @@ class NewickParser:
                 self._advance()
                 break
 
+            # 跳过 Newick 注释 [comment]: 扫描至配对的 ']' (支持嵌套)。
+            # 旧实现扫描到行尾, 会把同一行注释之后的树一并吞掉。
+            if self._current() == "[":
+                self._consume_bracket_block()
+                continue
+
+            # 游离的 ')': 若不报错, 顶层循环将无法消耗任何字符而无限追加空节点
+            if self._current() == ")":
+                raise ValueError(
+                    f"Unmatched ')' in Newick string at position {self._pos}"
+                )
+
             # 解析树
             tree = self._parse_subtree()
             if tree:
@@ -559,6 +599,13 @@ class NewickParser:
             # 检查逗号分隔多棵树
             if self._current() == ",":
                 self._advance()
+
+        # 检查括号配对 (如 "((A,B);" 这类未闭合输入此前被静默接受)
+        if self._paren_balance > 0:
+            raise ValueError(
+                f"Unbalanced parentheses in Newick string: "
+                f"{self._paren_balance} unclosed '('"
+            )
 
         # 检查是否解析成功
         if not trees:
@@ -594,7 +641,8 @@ class NewickParser:
                 f"Newick file too large: {size} bytes (limit {max_size}); "
                 "refusing to read to prevent memory exhaustion."
             )
-        with open(filepath, encoding="utf-8") as f:
+        # Use utf-8-sig to strip UTF-8 BOM if present
+        with open(filepath, encoding="utf-8-sig") as f:
             content = f.read()
 
         return self.parse_multi(content)
@@ -682,11 +730,17 @@ class NewickParser:
         public method wraps this in a depth counter."""
         # 消耗 '('
         self._advance()
+        self._paren_balance += 1
 
         children: list[TreeNode] = []
 
         while True:
             self._skip_whitespace()
+
+            # 子节点前的注释 (如 (A,[comment]B))
+            while self._current() == "[":
+                self._consume_bracket_block()
+                self._skip_whitespace()
 
             # 解析第一个子节点
             child = self._parse_subtree()
@@ -695,12 +749,18 @@ class NewickParser:
 
             self._skip_whitespace()
 
+            # 子节点后的注释
+            while self._current() == "[":
+                self._consume_bracket_block()
+                self._skip_whitespace()
+
             # 检查分隔符
             if self._current() == ",":
                 self._advance()
                 continue
             elif self._current() == ")":
                 self._advance()
+                self._paren_balance -= 1
                 break
             else:
                 # 可能到达字符串末尾
@@ -709,13 +769,28 @@ class NewickParser:
         # 解析节点名称和枝长
         name = self._parse_name() or ""
 
+        # 名称之后、枝长之前的 NHX 元数据: (...)[&&NHX:x=1]:0.5
+        metadata: dict[str, Any] = {}
+        if self._current() == "[":
+            nhx_content = self._consume_bracket_block()
+            if nhx_content is not None:
+                metadata.update(self._parse_nhx_pairs(nhx_content))
+
         branch_length = None
         if self._current() == ":":
             self._advance()
             branch_length = self._parse_number()
 
+        # 枝长之后的 NHX 元数据: (...):0.5[&&NHX:x=1]
+        if self._current() == "[":
+            nhx_content = self._consume_bracket_block()
+            if nhx_content is not None:
+                metadata.update(self._parse_nhx_pairs(nhx_content))
+
         # 创建内部节点
         node = TreeNode(name=name, branch_length=branch_length)
+        if metadata:
+            node.metadata.update(metadata)
 
         # 设置子节点
         for child in children:
@@ -728,31 +803,76 @@ class NewickParser:
         """
         解析简单节点 (叶节点)
 
-        格式: name:length
+        格式: name[length][:branch_length]
 
         返回:
             TreeNode对象
         """
         name = self._parse_name() or ""
 
+        # 叶节点 NHX 元数据 (名称之后、枝长之前): A[&&NHX:S=human]:0.1
+        metadata: dict[str, Any] = {}
+        if self._current() == "[":
+            nhx_content = self._consume_bracket_block()
+            if nhx_content is not None:
+                metadata.update(self._parse_nhx_pairs(nhx_content))
+
         branch_length = None
         if self._current() == ":":
             self._advance()
             branch_length = self._parse_number()
 
-        return TreeNode(name=name, branch_length=branch_length)
+        # 枝长之后的 NHX 元数据: A:0.1[&&NHX:S=human]
+        if self._current() == "[":
+            nhx_content = self._consume_bracket_block()
+            if nhx_content is not None:
+                metadata.update(self._parse_nhx_pairs(nhx_content))
+
+        node = TreeNode(name=name, branch_length=branch_length)
+        if metadata:
+            node.metadata.update(metadata)
+        return node
 
     def _parse_name(self) -> str | None:
         """
         解析节点名称
 
-        名称是非空白、非特殊字符的序列。
+        支持:
+        - 普通名称: 非空白、非特殊字符序列
+        - 单引号名称: 'Homo sapiens' (允许包含空格)
+        - 双引号名称: "Homo sapiens"
 
         返回:
-            名称字符串
+            名称字符串 (引号已剥离)
         """
         self._skip_whitespace()
 
+        if self._pos >= self._length:
+            return None
+
+        # Support quoted labels: 'name with spaces' or "name with spaces"
+        quote_char = self._current()
+        if quote_char in ("'", '"'):
+            quote_char_typed = quote_char
+            self._advance()
+            start = self._pos
+            # Scan until matching quote
+            while self._pos < self._length and self._current() != quote_char_typed:
+                # Allow escaped quotes: \' or \"
+                if self._current() == "\\" and self._pos + 1 < self._length:
+                    self._advance()
+                self._advance()
+            if self._pos >= self._length:
+                raise ValueError(
+                    f"Unterminated quoted name starting at position {start}"
+                )
+            name = self._input[start : self._pos]
+            self._advance()  # consume closing quote
+            # Unescape internal escaped quotes
+            name = name.replace("\\" + quote_char_typed, quote_char_typed)
+            return name
+
+        # Unquoted name: non-whitespace, non-special chars
         match = self._name_pattern.match(self._input[self._pos :])
         if match:
             name = match.group(1)
@@ -779,6 +899,81 @@ class NewickParser:
             return value
 
         return None
+
+    def _consume_bracket_block(self) -> str | None:
+        """
+        消费当前位置的 [ ... ] 块 (平衡嵌套扫描)。
+
+        返回:
+            若块以 "&&NHX" 开头则返回其内容字符串 (不含括号);
+            普通注释返回 None。
+
+        异常:
+            ValueError: 块未闭合
+        """
+        if self._current() != "[":
+            return None
+        start_pos = self._pos
+        self._advance()  # consume '['
+
+        is_nhx = self._input[self._pos : self._pos + 5] == "&&NHX"
+        if is_nhx:
+            self._advance(5)  # consume '&&NHX'
+
+        content_start = self._pos
+        depth = 1
+        while self._pos < self._length and depth > 0:
+            ch = self._current()
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+            self._advance()
+
+        if depth > 0:
+            raise ValueError(
+                f"Unterminated bracket block at position {start_pos}"
+            )
+
+        if not is_nhx:
+            return None
+        # self._pos 位于 ']' 之后
+        return self._input[content_start : self._pos - 1]
+
+    @staticmethod
+    def _parse_nhx_pairs(content: str) -> dict[str, str]:
+        """
+        解析 NHX 属性串。
+
+        规范格式 (Zmasek & Eddy 2001) 以 ':' 分隔属性:
+            [&&NHX:spec=Human:bug=Tyro]
+        亦兼容逗号分隔 (部分工具输出):
+            [&&NHX B=95,D=N]
+
+        返回:
+            dict of metadata key -> value strings
+        """
+        content = content.strip()
+        if not content:
+            return {}
+
+        if ":" in content:
+            tokens = content.split(":")
+        else:
+            tokens = content.split(",")
+
+        metadata: dict[str, str] = {}
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+            if "=" in token:
+                key, _, value = token.partition("=")
+                metadata[key.strip()] = value.strip()
+            else:
+                # 裸标志位 (无值), 记录为空串
+                metadata[token] = ""
+        return metadata
 
     def _skip_whitespace(self) -> None:
         """跳过空白字符"""

@@ -291,6 +291,9 @@ class LexerTokenizer:
         # 关键字映射
         self._keywords: dict[str, TokenType] = {}
 
+        # 组名 -> 规则 映射 (由 _compile_pattern 维护)
+        self._group_rules: dict[str, LexerRule] = {}
+
     def _compile_pattern(self) -> None:
         """
         编译合并的正则表达式
@@ -305,10 +308,16 @@ class LexerTokenizer:
         sorted_rules = sorted(self._rules, key=lambda r: r.priority)
 
         # 构建分支模式
+        # 注: 组名用规则索引 (r0, r1, ...) 而非 TokenType 名——同一
+        # TokenType 可对应多条规则 (如双引号/单引号字符串), 用类型名
+        # 作组名会在 re.compile 时因组名重定义而崩溃。
         branches = []
-        for rule in sorted_rules:
+        self._group_rules = {}
+        for idx, rule in enumerate(sorted_rules):
             pattern_str = rule.pattern.pattern
-            branches.append(f"(?P<{rule.token_type.name}>{pattern_str})")
+            group_name = f"r{idx}"
+            self._group_rules[group_name] = rule
+            branches.append(f"(?P<{group_name}>{pattern_str})")
 
         combined = "|".join(branches)
         self._combined_pattern = re.compile(combined, flags=re.MULTILINE)
@@ -384,18 +393,13 @@ class LexerTokenizer:
             match = self._combined_pattern.match(source, position) if self._combined_pattern else None
 
             if match:
-                # 确定匹配的Token类型
+                # 确定匹配的Token类型: 取第一个命中的规则组 (rN)。
+                # 只认 _group_rules 中的组, 跳过规则模式自带的命名组,
+                # 避免内部组抢先命中导致类型误判。
                 token_type = None
                 for name, value in match.groupdict().items():
-                    if value is not None:
-                        try:
-                            token_type = TokenType[name]
-                        except KeyError:
-                            # 尝试从规则中查找
-                            for rule in self._rules:
-                                if rule.token_type.name == name:
-                                    token_type = rule.token_type
-                                    break
+                    if value is not None and name in self._group_rules:
+                        token_type = self._group_rules[name].token_type
                         break
 
                 if token_type is None:

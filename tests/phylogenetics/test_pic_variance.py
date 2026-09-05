@@ -35,8 +35,9 @@ class TestPICVariance4TaxaTree:
 
     @pytest.fixture
     def tree_4taxa(self):
-        """创建经典 4-taxa 树: (A:1, B:2, (C:3, D:4)E:5)F:0;"""
-        return PhyloTree.from_newick("(A:1, B:2, (C:3, D:4)E:5)F:0;")
+        """经典 4-taxa 全二叉树 (旧 fixture "(A:1, B:2, (C:3, D:4)E:5)F:0;"
+        的根有 3 个子节点, 是三分叉而非二叉树)"""
+        return PhyloTree.from_newick("((A:1, B:2):3, (C:3, D:4):5)F:0;")
 
     @pytest.fixture
     def traits_simple(self):
@@ -90,15 +91,15 @@ class TestPICVariancePolytomy:
 
     @pytest.fixture
     def tree_5taxa_polytomy(self):
-        """创建 5-taxa 树，带 3-furcation (polytomy)"""
-        # ((A:1, B:2, C:3)D:4, E:5)F:0;
-        # D 节点有 3 个子节点 (A, B, C)，形成 2 个独立对比
-        return PhyloTree.from_newick("((A:1, B:2, C:3)D:4, E:5)F:0;")
+        """创建 5-tip 树，带 3-furcation (polytomy)。
+        (旧 fixture "((A:1, B:2, C:3)D:4, E:5)F:0;" 只有 4 个 tip——
+        "D" 是内部节点名而非第 5 个分类单元)"""
+        return PhyloTree.from_newick("((A:1, B:2, C:3)Z:4, E:5, G:6)F:0;")
 
     @pytest.fixture
     def traits_5taxa(self):
         """5 个分类单元的性状数据"""
-        return {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0}
+        return {"A": 1.0, "B": 2.0, "C": 3.0, "E": 4.0, "G": 5.0}
 
     def test_polytomy_detected(self, tree_5taxa_polytomy):
         """验证 polytomy 被正确检测"""

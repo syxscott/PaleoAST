@@ -1918,25 +1918,37 @@ class MainWindow(QMainWindow):
         help_menu.addAction(doc_action)
 
     def _switch_language(self, lang: str) -> None:
-        """Switch application language with restart prompt.
+        """Switch application language.
 
-        The menu-bar check state is only flipped after the user
-        confirms an immediate restart. If the user defers ("Later"),
-        the actual translator language remains unchanged and the menu
-        check-marks are rolled back to reflect the real current state.
+        语言选择立即持久化到 QSettings: 两个分支 ("立即重启" /
+        "下次启动生效") 都保证该选择不会丢失。会话内 UI 仍是旧语言
+        (界面文本在构建时经 _() 取值, 无重翻译机制), 因此:
+        - "立即重启": 重启进程, 新语言即刻生效;
+        - "下次启动生效": 勾选移到新语言, 并在状态栏提示下次启动生效。
+        旧实现中 "稍后" 分支既不持久化也不应用——用户以为稍后生效,
+        实际永不生效, 属于 UX 陷阱, 已修正。
         """
         from PyQt6.QtCore import QSettings
         from PyQt6.QtWidgets import QMessageBox
 
         current_lang = get_translator().get_language()
         if lang == current_lang:
+            # 点击的就是当前会话语言: 清除可能遗留的"下次启动生效"
+            # 持久化选择, 保证 QSettings 与用户最终意图一致。
+            settings = QSettings("PaleoAST", "PaleoAST")
+            if settings.value("language", "") != lang:
+                settings.setValue("language", lang)
+                settings.sync()
             return
 
-        # Ask user whether to restart now.
-        # NOTE: do NOT update QSettings / check-marks yet. We commit
-        # the new language only if the user explicitly accepts the
-        # restart, otherwise the menu would be lying about the
-        # in-session language.
+        # 立即持久化 (execv 替换进程前显式 flush 更安全)
+        settings = QSettings("PaleoAST", "PaleoAST")
+        settings.setValue("language", lang)
+        settings.sync()
+        # 选择已提交, 勾选反映新语言
+        self._lang_action_en.setChecked(lang == "en")
+        self._lang_action_zh.setChecked(lang == "zh")
+
         msg = QMessageBox(self)
         msg.setWindowTitle(_("Language Changed"))
         msg.setIcon(QMessageBox.Icon.Question)
@@ -1950,23 +1962,16 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         msg.button(QMessageBox.StandardButton.Yes).setText(_("Restart Now"))
-        msg.button(QMessageBox.StandardButton.No).setText(_("Later"))
-
+        msg.button(QMessageBox.StandardButton.No).setText(_("Apply on Next Start"))
         if msg.exec() != QMessageBox.StandardButton.Yes:
-            # User deferred. Roll back the menu check-marks so they
-            # reflect the actual current language.
-            self._lang_action_en.setChecked(current_lang == "en")
-            self._lang_action_zh.setChecked(current_lang == "zh")
+            # 用户选择"下次启动生效": 选择已保存, 无需进一步操作
+            self._status_bar.setInfo(
+                _("Language will change to {0} on next start.").format(
+                    "中文" if lang == "zh" else "English"
+                )
+            )
             return
 
-        # User accepted the restart: persist the choice *before* the
-        # process is replaced (QSettings flush is best-effort but
-        # explicit saves are safer).
-        settings = QSettings("PaleoAST", "PaleoAST")
-        settings.setValue("language", lang)
-        settings.sync()
-        self._lang_action_en.setChecked(lang == "en")
-        self._lang_action_zh.setChecked(lang == "zh")
         self._restart_application()
 
     def _restart_application(self) -> None:
@@ -1995,14 +2000,27 @@ class MainWindow(QMainWindow):
         QApplication.quit()
 
         # Replace the current process with a fresh interpreter.
-        # ``os.execv`` is preferred over ``os.execl`` because it accepts
-        # the full argument list as a single sequence.
-        try:
-            os.execv(sys.executable, [sys.executable, *sys.argv])
-        except OSError:
-            # If exec fails (e.g. the binary is gone) fall back to a
-            # plain exit and let the user restart manually.
+        # Windows 上 os.execv 以分离方式重启且立即从调用点返回,
+        # 可能产生新旧两个实例并存; 用分离子进程 + 正常退出更稳。
+        # POSIX 上 execv 真正替换进程映像, 保持原实现。
+        if sys.platform == "win32":
+            import subprocess
+
+            subprocess.Popen(
+                [sys.executable, *sys.argv],
+                cwd=os.getcwd(),
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+            QApplication.quit()
             sys.exit(0)
+        else:
+            try:
+                os.execv(sys.executable, [sys.executable, *sys.argv])
+            except OSError:
+                # If exec fails (e.g. the binary is gone) fall back to a
+                # plain exit and let the user restart manually.
+                sys.exit(0)
 
     def _on_navigation_clicked(self, item: NavigationItem) -> None:
         """
@@ -2176,8 +2194,9 @@ class MainWindow(QMainWindow):
                 else:
                     matrix = self._data_controller.load_csv(filepath, has_header=True, has_row_labels=True)
 
-                # Update state manager
-                self._state.set_data_matrix(matrix)
+                # Update state manager. Loading from disk is not a user
+                # modification: do not flag the project as modified.
+                self._state.set_data_matrix(matrix, mark_modified=False)
 
                 self._spreadsheet.load_data(matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels, update_state=False)
                 self._workspace.setCurrentIndex(self._spreadsheet_index)
@@ -2518,8 +2537,9 @@ class MainWindow(QMainWindow):
         col_labels = metadata.get("col_labels")
         matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
 
-        # Update state manager
-        self._state.set_data_matrix(matrix)
+        # Update state manager. Loading fresh data is not a user
+        # modification: do not flag the project as modified.
+        self._state.set_data_matrix(matrix, mark_modified=False)
 
         # ``ScientificSpreadsheet.load_data`` only accepts the explicit
         # ``row_labels`` / ``col_labels`` parameters, not arbitrary
@@ -2926,6 +2946,44 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
+    class _GenericAnalysisTask(QRunnable):
+        """通用后台分析任务: 在线程池中执行 work(), 结果/异常经信号回传。
+
+        长时间计算 (NMDS 多重启动、CONISS、GPA 迭代等) 若在 GUI 线程
+        同步执行会冻结整个界面且无任何进度提示; 分析处理器应通过
+        ``_run_analysis_async`` 使用本任务。
+        """
+        result_ready = pyqtSignal(object)
+        error_raised = pyqtSignal(Exception)
+
+        def __init__(self, work):
+            super().__init__()
+            self._work = work
+
+        def run(self):
+            try:
+                result = self._work()
+                self.result_ready.emit(result)
+            except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
+                self.error_raised.emit(e)
+
+    def _run_analysis_async(self, work, on_success, on_error, title: str) -> None:
+        """在后台线程运行分析并接气回调。
+
+        Parameters:
+            work: 无参可调用, 返回分析结果 (在worker线程执行)。
+            on_success: result -> None (GUI线程执行)。
+            on_error: Exception -> None (GUI线程执行)。
+            title: 状态栏显示的分析名称。
+        """
+        self._status_bar.setProgress(0, 0)  # indeterminate
+        self._status_bar.setInfo(_("Running {0}...").format(title))
+
+        task = self._GenericAnalysisTask(work)
+        task.result_ready.connect(on_success)
+        task.error_raised.connect(on_error)
+        self._thread_pool.start(task)
+
     class _PCATask(QRunnable):
         """Worker that runs PCA on the thread pool."""
         result_ready = pyqtSignal(object)
@@ -3052,8 +3110,10 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
 
-            try:
-                result = self._statistics_controller.run_nmds(
+            def _work():
+                # 多重启动 SMACOF 是长时间计算, 必须在后台线程执行
+                # (旧实现在 GUI 线程同步运行, 大矩阵会冻结界面)
+                return self._statistics_controller.run_nmds(
                     metric=params["metric"],
                     n_dimensions=params["n_dimensions"],
                     n_restarts=params["n_restarts"],
@@ -3061,6 +3121,8 @@ class MainWindow(QMainWindow):
                     tolerance=params["tolerance"],
                 )
 
+            def _on_result(result):
+                self._status_bar.setProgress(100, 100)
                 plot = InteractivePlotCanvas()
                 plot.plot_nmds(result)
 
@@ -3069,8 +3131,11 @@ class MainWindow(QMainWindow):
 
                 self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
 
-            except Exception as e:
+            def _on_error(e):
+                self._status_bar.setProgress(100, 100)
                 QMessageBox.critical(self, _("NMDS Error"), format_user_error(e, "NMDS"))
+
+            self._run_analysis_async(_work, _on_result, _on_error, _("NMDS"))
 
     def _on_run_diversity(self) -> None:
         """Run diversity analysis."""
@@ -3663,14 +3728,19 @@ class MainWindow(QMainWindow):
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                result = self._statistics_controller.analyze_coniss(
-                    data=self._state.data_matrix.data,
-                    n_zones=params.get("n_zones", 4),
+
+            data = self._state.data_matrix.data
+            n_zones = params.get("n_zones", 4)
+
+            def _work():
+                # CONISS 层次聚类是 O(n^3): 后台线程执行, 避免大剖面冻结 GUI
+                return self._statistics_controller.analyze_coniss(
+                    data=data,
+                    n_zones=n_zones,
                 )
 
-                # Plot dendrogram
+            def _on_result(result):
+                self._status_bar.setProgress(100, 100)
                 sample_names = list(self._state.data_matrix.row_labels or [])
                 plot = InteractivePlotCanvas()
                 plot.plot_coniss_dendrogram(
@@ -3680,10 +3750,12 @@ class MainWindow(QMainWindow):
                 plot_index = self._add_plot_to_workspace(plot, _("CONISS Dendrogram"))
                 self._workspace.setCurrentIndex(plot_index)
                 self._status_bar.setInfo(_("CONISS: {0} zones").format(result.n_zones))
-            except Exception as e:
-                QMessageBox.critical(self, _("CONISS Error"), format_user_error(e, "CONISS"))
-            finally:
+
+            def _on_error(e):
                 self._status_bar.setProgress(100, 100)
+                QMessageBox.critical(self, _("CONISS Error"), format_user_error(e, "CONISS"))
+
+            self._run_analysis_async(_work, _on_result, _on_error, _("CONISS"))
 
     def _on_run_markov(self) -> None:
         """Run Markov chain analysis."""
@@ -4410,11 +4482,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
-        try:
-            self._status_bar.setProgress(0, 0)
-            result = self._statistics_controller.analyze_gpa(
-                data=self._state.data_matrix.data,
-            )
+        data = self._state.data_matrix.data
+
+        def _gpa_work():
+            # GPA 迭代对齐在标本/标志点多时是长计算, 后台线程执行
+            return self._statistics_controller.analyze_gpa(data=data)
+
+        def _gpa_result(result):
+            self._status_bar.setProgress(100, 100)
 
             import numpy as _np  # local import keeps the module-level namespace tidy
             plot = InteractivePlotCanvas()
@@ -4464,11 +4539,13 @@ class MainWindow(QMainWindow):
                 self._workspace.setCurrentIndex(plot_index)
 
             self._status_bar.setInfo(_("GPA analysis completed"))
-        except Exception as e:
+
+        def _gpa_error(e):
+            self._status_bar.setProgress(100, 100)
             self._logger.error(f"GPA analysis failed: {e}")
             QMessageBox.critical(self, _("GPA Error"), format_user_error(e, "GPA"))
-        finally:
-            self._status_bar.setProgress(100, 100)
+
+        self._run_analysis_async(_gpa_work, _gpa_result, _gpa_error, _("GPA"))
 
     def _on_run_tps_grid(self) -> None:
         """Run TPS Deformation Grid visualization."""

@@ -213,14 +213,19 @@ class AgeModelAnalyzer:
         Returns:
             AgeModelResult
         """
-        from scipy.interpolate import interp1d
+        from scipy.interpolate import PchipInterpolator, interp1d
 
         constraint_heights = np.array([c[0] for c in age_constraints])
         constraint_ages = np.array([c[1] for c in age_constraints])
         constraint_errors = np.array([c[2] for c in age_constraints])
 
-        kind = "linear" if model_type == "linear" else "cubic"
-        age_func = interp1d(constraint_heights, constraint_ages, kind=kind, fill_value="extrapolate")
+        if model_type == "linear":
+            age_func = interp1d(constraint_heights, constraint_ages, kind="linear", fill_value="extrapolate")
+        else:
+            # PCHIP (单调三次插值): 年龄模型约束点稀疏且年龄-深度关系
+            # 必须单调, 三次样条在稀疏节点间会振荡 (Runge 现象), 甚至
+            # 产生负沉积速率。PCHIP 保形且不振荡 (2026-09 复审 H9)。
+            age_func = PchipInterpolator(constraint_heights, constraint_ages, extrapolate=True)
 
         modeled_ages = age_func(section.heights)
 
@@ -232,6 +237,11 @@ class AgeModelAnalyzer:
                 rates = np.diff(section.heights) / np.diff(modeled_ages)
                 rates = -rates  # Make positive (sedimentation rate)
                 rates = np.concatenate([[rates[0]], rates])
+            if np.any(~np.isfinite(rates)) or np.any(rates < 0):
+                self._logger.warning(
+                    "Age model produced non-positive or non-finite sedimentation rates; "
+                    "check constraint ordering (age must be monotonic with depth)."
+                )
 
         ci_lower = modeled_ages - 1.96 * constraint_errors.mean()
         ci_upper = modeled_ages + 1.96 * constraint_errors.mean()

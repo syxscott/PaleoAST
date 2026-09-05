@@ -47,55 +47,84 @@ from utils.validators import validate_data_array
 logger = logging.getLogger(__name__)
 
 
-def _morlet_wavelet(n: int, w0: float = 5.0) -> np.ndarray:
+def _morlet_wavelet(scale: float, w0: float = 6.0) -> np.ndarray:
     """
-    Generate Morlet wavelet of length n.
+    Generate a dilated, L2-normalized Morlet wavelet.
+
+    Correct CWT requires dilation ψ((t-b)/s): the carrier frequency must
+    scale as w0/s. The previous implementation kept the carrier fixed at
+    w0 rad/sample and only changed the window length, so different
+    "scales" saw the same frequency content and the transform could not
+    detect periodicities (2026-09 review).
 
     Parameters:
-        n: Length of wavelet
-        w0: Central frequency (default 5.0)
+        scale: Dilation scale (in samples)
+        w0: Central frequency (default 6.0, Torrence & Compo 1998)
 
     Returns:
-        Complex Morlet wavelet
+        Complex Morlet wavelet ψ_s(t) = π^{-1/4} e^{i w0 t/s} e^{-t²/(2s²)},
+        L2-normalized to unit energy.
     """
-    n = int(n)
-    half_n = n // 2
-    t = np.arange(-half_n, half_n + 1)
-    # Morlet wavelet: pi^{-1/4} * exp(i*w0*t) * exp(-t^2/2)
-    wavelet = np.exp(1j * w0 * t) * np.exp(-(t**2) / 2)
-    wavelet *= np.pi ** (-0.25)  # Normalization
+    scale = float(scale)
+    length = max(int(np.ceil(10.0 * scale)) | 1, 7)  # ±5·scale, odd
+    half = (length - 1) / 2.0
+    t = np.arange(length, dtype=float) - half
+    eta = t / scale
+    wavelet = np.pi ** (-0.25) * np.exp(1j * w0 * eta) * np.exp(-0.5 * eta**2)
+    energy = np.sqrt(np.sum(np.abs(wavelet) ** 2))
+    if energy > 0:
+        wavelet /= energy
     return wavelet
 
 
-def _mexican_hat_wavelet(n: int) -> np.ndarray:
+def _mexican_hat_wavelet(scale: float) -> np.ndarray:
     """
-    Generate Mexican Hat (Ricker) wavelet of length n.
+    Generate a dilated, L2-normalized Mexican Hat (DOG m=2) wavelet.
 
     Parameters:
-        n: Length of wavelet (should be odd)
+        scale: Dilation scale (in samples)
 
     Returns:
-        Mexican hat wavelet
+        ψ_s(t) = (1 - η²) e^{-η²/2} with η = t/s, L2-normalized.
     """
-    n = int(n)
-    if n % 2 == 0:
-        n += 1
-    half_n = n // 2
-    t = np.arange(-half_n, half_n + 1)
-    # Mexican hat: (1 - t^2) * exp(-t^2/2)
-    wavelet = (1 - t**2) * np.exp(-(t**2) / 2)
-    wavelet *= np.pi ** (-0.25)  # Normalization
+    scale = float(scale)
+    length = max(int(np.ceil(10.0 * scale)) | 1, 7)
+    half = (length - 1) / 2.0
+    t = np.arange(length, dtype=float) - half
+    eta = t / scale
+    wavelet = (1.0 - eta**2) * np.exp(-0.5 * eta**2)
+    energy = np.sqrt(np.sum(np.abs(wavelet) ** 2))
+    if energy > 0:
+        wavelet /= energy
     return wavelet
 
 
-def _cwt_simple(signal: np.ndarray, wavelet_func, scales: np.ndarray) -> np.ndarray:
+def _wavelet_fourier_frequency(scale: float, wavelet: str) -> float:
     """
-    Simple Continuous Wavelet Transform using convolution.
+    Fourier frequency (cycles per sample) of a unit-dilation wavelet at the
+    given scale, following Torrence & Compo (1998), Table 1.
+
+        Morlet (w0=6):      λ = 4πs / (w0 + sqrt(2 + w0²)) → f ≈ 0.968 / s
+        Mexican Hat (m=2):  λ = 2πs / sqrt(m + 1/2)        → f ≈ 0.252 / s
+    """
+    if wavelet == "morlet":
+        w0 = 6.0
+        lambda_per_s = 4.0 * np.pi / (w0 + np.sqrt(2.0 + w0**2))
+        return float(1.0 / (lambda_per_s * scale))
+    # Mexican Hat / DOG m=2
+    lambda_per_s = 2.0 * np.pi / np.sqrt(2.5)
+    return float(1.0 / (lambda_per_s * scale))
+
+
+def _cwt_simple(signal: np.ndarray, wavelet_func, scales: np.ndarray, wavelet_name: str = "morlet") -> np.ndarray:
+    """
+    Continuous Wavelet Transform using convolution.
 
     Parameters:
         signal: Input signal
-        wavelet_func: Function to generate wavelet of given length
+        wavelet_func: Function (scale) -> dilated wavelet
         scales: Wavelet scales
+        wavelet_name: Wavelet name (for frequency conversion)
 
     Returns:
         CWT matrix of shape (len(scales), len(signal))
@@ -105,15 +134,10 @@ def _cwt_simple(signal: np.ndarray, wavelet_func, scales: np.ndarray) -> np.ndar
     cwt_matrix = np.zeros((n_scales, n_samples), dtype=complex)
 
     for i, scale in enumerate(scales):
-        # Wavelet length proportional to scale
-        wavelet_len = max(2 * int(scale) + 1, 7)
-        if wavelet_len % 2 == 0:
-            wavelet_len += 1
-        wavelet = wavelet_func(wavelet_len)
-        # Normalize wavelet by scale
-        wavelet = wavelet / np.sqrt(scale)
-        # Convolve
-        cwt_matrix[i] = fftconvolve(signal, wavelet, mode="same")
+        wavelet = wavelet_func(scale)
+        # L2-normalized dilated wavelet: convolution amplitude is directly
+        # comparable across scales (Torrence & Compo 1998, eq. 4).
+        cwt_matrix[i] = fftconvolve(signal, wavelet[::-1].conj(), mode="same")
 
     return cwt_matrix
 
@@ -346,16 +370,12 @@ class SpectralAnalyzer:
             else:
                 power[i] = 0
 
-        # Normalise. The previous implementation divided by ``variance``
-        # only, which does not give the standard Lomb-Scargle
-        # normalised periodogram (Scargle 1982). The conventional
-        # form divides the squared magnitude by ``2 * n * variance``,
-        # which makes the spectrum dimensionless and comparable
-        # across different sample counts. ``n`` here is the number of
-        # time samples.
-        n = len(values_centered)
-        if variance > 0 and n > 0:
-            power = power / (2.0 * n * variance)
+        # Normalise per Scargle (1982): P = (1/(2σ²))·{...}, giving the
+        # standard dimensionless periodogram with a noise background
+        # level of ≈ 1. The previous division by 2·n·σ² suppressed the
+        # spectrum by a factor n and broke absolute significance levels.
+        if variance > 0:
+            power = power / (2.0 * variance)
 
         return power
 
@@ -464,40 +484,37 @@ class SpectralAnalyzer:
         # Compute CWT using scipy
         if wavelet == "morlet":
             # Morlet wavelet
-            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales)
+            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales, "morlet")
             wavelet_name = "Morlet"
         elif wavelet in ("ricker", "mexican_hat"):
-            cwt_matrix = _cwt_simple(values, _mexican_hat_wavelet, scales)
+            cwt_matrix = _cwt_simple(values, _mexican_hat_wavelet, scales, "mexican_hat")
             wavelet_name = "Mexican Hat"
         else:
             # Default to Morlet
-            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales)
+            cwt_matrix = _cwt_simple(values, _morlet_wavelet, scales, "morlet")
             wavelet_name = "Morlet"
 
         # Power spectrum
         power = np.abs(cwt_matrix) ** 2
 
-        # Convert scales to frequencies
-        # For Morlet: freq = (center_freq * sampling_rate) / scale
-        # Center frequency for Morlet is ~0.8125
+        # Convert scales to Fourier frequencies (cycles per unit time),
+        # following Torrence & Compo (1998) per-wavelet Fourier factors.
         sampling_rate = 1.0 / dt if dt > 0 else 1.0
-        center_freq = 0.8125
-        frequencies = (center_freq * sampling_rate) / scales
+        frequencies = np.array([_wavelet_fourier_frequency(s, wavelet.lower() if wavelet in ("morlet", "mexican_hat") else "morlet") for s in scales]) * sampling_rate
 
         # Find peak
         peak_idx = np.unravel_index(np.argmax(power), power.shape)
         peak_scale = scales[peak_idx[0]]
         peak_frequency = frequencies[peak_idx[0]]
 
-        # Cone of Influence (COI) - regions where edge effects are significant
-        # COI = scale * sqrt(2) in sample units
-        coi = np.zeros_like(values, dtype=bool)
+        # Cone of Influence (COI) - regions where edge effects are significant.
+        # Torrence & Compo (1998): e-folding time = sqrt(2)·s (sample units).
+        # Edge samples (t_from_edge = 0) are unreliable for every scale > 0.
+        coi = np.zeros(len(values), dtype=bool)
         for i in range(len(values)):
-            # Time from edge
             t_from_edge = min(i, len(values) - 1 - i)
-            # Maximum scale that is reliable at this position
-            max_reliable_scale = t_from_edge / (center_freq * np.sqrt(2))
-            coi[i] = np.any(scales > max_reliable_scale) if t_from_edge > 0 else False
+            max_reliable_scale = t_from_edge / np.sqrt(2)
+            coi[i] = bool(np.any(np.asarray(scales) > max_reliable_scale))
 
         result = WaveletResult(
             time=time,

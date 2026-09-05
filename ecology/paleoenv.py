@@ -120,9 +120,11 @@ class PaleoEnvironmentReconstructor:
 
         S_ij = (P_ij - r_i * c_j) / sqrt(r_i * c_j)
 
-    Performing SVD S = U * Sigma * V.T yields the row scores
-    F_r = U * Sigma and column scores F_c = V * Sigma for the first
-    principal inertia axis.
+    Performing SVD S = U * Sigma * V.T yields the canonical principal
+    coordinates for the first principal inertia axis: row scores
+    F_r = U[:, 1] * sigma_1 / sqrt(r) and column scores
+    F_c = V[1, :] * sigma_1 / sqrt(c). Euclidean distances between these
+    scores approximate the chi-square distances between profiles.
 
     Direction Calibration
     ---------------------
@@ -275,8 +277,13 @@ class PaleoEnvironmentReconstructor:
                     _("Leading singular value is non-positive; axis extraction failed")
                 )
 
-            row_axis_raw = u_mat[:, 0] * float(s_vals[0])
-            col_axis_raw = vt_mat[0, :] * float(s_vals[0])
+            # Canonical CA principal coordinates (Greenacre 1984; Legendre &
+            # Legendre 1998): row scores F_k = U[:,k]*sigma_k/sqrt(row mass),
+            # column scores G_k = V[:,k]*sigma_k/sqrt(col mass). Euclidean
+            # distances between these coordinates approximate the chi-square
+            # distances between the row/column profiles.
+            row_axis_raw = u_mat[:, 0] * float(s_vals[0]) / np.sqrt(r_masses)
+            col_axis_raw = vt_mat[0, :] * float(s_vals[0]) / np.sqrt(c_masses)
 
             with np.errstate(invalid="ignore"):
                 corr_matrix = np.corrcoef(row_axis_raw, h_arr)

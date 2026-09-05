@@ -216,14 +216,14 @@ class RipleyKAnalyzer:
         """
         Compute Ripley's K-function for given points.
 
-        Uses the standard estimator (Diggle 2003):
-            K(r) = (A / n²) * Σ_{i ≠ j} I(d_ij < r)
+        Uses the unbiased estimator (Ripley 1976; Diggle 2003):
 
-        Note: the previous implementation divided by ``n * (n - 1)``
-        instead of ``n²``, which slightly under-estimates K for small n.
-        The current formula is internally consistent with the Monte
-        Carlo envelope (which is built with the same expression), so
-        the interpretation of the test against CSR is unchanged.
+            K(r) = (A / (n * (n - 1))) * sum_{i != j} I(d_ij < r)
+
+        The denominator is the number of ordered (i, j) pairs with i != j,
+        which makes K_hat unbiased under CSR (E[K(r)] = pi * r^2). The
+        Monte Carlo envelope is built with this same function, so the
+        statistic and its null distribution remain internally consistent.
         """
         n = points.shape[0]
         k_values = np.zeros(len(r_values))
@@ -247,12 +247,11 @@ class RipleyKAnalyzer:
                         count += 1
 
             # Number of ordered pairs (i != j) is n * (n - 1).
-            # ``count`` already counts each unordered pair once, so
-            # 2*count is the total number of (i, j) ordered pairs with
-            # i != j and d_ij < r. Dividing by n^2 gives the standard
-            # K estimator.
+            # ``count`` counts each unordered pair once, so 2*count is the
+            # total number of ordered pairs with i != j and d_ij < r.
+            # Dividing by n*(n-1) gives the unbiased K estimator under CSR.
             if n > 1:
-                k_values[i] = (area * 2.0 * count) / (n * n)
+                k_values[i] = (area * 2.0 * count) / (n * (n - 1))
             else:
                 k_values[i] = 0.0
 

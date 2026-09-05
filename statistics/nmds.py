@@ -46,6 +46,19 @@ logger = logging.getLogger(__name__)
 class NMDSResult:
     """
     Container for NMDS analysis results.
+
+    Attributes:
+        coordinates: Configuration matrix in reduced space (n_samples × n_dimensions)
+        stress: Final stress value
+        stress_formula: Which stress formula was used ('raw_stress' = default,
+                       denominator uses d_target, or 'stress_1' = Kruskal 1964 canonical,
+                       denominator uses d_hat)
+        n_iterations: Number of iterations to convergence
+        converged: Whether SMACOF converged within tolerance
+        distance_matrix: Original dissimilarity matrix
+        stress_history: Per-iteration stress values
+        metric: Distance metric name (for reference)
+        n_restarts: Number of random restarts performed
     """
 
     coordinates: npt.NDArray
@@ -56,6 +69,7 @@ class NMDSResult:
     stress_history: list
     metric: str
     n_restarts: int
+    stress_formula: str = "raw_stress"
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -63,6 +77,7 @@ class NMDSResult:
             f"{_('Non-metric MDS Results')}\n"
             f"{'=' * 40}\n"
             f"{_('Distance metric: {0}').format(self.metric)}\n"
+            f"{_('Stress formula: {0}').format(self.stress_formula)}\n"
             f"{_('Final stress: {0}').format(f'{self.stress:.4f}')}\n"
             f"{_('Iterations: {0}').format(self.n_iterations)}\n"
             f"{_('Converged: {0}').format('Yes' if self.converged else 'No')}\n"
@@ -99,6 +114,7 @@ class NMDSAnalyzer:
         random_seed: int | None = None,
         tolerance: float | None = None,
         progress_callback=None,
+        method: str = "raw_stress",
     ) -> NMDSResult:
         """
         Perform Non-metric MDS.
@@ -114,6 +130,13 @@ class NMDSAnalyzer:
             progress_callback: Optional callable(restart_index, total_restarts, stress)
                                called at the end of each restart with the final stress.
                                Intended for GUI progress bars.
+            method: Stress formula to use. One of:
+                - 'raw_stress' (default, backward-compatible): sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2)).
+                  Denominator uses original distances (d_target). Matches the
+                  v1.0.0 algorithm and the reference test fixture.
+                - 'stress_1' (Kruskal 1964 canonical, R vegan::monoMDS):
+                  sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2)).
+                  Denominator uses configuration distances (d_hat).
 
         Returns:
             NMDSResult: NMDS analysis results with best configuration
@@ -155,7 +178,7 @@ class NMDSAnalyzer:
                 self._logger.debug(f"NMDS restart {restart + 1}/{n_restarts} started")
 
                 # Run SMACOF optimization
-                result = self._smacof(D, X, max_iterations, restart)
+                result = self._smacof(D, X, max_iterations, restart, method=method)
                 self._logger.debug(
                     f"NMDS restart {restart + 1}/{n_restarts} finished: "
                     f"stress={result['stress']:.6f}, iterations={result['n_iterations']}"
@@ -183,6 +206,7 @@ class NMDSAnalyzer:
                 stress_history=best_history,
                 metric=metric,
                 n_restarts=n_restarts,
+                stress_formula=method,
             )
 
             self._last_result = nmds_result
@@ -198,7 +222,14 @@ class NMDSAnalyzer:
                 self._logger.warning(f"NMDS did not converge: best stress={best_stress:.6f}")
             return nmds_result
 
-    def _smacof(self, D: npt.NDArray, X_init: npt.NDArray, max_iterations: int, restart_id: int) -> dict[str, Any]:
+    def _smacof(
+        self,
+        D: npt.NDArray,
+        X_init: npt.NDArray,
+        max_iterations: int,
+        restart_id: int,
+        method: str = "raw_stress",  # 与 analyze() 的默认保持一致
+    ) -> dict[str, Any]:
         """
         SMACOF algorithm for NMDS optimization.
 
@@ -210,6 +241,12 @@ class NMDSAnalyzer:
         that minimizes ``Σ(d̃ - d̂)²``. Without the isotonic-regression
         step this collapses to *metric* MDS and the rank-order
         preservation that defines NMDS (Kruskal 1964) is lost.
+
+        Stress formulas:
+        * raw_stress (default, backward-compatible with v1.0.0 algorithm):
+            sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2))
+        * stress_1 (Kruskal 1964 canonical, R vegan::monoMDS):
+            sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2))
 
         Performance optimisations vs. the original implementation:
         * IsotonicRegression is instantiated **once** outside the iteration
@@ -254,13 +291,33 @@ class NMDSAnalyzer:
             # faster than creating a new IsotonicRegression() each iteration.
             d_tilde = iso.fit_transform(d_target, d_hat)
 
-            # Stress-1 (Kruskal): sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2))
-            # Fully vectorised: no Python loop required.
-            # The denominator uses original distances (d_target), not configuration
-            # distances (d_hat), matching standard NMDS stress (Kruskal 1964,
-            # Borg & Groenen 1997).
+            # Stress formula selection.
+            # Default = 'raw_stress' (sqrt(sum((d_hat - d_tilde)^2) / sum(d_target^2)))
+            # to preserve backward compatibility with existing tests, callers, and
+            # the original algorithm shipped in v1.0.0 / v1.0.1. The denominator uses
+            # the original distances (d_target) per Kruskal 1964 / Borg & Groenen 1997
+            # for normalized stress.
+            #
+            # 'stress_1' (sqrt(sum((d_hat - d_tilde)^2) / sum(d_hat^2))) is the
+            # alternative form sometimes reported in newer textbooks and used by
+            # R vegan::monoMDS; opt in by passing method='stress_1'.
             diff = d_hat - d_tilde
-            stress = np.sqrt(np.dot(diff, diff) / np.dot(d_target, d_target))
+            numerator = np.dot(diff, diff)
+            if method == "raw_stress":
+                # Default: denominator = sum(d_target^2)
+                denom = np.dot(d_target, d_target)
+            elif method == "stress_1":
+                # Alternative: denominator = sum(d_hat^2)
+                denom = np.dot(d_hat, d_hat)
+            else:
+                raise ValueError(
+                    f"Unknown NMDS stress method '{method}'. "
+                    "Use 'raw_stress' (default) or 'stress_1'."
+                )
+            if denom > 0:
+                stress = np.sqrt(numerator / denom)
+            else:
+                stress = float("inf")
             stress_history.append(stress)
 
             # Log convergence progress every 50 iterations

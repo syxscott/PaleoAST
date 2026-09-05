@@ -18,9 +18,15 @@ RDA (Redundancy Analysis):
     M = U Λ U^T (eigenvalue decomposition)
     scores = Y_centered @ U
 
-CCA (Canonical Correspondence Analysis):
-    Uses chi-square distance instead of Euclidean
-    Similar derivation with weighted averages
+CCA (Canonical Correspondence Analysis, ter Braak 1986):
+    Chi-square standardization of the relative abundance matrix P = Y/N:
+        S = (P - r c^T) / sqrt(r c^T),  r, c = row/column fractions of P
+    The constraints enter through a row-weighted regression of S on the
+    centered environmental matrix (hat matrix H = Xt (Xt' Dr Xt)^-1 Xt' Dr),
+    and the constrained eigenvalues are those of
+        D_c^{-1/2} S_hat^T D_r S_hat D_c^{-1/2}
+    (equivalently, squared singular values of Dr^{1/2} S_hat D_c^{-1/2}).
+    Total inertia is the chi-square inertia sum_ij (p_ij - r_i c_j)^2/(r_i c_j).
 
 Author: PaleoAST Development Team
 version: 1.0.1
@@ -375,88 +381,158 @@ class CCAAnalyzer:
         env_names: list[str] | None,
     ) -> CCAResult:
         """
-        Perform Canonical Correspondence Analysis (CCA).
+        Perform Canonical Correspondence Analysis (CCA) after ter Braak (1986).
 
-        Mathematical Steps:
-            1. Compute chi-square weights (row and column totals)
-            2. Center using chi-square standardization
-            3. Similar to RDA but with weighted calculations
+        Mathematical Steps (ter Braak 1986; Legendre & Legendre 2012, ch. 11):
+
+            Let P = Y / grand_total be the relative-abundance matrix
+            (n_samples x n_species), r = P.sum(axis=1) the row fractions and
+            c = P.sum(axis=0) the column fractions (both sum to 1). The
+            expected abundance under row/column independence is the outer
+            product E = r c^T.
+
+            1. Standardized residuals (chi-square standardization):
+
+                   S = (P - r c^T) / sqrt(r c^T)      (element-wise)
+
+               Total inertia is the chi-square inertia of the table:
+
+                   TI = sum_ij S_ij^2 = sum_ij (P_ij - r_i c_j)^2 / (r_i c_j)
+
+            2. Row-weighted regression of S on the environmental matrix.
+               X is centered with the row weights (X_tilde = X - r^T X) and
+               the hat matrix of the weighted least squares fit is
+
+                   H = X_tilde (X_tilde' D_r X_tilde)^{-1} X_tilde' D_r,
+                   D_r = diag(r)
+
+               giving the fitted residuals S_hat = H S.
+
+            3. Constrained eigenproblem: the constrained (canonical)
+               eigenvalues lambda_k are the eigenvalues of the symmetric
+               matrix
+
+                   B = D_c^{-1/2} S_hat' D_r S_hat D_c^{-1/2},
+                   D_c = diag(c)
+
+               computed here (with identical results and better numerical
+               stability) as the squared singular values of
+               D_r^{1/2} S_hat D_c^{-1/2}.
+
+            4. Scores. Scaling convention (ter Braak's weighted-averaging
+               scores, mutually consistent):
+
+                   species_scores[:, k] = v_k / sqrt(c)
+                       (v_k = right singular vector;
+                        sum_j c_j species_jk^2 = 1)
+                   site_scores[:, k] = sqrt(lambda_k) * u_k / sqrt(r)
+                       (u_k = left singular vector;
+                        sum_i r_i site_ik^2 = lambda_k, i.e.
+                        site_scores = S_hat @ species_scores: the site score
+                        is the abundance-weighted average of the species
+                        scores with weights P / r)
+                   biplot_scores: row-weighted covariances of X_tilde with
+                       the site scores, normalized to unit length per axis
+                       and scaled by sqrt(lambda_k) (biplot arrow scaling).
+
+            5. proportion_explained[k] = 100 * lambda_k / TI, and
+               constrained_variance = sum_k proportion_explained[k].
+
+        Rows (samples) or columns (species) of Y with zero totals have zero
+        chi-square weight and carry no information: they are dropped from the
+        computation with a warning (they are never replaced by pseudo-totals
+        such as 1). Their entries in site_scores / species_scores are
+        reported as NaN so the output arrays keep the shape of the input.
+
+        References:
+            - ter Braak, C.J.F. (1986) Canonical correspondence analysis: a
+              new eigenvector technique for multivariate direct gradient
+              analysis. Ecology 67:1167-1176.
+            - Legendre & Legendre (2012) Numerical Ecology, 3rd ed., Elsevier.
         """
-        n_samples, n_species = Y.shape
+        n_samples_orig, n_species_orig = Y.shape
         n_env = X.shape[1]
 
         # Ensure non-negative data for CCA
         if np.any(Y < 0):
             raise ComputationError("CCA requires non-negative abundance data")
 
-        # Compute row and column totals for chi-square weights
-        row_totals = Y.sum(axis=1, keepdims=True)
-        col_totals = Y.sum(axis=0, keepdims=True)
-        grand_total = Y.sum()
+        grand_total = float(Y.sum())
+        if grand_total <= 0:
+            raise ComputationError("CCA requires at least one positive abundance value")
 
-        # Avoid division by zero
-        row_totals[row_totals == 0] = 1
-        col_totals[col_totals == 0] = 1
-        grand_total = max(grand_total, 1e-10)
+        # ------------------------------------------------------------------
+        # Drop zero-total rows/columns before computing (ter Braak 1986).
+        # Their chi-square weight r_i = 0 (or c_j = 0) is exactly zero, so
+        # they contribute nothing to the inertia; substituting a pseudo-total
+        # of 1 (the old behavior) invented samples/species and distorted the
+        # expected values E = r c^T of every remaining cell.
+        # ------------------------------------------------------------------
+        keep_rows = Y.sum(axis=1) > 0
+        keep_cols = Y.sum(axis=0) > 0
+        n_dropped_rows = int(np.sum(~keep_rows))
+        n_dropped_cols = int(np.sum(~keep_cols))
+        if n_dropped_rows or n_dropped_cols:
+            import warnings as _warnings
+            msg = (
+                f"CCA: dropped {n_dropped_rows} sample row(s) and "
+                f"{n_dropped_cols} species column(s) with zero totals "
+                f"(zero chi-square weight); their scores are reported as NaN."
+            )
+            _warnings.warn(msg, stacklevel=2)
+            self._logger.warning(msg)
+            Y = Y[keep_rows][:, keep_cols]
+            X = X[keep_rows, :]
+            if species_names is not None:
+                species_names = [nm for nm, keep in zip(species_names, keep_cols) if keep]
+            grand_total = float(Y.sum())
 
-        # Chi-square standardization (ter Braak 1986, Ecology 67:1167-1176).
-        #
-        # Chi-square distance: d²_ij = Σ (x_ik - x_jk)² / x_.k
-        # where x_.k = col_total_k (column marginal).
-        # Weight = 1 / col_total_k (LINEAR, not sqrt).
-        #
-        # The canonical formulation uses unscaled counts Y directly:
-        #   expected[i,k] = (row_total_i * col_total_k) / grand_total
-        #   residual[i,k] = (Y[i,k] - expected[i,k]) / col_total_k
-        #
-        # IMPORTANT: Chi-square distance requires positive expected values.
-        # When expected == 0, the contribution to chi-square distance is
-        # mathematically undefined (0/0 yields no contribution when both
-        # observed==0 and expected==0, but is infinite when observed>0).
-        # We mark zero-expectation positions with NaN to exclude them from
-        # distance computations, preventing the spurious structure that
-        # arises from substituting an artificial value like 1.0.
-        #
-        # References:
-        #   - ter Braak (1986) Ecology 67:1167-1176
-        #   - Legendre & Legendre (2012) Numerical Ecology, 3rd ed., Elsevier
-        p_row = row_totals / grand_total  # (n_samples, 1)
-        p_col = col_totals / grand_total  # (1, n_species)
-        expected = (row_totals @ col_totals) / grand_total  # (n_samples, n_species)
-        # Compute standardized residuals with LINEAR weight (1/col_total).
-        # Where expected == 0: set to NaN (undefined contribution).
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Y_std = np.where(expected > 0, (Y - expected) / col_totals, np.nan)
+        n_samples, n_species = Y.shape
 
-        # Center the environmental matrix
-        X_centered = X - X.mean(axis=0)
+        # Clamp the number of axes to what is extractable after dropping
+        max_components = min(n_samples - 1, n_species, n_env)
+        n_components = min(n_components, max_components)
+        if n_components < 1:
+            raise MatrixDimensionError(
+                "Cannot perform CCA: insufficient dimensions after dropping zero-total rows/columns"
+            )
 
-        # Compute weights matrix for samples
-        w = row_totals.flatten() / grand_total
+        # ------------------------------------------------------------------
+        # Step 1: standardized residuals and total (chi-square) inertia.
+        # r and c sum to 1, so expected = r c^T > 0 element-wise and S is
+        # finite everywhere (no NaN masking needed).
+        # ------------------------------------------------------------------
+        P = Y / grand_total
+        r = P.sum(axis=1)  # (n,) row fractions, sums to 1
+        c = P.sum(axis=0)  # (m,) column fractions, sums to 1
+        expected = np.outer(r, c)
+        S = (P - expected) / np.sqrt(expected)
 
-        # Weighted centering for Y
-        Y_weighted = Y_std * w[:, np.newaxis]
+        # Chi-square inertia: sum (p - r c)^2 / (r c) = sum S^2
+        total_inertia = float(np.sum(S**2))
 
-        # Compute projection matrix Q = X(X'X)^-1 X' (weighted)
-        # Use ridge-regularized lstsq for numerical stability when X'X is
-        # near-singular (collinear environmental variables).
-        XtX = X_centered.T @ X_centered
+        # ------------------------------------------------------------------
+        # Step 2: row-weighted regression of S on the centered environment.
+        # X_tilde = X - r^T X is the D_r-weighted centering (sum r = 1).
+        # ------------------------------------------------------------------
+        X_tilde = X - r @ X
+        XtX = X_tilde.T @ (r[:, np.newaxis] * X_tilde)  # X' D_r X
         XtX_inv = self._solve_XtX(XtX, method="cca")
+        # S_hat = X_tilde (X' D_r X)^{-1} X_tilde' D_r S
+        S_hat = X_tilde @ (XtX_inv @ (X_tilde.T @ (r[:, np.newaxis] * S)))
 
-        Q = X_centered @ XtX_inv @ X_centered.T
+        # ------------------------------------------------------------------
+        # Step 3: constrained eigenproblem.
+        # A = D_r^{1/2} S_hat D_c^{-1/2}; its squared singular values are the
+        # eigenvalues of D_c^{-1/2} S_hat' D_r S_hat D_c^{-1/2} (ter Braak 1986).
+        # ------------------------------------------------------------------
+        A = np.sqrt(r)[:, np.newaxis] * S_hat / np.sqrt(c)[np.newaxis, :]
+        U, singular_values, Vt = np.linalg.svd(A, full_matrices=False)
+        all_lambdas = singular_values**2
+        order = np.argsort(all_lambdas)[::-1][:n_components]
+        eigenvalues = all_lambdas[order]
 
-        # Compute cross-covariance with weights
-        M = Y_weighted.T @ Q @ Y_weighted
-
-        # Eigendecomposition
-        eigenvalues, eigenvectors = np.linalg.eigh(M)
-
-        # Sort and select top components
-        sorted_indices = np.argsort(eigenvalues)[::-1][:n_components]
-        eigenvalues = eigenvalues[sorted_indices]
-        eigenvectors = eigenvectors[:, sorted_indices]
-
-        # Ensure positive eigenvalues. Warn when any clipping happens so
+        # Ensure non-negative eigenvalues. Warn when any clipping happens so
         # silent numerical issues (e.g. collinear env variables) are
         # surfaced to the user instead of hidden behind a 1e-10 floor.
         clipped = eigenvalues < 1e-10
@@ -474,43 +550,54 @@ class CCAAnalyzer:
             )
         eigenvalues = np.maximum(eigenvalues, 1e-10)
 
-        # Compute scores
-        site_scores = Y_weighted @ eigenvectors
-        species_scores = eigenvectors * np.sqrt(eigenvalues)
+        # ------------------------------------------------------------------
+        # Step 4: scores (documented scaling convention, see docstring).
+        # V = right singular vectors, one column per retained axis.
+        # ------------------------------------------------------------------
+        V = Vt[order, :].T  # (n_species, n_components)
+        species_scores = V / np.sqrt(c)[:, np.newaxis]
+        # site scores = sqrt(lambda) * u / sqrt(r)  (== S_hat @ species_scores)
+        site_scores = np.sqrt(eigenvalues)[np.newaxis, :] * (U[:, order] / np.sqrt(r)[:, np.newaxis])
 
-        # Biplot scores
-        biplot_scores = X_centered.T @ site_scores
+        # Biplot scores: row-weighted covariance of X_tilde with site scores,
+        # unit-normalized per axis and scaled by sqrt(lambda).
+        biplot_scores = X_tilde.T @ (r[:, np.newaxis] * site_scores)
         scale_factor = np.sqrt(np.sum(biplot_scores**2, axis=0))
         scale_factor[scale_factor == 0] = 1
         biplot_scores = biplot_scores / scale_factor * np.sqrt(eigenvalues)
 
-        # Total inertia (chi-square distance).
-        # Use nansum to handle NaN values where expected == 0.
-        total_inertia = np.nansum(Y_std**2)
-
-        # Proportions
+        # ------------------------------------------------------------------
+        # Step 5: proportions of the chi-square inertia explained per axis.
+        # ------------------------------------------------------------------
         proportion_explained = (eigenvalues / total_inertia) * 100 if total_inertia > 0 else np.zeros_like(eigenvalues)
         cumulative_proportion = np.cumsum(proportion_explained)
 
-        # Default names
+        # Default names (full input dimensions)
         if species_names is None:
-            species_names = [f"Species_{i + 1}" for i in range(n_species)]
+            species_names = [f"Species_{i + 1}" for i in range(n_species_orig)]
         if env_names is None:
             env_names = [f"Env_{i + 1}" for i in range(n_env)]
+
+        # Report scores at the shape of the input data; dropped zero-total
+        # rows/columns get NaN (no meaningful score exists for them).
+        site_scores_full = np.full((n_samples_orig, n_components), np.nan)
+        site_scores_full[keep_rows, :] = site_scores
+        species_scores_full = np.full((n_species_orig, n_components), np.nan)
+        species_scores_full[keep_cols, :] = species_scores
 
         constrained_variance = np.sum(proportion_explained)
 
         return CCAResult(
-            site_scores=site_scores,
-            species_scores=species_scores,
+            site_scores=site_scores_full,
+            species_scores=species_scores_full,
             biplot_scores=biplot_scores,
             eigenvalues=eigenvalues,
             proportion_explained=proportion_explained,
             cumulative_proportion=cumulative_proportion,
             method="cca",
             n_components=n_components,
-            n_samples=n_samples,
-            n_species=n_species,
+            n_samples=n_samples_orig,
+            n_species=n_species_orig,
             n_env=n_env,
             species_names=species_names,
             env_names=env_names,

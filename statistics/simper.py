@@ -18,14 +18,12 @@ where δ_ij = Σ_k |x_ik - x_jk| / Σ_k (x_ik + x_jk)
 
 The contribution of variable k to the overall dissimilarity is:
 
-    c_k = 2 * Σ_i Σ_j min(x_ik, x_jk) / Σ_i Σ_j Σ_k (x_ik + x_jk)
+    δ_k = mean over pairs (i, j) of [ |x_ik - x_jk| / Σ_l (x_il + x_jl) ]
 
-Equivalently: c_k = mean over pairs of [ 2 * min(x_ik, x_jk) / Σ_k (x_ik + x_jk) ]
-
-The factor of 2 ensures that Σ_k c_k = δ̄ (species contributions sum to overall dissimilarity).
-
-This represents the contribution of species k to the overall
-dissimilarity between samples i and j.
+Because |a - b| = (a + b) - 2*min(a, b), the per-pair contributions
+satisfy Σ_k |x_ik - x_jk| / Σ_l (x_il + x_jl) = δ_ij exactly, and
+therefore Σ_k δ_k = δ̄: species contributions sum to the overall
+dissimilarity and cumulative percentages reach 100%.
 
 SIMPER reports:
     - Average contribution of each variable across all pairs
@@ -165,10 +163,12 @@ class SimperAnalyzer:
                 for gj in range(gi + 1, n_groups):
                     group_pairs.append((unique_groups[gi], unique_groups[gj]))
 
-            # Compute overall dissimilarity as mean of pairwise Bray-Curtis values
-            # Per Clarke 1993: δ̄ = (1/(n_A*n_B)) Σ_i Σ_j δ_ij
-            # where δ_ij = Σ_k |x_ik - x_jk| / Σ_k (x_ik + x_jk)
-            all_pairwise_dissimilarities = []
+            # Single pass over all cross-group pairs:
+            # per-pair Bray-Curtis (for overall δ̄) and per-variable
+            # contributions δ_k(ij) = |x_ik - x_jk| / Σ_l (x_il + x_jl).
+            # Per Clarke 1993 the δ_k(ij) over variables sum to δ_ij.
+            delta_rows: list[npt.NDArray] = []
+            pairwise_dissimilarities: list[float] = []
             for gi in range(n_groups):
                 for gj in range(gi + 1, n_groups):
                     ga, gb = unique_groups[gi], unique_groups[gj]
@@ -179,53 +179,57 @@ class SimperAnalyzer:
 
                     for i in range(len(idx_a)):
                         for j in range(len(idx_b)):
-                            num = np.sum(np.abs(data_a[i] - data_b[j]))
                             den = np.sum(data_a[i] + data_b[j])
-                            if den > 0:
-                                all_pairwise_dissimilarities.append(num / den)
+                            if den <= 0:
+                                continue
+                            pairwise_dissimilarities.append(
+                                np.sum(np.abs(data_a[i] - data_b[j])) / den
+                            )
+                            delta_rows.append(np.abs(data_a[i] - data_b[j]) / den)
 
-            overall_dissimilarity = np.mean(all_pairwise_dissimilarities) if all_pairwise_dissimilarities else 0.0
+            overall_dissimilarity = float(np.mean(pairwise_dissimilarities)) if pairwise_dissimilarities else 0.0
 
-            # Compute per-variable stats across all group pairs
-            # Species contribution per Clarke 1993: min(x_ik, x_jk) / Σ(x_ik + x_jk)
+            # Per-variable stats. SD is taken across individual (i, j) pairs
+            # (Clarke's Av/SD consistency measure), not across group pairs:
+            # with the standard 2-group design there is only one group pair
+            # and a across-pair SD would collapse to 0 (ratio = inf).
+            if delta_rows:
+                delta_matrix = np.vstack(delta_rows)
+                avg_vec = delta_matrix.mean(axis=0)
+                std_vec = delta_matrix.std(axis=0, ddof=1) if delta_matrix.shape[0] > 1 else np.zeros(n_vars)
+            else:
+                avg_vec = np.zeros(n_vars)
+                std_vec = np.zeros(n_vars)
+
             contrib_list = []
+            means_a = []
+            means_b = []
+            for ga, gb in group_pairs:
+                idx_a = [i for i, g in enumerate(groups) if g == ga]
+                idx_b = [i for i, g in enumerate(groups) if g == gb]
+                means_a.append(np.mean(data[idx_a], axis=0))
+                means_b.append(np.mean(data[idx_b], axis=0))
+            mean_a_vec = np.mean(means_a, axis=0) if means_a else np.zeros(n_vars)
+            mean_b_vec = np.mean(means_b, axis=0) if means_b else np.zeros(n_vars)
+
             for k in range(n_vars):
-                # Collect contributions from each pair for std estimation
-                pair_vals = []
-                means_a = []
-                means_b = []
-                for gi in range(n_groups):
-                    for gj in range(gi + 1, n_groups):
-                        ga, gb = unique_groups[gi], unique_groups[gj]
-                        idx_a = [i for i, g in enumerate(groups) if g == ga]
-                        idx_b = [i for i, g in enumerate(groups) if g == gb]
-                        data_a = data[idx_a]
-                        data_b = data[idx_b]
-
-                        contrib_k = self._single_variable_contribution(data_a, data_b, k)
-                        pair_vals.append(contrib_k)
-                        means_a.append(np.mean(data_a[:, k]))
-                        means_b.append(np.mean(data_b[:, k]))
-
-                avg_k = np.mean(pair_vals)
-                std_k = np.std(pair_vals, ddof=1) if len(pair_vals) > 1 else 0.0
-
                 contrib_list.append(
                     {
                         "index": k,
-                        "average": avg_k,
-                        "std": std_k,
-                        "ratio": avg_k / std_k if std_k > 0 else float("inf"),
-                        "mean_a": np.mean(means_a),
-                        "mean_b": np.mean(means_b),
+                        "average": float(avg_vec[k]),
+                        "std": float(std_vec[k]),
+                        "ratio": float(avg_vec[k] / std_vec[k]) if std_vec[k] > 0 else float("inf"),
+                        "mean_a": float(mean_a_vec[k]),
+                        "mean_b": float(mean_b_vec[k]),
                     }
                 )
 
             # Sort by average contribution descending
             contrib_list.sort(key=lambda x: x["average"], reverse=True)
 
-            # Compute cumulative - contributions sum to overall_dissimilarity
-            total = overall_dissimilarity
+            # Cumulative %: contributions sum to overall_dissimilarity
+            # (Σ_k δ_k = δ̄), so the last species reaches exactly 100%.
+            total = float(np.sum(avg_vec))
             cum = 0.0
             result_contribs = []
             for c in contrib_list:
@@ -260,15 +264,10 @@ class SimperAnalyzer:
         """Compute average contribution of each variable across all between-group pairs.
 
         Per Clarke 1993, species k contribution is:
-        c_k = 2 * Σ min(x_ik, x_jk) / Σ (x_ik + x_jk)
+        δ_k = mean over pairs of [ |x_ik - x_jk| / Σ_l (x_il + x_jl) ]
 
-        The factor of 2 ensures that species contributions sum to the
-        Bray-Curtis dissimilarity (since |x_ik - x_jk| = max - min and
-        max + min = x_ik + x_jk, so max - min = 2*min - (x_ik + x_jk)
-        which gives Bray-Curtis = 2*min/(x_ik + x_jk) for each species).
-
-        This represents the contribution of species k to the overall
-        dissimilarity between samples i and j.
+        Since |a - b| = (a + b) - 2*min(a, b), the δ_k over variables sum
+        to the Bray-Curtis dissimilarity of each pair.
         """
         n_a, n_vars = data_a.shape
         n_b = data_b.shape[0]
@@ -276,37 +275,12 @@ class SimperAnalyzer:
 
         for i in range(n_a):
             for j in range(n_b):
-                # Species contribution uses 2*min to match Bray-Curtis
-                num = 2.0 * np.minimum(data_a[i], data_b[j])
-                den = data_a[i] + data_b[j]
-                total = np.sum(den)
-                if total > 0:
-                    contributions += num / total
+                den = np.sum(data_a[i] + data_b[j])
+                if den > 0:
+                    contributions += np.abs(data_a[i] - data_b[j]) / den
 
         contributions /= n_a * n_b
         return contributions
-
-    def _single_variable_contribution(self, data_a: npt.NDArray, data_b: npt.NDArray, var_idx: int) -> float:
-        """Compute average contribution of a single variable for one group pair.
-
-        Per Clarke 1993, species contribution is:
-        c_k = 2 * Σ min(x_ik, x_jk) / Σ (x_ik + x_jk)
-
-        The factor of 2 ensures contributions sum to Bray-Curtis.
-        """
-        n_a = data_a.shape[0]
-        n_b = data_b.shape[0]
-        contrib = 0.0
-
-        for i in range(n_a):
-            for j in range(n_b):
-                # Species contribution uses 2*min to match Bray-Curtis
-                num = 2.0 * min(data_a[i, var_idx], data_b[j, var_idx])
-                den = np.sum(data_a[i] + data_b[j])
-                if den > 0:
-                    contrib += num / den
-
-        return contrib / (n_a * n_b)
 
     @property
     def last_result(self) -> SimperResult | None:

@@ -294,7 +294,16 @@ class BinaryCache:
                 np.uint8: DataType.UINT8,
             }
 
-            dtype = dtype_map.get(matrix.dtype.type, DataType.FLOAT64)
+            dtype = dtype_map.get(matrix.dtype.type)
+            if dtype is None:
+                # 头部只认上述 4 种 dtype。此前不支持的 dtype (如 numpy 2.x
+                # 默认的 int64) 会按原始字节写入、却把头部标成 FLOAT64,
+                # 读取时按 float64 重解释 → 静默数据损坏。这里先安全转换。
+                self._logger.debug(
+                    f"Unsupported dtype {matrix.dtype} for binary cache; casting to float64"
+                )
+                matrix = matrix.astype(np.float64)
+                dtype = DataType.FLOAT64
 
             # 计算矩阵大小
             itemsize = matrix.dtype.itemsize
@@ -474,6 +483,12 @@ class BinaryCache:
 
                 return result
 
+        except CorruptedCacheError:
+            # 损坏缓存必须显式暴露给调用方, 不能与"缓存未命中"混为一谈
+            raise
+        except OSError as e:
+            self._logger.warning(f"Cannot read binary cache {filepath}: {e}")
+            return None
         except Exception as e:
             self._logger.error(f"Failed to load binary cache: {e}")
             return None
@@ -514,6 +529,8 @@ class BinaryCache:
         """
         import numpy as np
 
+        fd = None
+        mm = None
         try:
             # 打开文件
             fd = os.open(filepath, os.O_RDONLY)
@@ -553,10 +570,28 @@ class BinaryCache:
                 .copy()
             )  # 复制以断开mmap
 
+            # 数组已 .copy(), mmap 不再需要: 立即释放, 否则在 Windows 上
+            # 未关闭的 fd/mmap 会阻止文件被删除。
+            # 注: mmap.close() 幂等, 调用方再次 close() 是安全的 no-op。
+            mm.close()
+            os.close(fd)
+            fd = None
+
             return matrix, mm
 
         except Exception as e:
             self._logger.error(f"Failed to load mmap: {e}")
+            # 异常路径必须释放资源, 避免句柄泄漏
+            if mm is not None:
+                try:
+                    mm.close()
+                except Exception:
+                    pass
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
             return None
 
     def _serialize_labels(self, labels: list[str] | None) -> bytes:

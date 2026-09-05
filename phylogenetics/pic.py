@@ -117,110 +117,79 @@ def compute_pic(
     else:
         root = tree
 
-    # 初始化: 为所有节点计算累积方差
-    _compute_variances(root, root_variance)
-
-    # 为叶节点设置性状值
-    for node in root.preorder_traverse():
-        if node.is_leaf:
-            if node.name not in traits:
-                logger.warning(f"Trait value not found for tip '{node.name}', using 0.0")
-                node.data = PICNodeData(trait=0.0, variance=node.metadata.get('_variance', 0.0))
-            else:
-                node.data = PICNodeData(
-                    trait=traits[node.name],
-                    variance=node.metadata.get('_variance', 0.0)
-                )
-
-    # 后序遍历计算对比
+    # 初始化
     contrasts = []
     contrast_pairs = []
 
-    def compute_node_contrast(node):
+    def recurse(node):
         """
-        递归计算节点的对比值
+        递归计算 (重建值, 子树累积方差)。
 
-        返回:
-            (contrast_value, variance_at_node)
+        约定与 statistics/pcm.py 的单一参考实现一致 (Felsenstein 1985):
+        - 叶节点返回 (trait, 0.0); 父节点把子节点枝长加到子树方差上;
+        - 对比 IC = (x_A - x_B) / sqrt(v_A + v_B);
+        - 向上传递的是逆方差加权重建值 (而非标准化对比——旧实现把
+          对比值当性状值传递, 使上层对比与原始量纲混合, 结果错误);
+        - 节点向上传递的方差 = v_A·v_B/(v_A+v_B) (加权重建值的方差);
+        - polytomy: 迭代组合产生 k-1 个对比; unary: 透传不产生对比。
         """
         if node.is_leaf:
-            pic_data = node.data
-            return pic_data.trait, pic_data.variance
+            val = traits.get(node.name)
+            if val is None:
+                logger.warning(f"Trait value not found for tip '{node.name}', using 0.0")
+                val = 0.0
+            val = float(val)
+            node.data = PICNodeData(trait=val, variance=0.0)
+            return val, 0.0
 
-        # 递归计算所有子节点
         child_results = []
         for child in node.children:
-            child_contrast, child_var = compute_node_contrast(child)
-            branch_len = child.branch_length if child.branch_length is not None else 0.0
-            child_results.append((child_contrast, child_var, branch_len, child.name))
+            val, cvar = recurse(child)
+            child_results.append((val, cvar + (child.branch_length or 0.0), child.name))
 
-        # 根据子节点数量计算对比
-        k = len(child_results)
+        if len(child_results) == 1:
+            # Unary 退化: 透传, 不产生对比 (旧实现 contrast/sqrt(2) 无依据)
+            val, var, _ = child_results[0]
+            node.data = PICNodeData(variance=var, trait=val)
+            return val, var
 
-        if k == 1:
-            # Unary 退化情况
-            child_contrast, child_var, branch_len, child_name = child_results[0]
-            node_var = child_var + branch_len
-            # contrast = child_contrast / sqrt(2)
-            contrast = child_contrast / np.sqrt(2)
-            node.data = PICNodeData(variance=node_var, contrast=contrast)
-            return contrast, node_var
-
-        elif k == 2:
-            # 标准二叉情况 (Felsenstein 1985)
-            c0, v0, bl0, name0 = child_results[0]
-            c1, v1, bl1, name1 = child_results[1]
-            var_sum = v0 + v1
+        def _combine(res0, res1):
+            val0, var0, name0 = res0
+            val1, var1, name1 = res1
+            var_sum = var0 + var1
             if var_sum <= 0:
-                var_sum = 1e-10  # 避免除零
-            contrast = (c0 - c1) / np.sqrt(var_sum)
-            # 节点方差 = 两个子节点方差之和 (v0/v1 已包含 bl0/bl1)
-            # Felsenstein 1985: Var(recon_A - recon_B | P) = v_A + v_B
-            node_var = v0 + v1
-            node.data = PICNodeData(variance=node_var, contrast=contrast)
-            contrasts.append(contrast)
+                var_sum = 1e-10
+            contrast = (val0 - val1) / np.sqrt(var_sum)
+            if var0 > 0 and var1 > 0:
+                recon = (val0 / var0 + val1 / var1) / (1.0 / var0 + 1.0 / var1)
+            else:
+                recon = (val0 + val1) / 2.0
+            pooled = var0 * var1 / var_sum
+            contrasts.append(float(contrast))
             contrast_pairs.append((name0, name1))
-            return contrast, node_var
+            return recon, pooled
 
-        else:
-            # Polytomy: k > 2，产生 k-1 个独立对比
-            # 使用迭代组合法
-            node_var = sum(v for _, v, _, _ in child_results)
-            branch_sum = sum(bl for _, _, bl, _ in child_results)
-            node_var += branch_sum
+        if len(child_results) == 2:
+            recon, pooled = _combine(child_results[0], child_results[1])
+            node.data = PICNodeData(variance=pooled, contrast=contrasts[-1], trait=recon)
+            return recon, pooled
 
-            # 第一个对比: child0 - child1
-            c0, v0, bl0, name0 = child_results[0]
-            c1, v1, bl1, name1 = child_results[1]
-            var01 = v0 + v1
-            if var01 <= 0:
-                var01 = 1e-10
-            contrast01 = (c0 - c1) / np.sqrt(var01)
-            running_contrast = contrast01
-            # v0/v1 已包含 bl0/bl1, 不需要重复加
-            running_var = v0 + v1  # Felsenstein 1985
+        # Polytomy (k > 2): 迭代组合, 产生 k-1 个独立对比
+        active = list(child_results)
+        combined_idx = 0
+        while len(active) > 1:
+            recon, pooled = _combine(active[0], active[1])
+            combined_idx += 1
+            active = [(recon, pooled, f"_combined_{combined_idx}"), *active[2:]]
 
-            first_pair = (name0, name1)
-            contrasts.append(contrast01)
-            contrast_pairs.append(first_pair)
+        node.data = PICNodeData(
+            variance=active[0][1],
+            contrast=contrasts[-1] if contrasts else 0.0,
+            trait=active[0][0],
+        )
+        return active[0][0], active[0][1]
 
-            # 后续对比: 累积结果与下一个子节点
-            for idx in range(2, k):
-                c_i, v_i, bl_i, name_i = child_results[idx]
-                new_var = running_var + v_i + bl_i
-                if new_var <= 0:
-                    new_var = 1e-10
-                new_contrast = (running_contrast - c_i) / np.sqrt(new_var)
-                contrasts.append(new_contrast)
-                contrast_pairs.append((f"_combined_{idx-1}", name_i))
-                running_contrast = new_contrast
-                running_var = new_var  # 不再加 bl_i, 因为 new_var 已包含
-
-            node.data = PICNodeData(variance=running_var, contrast=running_contrast)
-            return running_contrast, running_var
-
-    # 从根开始计算
-    root_contrast, root_var = compute_node_contrast(root)
+    recurse(root)
 
     logger.info(f"PIC computation complete: {len(contrasts)} contrasts computed")
 

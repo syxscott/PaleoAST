@@ -239,11 +239,17 @@ def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict
 
     Notes
     -----
-    The broken-stick model:
+    The broken-stick model (MacArthur 1957):
 
-    1. Randomly assign 1 unit length to n segments (expected length = 1/n)
-    2. Compare observed group inertia to broken-stick expectation
-    3. A zone is significant when its contribution > broken-stick expectation
+    1. A stick of unit length is broken at n-1 random points into n
+       segments; the expected length of the k-th largest segment is
+       E[k] = (1/n) * sum_{i=k..n} (1/i).
+    2. Observed BD values (sorted descending, normalised to sum 1) are
+       compared with the expectation one-to-one.
+    3. p-values come from Monte-Carlo simulation of true random
+       breakages (Dirichlet(1,...,1)); a zone is significant when its
+       normalised BD exceeds E[k] with p < 0.05, counted as a
+       contiguous prefix from the largest zone (Bennett 1996).
 
     References
     ----------
@@ -255,59 +261,55 @@ def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict
         Geosciences, 13: 13-35.
     """
     bd_values = np.asarray(bd_values, dtype=float)
-    n_levels = len(bd_values) + 1  # n zones = n_levels - 1 merges possible
-
-    # Compute broken-stick expected values
-    # For n segments, expected length of segment i (sorted descending) is:
-    # E[i] = 1/(n) + 1/(n-1) + ... + 1/(n-i+1)
-    broken_stick_expectation = []
-    for k in range(1, n_levels):
-        # Expected contribution of zone k under broken-stick
-        expected = 1.0 / (n_levels - k + 1)
-        broken_stick_expectation.append(expected)
-
-    # Normalize BD values to sum to 1 (proportion of total inertia)
-    total_bd = np.sum(bd_values)
-    if total_bd == 0:
+    n_segments = len(bd_values)
+    if n_segments == 0:
         return {
             "significant_zones": 0,
-            "p_values": [1.0] * (n_levels - 1),
-            "broken_stick_expectation": broken_stick_expectation,
+            "p_values": [],
+            "broken_stick_expectation": [],
         }
 
-    normalized_bd = bd_values / total_bd
+    # 规范 broken-stick 期望 (MacArthur 1957; Bennett 1996;
+    # rioja::bstick 同式): 把单位长度随机折成 n 段, 第 k 大段的期望为
+    #     E[k] = (1/n) * Σ_{i=k..n} (1/i)
+    # 此前的实现用调和级数项 1/(n_levels - i) (升序) 归一化后与降序 BD
+    # 配对, 不是 broken-stick 分布 (n=5 时最大份额 0.12 vs 规范 0.457)。
+    n = n_segments
+    harmonic_suffix = np.cumsum(1.0 / np.arange(n, 0, -1))[::-1]  # Σ_{i=k..n} 1/i, k=1..n
+    broken_stick_expectation = harmonic_suffix / n  # 和为 1
 
-    # Monte Carlo permutation test
-    # Under null hypothesis, zone contributions are randomly distributed
-    n_permutations = max(n_permutations, 99)  # minimum 99 for valid p-values
-    permutation_max = np.zeros(n_permutations)
+    # 观测 BD 按降序排列 (最大惯性增量 = 最早/最重要的分带), 与
+    # E[1..n] 一一对应; 归一化到总惯量为 1。
+    sorted_bd = np.sort(bd_values)[::-1]
+    total_bd = np.sum(bd_values)
+    if total_bd <= 0:
+        return {
+            "significant_zones": 0,
+            "p_values": [1.0] * n,
+            "broken_stick_expectation": broken_stick_expectation.tolist(),
+        }
+    normalized_bd = sorted_bd / total_bd
 
-    for perm in range(n_permutations):
-        # Random permutation of normalized BD values
-        perm_bd = np.random.permutation(normalized_bd)
-        # Compute maximum deviation from broken-stick expectation
-        perm_max = np.max(np.abs(np.cumsum(perm_bd) - np.array(broken_stick_expectation)))
-        permutation_max[perm] = perm_max
+    # 显著性: 逐带比较观测与期望, 并用 Monte Carlo 模拟真实
+    # broken-stick 随机分割 (Dirichlet(1,...,1) 与随机折棒等价)
+    # 估计每个秩次的 p 值。Bennett (1996) 的判据是"自最大带起,
+    # 观测 > 期望 的连续前缀长度"为显著带数。
+    n_permutations = max(int(n_permutations), 99)
+    rng = np.random.default_rng()
+    perm_sorted = np.sort(rng.dirichlet(np.ones(n), size=n_permutations), axis=1)[:, ::-1]
+    # p_k = P(随机分割的第 k 大段 >= 观测第 k 大段) (add-one)
+    exceed = perm_sorted >= normalized_bd[np.newaxis, :]
+    p_values = (np.sum(exceed, axis=0) + 1.0) / (n_permutations + 1.0)
 
-    # Compute p-values for each zone boundary
-    observed_cumsum = np.cumsum(normalized_bd)
-    p_values = []
     significant_zones = 0
-
-    for k in range(len(normalized_bd)):
-        observed_dev = np.abs(observed_cumsum[k] - broken_stick_expectation[k])
-        # p-value = proportion of permutations with larger deviation
-        p_val = np.mean(permutation_max >= observed_dev)
-        p_values.append(float(p_val))
-        if p_val < 0.05 and k + 1 > significant_zones:
+    for k in range(n):
+        if normalized_bd[k] > broken_stick_expectation[k] and p_values[k] < 0.05:
             significant_zones = k + 1
-
-    # Number of significant zones = number of boundaries where p < 0.05
-    # But we need at least 1 zone
-    significant_zones = max(1, sum(1 for p in p_values if p < 0.05))
+        else:
+            break
 
     return {
         "significant_zones": significant_zones,
-        "p_values": p_values,
-        "broken_stick_expectation": broken_stick_expectation,
+        "p_values": [float(p) for p in p_values],
+        "broken_stick_expectation": broken_stick_expectation.tolist(),
     }

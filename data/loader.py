@@ -19,6 +19,7 @@ version: 1.0.1
 
 from __future__ import annotations
 
+import logging
 import os
 from importlib.resources import files
 from typing import TYPE_CHECKING
@@ -31,6 +32,46 @@ if TYPE_CHECKING:
 
 # Get the data directory path
 _DATA_DIR = files("data") / "examples"
+
+logger = logging.getLogger(__name__)
+
+# Encodings tried in order when reading CSVs. ``utf-8-sig`` covers
+# modern UTF-8 files (with or without BOM); ``gbk`` covers Chinese
+# Windows CSVs that raise UnicodeDecodeError under UTF-8; ``latin-1``
+# maps every possible byte and therefore never fails — it is a true
+# last resort (contents may be mojibake, hence the warning).
+_CSV_ENCODING_CANDIDATES: tuple[str, ...] = ("utf-8-sig", "gbk", "latin-1")
+
+
+def _read_csv_with_fallback(path: str) -> pd.DataFrame:
+    """Read a CSV file, falling back across text encodings.
+
+    The previous call sites used a bare ``pd.read_csv(data_path)``,
+    which assumes UTF-8 and raises ``UnicodeDecodeError`` on GBK-encoded
+    Chinese CSVs. Candidates are tried in :data:`_CSV_ENCODING_CANDIDATES`
+    order with the default separator. Because ``latin-1`` decodes every
+    byte, a warning is logged whenever anything beyond UTF-8 had to be
+    used.
+    """
+    last_error: Exception | None = None
+    for encoding in _CSV_ENCODING_CANDIDATES:
+        try:
+            df = pd.read_csv(path, encoding=encoding)
+        except UnicodeDecodeError as exc:  # try the next candidate
+            last_error = exc
+            continue
+        if encoding != _CSV_ENCODING_CANDIDATES[0]:
+            logger.warning(
+                "CSV %s could not be read as %s; fell back to encoding "
+                "'%s'. Non-ASCII text may be misdecoded.",
+                path,
+                _CSV_ENCODING_CANDIDATES[0],
+                encoding,
+            )
+        return df
+    raise last_error if last_error is not None else UnicodeDecodeError(
+        "utf-8", b"", 0, 1, "could not decode CSV with any known encoding"
+    )
 
 
 def _get_data_path(filename: str) -> str:

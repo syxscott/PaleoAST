@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import matplotlib
 from matplotlib.figure import Figure
@@ -85,17 +85,27 @@ _FORMAT_EXTENSIONS: dict[str, str] = {
     "jpg": "jpg",
 }
 
+# Legitimate alternative spellings for the canonical extensions above.
+# ``.jpeg`` is the official JPEG abbreviation and is accepted as an
+# alias of ``jpg`` instead of being rejected by the validator.
+_EXTENSION_ALIASES: dict[str, str] = {
+    "jpeg": "jpg",
+}
+
 
 def _normalize_path(path: str, fmt: str) -> str:
     """Ensure the file path ends with the correct extension.
 
     If the user passes a path without an extension, append the one
-    matching ``fmt``. If the extension does not match ``fmt``, raise.
+    matching ``fmt``. If the extension does not match ``fmt`` (allowing
+    registered aliases such as ``.jpeg`` for ``jpg``), raise.
     """
     p = Path(path)
     if p.suffix == "":
         return str(p.with_suffix(f".{_FORMAT_EXTENSIONS[fmt]}"))
-    if p.suffix.lower().lstrip(".") != _FORMAT_EXTENSIONS[fmt]:
+    suffix = p.suffix.lower().lstrip(".")
+    suffix = _EXTENSION_ALIASES.get(suffix, suffix)
+    if suffix != _FORMAT_EXTENSIONS[fmt]:
         raise ValueError(
             f"File extension {p.suffix!r} does not match export format {fmt!r}. "
             f"Use .{ _FORMAT_EXTENSIONS[fmt] } or omit the extension."
@@ -128,8 +138,17 @@ def _validate_options(options: PlotExportOptions) -> None:
         raise ValueError("jpeg_quality must be in [1, 100]")
 
 
-def _apply_grayscale(figure: Figure) -> None:
-    """Convert every line/face colour in ``figure`` to greyscale."""
+def _apply_grayscale(figure: Figure) -> Callable[[], None]:
+    """Convert every line/face colour in ``figure`` to greyscale.
+
+    The conversion mutates artists in place, so a zero-argument
+    *restore* callable is returned; the caller must invoke it (typically
+    from a ``finally`` block) once the export is finished. Lines,
+    patches, collections, and images (colour-map + array) are all
+    restored to their original state. The previous implementation never
+    restored anything, leaving the on-screen figure permanently grey
+    after a single grayscale export.
+    """
     import numpy as np
 
     def to_grey(value: Any) -> float:
@@ -138,18 +157,42 @@ def _apply_grayscale(figure: Figure) -> None:
         luma = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
         return float(luma)
 
+    # (artist, setter_name, original_value) triples recorded before the
+    # mutation so they can be replayed in reverse on restore.
+    restore: list[tuple[Any, str, Any]] = []
+
     for ax in figure.get_axes():
-        # Lines, collections, patches.
+        # Lines.
         for line in ax.get_lines():
-            line.set_color(str(to_grey(line.get_color())))
+            original = line.get_color()
+            restore.append((line, "set_color", original))
+            line.set_color(str(to_grey(original)))
+        # Patches (bars, boxes, pie slices, ...).
         for patch in ax.patches:
             face = patch.get_facecolor()
             if face is not None and len(face) >= 3:
+                restore.append((patch, "set_facecolor", face))
                 patch.set_facecolor(str(to_grey(face)))
+        # Collections (scatter, fill_between, ...): the face colour is
+        # an (N, 4) array, so grey it row-wise.
+        for coll in ax.collections:
+            try:
+                face = np.asarray(coll.get_facecolor(), dtype=float)
+            except Exception:  # pragma: no cover - defensive
+                continue
+            if face.ndim == 2 and face.shape[0] > 0 and face.shape[1] >= 3:
+                luma = 0.299 * face[:, 0] + 0.587 * face[:, 1] + 0.114 * face[:, 2]
+                grey = np.column_stack([luma, luma, luma, face[:, 3]])
+                restore.append((coll, "set_facecolor", np.array(face, copy=True)))
+                coll.set_facecolor(grey)
         # Image artists such as heatmap imshows.
         for image in ax.images:
             try:
-                arr = np.asarray(image.get_array(), dtype=float)
+                restore.append((image, "set_cmap", image.get_cmap()))
+                original_array = image.get_array()
+                if original_array is not None:
+                    restore.append((image, "set_array", original_array))
+                arr = np.asarray(original_array, dtype=float)
                 if arr.ndim >= 3:
                     image.set_array(arr.mean(axis=-1))
                 # Reset the colourmap to a grey one if currently a
@@ -157,6 +200,15 @@ def _apply_grayscale(figure: Figure) -> None:
                 image.set_cmap("Greys")
             except Exception:  # pragma: no cover - defensive
                 pass
+
+    def restore_colors() -> None:
+        for artist, setter, original in restore:
+            try:
+                getattr(artist, setter)(original)
+            except Exception:  # pragma: no cover - defensive
+                pass
+
+    return restore_colors
 
 
 def _resolve_background(figure: Figure, options: PlotExportOptions) -> str | None:
@@ -190,19 +242,35 @@ def export_figure(figure: Figure, path: str, options: PlotExportOptions) -> str:
 
     out_path = os.path.abspath(_normalize_path(path, fmt))
 
+    # Snapshot figure state BEFORE any mutation — in particular before
+    # the optional ``set_size_inches`` below. The previous code took the
+    # snapshot after the resize, so the ``finally`` block restored the
+    # *export* dimensions and permanently resized the on-screen canvas.
+    original_size = (figure.get_figwidth(), figure.get_figheight())
+    original_face = figure.patch.get_facecolor()
+
+    # Vector formats honour ``embed_fonts`` through backend rcParams.
+    # ``svg.fonttype='path'`` embeds text as glyph outlines while 'none'
+    # leaves text editable (i.e. NOT embedded); ``pdf.fonttype=42``
+    # ensures TrueType fonts are embedded in PDF output. Original values
+    # are restored in the ``finally`` block below.
+    rc_backup: dict[str, Any] = {}
+    if fmt in {"svg", "pdf"}:
+        for key in ("svg.fonttype", "pdf.fonttype"):
+            rc_backup[key] = matplotlib.rcParams[key]
+        matplotlib.rcParams["pdf.fonttype"] = 42
+        matplotlib.rcParams["svg.fonttype"] = "none" if not options.embed_fonts else "path"
+
     # Resize figure if the user wants a custom canvas size.
     if options.width_inches is not None or options.height_inches is not None:
         w = options.width_inches or figure.get_figwidth()
         h = options.height_inches or figure.get_figheight()
         figure.set_size_inches(w, h)
 
-    # Snapshot figure state so we can restore it after the export.
-    original_size = (figure.get_figwidth(), figure.get_figheight())
-    original_face = figure.patch.get_facecolor()
-
+    restore_colors: Callable[[], None] | None = None
     try:
         if options.color_mode == "grayscale":
-            _apply_grayscale(figure)
+            restore_colors = _apply_grayscale(figure)
 
         facecolor = _resolve_background(figure, options)
         kwargs: dict[str, Any] = {
@@ -231,6 +299,10 @@ def export_figure(figure: Figure, path: str, options: PlotExportOptions) -> str:
     finally:
         # Restore figure state so subsequent in-app interactions are
         # not affected by export-only mutations.
+        if restore_colors is not None:
+            restore_colors()
+        for key, value in rc_backup.items():
+            matplotlib.rcParams[key] = value
         figure.set_size_inches(*original_size)
         figure.patch.set_facecolor(original_face)
 

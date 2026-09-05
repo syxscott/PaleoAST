@@ -141,6 +141,7 @@ class DATParser:
         has_groups = False
         expected_field_count = None
         has_found_header_or_data = False
+        header_parts: list[str] | None = None
 
         for line_num, line in enumerate(lines):
             stripped = line.strip()
@@ -183,23 +184,33 @@ class DATParser:
             # Use has_found_header_or_data to track whether we've processed
             # the header line (regardless of line number in file)
             if not has_found_header_or_data and self._looks_like_header(parts):
-                # If first column is a label, exclude it from col_labels
-                if self._is_label(parts[0]):
-                    col_labels = parts[1:]
-                else:
-                    col_labels = parts
-                expected_field_count = len(parts) - 1 if self._is_label(parts[0]) else len(parts)
+                # 记录表头。是否带左上角单元 (corner cell) 不在此处裁决——
+                # 由首条数据行反推: 否则"有表头、无行标签"的合法文件会被误判列数。
+                header_parts = list(parts)
+                col_labels = parts[1:] if self._is_label(parts[0]) else parts
                 has_found_header_or_data = True
                 continue
 
-            # Determine field count from header or first data line
+            # Determine field count from the FIRST DATA LINE (not the header):
+            # 数据行是否带行标签只有看数据本身才可靠。
+            # 基准列数: 有表头时 = 表头单元格数, 否则 = 首条数据行单元格数;
+            # 数据行带行标签时再减 1。这样"有表头、无行标签"的合法文件
+            # (表头 2 格 + 数据 2 格) 不再被误判, 而"表头 2 格 + 数据
+            # 带标签 3 格"的真实失配仍然报错。
             if expected_field_count is None:
-                # First data line - determine expected field count
-                if self._is_label(parts[0]):
-                    expected_field_count = len(parts) - 1
-                else:
-                    expected_field_count = len(parts)
+                has_row_label = self._is_label(parts[0])
+                base_count = len(header_parts) if header_parts is not None else len(parts)
+                expected_field_count = base_count - 1 if has_row_label else base_count
                 has_found_header_or_data = True
+                # 若数据行不带行标签且表头长度与数据宽度一致,
+                # 说明表头并没有左上角单元, 之前裁掉的首格要还原。
+                if (
+                    col_labels is not None
+                    and header_parts is not None
+                    and not has_row_label
+                    and len(header_parts) == expected_field_count
+                ):
+                    col_labels = list(header_parts)
 
             # Check if first element is a label (string) or data
             if self._is_label(parts[0]):

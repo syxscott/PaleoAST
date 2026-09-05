@@ -249,7 +249,10 @@ class GPA3D:
                         scaled = translated / cs
                     else:
                         scaled = translated
-                    centroid_sizes[i] = cs
+                    # 只在首轮记录: 第二轮起 translated 来自已缩放的
+                    # 构型, cs ≈ 1.0, 会覆盖原始质心大小
+                    if n_iterations == 1:
+                        centroid_sizes[i] = cs
                 else:
                     scaled = translated
 

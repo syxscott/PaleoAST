@@ -167,33 +167,27 @@ class StrictConsensusTree:
         for tree in trees[1:]:
             all_taxa |= set(tree.leaf_names)
 
-        # 提取所有分割
-        all_splits = self._extract_all_splits(trees)
-
-        # 统计频率
-        split_counts = Counter(all_splits)
+        # 统计频率: 以"包含该分割的树数 / 总树数"计。
+        # 旧实现用出现总次数 / 树数——同一棵树内多条边可归一化为同一
+        # 分割 (如根的子节点 (A,B) 与 (C,D) 各给出一条 AB|CD), 出现
+        # 次数超过树数 (3/2=1.5), 严格分割因此被整体丢弃。
+        tree_counts: Counter = Counter()
+        for tree in trees:
+            if tree.root is None:
+                continue
+            for s in set(self._extract_all_splits([tree])):
+                tree_counts[s] += 1
         n_trees = len(trees)
 
-        # 构建分割集合及其频率
         splits_with_freq: list[Split] = []
-        for split_set in all_splits:
-            freq = split_counts[split_set] / n_trees
-            split_obj = Split(set1=split_set.set1, set2=split_set.set2, frequency=freq)
-            splits_with_freq.append(split_obj)
-
-        # 去重
-        unique_splits = []
-        seen = set()
-        for s in splits_with_freq:
-            key = (s.set1, s.set2)
-            if key not in seen:
-                seen.add(key)
-                unique_splits.append(s)
+        for split_set, count in tree_counts.items():
+            freq = count / n_trees
+            splits_with_freq.append(Split(set1=split_set.set1, set2=split_set.set2, frequency=freq))
 
         # 筛选严格一致性分割 (频率=1.0)
-        strict_splits = [s for s in unique_splits if abs(s.frequency - 1.0) < 1e-10]
+        strict_splits = [s for s in splits_with_freq if abs(s.frequency - 1.0) < 1e-10]
 
-        self._logger.info(f"Extracted {len(unique_splits)} unique splits, {len(strict_splits)} are strict consensus")
+        self._logger.info(f"Extracted {len(splits_with_freq)} unique splits, {len(strict_splits)} are strict consensus")
 
         # 构建一致性树
         consensus_tree = self._build_tree_from_splits(strict_splits, all_taxa)
@@ -226,13 +220,19 @@ class StrictConsensusTree:
         for tree in trees[1:]:
             all_taxa |= set(tree.leaf_names)
 
-        all_splits = self._extract_all_splits(trees)
-        split_counts = Counter(all_splits)
+        # 统计频率: 以"包含该分割的树数 / 总树数"计 (与 build() 相同,
+        # 出现总次数会在同一树内被重复计数)
+        tree_counts: Counter = Counter()
+        for tree in trees:
+            if tree.root is None:
+                continue
+            for s in set(self._extract_all_splits([tree])):
+                tree_counts[s] += 1
         n_trees = len(trees)
 
         # 筛选超过阈值的分割
         majority_splits = []
-        for split_set, count in split_counts.items():
+        for split_set, count in tree_counts.items():
             freq = count / n_trees
             if freq >= threshold:
                 split_obj = Split(set1=split_set.set1, set2=split_set.set2, frequency=freq)
@@ -358,29 +358,17 @@ class StrictConsensusTree:
         if not non_trivial:
             return self._build_star_tree(all_taxa)
 
-        # 选择最小的非平凡分割
-        best_split = min(non_trivial, key=lambda s: len(s.set1))
-
-        # 使用选中的分割将taxa分组
-        set1 = best_split.set1 & all_taxa
-        set2 = best_split.set2 & all_taxa
-
-        # 递归构建左右子树
-        tree1 = self._build_recursive(splits, set1)
-        tree2 = self._build_recursive(splits, set2)
-
-        # 合并子树
-        root = PhyloNode(name="", node_type=NodeType.INTERNAL)
-        if tree1.root:
-            root.add_child(tree1.root)
-        if tree2.root:
-            root.add_child(tree2.root)
-
-        return PhyloTree(root=root)
+        return self._build_recursive(splits, all_taxa)
 
     def _build_recursive(self, splits: list[Split], taxa: set[str]) -> PhyloTree:
         """
         递归构建树
+
+        适用性规则: 分割在当前 clade 内生效当且仅当 set1∩taxa 与
+        set2∩taxa 均非空 (全局分割的另一侧是补集, 旧实现要求双侧都
+        ⊆ taxa, 使嵌套分割永远找不到; 而对无分割的 2-taxa 子集构建
+        "星形树"会生成输入中不存在的二叉 clade, 例如
+        ((A,B),C,D) 与自身的严格一致树被错误输出为 ((A,B),(C,D)))。
 
         Parameters:
             splits: 分割列表
@@ -395,33 +383,41 @@ class StrictConsensusTree:
             node = PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF)
             return PhyloTree(root=node)
 
-        # 找覆盖taxa的分割
-        compatible = []
+        applicable = []
         for split in splits:
-            if split.set1.issubset(taxa) and split.set2.issubset(taxa):
-                compatible.append(split)
+            if split.is_trivial:
+                continue
+            side1 = split.set1 & taxa
+            side2 = split.set2 & taxa
+            if side1 and side2:
+                applicable.append((side1, side2))
 
-        if not compatible:
-            # 没有兼容分割，构建星形树
+        if not applicable:
+            # 无分割在 clade 内部生效: 按多分叉展开 (不制造分辨节点)
             return self._build_star_tree(taxa)
 
-        # 选择最佳分割
-        best = min(compatible, key=lambda s: abs(len(s.set1) - len(taxa) / 2))
+        # 选择在 taxa 内部分割得最均衡的分割, 以较小侧作为子 clade
+        side1, side2 = min(applicable, key=lambda p: abs(len(p[0]) - len(p[1])))
+        if len(side1) > len(side2):
+            side1, side2 = side2, side1
 
-        set1 = best.set1 & taxa
-        set2 = best.set2 & taxa
+        subtree = self._build_recursive(splits, side1)
 
-        # 递归构建子树
-        tree1 = self._build_recursive(splits, set1)
-        tree2 = self._build_recursive(splits, set2)
+        # 另一侧: 若仍有分割在其内部生效则递归, 否则作为叶直接挂载
+        rest_partitioned = any(
+            (s.set1 & side2) and (s.set2 & side2) for s in splits if not s.is_trivial
+        )
 
-        # 合并
         root = PhyloNode(name="", node_type=NodeType.INTERNAL)
-
-        if tree1.root:
-            root.add_child(tree1.root)
-        if tree2.root:
-            root.add_child(tree2.root)
+        if subtree.root:
+            root.add_child(subtree.root)
+        if rest_partitioned:
+            rest_tree = self._build_recursive(splits, side2)
+            if rest_tree.root:
+                root.add_child(rest_tree.root)
+        else:
+            for taxon in sorted(side2):
+                root.add_child(PhyloNode(name=taxon, node_type=NodeType.LEAF))
 
         return PhyloTree(root=root)
 

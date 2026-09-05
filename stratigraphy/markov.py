@@ -9,15 +9,24 @@ sequence or exhibit first-order Markov dependency.
 
 Mathematical Foundation:
 
-Given a transition count matrix T, the expected count under independence is:
+Given a transition count matrix T, the expected count under the
+embedded-chain null of independence is (Powers & Easterling 1982):
 
-    E_ij = (row_i_total × col_j_total) / grand_total
+    E_ij = (row_i_total × col_j_total) / (grand_total − row_i_total)
+
+The fixed-row (N − row_i) denominator is essential: in an embedded
+Markov chain a transition out of state i cannot return to state i in
+the same step, so self-transitions are structurally excluded. The
+plain multinomial expectation ``row_i × col_j / N`` ignores this
+constraint and inflates χ², as shown by Powers & Easterling (1982).
 
 The chi-squared statistic for Markovity:
 
     χ² = Σ (T_ij - E_ij)² / E_ij
 
-with df = (n-1)² degrees of freedom.
+with df = (n-1)² degrees of freedom. Cells whose ``grand_total −
+row_i_total`` is zero have no admissible alternative transition and
+are skipped (excluded from the sum).
 
 The Difference Matrix (Powers & Easterling 1982):
 
@@ -133,11 +142,24 @@ class MarkovAnalyzer:
 
         n_transitions = int(T.sum())
 
-        # Expected matrix under independence
+        # Expected matrix under the Powers & Easterling (1982) embedded
+        # chain null: E_ij = row_i * col_j / (N - row_i). The plain
+        # independence expectation row_i * col_j / N treats the chain as
+        # a set of independent draws and therefore inflates chi-squared
+        # for transition matrices (see module docstring). Cells with
+        # N - row_i <= 0 (an entire row of self-transitions, i.e. no
+        # admissible alternative) have an undefined expectation: they
+        # are skipped, keeping E_ij at 0 so the chi-squared ``E > 0``
+        # mask excludes them.
         row_sums = T.sum(axis=1, keepdims=True)
         col_sums = T.sum(axis=0, keepdims=True)
         grand_total = T.sum()
-        E = (row_sums @ col_sums) / grand_total if grand_total > 0 else np.zeros_like(T)
+        E = np.zeros_like(T)
+        if grand_total > 0:
+            denominator = grand_total - row_sums  # shape (n_states, 1)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                E = np.where(denominator > 0, (row_sums @ col_sums) / denominator, 0.0)
+            E = np.nan_to_num(E, nan=0.0)
 
         # Difference matrix
         D = T - E

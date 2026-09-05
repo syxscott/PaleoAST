@@ -124,6 +124,7 @@ class TPS3DResult:
     bending_energy: float
     grid_points: np.ndarray | None = None
     deformations: np.ndarray | None = None
+    kernel: str = "thin_plate"  # 与拟合时使用的核保持一致
 
     def transform_points(self, points: np.ndarray) -> np.ndarray:
         """
@@ -166,12 +167,25 @@ class TPS3DResult:
 
     def _radial_basis_function(self, r: np.ndarray) -> np.ndarray:
         """
-        径向基函数
+        径向基函数 (按拟合时的核分派)
 
-        使用 |r|³ 核
+        旧实现硬编码 |r|³, 而 fit() 默认用 thin_plate (U=r) 核,
+        导致结果对象无法复现自身的映射。
         """
-        U = np.where(r > 1e-10, r**3, 0.0)
-        return U
+        out = np.zeros_like(r, dtype=np.float64)
+        mask = r > 1e-10
+        rr = r[mask]
+        if self.kernel == "cubic":
+            out[mask] = rr**3
+        elif self.kernel == "thin_plate":
+            out[mask] = rr
+        elif self.kernel == "multiquadric":
+            out[mask] = np.sqrt(rr**2 + 1.0)
+        elif self.kernel == "gaussian":
+            out[mask] = np.exp(-(rr**2) / 2.0)
+        else:
+            out[mask] = rr
+        return out
 
 
 class TPS3D:
@@ -217,6 +231,7 @@ class TPS3D:
         self.fit(source, target)
         K = self._compute_kernel_matrix(source, source)
         return TPS3DResult(
+            kernel=self._kernel,
             source_points=source,
             target_points=target,
             weights=self._weights,

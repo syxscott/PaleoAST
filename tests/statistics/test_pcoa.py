@@ -2,7 +2,7 @@
 # FILE: tests/statistics/test_pcoa.py
 # =============================================================================
 """
-Unit tests for PCoA module - focusing on Bug 2: negative eigenvalue handling.
+Unit tests for PCoA module - negative eigenvalue handling.
 
 Bug 2 Description:
     When distance matrices produce negative eigenvalues (non-Euclidean metrics
@@ -11,12 +11,16 @@ Bug 2 Description:
     1. Loss of meaningful biological information
     2. Inconsistent results compared to R cmdscale()/ape::pcoa()
 
-    The fix:
-    1. Preserves ALL eigenvalues including negative ones
-    2. Sorts by absolute value (descending)
-    3. Uses sqrt(abs(λ)) for coordinates
-    4. Issues explicit warnings (not just log)
-    5. Proportion calculated from absolute values
+    A later regression (commit c61a82b) changed the handling to sort axes by
+    |lambda| and build coordinates from sqrt(|lambda|), which lets a large
+    negative eigenvalue displace genuine positive axes.
+
+    Current behavior (reverted to the R cmdscale convention; Gower 1966):
+    1. Axes are sorted by signed eigenvalue (descending)
+    2. Coordinates are built only from positive eigenvalues: sqrt(max(lambda, 0))
+    3. Negative eigenvalues are warned about and their sum is reported
+       separately (negative_eigenvalue_sum / summary text)
+    4. Proportions are computed from the positive parts of the eigenvalues
 """
 
 import numpy as np
@@ -36,8 +40,14 @@ class TestPCoANegativeEigenvalueBehavior:
     eigenvalues to appear in every test.
     """
 
-    def test_eigenvalues_sorted_by_absolute_value(self):
-        """Test that eigenvalues are sorted by absolute value (descending)."""
+    def test_eigenvalues_sorted_descending(self):
+        """Test that eigenvalues are sorted by signed value (descending).
+
+        Regression note: an earlier version sorted by |lambda|, which let a
+        large negative eigenvalue displace genuine positive axes. The R
+        cmdscale convention (Gower 1966) sorts by lambda descending and
+        builds coordinates only from the positive eigenvalues.
+        """
         # Create a non-Euclidean distance matrix
         distance_matrix = np.array([
             [0.0, 0.8, 0.9, 0.3],
@@ -48,16 +58,20 @@ class TestPCoANegativeEigenvalueBehavior:
         analyzer = PCoAAnalyzer()
         result = analyzer.analyze(distance_matrix, metric='non-euclidean')
 
-        # Check that absolute values are in descending order
-        abs_eigenvalues = np.abs(result.eigenvalues)
-        for i in range(len(abs_eigenvalues) - 1):
-            assert abs_eigenvalues[i] >= abs_eigenvalues[i + 1], (
-                f"Eigenvalues not sorted by absolute value: "
-                f"{abs_eigenvalues[i]} < {abs_eigenvalues[i + 1]}"
+        # Check that signed eigenvalues are in descending order
+        eigenvalues = result.eigenvalues
+        for i in range(len(eigenvalues) - 1):
+            assert eigenvalues[i] >= eigenvalues[i + 1], (
+                f"Eigenvalues not sorted in descending order: "
+                f"{eigenvalues[i]} < {eigenvalues[i + 1]}"
             )
 
-    def test_coordinates_from_sqrt_abs_eigenvalues(self):
-        """Test that coordinates are computed using sqrt(|λ|)."""
+    def test_coordinates_from_positive_eigenvalues(self):
+        """Test that coordinates are computed as sqrt(max(lambda, 0)).
+
+        Follows the R cmdscale convention: coordinates come only from
+        positive eigenvalues, and negative eigenvalues contribute none.
+        """
         analyzer = PCoAAnalyzer()
         distance_matrix = np.array([
             [0.0, 0.8, 0.9],
@@ -71,8 +85,15 @@ class TestPCoANegativeEigenvalueBehavior:
         assert result.coordinates.shape[0] == 3  # 3 samples
 
         # The coordinates should not be all zeros (which would happen if
-        # negative eigenvalues were truncated to zero)
+        # all eigenvalues were non-positive)
         assert not np.allclose(result.coordinates, 0)
+
+        # Columns tied to negative eigenvalues must be exactly zero
+        for k in range(result.coordinates.shape[1]):
+            if result.eigenvalues[k] < 0:
+                assert np.allclose(result.coordinates[:, k], 0), (
+                    f"Axis {k} has negative eigenvalue but non-zero coordinates"
+                )
 
     def test_proportion_explained_sums_to_100(self):
         """Test that proportion explained sums to ~100%."""

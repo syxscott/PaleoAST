@@ -483,7 +483,11 @@ class UnivariateAnalyzer:
                     all_vals = np.concatenate(group_data)
                     df_within = len(all_vals) - n_groups
                     ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
-                    se = np.sqrt(ms_within * (1 / len(group_data[i]) + 1 / len(group_data[j])))
+                    # scipy's tukey_hsd uses stand_err = sqrt(MSE * (1/ni + 1/nj) / 2)
+                    # and the statistic is |mean_diff| / stand_err. Match the
+                    # fallback path below exactly so the reported q_stat is on
+                    # the studentized-range scale.
+                    se = np.sqrt(ms_within * (1.0 / len(group_data[i]) + 1.0 / len(group_data[j])) / 2.0)
                     q_stat = abs(mean_diff) / se if se > 0 else 0.0
 
                     results.append(

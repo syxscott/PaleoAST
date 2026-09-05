@@ -295,6 +295,11 @@ class TPSParser:
                     id=value, landmarks=np.array([]), scale=self._current_scale, curve_points=None, raw_data={"id": value}
                 )
                 self._current_landmarks = []
+                # Reset curve state: ``_in_curve`` belongs to the previous
+                # specimen. Without this reset, a later specimen with a
+                # POINTS= line but no preceding CO= left ``_in_curve``
+                # True while ``curve_points`` was None and crashed.
+                self._in_curve = False
             elif key == "CO":
                 # Curve order
                 if self._current_spec is not None:
@@ -313,6 +318,17 @@ class TPSParser:
             elif key == "POINTS":
                 # Curve points for current curve
                 if self._current_spec is not None and self._in_curve:
+                    if self._current_spec.curve_points is None:
+                        # POINTS= without a preceding CO= line. Initialise
+                        # an empty curve container instead of crashing on
+                        # ``"points" not in None``.
+                        self._logger.warning(
+                            "POINTS= line at %s line %d without preceding CO=; "
+                            "initialising empty curve points",
+                            self._parse_errors.file_path,
+                            line_num,
+                        )
+                        self._current_spec.curve_points = {}
                     if "points" not in self._current_spec.curve_points:
                         self._current_spec.curve_points["points"] = []
                     try:

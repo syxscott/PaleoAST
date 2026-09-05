@@ -35,11 +35,11 @@ Sorensen: S = 2a / (2a + b + c)
 
 Turnover component:
     J_tu = 2*min(b, c) / (a + 2*min(b, c))
-    S_tu = 2*min(b, c) / (2a + b + c)
+    S_tu (beta_sim) = min(b, c) / (2a + min(b, c))
 
-Nestedness component:
-    J_ne = |b - c| / (a + b + c)
-    S_ne = |b - c| / (2a + b + c)
+Nestedness component (Baselga 2012 / Baselga 2010):
+    J_ne = beta_jac - beta_jtu = a*|b - c| / [(a + b + c)*(a + 2*min(b, c))]
+    S_ne = beta_sor - beta_sim = 2*a*max(b, c) / [(2a + b + c)*(2a + min(b, c))]
 
 Coverage-based Rarefaction:
 
@@ -60,6 +60,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from scipy.stats import norm
 
 from config.i18n import _
 from utils.exceptions import ValidationError
@@ -299,13 +300,13 @@ class BetaDiversityAnalyzer:
                     #   βsor = (b + c) / (2a + b + c)
                     #   βsim = min(b,c) / (2a + min(b,c))              (turnover)
                     #   βsne = βsor - βsim
-                    #         = a·|b - c| / [(2a + b + c)·(2a + min(b,c))]
+                    #         = 2a·max(b,c) / [(2a + b + c)·(2a + min(b,c))]
                     denom = 2 * a + b + c
                     total_val = (b + c) / denom if denom > 0 else 0.0
                     min_bc = min(b, c)
                     denom_turn = 2 * a + min_bc
                     turn_val = min_bc / denom_turn if denom_turn > 0 else 0.0
-                    nest_val = (a * abs(b - c)) / (denom * denom_turn) if (denom > 0 and denom_turn > 0) else 0.0
+                    nest_val = (2 * a * max(b, c)) / (denom * denom_turn) if (denom > 0 and denom_turn > 0) else 0.0
 
                 total_beta[i, j] = total_beta[j, i] = total_val
                 turnover[i, j] = turnover[j, i] = turn_val
@@ -441,7 +442,8 @@ def coverage_rarefaction_hill(
 
     # Bootstrap CI using LOCAL RNG (avoids global seed pollution)
     rng = np.random.default_rng(seed)
-    z = 1.96 if confidence_level == 0.95 else 2.576
+    # Two-sided normal quantile for the requested confidence level
+    z = float(norm.ppf(1.0 - (1.0 - confidence_level) / 2.0))
 
     # Storage for per-sample results
     sample_coverage = np.zeros(n_samples)
@@ -584,15 +586,39 @@ def coverage_rarefaction_hill(
                         boot_curve[j] = boot_s_obs
             bootstrap_curves.append(boot_curve)
 
-        bootstrap_curves = np.array(bootstrap_curves)
+        bootstrap_curves = np.array(bootstrap_curves) if bootstrap_curves else np.zeros((0, n_points))
 
-        # Use median bootstrap curve as point estimate
-        richness_curve[i] = np.median(bootstrap_curves, axis=0)
+        # ---- Point estimate: computed from the OBSERVED sample ----
+        # Chao et al. (2014) compute the rarefaction/extrapolation point
+        # estimate from the observed data; bootstrap replicates are used
+        # only to estimate the standard error / confidence bounds.
+        observed_curve = np.zeros(n_points)
+        for j, c_level in enumerate(coverage_levels):
+            if coverage_i > 0 and c_level <= coverage_i:
+                # Interpolation (rarefaction) of the observed sample
+                m = max(1, int(total_n * c_level / coverage_i))
+                m = min(m, total_n - 1)
+                if q == 0:
+                    observed_curve[j] = _rarefaction_species(species_counts, m)
+                elif q == 1:
+                    observed_curve[j] = _rarefaction_shannon(species_counts, m, total_n)
+                else:
+                    observed_curve[j] = _rarefaction_simpson(species_counts, m, total_n)
+            else:
+                # Extrapolation toward the asymptotic estimator
+                ratio = c_level / coverage_i if coverage_i > 0 else 1.0
+                observed_curve[j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
+                observed_curve[j] = min(observed_curve[j], asymptote[i])
+        richness_curve[i] = observed_curve
 
-        # Percentile-based CI
-        alpha = 1 - confidence_level
-        ci_lower_curve[i] = np.percentile(bootstrap_curves, 100 * alpha / 2, axis=0)
-        ci_upper_curve[i] = np.percentile(bootstrap_curves, 100 * (1 - alpha / 2), axis=0)
+        # ---- Bootstrap replicates feed only the s.e. / CI bounds ----
+        if bootstrap_curves.shape[0] > 1:
+            boot_se = np.std(bootstrap_curves, axis=0, ddof=1)
+            ci_lower_curve[i] = np.maximum(observed_curve - z * boot_se, 0.0)
+            ci_upper_curve[i] = observed_curve + z * boot_se
+        else:
+            ci_lower_curve[i] = observed_curve
+            ci_upper_curve[i] = observed_curve
 
     # Aggregate across samples
     result = CoverageRarefactionResult(
@@ -606,6 +632,56 @@ def coverage_rarefaction_hill(
         method=f"coverage_rarefaction_hill_q{q}",
     )
     return result
+
+
+def _rarefied_coverage(species_counts: npt.NDArray, n: int, N: int) -> float:
+    """
+    Interpolated (rarefied) sample coverage at sample size n.
+
+    Chao & Jost (2012), Eq. 4 (see also Chao et al. 2014, Table 1,
+    last row): the coverage of a rarefied subsample of ``n`` individuals
+    drawn without replacement from the observed sample of ``N`` individuals,
+
+        C(n) = 1 - sum_i (x_i / N) * C(N - x_i, n) / C(N - 1, n)
+
+    where x_i is the abundance of species i. Singletons contribute exactly
+    1/N each (a singleton is represented in the subsample with probability
+    n/N and then contributes x_i/n = 1/n), while rarer species are
+    increasingly likely to be missed, so C(n) < C(N-1) = 1 - f1/N for
+    n < N-1 and the curve is strictly increasing in n.
+
+    Parameters
+    ----------
+    species_counts : array-like
+        Species abundances in the full sample (positive counts).
+    n : int
+        Rarefied sample size (n < N for interpolation).
+    N : int
+        Total sample size of the full sample.
+
+    Returns
+    -------
+    float
+        Estimated coverage C(n) of the rarefied sample.
+    """
+    if n <= 0:
+        return 0.0
+    if n >= N:
+        # At (or beyond) the full sample size the Good-Turing estimate applies
+        f1 = float(np.sum(species_counts == 1))
+        return 1.0 - f1 / N if N > 0 else 0.0
+
+    # log C(N-1, n): denominator binomial coefficient
+    log_ref = _lgamma(N) - _lgamma(n + 1) - _lgamma(N - n)
+    deficiency = 0.0
+    for x in species_counts:
+        if x > N - n:
+            # Species is necessarily present in every subsample of size n
+            continue
+        # log C(N - x, n)
+        log_num = _lgamma(N - x + 1) - _lgamma(n + 1) - _lgamma(N - x - n + 1)
+        deficiency += (x / N) * math.exp(log_num - log_ref)
+    return max(0.0, 1.0 - deficiency)
 
 
 def _rarefaction_species(species_counts: npt.NDArray, n: int) -> float:
@@ -654,7 +730,9 @@ def _rarefaction_shannon(species_counts: npt.NDArray, n: int, N: int) -> float:
     Based on Chao & Jost 2012 Eq. (4):
     H_n = H_N * (1 - (N-n)/N * (1 - C_n/C_N))
 
-    where H_N is observed Shannon entropy, C_n is coverage at size n.
+    where H_N is observed Shannon entropy, C_n is the interpolated
+    (rarefied) coverage at size n (Chao & Jost 2012, Eq. 4) and C_N is
+    the observed coverage estimated by Good-Turing as 1 - f1/N.
 
     Parameters
     ----------
@@ -679,16 +757,12 @@ def _rarefaction_shannon(species_counts: npt.NDArray, n: int, N: int) -> float:
     p = species_counts / N
     H_N = -np.sum(p * np.log(p))
 
-    # Coverage at full sample
+    # Coverage at full sample (Good-Turing)
     f1 = float(np.sum(species_counts == 1))
     C_N = 1.0 - (f1 / N) if N > 0 else 0.0
 
-    # Approximate coverage at n
-    if n < N:
-        f1_n = max(1.0, f1 * (n / N))
-        C_n = 1.0 - (f1_n / n) if n > 0 else 0.0
-    else:
-        C_n = C_N
+    # Interpolated (rarefied) coverage at n (Chao & Jost 2012, Eq. 4)
+    C_n = _rarefied_coverage(species_counts, n, N)
 
     if C_n > 0 and C_N > 0:
         H_n = H_N * (1 - ((N - n) / N) * (1 - C_n / C_N))
@@ -705,7 +779,9 @@ def _rarefaction_simpson(species_counts: npt.NDArray, n: int, N: int) -> float:
     Based on Chao & Jost 2012 Eq. (5):
     D_n = D_N * (1 - (N-n)/N * (1 - C_n/C_N))
 
-    where D_N is observed Simpson concentration, C_n is coverage.
+    where D_N is observed Simpson concentration, C_n is the interpolated
+    (rarefied) coverage at size n (Chao & Jost 2012, Eq. 4) and C_N is
+    the observed coverage estimated by Good-Turing as 1 - f1/N.
 
     Parameters
     ----------
@@ -731,15 +807,12 @@ def _rarefaction_simpson(species_counts: npt.NDArray, n: int, N: int) -> float:
     p = species_counts / N
     D_N = 1.0 - np.sum(p**2)
 
-    # Coverage
+    # Coverage at full sample (Good-Turing)
     f1 = float(np.sum(species_counts == 1))
     C_N = 1.0 - (f1 / N) if N > 0 else 0.0
 
-    if n < N:
-        f1_n = max(1.0, f1 * (n / N))
-        C_n = 1.0 - (f1_n / n) if n > 0 else 0.0
-    else:
-        C_n = C_N
+    # Interpolated (rarefied) coverage at n (Chao & Jost 2012, Eq. 4)
+    C_n = _rarefied_coverage(species_counts, n, N)
 
     if C_n > 0 and C_N > 0:
         D_n = D_N * (1 - ((N - n) / N) * (1 - C_n / C_N))
@@ -919,6 +992,9 @@ class CoverageRarefactionAnalyzer:
         # Coverage levels from 0.1 to 0.99
         coverage_levels = np.linspace(0.1, 0.99, n_points)
 
+        # Two-sided normal quantile for the requested confidence level
+        z = float(norm.ppf(1.0 - (1.0 - confidence_level) / 2.0))
+
         for i in range(n_samples):
             row = abundance_matrix[i]
             total_n = np.sum(row)
@@ -970,7 +1046,6 @@ class CoverageRarefactionAnalyzer:
                 # Approximate CI using Poisson-like variance
                 var = expected_at_coverage[i, j] * (1 - c_level) / c_level
                 std = math.sqrt(max(0, var))
-                z = 1.96 if confidence_level == 0.95 else 2.576
                 ci_lower[i, j] = max(0, expected_at_coverage[i, j] - z * std)
                 ci_upper[i, j] = min(n_species, expected_at_coverage[i, j] + z * std)
 

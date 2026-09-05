@@ -294,7 +294,7 @@ class SemiLandmarkSlider:
                 {
                     "iteration": iteration,
                     "mean_shape": current_mean.copy(),
-                    "bending_energy": self._compute_bending_energy(current_mean, gpa_result.mean_config),
+                    "bending_energy": self._compute_bending_energy(current_configs, current_mean),
                 }
             )
 
@@ -317,20 +317,45 @@ class SemiLandmarkSlider:
 
     def _gpa_with_fixed_landmarks(self, configs: list[np.ndarray]) -> GPA3DResult:
         """
-        对固定界标执行GPA
+        对固定界标执行GPA, 并把每个标本的变换 (平移+缩放+旋转)
+        应用到完整构型上。
+
+        旧实现只返回固定界标子集的对齐结果 (n_fixed 个点), 随后用
+        全树索引 aligned[self._semi_indices] / mean[self._semi_indices]
+        访问 → 正常配置下直接 IndexError 崩溃 (2026-09 复审)。
 
         参数:
             configs: 构型列表
 
         返回:
-            GPA3DResult
+            GPA3DResult (aligned_configs/mean_config 均为完整构型)
         """
-        # 提取固定界标
+        # 提取固定界标并执行GPA
         fixed_configs = [config[self._fixed_indices] for config in configs]
-
-        # 执行GPA
         gpa = GPA3D(tolerance=self._tolerance, verbose=False)
-        return gpa.analyze(fixed_configs)
+        result = gpa.analyze(fixed_configs)
+
+        # 把固定界标 GPA 的每个标本变换 (平移 + 缩放 + 旋转) 应用到
+        # 完整构型: aligned_fixed = (fixed - centroid) [/cs] @ R.T
+        aligned_full: list[np.ndarray] = []
+        for config, rot, cs in zip(configs, result.rotations, result.centroid_sizes):
+            fixed_pts = config[self._fixed_indices]
+            centered = config - fixed_pts.mean(axis=0)
+            if gpa._scale and cs > 1e-10:
+                centered = centered / cs
+            aligned_full.append(centered @ rot.T)
+
+        mean_full = np.mean(np.stack(aligned_full), axis=0)
+
+        return GPA3DResult(
+            aligned_configs=aligned_full,
+            mean_config=mean_full,
+            centroid_sizes=result.centroid_sizes,
+            rotations=result.rotations,
+            n_iterations=result.n_iterations,
+            final_spread=result.final_spread,
+            procrustes_distances=None,
+        )
 
     def _slide_curve_points(self, original: np.ndarray, aligned: np.ndarray, mean_shape: np.ndarray) -> np.ndarray:
         """
@@ -360,10 +385,22 @@ class SemiLandmarkSlider:
 
         # 计算滑动方向
         if self._criterion == self.CRITERION_BENDING_ENERGY:
-            # 最小弯曲能量: 沿切线方向移动到均值
-            displacement = semi_mean - semi_aligned
+            # 最小弯曲能量 (离散代理): 使标本半标志点曲线的曲率
+            # (二阶差分) 与共识形状一致。对光滑的沿曲线滑动, 该位移
+            # 切向且不把半标志点拉向共识位置。旧实现两条分支完全
+            # 相同, 弯曲能量判据形同虚设。
+            lap_mean = np.zeros_like(semi_mean)
+            lap_aligned = np.zeros_like(semi_aligned)
+            for i in range(n_semi):
+                im = i - 1 if i > 0 else i + 1
+                ip = i + 1 if i < n_semi - 1 else i - 1
+                if im == i or ip == i or im == ip or n_semi < 3:
+                    continue
+                lap_mean[i] = semi_mean[im] - 2.0 * semi_mean[i] + semi_mean[ip]
+                lap_aligned[i] = semi_aligned[im] - 2.0 * semi_aligned[i] + semi_aligned[ip]
+            displacement = lap_mean - lap_aligned
         else:
-            # 最小Procrustes距离
+            # 最小 Procrustes 距离: 向共识的切向分量滑动
             displacement = semi_mean - semi_aligned
 
         # 投影到切线方向
@@ -540,12 +577,15 @@ class SemiLandmarkSlider:
         total_be = 0.0
 
         for config in configs:
-            # 创建TPS
-            tps = TPS3D(kernel="cubic")
-            tps.fit(mean_shape[self._fixed_indices], config[self._fixed_indices])
-            total_be += tps._compute_bending_energy(
-                tps._compute_kernel_matrix(mean_shape[self._semi_indices], mean_shape[self._semi_indices])
-            )
+            # 每标本: 共识(固定点) → 标本(固定点) 的 TPS 弯曲能。
+            # 旧实现把固定点数目的权重 w 与半标志点数目的核矩阵
+            # K(semi, semi) 相乘, 维数不匹配 (仅当两类点数恰好相等时
+            # 才不报错, 结果亦无意义)。
+            src_pts = mean_shape[self._fixed_indices]
+            tps = TPS3D(kernel="thin_plate")
+            tps.fit(src_pts, config[self._fixed_indices])
+            K = tps._compute_kernel_matrix(src_pts, src_pts)
+            total_be += float(tps._compute_bending_energy(K))
 
         return total_be
 

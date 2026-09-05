@@ -688,8 +688,8 @@ class _RegexParser:
 
         result = self._parse_concat()
 
-        # 处理或运算符
-        if self._pos < self._length and self._peek() == "|":
+        # 处理或运算符: 必须循环消费所有 '|', 否则 a|b|c 会静默丢弃 c
+        while self._pos < self._length and self._peek() == "|":
             self._advance()
             right = self._parse_concat()
             result = RegexNode(RegexNodeType.ALTERNATION, children=(result, right))

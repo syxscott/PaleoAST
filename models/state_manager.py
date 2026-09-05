@@ -209,6 +209,7 @@ class StateManager:
         matrix: DataMatrix,
         _record_undo: bool = True,
         _reset_metadata: bool = True,
+        mark_modified: bool | None = None,
     ) -> None:
         """
         Set the current data matrix.
@@ -225,6 +226,12 @@ class StateManager:
                 new matrix's labels. Callers that want to preserve
                 existing metadata (e.g. a simple value edit) should
                 pass ``False``.
+            mark_modified: Whether to flag the project as having
+                unsaved changes. Loading a file from disk is NOT a
+                modification (the on-disk state matches), so callers
+                that load fresh data should pass ``False``. When None
+                (default) the flag is set True, preserving the
+                historical behaviour for in-app edits and transforms.
         """
         with self._read_write_lock:
             if _record_undo:
@@ -253,7 +260,10 @@ class StateManager:
                 )
                 self._row_metadata.from_dict_by_label(preserved_row, matrix.row_labels)
             self._analysis_cache.clear()
-            self._modified = True
+            if mark_modified is not None:
+                self._modified = mark_modified
+            else:
+                self._modified = True
         get_event_bus().emit_data_changed(matrix)
 
     def clear_data(self, _record_undo: bool = True) -> None:

@@ -386,7 +386,3 @@ def test_plot_canvas_export_plot_uses_facade(tmp_path, monkeypatch):
     finally:
         canvas._figure.clear()
         canvas.close()
-        # ``export_figure`` does not change the global state but the
-        # Pillow import we use elsewhere caches data; nothing to do
-        # beyond closing the canvas.
-        _ = export_figure

@@ -354,38 +354,38 @@ class NexusLexer(BaseLexer):
         返回:
             (注释Token, 新位置) 或 None
 
-        嵌套注释语法:
-            - 普通注释: [...]  (不嵌套)
-            - 嵌套注释: [[ ... ]]  (可多重嵌套)
-            - 混合: [ outer [[ nested ]] still_outer ]
+        终止语义 (与 tests/parsers/test_nexus_lexer.py 一致):
+            开启形式 ("[[ " 或 "[") 先行消耗并计深度 1; 此后 "[[" / "]]"
+            作为单元各使深度 +1 / -1, 单个 '[' / ']' 同样各 +1 / -1。
+            注释在其配对深度归零处结束。不得只认 "]]" 而忽略单个 ']'
+            ——否则普通注释永不终止, 会吞掉文件剩余全部内容
+            (2026-09 复审发现的回归)。
         """
         start_line = self._line
         start_column = self._column
         comment_start = position
         length = len(source)
 
-        # 嵌套深度计数: 进入第一层 [
+        nested_opener = source[position : position + 2] == "[["
+        pos = position + (2 if nested_opener else 1)
         depth = 1
-        pos = position + 1
 
         while pos < length and depth > 0:
-            # 检查嵌套注释开始 [[
-            if source[pos : pos + 2] == "[[":
+            two = source[pos : pos + 2]
+            if two == "[[":
                 depth += 1
                 pos += 2
                 continue
-            # 检查嵌套注释结束 ]]
-            elif source[pos : pos + 2] == "]]":
+            if two == "]]":
                 depth -= 1
                 pos += 2
                 continue
-
-            # 计数换行
-            if source[pos] == "\n":
-                self._line += 1
-                self._column = 1
-            else:
-                self._column += 1
+            if source[pos] == "[":
+                depth += 1
+            elif source[pos] == "]":
+                depth -= 1
+            # 行号/列号统一由 tokenize 里的 _update_position 维护,
+            # 这里不再累计, 否则多行注释会导致行号双重计数。
             pos += 1
 
         # 构建注释token
@@ -400,8 +400,10 @@ class NexusLexer(BaseLexer):
                 end_pos,
             )
 
-        # 检查是否包含嵌套标记
-        if "[[" in value or "]]" in value:
+        # 类型取决于开启形式: "[[" 开启 → NESTED_COMMENT;
+        # 普通 '[' 开启的注释即使内容含 "[[" 也是 COMMENT,
+        # 否则 "[ outer [[ nested ]] still_outer ]" 会被误判类型。
+        if nested_opener:
             token_type = NexusTokenType.NESTED_COMMENT
         else:
             token_type = NexusTokenType.COMMENT
