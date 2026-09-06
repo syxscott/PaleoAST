@@ -184,7 +184,7 @@ class StatisticsController:
                 f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}'"
             )
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
-            result = self._pcoa_analyzer.analyze(distance_matrix, n_components)
+            result = self._pcoa_analyzer.analyze(distance_matrix, n_components, metric=metric)
             self._state.cache_result("pcoa_result", result)
             self._state.cache_result("pcoa_metric", metric)
             self._logger.info(f"PCoA completed: {n_components} coordinates extracted")

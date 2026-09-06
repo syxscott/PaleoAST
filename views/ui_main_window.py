@@ -1145,6 +1145,40 @@ class WorkspaceArea(QWidget):
         self._stack.removeWidget(widget)
 
 
+class _AnalysisSignals(QObject):
+    """后台分析任务的信号桥。
+
+    pyqtSignal 只能挂在 QObject 子类上 (QRunnable 不是 QObject,
+    在 QRunnable 里声明信号会在 connect 时抛
+    "cannot be converted to PyQt6.QtCore.QObject")。工作者线程
+    通过本对象 emit, Qt 的队列连接保证槽在 GUI 线程执行。
+    """
+
+    result_ready = pyqtSignal(object)
+    error_raised = pyqtSignal(Exception)
+
+
+class _AnalysisTask(QRunnable):
+    """在线程池中执行 work(), 结果/异常经 _AnalysisSignals 回传。
+
+    长时间计算 (NMDS 多重启动、CONISS、GPA 迭代等) 若在 GUI 线程
+    同步执行会冻结整个界面且无任何进度提示; 分析处理器应通过
+    ``MainWindow._run_analysis_async`` 使用本任务。
+    """
+
+    def __init__(self, work, signals: _AnalysisSignals):
+        super().__init__()
+        self._work = work
+        self._signals = signals  # 持引用防垃圾回收
+
+    def run(self):
+        try:
+            result = self._work()
+            self._signals.result_ready.emit(result)
+        except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
+            self._signals.error_raised.emit(e)
+
+
 class MainWindow(QMainWindow):
     """
     Main Application Window for PaleoAST.
@@ -2946,29 +2980,14 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
-    class _GenericAnalysisTask(QRunnable):
-        """通用后台分析任务: 在线程池中执行 work(), 结果/异常经信号回传。
-
-        长时间计算 (NMDS 多重启动、CONISS、GPA 迭代等) 若在 GUI 线程
-        同步执行会冻结整个界面且无任何进度提示; 分析处理器应通过
-        ``_run_analysis_async`` 使用本任务。
-        """
-        result_ready = pyqtSignal(object)
-        error_raised = pyqtSignal(Exception)
-
-        def __init__(self, work):
-            super().__init__()
-            self._work = work
-
-        def run(self):
-            try:
-                result = self._work()
-                self.result_ready.emit(result)
-            except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
-                self.error_raised.emit(e)
-
     def _run_analysis_async(self, work, on_success, on_error, title: str) -> None:
         """在后台线程运行分析并接气回调。
+
+        信号桥必须是 QObject: pyqtSignal 只有挂在 QObject 实例上才能
+        connect/emit (QRunnable 不是 QObject, 此前直接在 QRunnable
+        子类里声明信号, connect 时抛
+        "cannot be converted to PyQt6.QtCore.QObject")。
+        signals 以 self 为父对象, 保证 emit 前不被垃圾回收。
 
         Parameters:
             work: 无参可调用, 返回分析结果 (在worker线程执行)。
@@ -2979,28 +2998,12 @@ class MainWindow(QMainWindow):
         self._status_bar.setProgress(0, 0)  # indeterminate
         self._status_bar.setInfo(_("Running {0}...").format(title))
 
-        task = self._GenericAnalysisTask(work)
-        task.result_ready.connect(on_success)
-        task.error_raised.connect(on_error)
+        signals = _AnalysisSignals(self)
+        signals.result_ready.connect(on_success)
+        signals.error_raised.connect(on_error)
+
+        task = _AnalysisTask(work, signals)
         self._thread_pool.start(task)
-
-    class _PCATask(QRunnable):
-        """Worker that runs PCA on the thread pool."""
-        result_ready = pyqtSignal(object)
-        error_raised = pyqtSignal(Exception)
-
-        def __init__(self, controller, n_components, method):
-            super().__init__()
-            self._controller = controller
-            self._n_components = n_components
-            self._method = method
-
-        def run(self):
-            try:
-                result = self._controller.run_pca(n_components=self._n_components, method=self._method)
-                self.result_ready.emit(result)
-            except Exception as e:
-                self.error_raised.emit(e)
 
     def _on_run_pca(self) -> None:
         """
@@ -3039,12 +3042,16 @@ class MainWindow(QMainWindow):
             return
 
         params = dialog.get_parameters()
-        self._status_bar.setProgress(0, 0)  # indeterminate
 
-        task = _PCATask(self._statistics_controller, params["n_components"], params["method"])
-        task.result_ready.connect(self._on_pca_result_ready)
-        task.error_raised.connect(self._on_pca_error)
-        self._thread_pool.start(task)
+        controller = self._statistics_controller
+        n_components = params["n_components"]
+        method = params["method"]
+
+        def _work():
+            # PCA 分解在数据量大时是长计算, 后台线程执行
+            return controller.run_pca(n_components=n_components, method=method)
+
+        self._run_analysis_async(_work, self._on_pca_result_ready, self._on_pca_error, _("PCA"))
 
     def _on_pca_result_ready(self, result) -> None:
         self._status_bar.setProgress(100, 100)
