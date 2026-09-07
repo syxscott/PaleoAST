@@ -10,7 +10,7 @@
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
-**Professional desktop platform for paleontological, paleoecological, and biosratigraphic research.**
+**Professional desktop platform for paleontological, paleoecological, and biostratigraphic research.**
 
 **专业古生物学桌面数据分析平台，集成多元统计、形态测量、生态分析与系统发育功能。**
 
@@ -147,7 +147,7 @@ pip install -r requirements.txt
 ```
 
 > **What gets installed / 安装内容:**
-> `numpy`, `scipy`, `pandas`, `matplotlib`, `PyQt6`, `psutil`
+> `numpy`, `scipy`, `pandas`, `matplotlib`, `scikit-learn`, `PyQt6`, `psutil`
 
 ### Step 4: Launch / 启动应用
 
@@ -169,7 +169,7 @@ The main window has three areas:
 
 ```
 +-----------------------------------------------------------+
-|  [File] [Multivariate] [Ecology] [Morpho] [Phylo] [Evo]  |  <- Ribbon toolbar
+|   [Home]  [Analysis]  [Morphometrics]  [Spatial]  [Stratigraphy]  |  <- Ribbon toolbar
 +----------+------------------------------------------------+
 |          |                                                |
 | Nav Tree |          Workspace / 工作区                     |
@@ -396,12 +396,15 @@ Lomb-Scargle 周期图用于非均匀采样时间序列（如地质剖面）。
 | `Ctrl+O` | Open file / 打开 |
 | `Ctrl+S` | Save / 保存 |
 | `Ctrl+I` | Import data / 导入数据 |
-| `Ctrl+Shift+E` | Export data / 导出数据 |
-| `Ctrl+Shift+P` | Run PCA / 运行主成分分析 |
-| `Ctrl+Shift+C` | Run PCoA / 运行主坐标分析 |
-| `Ctrl+Shift+M` | Run NMDS / 运行非度量MDS |
-| `Ctrl+Shift+D` | Run Diversity / 运行多样性分析 |
-| `Ctrl+Shift+R` | Run Rarefaction / 运行稀疏化分析 |
+| `Ctrl+E` | Export data / 导出数据 |
+| `Ctrl+Shift+E` | Export plot / 导出图表 |
+| `Ctrl+1` | Run PCA / 运行主成分分析 |
+| `Ctrl+2` | Run PCoA / 运行主坐标分析 |
+| `Ctrl+3` | Run NMDS / 运行非度量MDS |
+| `Ctrl+D` | Run Diversity / 运行多样性分析 |
+| `Ctrl+R` | Run Rarefaction / 运行稀疏化分析 |
+| `Ctrl+Shift+A` | Run ANOSIM / 运行组间相似性分析 |
+| `Ctrl+Shift+P` | Run PERMANOVA / 运行多元方差分析 |
 | `Ctrl+Shift+S` | Run Spectral / 运行频谱分析 |
 
 ---
@@ -449,7 +452,7 @@ PaleoAST/
 | Computing | NumPy, SciPy, scikit-learn |
 | Plotting | Matplotlib integrated via FigureCanvasQTAgg |
 | Architecture | MVC pattern with singleton StateManager |
-| i18n | Chinese/English bilingual with runtime switching |
+| i18n | Chinese/English bilingual, switched from the 语言 (Language) menu — applied after restart |
 
 ---
 

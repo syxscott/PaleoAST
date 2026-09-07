@@ -631,6 +631,16 @@ class _NewickParser:
             根节点
         """
         logger.debug(f"Starting Newick parse, input length = {len(newick)}")
+        # 跳过 '!' 前缀注释行 (如 data/examples/primate_tree.nwk 的
+        # 文献引注头)。带引号的标签内可能包含 '!'; 逐行判断时需
+        # 剥离行首空白再检测。
+        lines = []
+        for raw_line in newick.splitlines():
+            if raw_line.lstrip().startswith("!"):
+                continue
+            lines.append(raw_line)
+        newick = "\n".join(lines)
+
         self._input = newick.strip().rstrip(";")
         self._pos = 0
         self._length = len(self._input)
