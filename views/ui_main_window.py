@@ -4498,7 +4498,7 @@ class MainWindow(QMainWindow):
         def _gpa_result(result):
             self._status_bar.setProgress(100, 100)
 
-            import numpy as _np  # local import keeps the module-level namespace tidy
+            import numpy as np  # local import keeps the module-level namespace tidy
             plot = InteractivePlotCanvas()
             # Plot GPA-aligned landmarks
             if hasattr(result, "aligned_configurations"):

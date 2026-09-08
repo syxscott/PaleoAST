@@ -142,7 +142,9 @@ known-first-party = [
 # Mypy - Static Type Checking
 # =============================================================================
 [tool.mypy]
-python_version = "3.10"
+# CI typecheck 作业运行在 Python 3.12; 3.10 目标下 numpy 新版 stubs
+# 的 PEP 695 `type` 语句会报语法错误 (mypy: numpy/__init__.pyi syntax error)
+python_version = "3.12"
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = false

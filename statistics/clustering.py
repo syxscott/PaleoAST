@@ -21,6 +21,7 @@ from scipy.cluster.hierarchy import cophenet, fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 
 from config.i18n import _
+from utils.exceptions import MatrixDimensionError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)

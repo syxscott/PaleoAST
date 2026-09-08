@@ -684,7 +684,7 @@ class PCMAnalyzer:
             rng = np.random
 
         perm_Ks: list[float] = []
-        for _ in range(n_r):
+        for _perm_index in range(n_r):
             perm_y = rng.permutation(tip_array)
             perm_Ks.append(_blomberg_k_from_vcv(perm_y, VCV))
 

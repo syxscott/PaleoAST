@@ -364,7 +364,7 @@ class CrashReportDialog(QDialog):
         default_name = f"paleoast_crash_report_{timestamp}.txt"
 
         # 显示保存对话框
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _selected_filter = QFileDialog.getSaveFileName(
             self,
             _("Export Crash Report"),
             str(Path.home() / "Desktop" / default_name),

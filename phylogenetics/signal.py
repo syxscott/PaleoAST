@@ -60,6 +60,11 @@ PaleoAST Phylogenetics - Phylogenetic Signal (Blomberg's K & Pagel's λ)
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from phylogenetics.tree import PhyloNode
+
 import logging
 from dataclasses import dataclass
 from typing import Any

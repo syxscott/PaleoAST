@@ -339,7 +339,7 @@ class PlotExportDialog(QDialog):
         filter_str = (
             f"{self.FORMAT_LABELS[fmt]} (*.{fmt});;All files (*)"
         )
-        path, _ = QFileDialog.getSaveFileName(self, _("Export Plot"), self._path_edit.text(), filter_str)
+        path, _selected_filter = QFileDialog.getSaveFileName(self, _("Export Plot"), self._path_edit.text(), filter_str)
         if path:
             self._path_edit.setText(path)
 
