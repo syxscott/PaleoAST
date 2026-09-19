@@ -84,6 +84,13 @@ class AllometryResult:
         n_specimens: Number of specimens
         n_landmarks: Number of landmarks
         n_dims: Number of dimensions
+        cac_scores: Common Allometric Component scores — projection of each
+            specimen onto the unit allometric direction (Mitteroecker et al.
+            2004; geomorph ``plotAllometry(method="CAC")``)
+        cac_variance: Fraction of total Procrustes variance carried by the CAC
+        rsc_scores: Residual Shape Component scores — PCA of the shapes after
+            the allometric direction is removed
+        rsc_proportion: Variance proportions of the reported RSC axes
     """
 
     centroid_sizes: npt.NDArray[np.float64]
@@ -98,6 +105,10 @@ class AllometryResult:
     n_specimens: int
     n_landmarks: int
     n_dims: int
+    cac_scores: npt.NDArray[np.float64] | None = None
+    cac_variance: float | None = None
+    rsc_scores: npt.NDArray[np.float64] | None = None
+    rsc_proportion: npt.NDArray[np.float64] | None = None
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -137,6 +148,10 @@ class AllometryResult:
             "n_specimens": self.n_specimens,
             "n_landmarks": self.n_landmarks,
             "n_dims": self.n_dims,
+            "cac_scores": None if self.cac_scores is None else self.cac_scores.tolist(),
+            "cac_variance": self.cac_variance,
+            "rsc_scores": None if self.rsc_scores is None else self.rsc_scores.tolist(),
+            "rsc_proportion": None if self.rsc_proportion is None else self.rsc_proportion.tolist(),
             "summary": self.summary(),
         }
 
@@ -147,15 +162,28 @@ class PLSResult:
     Container for 2-Block Partial Least Squares analysis results.
 
     Attributes:
-        singular_values: PLS singular values
-        covariance_explained: Percentage of covariance explained per component
+        singular_values: PLS singular values (cross-covariance SVD)
+        covariance_explained: Percentage of cross-block covariance explained per component
         cumulative_covariance: Cumulative covariance explained
         left_scores: PLS scores for block A (n_specimens, n_components)
         right_scores: PLS scores for block B (n_specimens, n_components)
         pls_loadings_left: Loadings for block A
         pls_loadings_right: Loadings for block B
-        rv_coefficients: RV coefficient per component
-        integration_index: Mean absolute RV coefficient (overall integration)
+        pls_correlations: Correlation between paired PLS score vectors per
+            component (Rohlf & Corti 2000).  Formerly mislabelled
+            ``rv_coefficients`` — these are score correlations, not Escoufier
+            RV coefficients.
+        integration_index: Correlation of the first pair of PLS axes (r₁),
+            the standard two-block integration estimate (geomorph
+            ``integration.test`` r.pls).
+        rv_coefficient: Escoufier's RV coefficient between the two centred
+            blocks (overall multivariate association), or None.
+        pls1_pvalue: Two-sided permutation p-value for |r₁| (None when no
+            permutations were run).
+        pls1_z: Effect size of r₁ relative to the permutation null —
+            (r_obs − mean(r_rand)) / sd(r_rand) (geomorph 3.0.4+ Z).
+        random_correlations: Permutation distribution of r₁ (None unless
+            permutations were run).
         n_components: Number of PLS components
         n_specimens: Number of specimens
     """
@@ -167,10 +195,14 @@ class PLSResult:
     right_scores: npt.NDArray[np.float64]
     pls_loadings_left: npt.NDArray[np.float64]
     pls_loadings_right: npt.NDArray[np.float64]
-    rv_coefficients: npt.NDArray[np.float64]
+    pls_correlations: npt.NDArray[np.float64]
     integration_index: float
     n_components: int
     n_specimens: int
+    rv_coefficient: float | None = None
+    pls1_pvalue: float | None = None
+    pls1_z: float | None = None
+    random_correlations: npt.NDArray[np.float64] | None = None
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -179,12 +211,18 @@ class PLSResult:
             f"{'=' * 50}\n",
             f"{_('Number of specimens: {0}').format(self.n_specimens)}\n",
             f"{_('Number of PLS components: {0}').format(self.n_components)}\n",
-            f"{_('Overall integration index (mean RV): {0:.4f}').format(self.integration_index)}\n",
-            "",
-            f"{_('RV Coefficients by component:')}\n",
+            f"{_('Integration index (PLS1 correlation r1): {0:.4f}').format(self.integration_index)}\n",
         ]
-        for i, rv in enumerate(self.rv_coefficients):
-            lines.append(f"  {i + 1}: {rv:.4f}")
+        if self.rv_coefficient is not None:
+            lines.append(f"{_('Escoufier RV coefficient: {0:.4f}').format(self.rv_coefficient)}\n")
+        if self.pls1_pvalue is not None:
+            lines.append(
+                f"{_('Permutation test of r1: p={0:.4f}, Z={1:.2f}').format(self.pls1_pvalue, self.pls1_z)}\n"
+            )
+        lines.append("")
+        lines.append(f"{_('PLS score correlations by component:')}\n")
+        for i, r in enumerate(self.pls_correlations):
+            lines.append(f"  {i + 1}: {r:.4f}")
 
         lines.append("")
         lines.append(f"{_('Covariance explained:')}")
@@ -203,8 +241,12 @@ class PLSResult:
             "right_scores": self.right_scores.tolist(),
             "pls_loadings_left": self.pls_loadings_left.tolist(),
             "pls_loadings_right": self.pls_loadings_right.tolist(),
-            "rv_coefficients": self.rv_coefficients.tolist(),
+            "pls_correlations": self.pls_correlations.tolist(),
             "integration_index": self.integration_index,
+            "rv_coefficient": self.rv_coefficient,
+            "pls1_pvalue": self.pls1_pvalue,
+            "pls1_z": self.pls1_z,
+            "random_correlations": None if self.random_correlations is None else self.random_correlations.tolist(),
             "n_components": self.n_components,
             "n_specimens": self.n_specimens,
             "summary": self.summary(),
@@ -344,6 +386,36 @@ class AllometryAnalyzer:
             else:
                 predicted_full = predicted + mean_shape
 
+            # Step 10: Common Allometric Component (CAC) and Residual Shape
+            # Components (RSC) in the FULL shape space (Mitteroecker et al.
+            # 2004; geomorph plotAllometry): unit allometric direction
+            # e = a/||a|| with a = Yc'xc / (xc'xc); CAC scores = Yc e; RSC =
+            # PCA of Yc after removing the allometric direction.
+            Yc = flattened - mean_shape
+            xc = log_cs - np.mean(log_cs)
+            xzx = float(xc @ xc)
+            total_shape_var = float(np.sum(Yc**2))
+            cac_scores = cac_variance = rsc_scores = rsc_proportion = None
+            if xzx > 0 and total_shape_var > 0:
+                a_vec = Yc.T @ xc / xzx
+                a_norm = float(np.linalg.norm(a_vec))
+                if a_norm > np.finfo(float).eps:
+                    e = a_vec / a_norm
+                    cac_proj = Yc @ e
+                    cac_scores = cac_proj
+                    cac_variance = float(np.sum(cac_proj**2) / total_shape_var)
+                    resid_full = Yc - np.outer(cac_proj, e)
+                    G = resid_full.T @ resid_full / (n_specimens - 1)
+                    evals, evecs = np.linalg.eigh(G)
+                    order = np.argsort(evals)[::-1]
+                    evals = np.clip(evals[order], 0.0, None)
+                    evecs = evecs[:, order]
+                    q = int(min(5, np.count_nonzero(evals > 1e-12), n_specimens - 1))
+                    if q > 0:
+                        rsc_scores = resid_full @ evecs[:, :q]
+                        rsc_var = float(np.sum(resid_full**2))
+                        rsc_proportion = evals[:q] / rsc_var if rsc_var > 0 else np.zeros(q)
+
             result = AllometryResult(
                 centroid_sizes=centroid_sizes,
                 log_centroid_sizes=log_cs,
@@ -357,6 +429,10 @@ class AllometryAnalyzer:
                 n_specimens=n_specimens,
                 n_landmarks=n_landmarks,
                 n_dims=n_dims,
+                cac_scores=cac_scores,
+                cac_variance=cac_variance,
+                rsc_scores=rsc_scores,
+                rsc_proportion=rsc_proportion,
             )
 
             self._last_result = result
@@ -432,6 +508,8 @@ class IntegrationAnalyzer:
         block_a: npt.NDArray,
         block_b: npt.NDArray,
         n_components: int | None = None,
+        permutations: int = 0,
+        seed: int | None = None,
     ) -> PLSResult:
         """
         Perform Two-Block Partial Least Squares analysis.
@@ -440,9 +518,15 @@ class IntegrationAnalyzer:
             block_a: First block of shape variables (n_specimens, n_vars_a)
             block_b: Second block of shape variables (n_specimens, n_vars_b)
             n_components: Number of PLS components (default: min(n_vars_a, n_vars_b, n_specimens-1))
+            permutations: If > 0, run a permutation test of the PLS1
+                correlation r₁ by shuffling block B specimens
+                (Rohlf & Corti 2000 / geomorph ``integration.test``).
+            seed: RNG seed for the permutations.
 
         Returns:
-            PLSResult with PLS scores, loadings, and integration metrics
+            PLSResult with PLS scores, loadings, score correlations, the
+            Escoufier RV coefficient and (optionally) the r₁ permutation
+            p-value and Z effect size.
 
         Raises:
             ValidationError: If input data is invalid
@@ -483,16 +567,49 @@ class IntegrationAnalyzer:
             pls_scores_left = block_a_centered @ U[:, :n_components]
             pls_scores_right = block_b_centered @ Vt[:n_components, :].T
 
-            # RV coefficients per component
-            rv_coefficients = np.zeros(n_components)
-            for i in range(n_components):
-                if np.std(pls_scores_left[:, i]) > 0 and np.std(pls_scores_right[:, i]) > 0:
-                    rv_coefficients[i] = np.corrcoef(pls_scores_left[:, i], pls_scores_right[:, i])[0, 1]
-                else:
-                    rv_coefficients[i] = 0.0
+            # Per-component correlation between paired PLS score vectors
+            # (Rohlf & Corti 2000).  These were previously mislabelled
+            # "rv_coefficients"; the true Escoufier RV is computed below.
+            pls_correlations = np.zeros(n_components)
+            for comp_idx in range(n_components):
+                if np.std(pls_scores_left[:, comp_idx]) > 0 and np.std(pls_scores_right[:, comp_idx]) > 0:
+                    pls_correlations[comp_idx] = np.corrcoef(
+                        pls_scores_left[:, comp_idx], pls_scores_right[:, comp_idx]
+                    )[0, 1]
 
-            # Overall integration index (mean absolute RV)
-            integration_index = float(np.mean(np.abs(rv_coefficients)))
+            # Integration index: the PLS1 correlation r₁ (geomorph r.pls)
+            integration_index = float(pls_correlations[0])
+
+            # Escoufier's RV coefficient (overall block association):
+            # RV = ||S12||² / sqrt(||S11||² * ||S22||²)  (Frobenius norms)
+            S11 = block_a_centered.T @ block_a_centered
+            S22 = block_b_centered.T @ block_b_centered
+            denom_rv = np.sqrt(np.sum(S11**2) * np.sum(S22**2))
+            rv_coefficient = float(np.sum(C_ab**2) * (n_specimens_a - 1) ** 2 / denom_rv) if denom_rv > 0 else 0.0
+
+            # Permutation test of r₁: shuffle block B specimens, recompute
+            # the leading singular vectors and the score correlation.
+            pls1_pvalue: float | None = None
+            pls1_z: float | None = None
+            random_correlations: npt.NDArray | None = None
+            if permutations and permutations > 0:
+                rng = np.random.default_rng(seed)
+                r_obs = integration_index
+                rand_rs = np.zeros(permutations)
+                for step in range(permutations):
+                    perm_idx = rng.permutation(n_specimens_a)
+                    Yp = block_b_centered[perm_idx]
+                    C_p = block_a_centered.T @ Yp
+                    U_p, _sv, Vt_p = np.linalg.svd(C_p, full_matrices=False)
+                    xs = block_a_centered @ U_p[:, 0]
+                    ys = Yp @ Vt_p[0, :]
+                    if np.std(xs) > 0 and np.std(ys) > 0:
+                        rand_rs[step] = np.corrcoef(xs, ys)[0, 1]
+                random_correlations = rand_rs
+                count = int(np.sum(np.abs(rand_rs) >= abs(r_obs) - 1e-15))
+                pls1_pvalue = (1.0 + count) / (1.0 + permutations)
+                sd_rand = float(np.std(rand_rs, ddof=1))
+                pls1_z = (r_obs - float(np.mean(rand_rs))) / sd_rand if sd_rand > 0 else 0.0
 
             # Covariance explained
             total_variance = np.sum(singular_values**2)
@@ -511,14 +628,18 @@ class IntegrationAnalyzer:
                 right_scores=pls_scores_right,
                 pls_loadings_left=U[:, :n_components],
                 pls_loadings_right=Vt[:n_components, :].T,
-                rv_coefficients=rv_coefficients,
+                pls_correlations=pls_correlations,
                 integration_index=integration_index,
                 n_components=n_components,
                 n_specimens=n_specimens_a,
+                rv_coefficient=rv_coefficient,
+                pls1_pvalue=pls1_pvalue,
+                pls1_z=pls1_z,
+                random_correlations=random_correlations,
             )
 
             self._last_result = result
-            self._logger.info(f"PLS: integration index = {integration_index:.4f}")
+            self._logger.info(f"PLS: r1 = {integration_index:.4f}, RV = {rv_coefficient:.4f}")
             return result
 
     def divide_configuration_into_blocks(

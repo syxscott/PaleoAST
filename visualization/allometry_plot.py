@@ -249,7 +249,7 @@ class AllometryPlotter:
         self,
         left_scores: npt.NDArray[np.float64],
         right_scores: npt.NDArray[np.float64],
-        rv_coefficients: npt.NDArray[np.float64],
+        pls_correlations: npt.NDArray[np.float64],
         integration_index: float,
         groups: list[int] | None = None,
         title: str = "2B-PLS: Morphological Integration",
@@ -260,8 +260,8 @@ class AllometryPlotter:
         Parameters:
             left_scores: PLS scores for block A (n_specimens, n_components)
             right_scores: PLS scores for block B (n_specimens, n_components)
-            rv_coefficients: RV coefficients per component
-            integration_index: Mean absolute RV coefficient
+            pls_correlations: PLS score correlations per component
+            integration_index: PLS1 correlation r₁
             groups: Optional group assignments
             title: Plot title
 
@@ -310,9 +310,9 @@ class AllometryPlotter:
         ax.set_ylabel("Block B PLS Score (Comp 1)", fontsize=self._font_size)
 
         # Title with integration info
-        rv1 = rv_coefficients[0] if len(rv_coefficients) > 0 else 0
+        r1 = pls_correlations[0] if len(pls_correlations) > 0 else 0
         ax.set_title(
-            f"{title}\nRV coefficient = {rv1:.4f}, Integration index = {integration_index:.4f}",
+            f"{title}\nPLS1 correlation = {r1:.4f}, Integration index = {integration_index:.4f}",
             fontsize=self._title_font_size,
             fontweight="bold",
         )
