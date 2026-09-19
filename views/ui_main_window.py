@@ -131,6 +131,12 @@ def format_user_error(e: Exception, operation: str = "") -> str:
     error_msg = str(e)
     operation_hint = f"{operation} " if operation else ""
 
+    # Newick 系统发育树解析错误: 消息自带行列定位, 原样展示
+    from utils.exceptions import NewickParseError
+
+    if isinstance(e, NewickParseError):
+        return _("{0}失败：系统发育树文件解析错误。\n\n{1}").format(operation_hint, error_msg)
+
     # 数据类型错误（最常见的中文字符或 "NA" 问题）
     if isinstance(e, (ValueError, TypeError)):
         # 检查是否是非法字符问题（更精确的匹配）

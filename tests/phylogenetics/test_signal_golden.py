@@ -71,7 +71,7 @@ class TestBlombergK:
         for seed in [1, 2, 3, 4, 5]:
             rng = np.random.default_rng(seed)
             traits = {name: rng.normal() for name in (leaf.name for leaf in tree.root.get_leaves())}
-            result = blomberg_k(tree, traits, n_permutations=199)
+            result = blomberg_k(tree, traits, n_permutations=199, seed=seed)
             assert result.K_pvalue > 0.05, (
                 f"seed={seed}: iid data should not show significant signal (p={result.K_pvalue})"
             )

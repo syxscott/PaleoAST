@@ -46,9 +46,11 @@ Newick格式由以下递归文法定义:
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from utils.exceptions import NewickParseError
+from utils.newick_core import NewickNodeSpec, parse_newick_trees
 
 logger = logging.getLogger(__name__)
 
@@ -482,135 +484,49 @@ class NewickParser:
     """
     Newick格式解析器
 
-    使用递归下降解析算法。
+    文法解析委托给共享核心 :func:`utils.newick_core.parse_newick_trees`
+    (与 ``phylogenetics.tree._NewickParser`` 共用同一套语法实现,
+    含行列定位异常、引号标签、嵌套注释与递归深度守卫)。
 
-    解析算法:
-    --------
-        1. 识别子树: '(' ... ')'
-        2. 解析子节点: 用 ',' 分隔
-        3. 解析节点名称: 名称后跟 ':'
-        4. 解析枝长: ':' 后跟数字
+    本类仅保留模型侧策略:
 
-    状态机:
-    --------
-        State: INITIAL → NAME → LENGTH → COMMA/SIBLING
-                         ↓
-                      SUBTREE
-
-    性能考虑:
-    --------
-        - 使用正则预处理
-        - 递归深度受Python调用栈限制
-        - 大树可能需要迭代实现
+    - ``[ ... ]`` 注释中以 ``&&NHX`` 开头者解析为 metadata,
+      值保持字符串 (与历史行为一致; phylogenetics 侧会做数值转换);
+    - 属性分隔兼容 ``:`` (Zmasek & Eddy 规范) 与 ``,`` (部分工具输出);
+    - 负枝长由 :class:`TreeNode` 构造时拒绝。
 
     示例:
         >>> parser = NewickParser()
-        >>> tree = parser.parse("(A:0.1,B:0.2)C:0.3;")
-        >>> print(tree.leaf_names)
-        ['A', 'B']
+        >>> tree = parser.parse("((A,B)C,(D,E)F)G;")
     """
 
     def __init__(self):
         self._logger = logging.getLogger(f"{__name__}.NewickParser")
-
-        # 解析状态
-        self._input: str = ""
-        self._pos: int = 0
-        self._length: int = 0
-        # Track recursion depth for the descent parser; the public
-        # ``_parse_subtree_with_children`` increments / decrements it
-        # so that malicious or pathological input can't crash the
-        # interpreter with ``RecursionError``.
-        self._depth: int = 0
-        self._MAX_DEPTH: int = 1000
-
-        # 正则表达式
-        # 注: 中括号/引号不属于未加引号的名字——'[' 开启注释或 NHX 元数据,
-        # 否则 "[&&NHX:..." 会被吞进节点名并使后续解析错位 (曾引发死循环)。
-        self._name_pattern = re.compile(r"^([^():,\[\]'\"\s;]+)")
-        self._number_pattern = re.compile(r"^([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)")
-        self._whitespace_pattern = re.compile(r"^\s+")
-        # 括号配对计数: parse() 结束时非零说明括号不匹配
-        self._paren_balance: int = 0
 
     def parse(self, newick_string: str) -> NewickTree:
         """
         解析Newick格式字符串
 
         参数:
-            newick_string: Newick格式树字符串
+            newick_string: Newick格式树字符串 (可含多棵以 ``;`` 分隔的树)
 
         返回:
-            NewickTree对象
+            NewickTree对象 (``root`` 为第一棵树)
 
         异常:
-            ValueError: 格式错误
+            NewickParseError: 语法错误 (携带 line/column/position)
 
         示例:
             >>> parser = NewickParser()
             >>> tree = parser.parse("((A,B)C,(D,E)F)G;")
         """
-        self._input = newick_string.strip()
-        self._pos = 0
-        self._length = len(self._input)
-        self._paren_balance = 0
+        self._logger.debug(f"Parsing Newick: {newick_string[:50]}...")
 
-        self._logger.debug(f"Parsing Newick: {self._input[:50]}...")
+        specs = parse_newick_trees(newick_string)
+        if not specs:
+            raise NewickParseError("Failed to parse Newick tree: no valid tree found")
 
-        trees: list[TreeNode] = []
-
-        while self._pos < self._length:
-            # 跳过空白
-            self._skip_whitespace()
-
-            if self._pos >= self._length:
-                break
-
-            # 检查分号结束
-            if self._current() == ";":
-                self._advance()
-                break
-
-            # 跳过 Newick 注释 [comment]: 扫描至配对的 ']' (支持嵌套)。
-            # 旧实现扫描到行尾, 会把同一行注释之后的树一并吞掉。
-            if self._current() == "[":
-                self._consume_bracket_block()
-                continue
-
-            # 游离的 ')': 若不报错, 顶层循环将无法消耗任何字符而无限追加空节点
-            if self._current() == ")":
-                raise ValueError(
-                    f"Unmatched ')' in Newick string at position {self._pos}"
-                )
-
-            # 解析树
-            tree = self._parse_subtree()
-            if tree:
-                trees.append(tree)
-
-            # 跳过空白
-            self._skip_whitespace()
-
-            # 处理分号
-            if self._current() == ";":
-                self._advance()
-                break
-
-            # 检查逗号分隔多棵树
-            if self._current() == ",":
-                self._advance()
-
-        # 检查括号配对 (如 "((A,B);" 这类未闭合输入此前被静默接受)
-        if self._paren_balance > 0:
-            raise ValueError(
-                f"Unbalanced parentheses in Newick string: "
-                f"{self._paren_balance} unclosed '('"
-            )
-
-        # 检查是否解析成功
-        if not trees:
-            raise ValueError("Failed to parse Newick tree: no valid tree found")
-
+        trees = [self._node_from_spec(spec) for spec in specs]
         tree_obj = NewickTree(trees=trees)
 
         self._logger.info(f"Parsed Newick tree with {tree_obj.leaf_count} leaves")
@@ -649,296 +565,62 @@ class NewickParser:
 
     def parse_multi(self, content: str) -> list[NewickTree]:
         """
-        解析包含多棵树的字符串
+        解析包含多棵树的字符串 (宽容模式: 坏树记录警告后跳过)。
+
+        恢复策略: 语法错误后从错误位置寻找下一个 ``;`` 继续解析,
+        已成功解析的树全部保留。
 
         参数:
             content: 包含多棵树的字符串
 
         返回:
-            NewickTree列表
+            NewickTree列表 (每个元素含一棵树)
         """
-        trees: list[NewickTree] = []
-
-        # 分割各棵树
-        tree_strings = content.split(";")
-
-        for ts in tree_strings:
-            ts = ts.strip()
-            if ts:
+        results: list[NewickTree] = []
+        offset = 0
+        total = len(content)
+        while offset < total:
+            specs: list[NewickNodeSpec] = []
+            failure: ValueError | None = None
+            try:
+                parse_newick_trees(content[offset:], out=specs)
+            except ValueError as exc:
+                failure = exc
+            # Keep the trees that parsed before the failure point.
+            for spec in specs:
                 try:
-                    tree = self.parse(ts + ";")
-                    trees.append(tree)
-                except ValueError as e:
-                    self._logger.warning(f"Failed to parse tree: {e}")
-
-        return trees
-
-    def _parse_subtree(self) -> TreeNode | None:
-        """
-        解析子树
-
-        递归下降解析入口。
-
-        递归文法:
-            Subtree → Name? Subtrees? ":" BranchLength?
-                    | Subtrees ":" BranchLength?
-                    | Name ":" BranchLength?
-
-        返回:
-            TreeNode对象
-        """
-        self._skip_whitespace()
-
-        if self._pos >= self._length:
-            return None
-
-        # 检查是否开始子节点列表
-        if self._current() == "(":
-            return self._parse_subtree_with_children()
-        else:
-            return self._parse_simple_node()
-
-    def _parse_subtree_with_children(self) -> TreeNode:
-        """
-        解析带子节点的子树
-
-        格式: (child1, child2, ...)name:length
-
-        返回:
-            TreeNode对象
-        """
-        # Recursion-depth guard. Newick allows arbitrarily deep
-        # nesting of parentheses; without this cap a malicious or
-        # accidentally pathological input of ``((((...`` depth 10^5
-        # would crash the interpreter with ``RecursionError`` (or
-        # worse, exhaust the C stack). 1000 is well above any
-        # reasonable biological tree and matches the effective
-        # default Python recursion limit.
-        self._depth += 1
-        try:
-            if self._depth > self._MAX_DEPTH:
-                raise ValueError(
-                    f"Newick recursion depth exceeded {self._MAX_DEPTH}; "
-                    "tree is too deeply nested or malformed."
-                )
-            return self._parse_subtree_with_children_impl()
-        finally:
-            self._depth -= 1
-
-    def _parse_subtree_with_children_impl(self) -> TreeNode:
-        """Implementation of ``_parse_subtree_with_children``; the
-        public method wraps this in a depth counter."""
-        # 消耗 '('
-        self._advance()
-        self._paren_balance += 1
-
-        children: list[TreeNode] = []
-
-        while True:
-            self._skip_whitespace()
-
-            # 子节点前的注释 (如 (A,[comment]B))
-            while self._current() == "[":
-                self._consume_bracket_block()
-                self._skip_whitespace()
-
-            # 解析第一个子节点
-            child = self._parse_subtree()
-            if child:
-                children.append(child)
-
-            self._skip_whitespace()
-
-            # 子节点后的注释
-            while self._current() == "[":
-                self._consume_bracket_block()
-                self._skip_whitespace()
-
-            # 检查分隔符
-            if self._current() == ",":
-                self._advance()
-                continue
-            elif self._current() == ")":
-                self._advance()
-                self._paren_balance -= 1
-                break
+                    results.append(NewickTree(trees=[self._node_from_spec(spec)]))
+                except ValueError as exc:
+                    # TreeNode-level policy errors (e.g. negative branch length)
+                    self._logger.warning(f"Failed to parse tree: {exc}")
+            if failure is None:
+                offset = total
             else:
-                # 可能到达字符串末尾
-                break
+                self._logger.warning(f"Failed to parse tree: {failure}")
+                position = getattr(failure, "position", None)
+                base = offset + position if position is not None else offset + 1
+                semicolon = content.find(";", base)
+                offset = semicolon + 1 if semicolon != -1 else total
+        return results
 
-        # 解析节点名称和枝长
-        name = self._parse_name() or ""
-
-        # 名称之后、枝长之前的 NHX 元数据: (...)[&&NHX:x=1]:0.5
+    @staticmethod
+    def _node_from_spec(spec: NewickNodeSpec) -> TreeNode:
+        """Convert a model-agnostic spec into a ``TreeNode`` subtree."""
         metadata: dict[str, Any] = {}
-        if self._current() == "[":
-            nhx_content = self._consume_bracket_block()
-            if nhx_content is not None:
-                metadata.update(self._parse_nhx_pairs(nhx_content))
+        for body in spec.comments:
+            stripped = body.strip()
+            if stripped.startswith("&&NHX"):
+                metadata.update(NewickParser._parse_nhx_pairs(stripped[len("&&NHX") :]))
 
-        branch_length = None
-        if self._current() == ":":
-            self._advance()
-            branch_length = self._parse_number()
-
-        # 枝长之后的 NHX 元数据: (...):0.5[&&NHX:x=1]
-        if self._current() == "[":
-            nhx_content = self._consume_bracket_block()
-            if nhx_content is not None:
-                metadata.update(self._parse_nhx_pairs(nhx_content))
-
-        # 创建内部节点
-        node = TreeNode(name=name, branch_length=branch_length)
+        node = TreeNode(name=spec.name, branch_length=spec.branch_length)
         if metadata:
             node.metadata.update(metadata)
 
-        # 设置子节点
-        for child in children:
+        for child_spec in spec.children:
+            child = NewickParser._node_from_spec(child_spec)
             child.parent = node
             node.children.append(child)
-
         return node
-
-    def _parse_simple_node(self) -> TreeNode:
-        """
-        解析简单节点 (叶节点)
-
-        格式: name[length][:branch_length]
-
-        返回:
-            TreeNode对象
-        """
-        name = self._parse_name() or ""
-
-        # 叶节点 NHX 元数据 (名称之后、枝长之前): A[&&NHX:S=human]:0.1
-        metadata: dict[str, Any] = {}
-        if self._current() == "[":
-            nhx_content = self._consume_bracket_block()
-            if nhx_content is not None:
-                metadata.update(self._parse_nhx_pairs(nhx_content))
-
-        branch_length = None
-        if self._current() == ":":
-            self._advance()
-            branch_length = self._parse_number()
-
-        # 枝长之后的 NHX 元数据: A:0.1[&&NHX:S=human]
-        if self._current() == "[":
-            nhx_content = self._consume_bracket_block()
-            if nhx_content is not None:
-                metadata.update(self._parse_nhx_pairs(nhx_content))
-
-        node = TreeNode(name=name, branch_length=branch_length)
-        if metadata:
-            node.metadata.update(metadata)
-        return node
-
-    def _parse_name(self) -> str | None:
-        """
-        解析节点名称
-
-        支持:
-        - 普通名称: 非空白、非特殊字符序列
-        - 单引号名称: 'Homo sapiens' (允许包含空格)
-        - 双引号名称: "Homo sapiens"
-
-        返回:
-            名称字符串 (引号已剥离)
-        """
-        self._skip_whitespace()
-
-        if self._pos >= self._length:
-            return None
-
-        # Support quoted labels: 'name with spaces' or "name with spaces"
-        quote_char = self._current()
-        if quote_char in ("'", '"'):
-            quote_char_typed = quote_char
-            self._advance()
-            start = self._pos
-            # Scan until matching quote
-            while self._pos < self._length and self._current() != quote_char_typed:
-                # Allow escaped quotes: \' or \"
-                if self._current() == "\\" and self._pos + 1 < self._length:
-                    self._advance()
-                self._advance()
-            if self._pos >= self._length:
-                raise ValueError(
-                    f"Unterminated quoted name starting at position {start}"
-                )
-            name = self._input[start : self._pos]
-            self._advance()  # consume closing quote
-            # Unescape internal escaped quotes
-            name = name.replace("\\" + quote_char_typed, quote_char_typed)
-            return name
-
-        # Unquoted name: non-whitespace, non-special chars
-        match = self._name_pattern.match(self._input[self._pos :])
-        if match:
-            name = match.group(1)
-            self._pos += match.end()
-            return name
-
-        return None
-
-    def _parse_number(self) -> float | None:
-        """
-        解析数字 (枝长)
-
-        支持整数、浮点数、科学计数法。
-
-        返回:
-            数字值
-        """
-        self._skip_whitespace()
-
-        match = self._number_pattern.match(self._input[self._pos :])
-        if match:
-            value = float(match.group(1))
-            self._pos += match.end()
-            return value
-
-        return None
-
-    def _consume_bracket_block(self) -> str | None:
-        """
-        消费当前位置的 [ ... ] 块 (平衡嵌套扫描)。
-
-        返回:
-            若块以 "&&NHX" 开头则返回其内容字符串 (不含括号);
-            普通注释返回 None。
-
-        异常:
-            ValueError: 块未闭合
-        """
-        if self._current() != "[":
-            return None
-        start_pos = self._pos
-        self._advance()  # consume '['
-
-        is_nhx = self._input[self._pos : self._pos + 5] == "&&NHX"
-        if is_nhx:
-            self._advance(5)  # consume '&&NHX'
-
-        content_start = self._pos
-        depth = 1
-        while self._pos < self._length and depth > 0:
-            ch = self._current()
-            if ch == "[":
-                depth += 1
-            elif ch == "]":
-                depth -= 1
-            self._advance()
-
-        if depth > 0:
-            raise ValueError(
-                f"Unterminated bracket block at position {start_pos}"
-            )
-
-        if not is_nhx:
-            return None
-        # self._pos 位于 ']' 之后
-        return self._input[content_start : self._pos - 1]
 
     @staticmethod
     def _parse_nhx_pairs(content: str) -> dict[str, str]:
@@ -975,25 +657,6 @@ class NewickParser:
                 metadata[token] = ""
         return metadata
 
-    def _skip_whitespace(self) -> None:
-        """跳过空白字符"""
-        while self._pos < self._length:
-            char = self._input[self._pos]
-            if char in " \t\n\r":
-                self._pos += 1
-            else:
-                break
-
-    def _current(self) -> str:
-        """获取当前位置字符"""
-        if self._pos < self._length:
-            return self._input[self._pos]
-        return ""
-
-    def _advance(self, count: int = 1) -> None:
-        """前进指定字符数"""
-        self._pos = min(self._pos + count, self._length)
-
 
 class TreeComparator:
     """
@@ -1029,42 +692,34 @@ class TreeComparator:
         return len(only1) + len(only2)
 
     @staticmethod
-    def _get_splits(node: TreeNode) -> set[tuple[str, ...]]:
+    def _get_splits(node: TreeNode) -> set[tuple[frozenset, frozenset]]:
         """
-        获取树的所有分割
+        获取树的所有分割 (polytomy 感知: 每个子节点各产生一个分割)。
 
-        参数:
-            node: 根节点
-
-        返回:
-            分割集合
+        规范方向: 叶子名排序后字典序较小的一侧作为第一元, 保证同
+        一分割在两棵树中得到相同表示 (旧实现用 frozenset 的 ``>``
+        比较, 那是超集判定而非大小判定, 会产生方向不一致的重复分割)。
         """
-        splits = set()
+        splits: set[tuple[frozenset, frozenset]] = set()
 
-        if node.is_leaf:
-            return splits
+        def collect(n: TreeNode) -> frozenset:
+            if n.is_leaf:
+                return frozenset([n.name])
+            child_sets = [collect(child) for child in n.children]
+            if len(child_sets) >= 2:
+                all_leaves = frozenset().union(*child_sets)
+                for child_leaves in child_sets:
+                    other_leaves = all_leaves - child_leaves
+                    group1, group2 = child_leaves, other_leaves
+                    if (len(group2), sorted(group2)) < (len(group1), sorted(group1)):
+                        group1, group2 = group2, group1
+                    splits.add((group1, group2))
+            elif len(child_sets) == 1:
+                # 单子节点: 无分割 (退化情况), 但仍需上传叶子集
+                pass
+            return frozenset().union(*child_sets) if child_sets else frozenset()
 
-        # 递归获取子节点分割
-        for child in node.children:
-            child_splits = TreeComparator._get_splits(child)
-            splits.update(child_splits)
-
-        # 当前节点的分割
-        # 处理 polytomy (多叉树): 为每个子节点生成一个分割
-        # 分割 = (该子节点的叶节点, 所有其他子节点的叶节点)
-        if len(node.children) >= 2:
-            all_leaves = node.get_leaves()
-            for i, child in enumerate(node.children):
-                child_leaves = frozenset(leaf.name for leaf in child.get_leaves())
-                other_leaves = frozenset(leaf.name for leaf in all_leaves if leaf not in child.get_leaves())
-                # 确保 group1 < group2 以保持唯一性
-                if child_leaves > other_leaves:
-                    child_leaves, other_leaves = other_leaves, child_leaves
-                splits.add((child_leaves, other_leaves))
-        elif len(node.children) == 1:
-            # 单子节点: 无分割 (退化情况)
-            pass
-
+        collect(node)
         return splits
 
 

@@ -8,6 +8,7 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 - 最大简约法 (Fitch算法)
 - 启发式树搜索 (NNI, TBR)
 - 严格一致性树
+- 树间距离 (Robinson-Foulds 加权/未加权、bipartition bitmask、MCCT)
 - 距离法 (UPGMA, NJ)
 - 系统发育独立对比 (PIC, Felsenstein 1985)
 - 系统发育信号 (Blomberg's K, Pagel's λ)
@@ -36,6 +37,20 @@ from .signal import (
 )
 from .strict_consensus import StrictConsensusTree
 from .tree import PhyloNode, PhyloTree
+from .tree_distance import (
+    clade_bitmask,
+    is_compatible_bitmask_pair,
+    is_trivial_bitmask,
+    maximum_product_of_split_support_tree,
+    mcct,
+    normalize_bitmask,
+    robinson_foulds_distance,
+    split_bitmasks,
+    split_lengths,
+    split_support_frequencies,
+    taxon_bitmask_map,
+    weighted_robinson_foulds_distance,
+)
 
 __all__ = [
     "UPGMA",
@@ -59,4 +74,17 @@ __all__ = [
     "phylogenetic_signal",
     "simulate_brownian_motion",
     "lambda_interpretation",
+    # Tree-to-tree distances & bipartition bitmasks (DendroPy port)
+    "clade_bitmask",
+    "is_compatible_bitmask_pair",
+    "is_trivial_bitmask",
+    "maximum_product_of_split_support_tree",
+    "mcct",
+    "normalize_bitmask",
+    "robinson_foulds_distance",
+    "split_bitmasks",
+    "split_lengths",
+    "split_support_frequencies",
+    "taxon_bitmask_map",
+    "weighted_robinson_foulds_distance",
 ]

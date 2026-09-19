@@ -386,3 +386,46 @@ class FileOperationError(PaleoASTError):
     """
 
     pass
+
+
+class NewickParseError(ValueError):
+    """
+    Exception raised when a Newick string fails to parse.
+
+    Subclasses ``ValueError`` so existing ``except ValueError`` call
+    sites keep working, while carrying structured diagnostics
+    (DendroPy-style line / column localization) for UI display.
+
+    Attributes:
+        message: Primary error message (without location suffix).
+        line: 1-based line number of the offending token, if known.
+        column: 1-based column number, if known.
+        position: 0-based character offset into the parsed text, if known.
+        line_text: Source line containing the error (for caret display).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        line: int | None = None,
+        column: int | None = None,
+        position: int | None = None,
+        line_text: str | None = None,
+    ) -> None:
+        self.message = message
+        self.line = line
+        self.column = column
+        self.position = position
+        full = message
+        if line is not None and column is not None:
+            full = f"{message} (line {line}, column {column})"
+            if line_text is not None:
+                caret = column - 1
+                shown = line_text
+                if len(shown) > 88:
+                    cut = max(0, caret - 43)
+                    shown = shown[cut : cut + 88]
+                    caret -= cut
+                full += f"\n    {shown}\n    {' ' * max(0, caret)}^"
+        super().__init__(full)
