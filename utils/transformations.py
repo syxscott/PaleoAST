@@ -98,8 +98,13 @@ def zscore_standardize(data: npt.NDArray, axis: int = 0) -> npt.NDArray:
         Standardized array
     """
     was_1d = data.ndim == 1
-    result = np.atleast_2d(data.astype(float).copy())
-    if axis == 0:
+    result = data.astype(float).copy()
+    if was_1d:
+        # np.atleast_2d would turn (n,) into (1, n), making the column-wise
+        # loop below a no-op; a 1-D vector is one variable, so standardise
+        # all its values as a single column.
+        result = result.reshape(-1, 1)
+    if was_1d or axis == 0:
         for j in range(result.shape[1]):
             col = result[:, j]
             valid = ~np.isnan(col)

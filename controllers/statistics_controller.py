@@ -123,6 +123,19 @@ class StatisticsController:
             return self._state.data_matrix.data
         return data
 
+    def _column_names_or_fallback(self, data: npt.NDArray) -> list[str]:
+        """State column labels when they fit ``data``, else generic names.
+
+        Directly reading ``self._state.data_matrix.col_labels`` crashed with
+        AttributeError whenever the caller passed explicit ``data`` while no
+        dataset was loaded (or gave a shape mismatch).
+        """
+        n_vars = data.shape[1] if data.ndim == 2 else 1
+        matrix = self._state.data_matrix
+        if matrix is not None and len(matrix.col_labels) == n_vars:
+            return list(matrix.col_labels)
+        return [f"Var_{i + 1}" for i in range(n_vars)]
+
     def _ensure_distance_matrix(
         self, distance_matrix: npt.NDArray | None, data: npt.NDArray | None, metric: str
     ) -> npt.NDArray:
@@ -496,7 +509,7 @@ class StatisticsController:
         with self._lock:
             data = self._ensure_data(data)
             if column_names is None:
-                column_names = self._state.data_matrix.col_labels
+                column_names = self._column_names_or_fallback(data)
             result = self._univariate_analyzer.summary_statistics(data, column_names)
             self._state.cache_result("univariate_summary", result)
             return result
@@ -508,7 +521,7 @@ class StatisticsController:
         with self._lock:
             data = self._ensure_data(data)
             if column_names is None:
-                column_names = self._state.data_matrix.col_labels
+                column_names = self._column_names_or_fallback(data)
             n_vars = data.shape[1] if data.ndim == 2 else 1
             results = [self._univariate_analyzer.normality_test(data, column=i) for i in range(n_vars)]
             self._state.cache_result("normality_results", results)
@@ -646,7 +659,11 @@ class StatisticsController:
                 data = self._state.data_matrix.data
                 mid = max(1, data.shape[1] // 2)
                 species_data = data[:, :mid]
-                env_data = data[:, mid : mid + min(mid, data.shape[1] - mid)]
+                # Only auto-split the env half when the caller did not
+                # supply env_data — previously this clobbered a caller-
+                # provided env_data whenever species_data was omitted.
+                if env_data is None:
+                    env_data = data[:, mid : mid + min(mid, data.shape[1] - mid)]
 
             return self.run_cca(Y=species_data, X=env_data, n_components=n_components, method=method)
 
@@ -913,10 +930,12 @@ class StatisticsController:
         """Run Eigenshape analysis on EFA coefficients."""
         with self._lock:
             if efa_coefficients_list is None:
-                cached = self._state.get_cached_result("efa_coefficients_list")
+                # EFA results are cached under "efa_result" (see analyze_efa);
+                # "efa_coefficients_list" was never written anywhere.
+                cached = self._state.get_cached_result("efa_result")
                 if cached is None:
                     raise ValidationError("No EFA coefficients available. Run EFA first.")
-                efa_coefficients_list = cached
+                efa_coefficients_list = [cached.coefficients]
             result = self._eigenshape_analyzer.analyze(efa_coefficients_list, n_components=n_components)
             self._state.cache_result("eigenshape_result", result)
             return result

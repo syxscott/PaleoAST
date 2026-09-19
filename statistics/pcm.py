@@ -288,12 +288,91 @@ def _compute_vcv_matrix(root: PhyloNode) -> tuple[dict[str, int], NDArray[np.flo
     return name_to_idx, VCV
 
 
+def _check_positive_branch_lengths(root: PhyloNode, context: str = "PIC") -> None:
+    """
+    Verify that every edge below the root has a strictly positive length.
+
+    The contrast recursion standardises each difference by
+    ``sqrt(v1 + v2)`` where ``v_i`` is the descendant variance plus the child's
+    own branch length.  Leaves contribute a variance of 0, so a zero (or
+    missing) branch length on both sides of a node makes that denominator
+    exactly zero.  The division then surfaced as a bare ``ZeroDivisionError``
+    from deep inside the recursion; it is reported as a validation error that
+    names the offending edges instead.
+
+    Parameters:
+        root: Root of the (already pruned) working tree.
+        context: Human-readable name of the analysis, used in the message.
+
+    Raises:
+        ValidationError: if any non-root edge has a missing or non-positive
+            branch length.
+    """
+    offenders: list[str] = []
+
+    def describe(node: PhyloNode) -> str:
+        if node is root:
+            return "root"
+        return node.name or ("<unnamed leaf>" if node.is_leaf else "<unnamed>")
+
+    def walk(node: PhyloNode) -> None:
+        parent = describe(node)
+        for child in node.children:
+            bl = child.branch_length
+            if bl is None or bl <= 0:
+                # Name the edge by both endpoints so internal-node edges and
+                # identically-named leaves in different clades stay traceable.
+                offenders.append(f"{parent}->{describe(child)}")
+            walk(child)
+
+    walk(root)
+
+    if offenders:
+        shown = offenders[:10]
+        raise ValidationError(
+            _("{0} requires strictly positive branch lengths: {1} edge(s) have "
+              "a zero or missing length ({2}). Rescale the tree or give the "
+              "affected branches a small positive length.").format(
+                context, len(offenders), ", ".join(shown)),
+            details={"n_offending_edges": len(offenders), "examples": shown},
+        )
+
+
+def _standardise_contrast(
+    val1: float,
+    val2: float,
+    v1: float,
+    v2: float,
+    node: PhyloNode,
+) -> tuple[float, float]:
+    """
+    Return ``(standardized_contrast, se)`` for one Felsenstein (1985) node.
+
+    ``IC = (x1 - x2) / sqrt(v1 + v2)`` with ``se = sqrt(v1 + v2)``.  The
+    variances must sum to a positive number; a zero denominator would raise a
+    bare ``ZeroDivisionError`` from inside the recursion, so it is converted
+    into a ``ComputationError`` that names the node.  Callers normally prevent
+    this up front via :func:`_check_positive_branch_lengths`.
+    """
+    denom_var = v1 + v2
+    if denom_var <= 0:
+        raise ComputationError(
+            "Phylogenetic independent contrasts are undefined at node "
+            f"'{node.name or '<unnamed>'}': the summed branch length "
+            f"(v1 + v2 = {denom_var:g}) is not positive. Every branch below "
+            "this node must have a strictly positive length.",
+            details={"v1": v1, "v2": v2},
+        )
+    se = math.sqrt(denom_var)
+    return (val1 - val2) / se, se
+
+
 def _compute_contrasts_recursive(
     node: PhyloNode,
     trait_values: dict[str, float],
-) -> tuple[float | None, float, list[tuple[float, float, str]], list[str]]:
+) -> tuple[float | None, float, list[tuple[float, float, str, PhyloNode]], list[str]]:
     """
-    Recursively compute independent contrasts (Felsenstein 1985).
+    Recursively compute phylogenetic independent contrasts (Felsenstein 1985).
 
     Post-order traversal: process children first, then compute contrast at
     parent. Returns ``(reconstructed_value, cum_variance, contrasts_list,
@@ -319,7 +398,12 @@ def _compute_contrasts_recursive(
       especially on deep trees. The fix below keeps the convention
       uniform: leaves return ``V = 0`` and every parent adds the
       child's branch_length explicitly.
-    - ``contrasts_list`` entries are ``(standardized_contrast, se, node_name)``.
+    - ``contrasts_list`` entries are
+      ``(standardized_contrast, se, node_name, node)``.  The node object is the
+      exact tree node at which the contrast was formed; name-based labelling is
+      ambiguous for polytomies (where several contrasts share one node and get
+      synthetic ``<name>_c<k>`` suffixes), so consumers that need to map a
+      contrast back onto the tree must use the node reference, not the name.
     """
     if node.is_leaf:
         leaf_name = node.name
@@ -329,7 +413,7 @@ def _compute_contrasts_recursive(
 
     # Process all children first
     child_results: list[tuple[PhyloNode, float, float]] = []
-    all_contrasts: list[tuple[float, float, str]] = []
+    all_contrasts: list[tuple[float, float, str, PhyloNode]] = []
     all_names: list[str] = []
 
     for child in node.children:
@@ -351,10 +435,9 @@ def _compute_contrasts_recursive(
         v1 = var1 + (child1.branch_length or 0.0)
         v2 = var2 + (child2.branch_length or 0.0)
         # Standardized contrast IC = (x_A - x_B) / sqrt(v_A + v_B)
-        contrast = (val1 - val2) / math.sqrt(v1 + v2)
-        se = math.sqrt(v1 + v2)
+        contrast, se = _standardise_contrast(val1, val2, v1, v2, node)
         node_name = node.name or f"node_{id(node)}"
-        all_contrasts.append((contrast, se, node_name))
+        all_contrasts.append((contrast, se, node_name, node))
         all_names.append(node_name)
         # Variance of this node's reconstruction (at this node, excluding
         # this node's branch_length): for the inverse-variance weighted
@@ -387,10 +470,9 @@ def _compute_contrasts_recursive(
         v1 = var1 + bl1
         v2 = var2 + bl2
         # Standardized contrast
-        contrast = (val1 - val2) / math.sqrt(v1 + v2)
-        se = math.sqrt(v1 + v2)
+        contrast, se = _standardise_contrast(val1, val2, v1, v2, node)
         node_name = f"{node.name}_c{len(active) - 2}" if node.name else f"node_{id(node)}_c{len(active) - 2}"
-        all_contrasts.append((contrast, se, node_name))
+        all_contrasts.append((contrast, se, node_name, node))
         all_names.append(node_name)
         # Combined subtree: weighted mean; combined descendant variance
         # v1*v2/(v1+v2) (variance of the inverse-variance weighted mean).
@@ -480,7 +562,8 @@ class PCMAnalyzer:
             ContrastResult with contrasts, standard errors, and summary statistics
 
         Raises:
-            ValidationError: If tree or trait data is invalid
+            ValidationError: If tree or trait data is invalid, or if any edge
+                of the (pruned) tree has a zero or missing branch length.
         """
         self._logger.info(f"Computing PIC for {len(trait_values)} taxa")
 
@@ -499,6 +582,10 @@ class PCMAnalyzer:
         working_tree = self._prune_tree(tree, set(trait_values.keys()))
         if working_tree.root is None:
             raise ValidationError(_("No matching taxa after pruning"))
+
+        # PIC divides by sqrt(v1 + v2) at every node, which is zero when the
+        # involved branches carry no length.
+        _check_positive_branch_lengths(working_tree.root, context="PIC")
 
         # Compute tree height
         tree_height = working_tree.root.compute_total_length()
@@ -626,10 +713,27 @@ class PCMAnalyzer:
         """
         Measure phylogenetic signal using Blomberg's K.
 
-        K = Var(IC) / E_BM[Var(IC)]
-             = (sum IC_i² / n) / (sum v_i / n)
-        where IC_i = independent contrast at node i
-              v_i = sum of branch lengths from node i to tips
+        Canonical, scale-invariant K (Blomberg, Garland & Iwasa 2003),
+        computed from the Brownian VCV matrix V of the pruned tree:
+
+            K = s²_ord / (σ̂²_GLS · tr(V) / n)
+
+        where
+            s²_ord   = Σ(yᵢ − ȳ)² / (n − 1)
+                the ordinary mean square of the trait across the n tips;
+            σ̂²_GLS = (y − 1·â)ᵀ V⁻¹ (y − 1·â) / (n − 1)
+                the Brownian rate σ̂² estimated by phylogenetic GLS with the
+                single ancestral mean â = (1ᵀV⁻¹1)⁻¹ 1ᵀV⁻¹y;
+            tr(V)/n  = the expected mean square under BM with rate σ̂² = 1.
+
+        K therefore compares the observed trait dispersion with the dispersion
+        expected under Brownian motion at the rate implied by the data, and is
+        invariant to linear rescaling of the trait.  (An earlier version of
+        this docstring claimed ``K = Var(IC)/E_BM[Var(IC)] = Σ IC² / Σ vᵢ``;
+        that ratio is the BM rate estimate σ̂² itself, carries the squared
+        units of the trait and is not a signal statistic.  The implementation
+        delegates to the single shared reference
+        :func:`phylogenetics.signal._blomberg_k_from_vcv`.)
 
         Interpretation:
             K < 1: trait evolves faster than expected under BM (convergence)
@@ -740,6 +844,13 @@ class PCMAnalyzer:
 
         Returns:
             PhyloANOVAResult with F-statistic, p-value, and ANOVA table
+
+        Raises:
+            ValidationError: if the tree, the trait values or the group
+                assignments are unusable (including zero/missing branch
+                lengths).
+            ComputationError: if an independent contrast cannot be classified
+                into one of the groups.
         """
         n_p = n_permutations or self._n_randomizations
         self._logger.info(
@@ -752,6 +863,10 @@ class PCMAnalyzer:
         working_tree = self._prune_tree(tree, set(trait_values.keys()))
         if working_tree.root is None:
             raise ValidationError(_("No matching taxa after pruning"))
+
+        # The contrasts below divide by sqrt(v1 + v2); zero-length edges make
+        # that denominator vanish.
+        _check_positive_branch_lengths(working_tree.root, context="Phylogenetic ANOVA")
 
         # Validate groups
         tips_with_groups = {k: v for k, v in group_labels.items() if k in trait_values}
@@ -768,17 +883,13 @@ class PCMAnalyzer:
         if len(ic_arr) < 2 or n_groups < 2:
             raise ValidationError(_("Need at least 2 groups and 2 contrasts"))
 
-        # Assign each contrast to "between-group" or "within-group" using the
-        # standard Garland (1993) / Garland et al. phylogenetic-ANOVA
-        # convention: a contrast at node P is *between-group* when the two
-        # direct children of P have *different* dominant tip groups; it is
-        # *within-group* when both children share the same dominant group.
-        # Only between-group contrasts carry information about group
-        # differences; within-group contrasts estimate the residual
-        # (phylogenetically corrected) variance. The previous
-        # implementation labelled each contrast with the single dominant
-        # group of the entire contrast subtree, which silently absorbed
-        # between-group signal into the within-group term and vice versa.
+        # Garland's (1993) phylogenetic ANOVA runs a one-way ANOVA on the
+        # independent contrasts, using the group each contrast belongs to as
+        # the factor.  A contrast formed at node P is attributed to the group
+        # that dominates P's descendant tips; the observed contrasts and every
+        # permuted set are classified with exactly this rule and scored with
+        # exactly this F formula, otherwise the permutation p-value would not
+        # refer to the observed statistic.
         node_to_tips: dict[int, set[str]] = {}
 
         def get_tip_names(node: PhyloNode) -> set[str]:
@@ -822,36 +933,48 @@ class PCMAnalyzer:
         # 否则 p 值无效 (此前观测 F 用"两子树主导群不同"分类 +
         # 对比平方和, 置换 F 用"整子树主导群"标签 + 单因素 ANOVA F)。
 
-        def _contrast_node(node_name: str) -> PhyloNode | None:
-            target_node: PhyloNode | None = None
-            if node_name.startswith("node_"):
-                node_id_str = node_name.split("_")[-1]
-                try:
-                    node_id = int(node_id_str)
+        def _contrast_node(c_data: tuple) -> PhyloNode | None:
+            """Return the tree node a contrast entry was formed at.
 
-                    def search_by_id(n: PhyloNode, tid: int) -> PhyloNode | None:
-                        if id(n) == tid:
-                            return n
-                        for ch in n.children:
-                            r = search_by_id(ch, tid)
-                            if r:
-                                return r
-                        return None
+            ``_compute_contrasts_recursive`` appends the node object itself, so
+            the mapping is exact.  Resolving by *name* is only a fallback for
+            3-element entries: it cannot work for polytomy contrasts, whose
+            labels are synthetic (``root_c0``, ``root_c1`` ...), and the old
+            code therefore sent every one of them to the default group, which
+            collapsed the ANOVA to F = 0, p = 1 on any tree with a polytomy.
+            """
+            if len(c_data) > 3 and c_data[3] is not None:
+                return c_data[3]
+            return find_node_by_name(working_tree.root, c_data[2])
 
-                    target_node = search_by_id(working_tree.root, node_id)
-                except ValueError:
-                    pass
-            if target_node is None:
-                target_node = find_node_by_name(working_tree.root, node_name)
-            return target_node
+        def _contrast_labels(ic_data: list[tuple]) -> list[str]:
+            """每条对比 → 其对应子树的主导群标签。
 
-        def _contrast_labels(ic_data: list[tuple[float, float, str]]) -> list[str]:
-            """每条对比 → 其对应子树的主导群标签 (不可归类时归入 groups[0])。"""
+            Raises:
+                ComputationError: if a contrast cannot be mapped back onto the
+                    tree, or if its subtree holds no labelled tip.  Silently
+                    defaulting to ``groups[0]`` used to bias the F statistic
+                    towards that group instead of reporting the problem.
+            """
             labels: list[str] = []
             for c_data in ic_data:
-                target_node = _contrast_node(c_data[2])
-                grp = dominant_group_of(target_node) if target_node is not None else None
-                labels.append(grp if grp is not None else groups[0])
+                target_node = _contrast_node(c_data)
+                if target_node is None:
+                    raise ComputationError(
+                        "Phylogenetic ANOVA: a phylogenetic independent contrast "
+                        f"could not be mapped back onto a node of the analysed tree "
+                        f"(label '{c_data[2]}').",
+                        details={"contrast_label": c_data[2]},
+                    )
+                grp = dominant_group_of(target_node)
+                if grp is None:
+                    raise ComputationError(
+                        "Phylogenetic ANOVA: the subtree of a contrast contains no "
+                        "tip with a group assignment, so the contrast cannot be "
+                        "classified. Provide group_labels for every retained taxon.",
+                        details={"contrast_label": c_data[2], "n_tips": len(get_tip_names(target_node))},
+                    )
+                labels.append(grp)
             return labels
 
         def _one_way_f(ic_values: list[float], labels: list[str]) -> tuple[float, float, float, float, float]:

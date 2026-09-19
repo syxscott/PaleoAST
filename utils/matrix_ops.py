@@ -329,6 +329,8 @@ def covariance_matrix(matrix: npt.NDArray, rowvar: bool = False, ddof: int = 1, 
     """
     validate_matrix_shape(matrix, min_rows=2, allow_empty=False)
     n, p = matrix.shape
+    # For rowvar=True rows are variables, so observations are columns.
+    n_obs = p if rowvar else n
     if n * p > 10000:
         logger.info(f"Computing covariance matrix for large dataset: {n} samples x {p} features")
     else:
@@ -336,17 +338,18 @@ def covariance_matrix(matrix: npt.NDArray, rowvar: bool = False, ddof: int = 1, 
 
     # Handle the ddof/bias interaction
     if bias:
-        divisor = matrix.shape[0]
+        divisor = n_obs
     else:
-        divisor = matrix.shape[0] - ddof
+        divisor = n_obs - ddof
 
     if divisor <= 0:
         raise ComputationError(
-            "Cannot compute covariance: insufficient degrees of freedom", details={"n": matrix.shape[0], "ddof": ddof}
+            "Cannot compute covariance: insufficient degrees of freedom", details={"n_obs": n_obs, "ddof": ddof}
         )
 
-    # Center the data
-    mean = np.mean(matrix, axis=0, keepdims=True)
+    # Center each variable (column when rowvar=False, row when True)
+    center_axis = 1 if rowvar else 0
+    mean = np.mean(matrix, axis=center_axis, keepdims=True)
     centered = matrix - mean
 
     # Compute covariance using matrix multiplication

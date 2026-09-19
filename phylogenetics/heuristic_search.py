@@ -160,12 +160,17 @@ class NNIOperation(TreeOperation):
         """
         应用NNI变换
 
-        NNI operates on an internal edge (node1, node2) where node1 is the
-        parent of node2. We swap one child of node1 with one child of node2.
+        NNI operates on an internal edge (node1, node2) where node2 is a child
+        of node1.  Let ``sib`` be the child of node1 that is *not* node2 (the
+        other side of the edge) and ``b1, b2`` two children of node2:
 
-        For edge (X, Y) where X has children {A1, A2} and Y has children {B1, B2}:
-            Option 1: X gets {A1, B1}, Y gets {A2, B2}  (swap A2 <-> B1)
-            Option 2: X gets {A1, B2}, Y gets {A2, B1}  (swap A1 <-> B2)
+            Option 1: exchange ``sib`` with ``b1``
+            Option 2: exchange ``sib`` with ``b2``
+
+        旧实现在 swap_option == 2 时写了 ``a1.parent = node2`` (a1 仍是 node1
+        的子节点)，使父子图成环；并且它假定 node2 恰好位于 ``node1.children[0]``，
+        否则会把 node2 从 node1 的子节点列表中整体丢掉。现在按身份定位 node2，
+        只对参与交换的两个子树做原位替换。
         """
         if tree.root is None:
             raise ValueError("Tree has no root")
@@ -186,36 +191,36 @@ class NNIOperation(TreeOperation):
         if node1.is_leaf or node2.is_leaf:
             raise ValueError("NNI requires both edge endpoints to be internal nodes")
 
-        # Get children of both nodes
-        a_children = list(node1.children)
-        b_children = list(node2.children)
+        # node2 必须是 node1 的子节点 (边存在于父子之间)
+        if node2 not in node1.children:
+            raise ValueError("NNI requires edge_node2 to be a child of edge_node1")
 
-        if len(a_children) < 2 or len(b_children) < 2:
+        # ``sib``: node1 中除 node2 之外的另一侧子树
+        sib_candidates = [c for c in node1.children if c is not node2]
+        b_children = [c for c in node2.children if c is not node1]
+
+        if not sib_candidates or len(b_children) < 2:
             raise ValueError("NNI requires nodes with at least 2 children")
 
-        a1, a2 = a_children[0], a_children[1]
-        b1, b2 = b_children[0], b_children[1]
+        sib = sib_candidates[0]
+        swap_index = self.swap_option - 1
+        if swap_index not in (0, 1):
+            raise ValueError(f"NNI swap_option must be 1 or 2, got {self.swap_option}")
+        moved = b_children[swap_index]
 
-        # Perform the NNI swap on node1 (parent) and node2 (child)
-        if self.swap_option == 1:
-            # Swap a2 with b1: node1 gets {a1, b1}, node2 gets {a2, b2}
-            node1.children = [a1, b1]
-            node2.children = [a2, b2]
-            # Update parent references for swapped children
-            b1.parent = node1
-            a2.parent = node2
-        else:
-            # Swap a1 with b2: node1 gets {a1, b2}, node2 gets {a2, b1}
-            node1.children = [a1, b2]
-            node2.children = [a2, b1]
-            # Update parent references for swapped children
-            b2.parent = node1
-            a1.parent = node2
+        # 原位交换: node1 失去 sib 得到 moved; node2 失去 moved 得到 sib
+        i = node1.children.index(sib)
+        node1.children[i] = moved
+        moved.parent = node1
+
+        j = node2.children.index(moved)
+        node2.children[j] = sib
+        sib.parent = node2
 
         return PhyloTree(new_root)
 
     def _deep_copy_tree(self, root: PhyloNode) -> PhyloNode:
-        """深度拷贝树"""
+        """深度拷贝树 (保留 data / label / metadata)"""
 
         def copy_node(node: PhyloNode, parent: PhyloNode | None) -> PhyloNode:
             new_node = PhyloNode(
@@ -223,6 +228,9 @@ class NNIOperation(TreeOperation):
                 node_type=node.node_type,
                 branch_length=node.branch_length,
                 support=node.support,
+                data=node.data,
+                label=node.label,
+                metadata=dict(node.metadata),
                 parent=parent,
             )
             for child in node.children:
@@ -314,6 +322,10 @@ class TBROperation(TreeOperation):
         3. 在子树1中选择reconnect_node1（默认为cut_node1的父节点）
         4. 在子树2中选择reconnect_node2（默认为cut_node2）
         5. 将子树2挂接到reconnect_node1上
+
+        Raises:
+            ValueError: 若 reconnect_node1 落在被移动的 n2 子树内部 —— 那会把
+                子树挂回自己身上并使父子图成环 (旧实现会静默产出损坏树)。
         """
         if tree.root is None:
             raise ValueError("Tree has no root")
@@ -349,6 +361,15 @@ class TBROperation(TreeOperation):
             if other_children:
                 r1 = other_children[0]
 
+        # 被移动的子树 = n2 及其全部后代；重连点必须落在该子树之外，
+        # 否则会把 n2 挂回它自己内部，父子图成环。
+        moved_subtree = set(n2.get_subtree_nodes())
+        if r1 in moved_subtree:
+            raise ValueError(
+                f"TBR reconnect node '{r1.name}' lies inside the subtree rooted at "
+                f"'{n2.name}'; regrafting there would create a cycle"
+            )
+
         # 执行TBR: 将n2子树从n1断开，挂接到r1上
         n1.children.remove(n2)
         n2.parent = None
@@ -363,7 +384,7 @@ class TBROperation(TreeOperation):
         return PhyloTree(new_root)
 
     def _deep_copy(self, root: PhyloNode) -> PhyloNode:
-        """深拷贝树"""
+        """深拷贝树 (保留 data / label / metadata)"""
 
         def copy_node(node: PhyloNode, parent: PhyloNode | None) -> PhyloNode:
             new_node = PhyloNode(
@@ -371,6 +392,9 @@ class TBROperation(TreeOperation):
                 node_type=node.node_type,
                 branch_length=node.branch_length,
                 support=node.support,
+                data=node.data,
+                label=node.label,
+                metadata=dict(node.metadata),
                 parent=parent,
             )
             for child in node.children:
@@ -419,23 +443,32 @@ class HeuristicSearch:
         初始化启发式搜索
 
         Parameters:
-            algorithm: 优化算法 ("parsimony" 或 "likelihood")
+            algorithm: 优化算法；当前仅实现 ``"parsimony"`` (Fitch)。
+                似然法尚未实现，传入其他值时评估阶段会抛 ValueError。
             max_iterations: 最大迭代次数
-            random_seed: 随机种子
-            nni_swap_probability: NNI交换概率 (vs TBR)
-            acceptance_probability: 接受次优解的概率
+            random_seed: 随机种子 (仅作用于本实例自己的 Random 发生器，
+                不再污染全局 ``random`` 状态)
+            nni_swap_probability: 保留原参数名以兼容既有调用。其语义是
+                "跳过 TBR 候选生成" 的概率补：TBR 生成概率
+                ``tbr_probability = 1 - nni_swap_probability``。NNI 邻居
+                (交换选项 1 与 2) 总是生成，不受该参数影响。
+            acceptance_probability: 接受次优解的概率 (当前未被使用，接受
+                概率由模拟退火温度决定)
             temperature: 初始温度 (模拟退火)
             cooling_rate: 冷却率
         """
         self._algorithm = algorithm
         self._max_iterations = max_iterations
+        self._initial_temperature = temperature
         self._nni_prob = nni_swap_probability
+        self._tbr_prob = 1.0 - nni_swap_probability
         self._acceptance_prob = acceptance_probability
         self._temperature = temperature
         self._cooling_rate = cooling_rate
 
-        if random_seed is not None:
-            random.seed(random_seed)
+        # 实例级随机源：random.seed(...) 会改动全局状态并影响进程内其他
+        # 使用者，因此改为持有自己的 random.Random(seed) 实例。
+        self._rng = random.Random(random_seed)
 
         self._logger = logging.getLogger(f"{__name__}.HeuristicSearch")
         self._fitch = FitchAlgorithm()
@@ -469,6 +502,18 @@ class HeuristicSearch:
         import time
 
         start_time = time.time()
+
+        if initial_tree is None and len(leaf_names) < 2:
+            raise ValueError(
+                f"Tree search needs at least 2 taxa to build a starting tree, got {len(leaf_names)}"
+            )
+
+        # 每次 search() 都从初始状态开始：温度若不在开头重置，第二次调用会
+        # 直接以已冷却的温度运行（迭代在第 1 步就被 < 0.001 的收敛判据中断），
+        # 计数器也会跨调用累加而使 SearchResult 报告失真。
+        self._temperature = self._initial_temperature
+        self._iterations = 0
+        self._neighbors_evaluated = 0
 
         # 初始化
         if initial_tree is None:
@@ -562,7 +607,10 @@ class HeuristicSearch:
             result = self._fitch.compute(tree, sequences)
             return float(result.tree_length)
         else:
-            raise ValueError(f"Unknown algorithm: {self._algorithm}")
+            raise ValueError(
+                f"Unknown algorithm: {self._algorithm} (only 'parsimony' is implemented; "
+                "maximum likelihood tree search is not available in this build)"
+            )
 
     def _generate_neighbors(self, tree: PhyloTree) -> list[PhyloTree]:
         """
@@ -582,6 +630,9 @@ class HeuristicSearch:
         # 收集所有内部边
         internal_edges = self._collect_internal_edges(tree.root)
 
+        # 全树节点（用于 TBR 重连点候选）
+        all_nodes = tree.root.get_all_nodes()
+
         for edge in internal_edges:
             node1, node2 = edge
 
@@ -594,13 +645,17 @@ class HeuristicSearch:
                 except (ValueError, AttributeError):
                     pass
 
-            # TBR邻居（以概率决定是否生成，避免搜索空间过大）
-            if random.random() < self._nni_prob:
+            # TBR邻居（以 _tbr_prob 决定是否生成，避免搜索空间过大）
+            if self._rng.random() >= self._tbr_prob:
                 continue
 
-            # 收集node2子树中的节点作为重连点候选
+            # 重连点候选：node2 子树内的非叶节点 (r2, 用于标识被移动的一侧)
             subtree_nodes = [n for n in node2.get_all_nodes() if not n.is_leaf]
-            parent_candidates = [n for n in node1.get_all_nodes() if not n.is_leaf and n is not node2]
+            # 挂载点候选必须是"全树节点 - node2 子树(含后代)"。旧实现从
+            # node1 的子树里取候选，其中包含 node2 的后代，会把 node2 挂回
+            # 自己内部形成环。
+            moved = set(node2.get_subtree_nodes())
+            parent_candidates = [n for n in all_nodes if n not in moved and not n.is_leaf]
 
             for r2 in subtree_nodes[:3]:  # 限制候选数
                 for r1 in parent_candidates[:3]:
@@ -659,7 +714,7 @@ class HeuristicSearch:
         else:
             probability = 0.0
 
-        return random.random() < probability
+        return self._rng.random() < probability
 
     def _build_random_tree(self, leaf_names: list[str]) -> PhyloTree:
         """
@@ -674,13 +729,15 @@ class HeuristicSearch:
         # 创建星形树，然后随机合并
         nodes = [PhyloNode(name=name, node_type=NodeType.LEAF) for name in leaf_names]
 
+        merge_step = 0
         while len(nodes) > 1:
             # 随机选择两个节点合并
-            i, j = random.sample(range(len(nodes)), 2)
+            i, j = self._rng.sample(range(len(nodes)), 2)
             node1, node2 = nodes[i], nodes[j]
 
-            # 创建新内部节点
-            new_node = PhyloNode(name=f"internal_{len(nodes)}", node_type=NodeType.INTERNAL)
+            # 创建新内部节点 (单调计数, 名称唯一)
+            merge_step += 1
+            new_node = PhyloNode(name=f"_internal_{merge_step}", node_type=NodeType.INTERNAL)
 
             # 添加子节点
             new_node.add_child(node1)
@@ -694,7 +751,7 @@ class HeuristicSearch:
         return tree
 
     def _deep_copy_tree(self, tree: PhyloTree) -> PhyloTree:
-        """深拷贝树"""
+        """深拷贝树 (保留 data / label / metadata)"""
         if tree.root is None:
             return PhyloTree()
 
@@ -704,6 +761,9 @@ class HeuristicSearch:
                 node_type=node.node_type,
                 branch_length=node.branch_length,
                 support=node.support,
+                data=node.data,
+                label=node.label,
+                metadata=dict(node.metadata),
                 parent=parent,
             )
             for child in node.children:
@@ -712,7 +772,7 @@ class HeuristicSearch:
             return new_node
 
         new_root = copy_node(tree.root, None)
-        return PhyloTree(root=new_root, name=tree.name)
+        return PhyloTree(root=new_root, name=tree.name, metadata=dict(tree.metadata))
 
 
 def run_heuristic_search(

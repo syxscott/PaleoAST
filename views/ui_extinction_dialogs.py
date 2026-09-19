@@ -24,8 +24,8 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -73,6 +73,8 @@ class ExtinctionIntervalDialog(QDialog):
             f"QGroupBox {{ color: {c.text_primary}; font-weight: {t.medium}; "
             f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
             f"QListWidget {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
+            f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
+            f"QPlainTextEdit {{ background-color: {c.bg_primary}; color: {c.text_primary}; "
             f"border: 1px solid {c.border_light}; border-radius: 4px; }}"
         )
 
@@ -143,9 +145,13 @@ class ExtinctionIntervalDialog(QDialog):
         info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         layout.addWidget(info_label)
 
-        # LAD input
-        self._lad_list = QListWidget()
+        # LAD input.  ``QListWidget`` has no ``toPlainText()`` — the widget
+        # below is read with ``toPlainText()`` in ``_on_run``, so a list view
+        # made the dialog raise AttributeError on every Run click.  A plain
+        # text edit keeps the "one LAD per line" contract of the info label.
+        self._lad_list = QPlainTextEdit()
         self._lad_list.setMaximumHeight(100)
+        self._lad_list.setPlaceholderText("12\n9\n7\n4")
         self._lad_list.setToolTip(_("Enter one LAD position per line"))
         layout.addWidget(self._lad_list)
 

@@ -18,14 +18,12 @@ Spacing: Based on 4px grid system
 Typography: Segoe UI + fallbacks
 """
 
-from dataclasses import dataclass
 
 # =============================================================================
 # Color Scheme (Light Theme - Modern)
 # =============================================================================
 
 
-@dataclass
 class ColorPalette:
     """Modern light color palette with professional scientific styling."""
 
@@ -95,7 +93,6 @@ class ColorPaletteDark(ColorPalette):
 # =============================================================================
 
 
-@dataclass
 class Spacing:
     """Spacing constants (4px base unit)."""
 
@@ -121,7 +118,6 @@ class Spacing:
 # =============================================================================
 
 
-@dataclass
 class Typography:
     """Typography scale."""
 
@@ -159,7 +155,6 @@ class Typography:
 # =============================================================================
 
 
-@dataclass
 class BorderRadius:
     """Border radius presets."""
 

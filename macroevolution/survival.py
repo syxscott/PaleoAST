@@ -10,15 +10,17 @@ fossil taxon longevity and extinction risk.
 Mathematical Foundation:
 
 1. Kaplan-Meier Estimator:
-    S(t) = Π_{t_i < t} (1 - d_i / n_i)
+    S(t) = Π_{t_i ≤ t} (1 - d_i / n_i)
 
 where:
-    t_i = time point i
+    t_i = distinct time at which at least one event occurs
     d_i = number of events (deaths/extinctions) at t_i
-    n_i = number at risk just before t_i
+    n_i = number at risk AT t_i, i.e. all subjects with observed time
+        >= t_i (subjects censored at t_i still contribute to the
+        risk set at t_i; that is why the comparison is ">=", not ">")
 
 2. Nelson-Aalen Estimator (Cumulative Hazard):
-    H(t) = Σ_{t_i < t} (d_i / n_i)
+    H(t) = Σ_{t_i ≤ t} (d_i / n_i)
 
 3. Log-Rank Test:
     H₀: S₁(t) = S₂(t) for all t
@@ -196,6 +198,11 @@ class KaplanMeierAnalyzer:
 
         if n_unique == 0:
             self._logger.warning("No events observed, returning trivial survival curve")
+            # 与 survival_prob / std_error / n_at_risk / n_events 保持同长 (1)。
+            # 旧实现把 times 留成空数组而其余字段长度为 1，绘图端
+            # zip(times, survival_prob) 会静默丢点 / 索引越界。
+            last_time = float(t_sorted[-1]) if n > 0 else 0.0
+            event_times = np.array([last_time])
             survival_prob = np.ones(1)
             std_error = np.zeros(1)
             lower_ci = np.ones(1)
@@ -214,7 +221,8 @@ class KaplanMeierAnalyzer:
             greenwood_sum = 0.0
             prev_s = 1.0
             for i, t_i in enumerate(event_times):
-                # Number at risk just before this time
+                # Number at risk at this event time: every subject whose
+                # observed time is >= t_i (censored at t_i included).
                 n_at_risk[i] = np.sum(t_sorted >= t_i)
 
                 # Number of events at this time
@@ -322,13 +330,41 @@ def log_rank_test(
     t2 = validate_data_array(times2, allow_nan=False, name="times2", preserve_dimensions=True)
     e2 = validate_data_array(events2, allow_nan=False, name="events2", preserve_dimensions=True)
 
+    # Flatten to 1D before anything else. ``preserve_dimensions=True`` can hand
+    # back a (n, 1) column vector; without ravel the shape check below compares
+    # (n, 1) with (n, 1) and passes, then np.concatenate/np.argsort work on the
+    # *last* axis, so the "sorted event times" and every risk-set count become
+    # 2-D boolean matrices and the statistic silently turns into nonsense.
+    t1 = np.asarray(t1, dtype=float).ravel()
+    e1 = np.asarray(e1).ravel()
+    t2 = np.asarray(t2, dtype=float).ravel()
+    e2 = np.asarray(e2).ravel()
+
     if t1.shape != e1.shape:
-        raise ComputationError("Group 1 times and events shape mismatch")
+        raise ComputationError(f"Group 1 times and events must have same shape: {t1.shape} vs {e1.shape}")
     if t2.shape != e2.shape:
-        raise ComputationError("Group 2 times and events shape mismatch")
+        raise ComputationError(f"Group 2 times and events must have same shape: {t2.shape} vs {e2.shape}")
+
+    if t1.size == 0 or t2.size == 0:
+        raise ComputationError("Both groups need at least one observation for a log-rank test")
+
+    if np.any(t1 < 0) or np.any(t2 < 0):
+        raise ComputationError("Times must be non-negative")
 
     e1 = (e1 > 0).astype(int)
     e2 = (e2 > 0).astype(int)
+
+    if e1.sum() == 0 and e2.sum() == 0:
+        logger.warning("Log-rank test: no events in either group, statistic is undefined (χ²=0)")
+        return LogRankResult(
+            statistic=0.0,
+            p_value=1.0,
+            degrees_of_freedom=1,
+            group1_events=0.0,
+            group1_expected=0.0,
+            group2_events=0.0,
+            group2_expected=0.0,
+        )
 
     logger.info(f"Computing log-rank test: n1={len(t1)}, n2={len(t2)}")
 
@@ -352,9 +388,13 @@ def log_rank_test(
     var_total = 0.0
 
     for t_i in unique_times:
-        # Number at risk in each group
-        n1_i = np.sum((t1 >= t_i) | ((t1 == t_i) & (e1 == 1)))
-        n2_i = np.sum((t2 >= t_i) | ((t2 == t_i) & (e2 == 1)))
+        # Number at risk in each group at t_i: all subjects with observed
+        # time >= t_i (a subject censored exactly at t_i is still at risk
+        # for the events happening at t_i). The old code OR-ed an extra
+        # "(t == t_i) & (e == 1)" term into this test, which is always
+        # covered by "t >= t_i" and therefore dead.
+        n1_i = int(np.sum(t1 >= t_i))
+        n2_i = int(np.sum(t2 >= t_i))
         n_i = n1_i + n2_i
 
         # Events at this time
@@ -505,48 +545,53 @@ def _compute_concordance(
     e1, e2 = events_arr[idx1], events_arr[idx2]
     lp1, lp2 = lp[idx1], lp[idx2]
 
-    # Determine which pairs are evaluable (at least one event)
-    has_event = (e1 == 1) | (e2 == 1)
-
-    # Initialize counts
+    # Harrell's C 只对"可比较"(comparable) 的配对求平均:
+    #   - 两个都是事件: 要求事件时间不相等 (并列时间的两个事件无法判定次序)
+    #   - 一个事件 + 一个删失: 要求事件时间 <= 删失时间 (删失发生在事件之前
+    #     时，这个配对不提供任何信息)
+    # 修复: 旧实现把分母取成 np.sum(has_event) —— 即"至少一方有事件"的全部
+    # 配对，把上面这些不可比较的配对也算进分母，分子却按规则不计数，
+    # 于是 C-index 被系统性低估 (删失越多低估越严重)。现在分子分母使用同一
+    # 个可比较配对集合。风险得分并列 (tie in lp) 的配对按 0.5 计。
     concordant = 0.0
     tied_risk = 0.0
-    total_pairs = 0
+    comparable = 0.0
 
     # Case 1: Both have events - compare times, higher risk (lower t) should have higher lp
-    both_events = has_event & (e1 == 1) & (e2 == 1)
+    both_events = (e1 == 1) & (e2 == 1) & (t1 != t2)
     if np.any(both_events):
         t1_ev, t2_ev = t1[both_events], t2[both_events]
         lp1_ev, lp2_ev = lp1[both_events], lp2[both_events]
+        comparable += t1_ev.size
         # Lower time = higher risk = should have higher lp
         risk_higher_1 = lp1_ev > lp2_ev
         risk_higher_2 = lp2_ev > lp1_ev
         time_lower_1 = t1_ev < t2_ev
         time_lower_2 = t2_ev < t1_ev
         concordant += np.sum((time_lower_1 & risk_higher_1) | (time_lower_2 & risk_higher_2))
-        tied_risk += np.sum((lp1_ev == lp2_ev) | ((t1_ev == t2_ev) & (lp1_ev == lp2_ev)))
+        tied_risk += np.sum(lp1_ev == lp2_ev)
 
-    # Case 2: Only i has event - if t_i <= t_j, i is at higher risk
-    i_only_event = has_event & (e1 == 1) & (e2 == 0)
+    # Case 2: Only i has event - comparable only if t_i <= t_j
+    i_only_event = (e1 == 1) & (e2 == 0) & (t1 <= t2)
     if np.any(i_only_event):
         t1_i, t2_i = t1[i_only_event], t2[i_only_event]
         lp1_i, lp2_i = lp1[i_only_event], lp2[i_only_event]
+        comparable += t1_i.size
         i_higher_risk = lp1_i > lp2_i
-        i_earlier_or_same = t1_i <= t2_i
-        concordant += np.sum(i_earlier_or_same & i_higher_risk)
-        tied_risk += np.sum((lp1_i == lp2_i) & i_earlier_or_same)
+        concordant += np.sum(i_higher_risk)
+        tied_risk += np.sum(lp1_i == lp2_i)
 
-    # Case 3: Only j has event - if t_j <= t_i, j is at higher risk
-    j_only_event = has_event & (e1 == 0) & (e2 == 1)
+    # Case 3: Only j has event - comparable only if t_j <= t_i
+    j_only_event = (e1 == 0) & (e2 == 1) & (t2 <= t1)
     if np.any(j_only_event):
         t1_j, t2_j = t1[j_only_event], t2[j_only_event]
         lp1_j, lp2_j = lp1[j_only_event], lp2[j_only_event]
+        comparable += t1_j.size
         j_higher_risk = lp2_j > lp1_j
-        j_earlier_or_same = t2_j <= t1_j
-        concordant += np.sum(j_earlier_or_same & j_higher_risk)
-        tied_risk += np.sum((lp1_j == lp2_j) & j_earlier_or_same)
+        concordant += np.sum(j_higher_risk)
+        tied_risk += np.sum(lp1_j == lp2_j)
 
-    total_pairs = np.sum(has_event)
+    total_pairs = float(comparable)
     if total_pairs == 0:
         return 0.5
 

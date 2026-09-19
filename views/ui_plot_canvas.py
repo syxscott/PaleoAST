@@ -145,6 +145,10 @@ class InteractivePlotCanvas(QWidget):
         self._groups: dict[int, list[int]] = {}
 
         # Plot data
+        # ``_scores`` is a property (see below): assigning to it also
+        # re-clamps the dimension indices used by the hover tooltip and the
+        # rectangle/lasso selectors.
+        self._scores_storage: np.ndarray | None = None
         self._scores: np.ndarray | None = None
         self._loadings: np.ndarray | None = None
         self._eigenvalues: np.ndarray | None = None
@@ -161,6 +165,57 @@ class InteractivePlotCanvas(QWidget):
         self._setup_ui()
         self._setup_connections()
 
+    @property
+    def _scores(self) -> np.ndarray | None:
+        """Score matrix currently shown (see setter for the invariant)."""
+        return getattr(self, "_scores_storage", None)
+
+    @_scores.setter
+    def _scores(self, value: np.ndarray | None) -> None:
+        # Every plot method assigns the new score matrix; re-clamping here
+        # means the hover/selection code can never index a dimension the
+        # new result does not have (e.g. PCA with 5 PCs -> 1-D NMDS/LDA,
+        # which used to raise IndexError on the first mouse move).
+        self._scores_storage = value
+        self._clamp_dims()
+
+    @property
+    def _current_dim1(self) -> int:
+        return getattr(self, "_dim1_storage", 0)
+
+    @_current_dim1.setter
+    def _current_dim1(self, value: int) -> None:
+        self._dim1_storage = int(value)
+        self._clamp_dims()
+
+    @property
+    def _current_dim2(self) -> int:
+        return getattr(self, "_dim2_storage", 1)
+
+    @_current_dim2.setter
+    def _current_dim2(self, value: int) -> None:
+        self._dim2_storage = int(value)
+        self._clamp_dims()
+
+    def _clamp_dims(self) -> None:
+        """
+        Keep the hovered dimension pair inside the current score matrix.
+
+        ``_on_motion``, the rectangle/lasso selectors and the tooltip all
+        index ``self._scores[:, self._current_dim1]``.  The pair is written
+        straight to the backing stores so this stays recursion-free.
+        """
+        scores = getattr(self, "_scores_storage", None)
+        if scores is None or getattr(scores, "ndim", 0) != 2 or scores.shape[1] == 0:
+            return
+        n_dims = scores.shape[1]
+        d1 = min(max(int(getattr(self, "_dim1_storage", 0)), 0), n_dims - 1)
+        d2 = min(max(int(getattr(self, "_dim2_storage", 1)), 0), n_dims - 1)
+        if d1 == d2 and n_dims > 1:
+            d2 = 1 if d1 == 0 else 0
+        self._dim1_storage = d1
+        self._dim2_storage = d2
+
     def _setup_ui(self) -> None:
         """Setup UI components."""
         layout = QVBoxLayout(self)
@@ -175,13 +230,13 @@ class InteractivePlotCanvas(QWidget):
         layout.addWidget(self._toolbar)
 
         # Matplotlib canvas
-        self._figure = Figure(figsize=(8, 6), facecolor="#FFFFFF")
+        self._figure = Figure(figsize=(8, 6), facecolor=self.theme_colors()["figure_bg"])
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Setup axes
         self._ax = self._figure.add_subplot(111)
-        self._ax.set_facecolor("#FAFBFC")
+        self._apply_axes_theme(self._ax)
 
         # Enable interaction
         self._canvas.mpl_connect("motion_notify_event", self._on_motion)
@@ -326,39 +381,24 @@ class InteractivePlotCanvas(QWidget):
         self._is_dark_theme = is_dark
         self._apply_stylesheet()
 
-        # Sync matplotlib theme
-        if is_dark:
-            # Dark theme colors for matplotlib
-            plt.rcParams.update(
-                {
-                    "axes.facecolor": "#1E1E1E",
-                    "figure.facecolor": "#2D2D2D",
-                    "axes.edgecolor": "#555555",
-                    "axes.labelcolor": "#E0E0E0",
-                    "xtick.color": "#E0E0E0",
-                    "ytick.color": "#E0E0E0",
-                    "text.color": "#E0E0E0",
-                    "grid.color": "#444444",
-                    "axes.spines.top": False,
-                    "axes.spines.right": False,
-                }
-            )
-        else:
-            # Light theme colors for matplotlib
-            plt.rcParams.update(
-                {
-                    "axes.facecolor": "#FAFBFC",
-                    "figure.facecolor": "#FFFFFF",
-                    "axes.edgecolor": "#E4E7EB",
-                    "axes.labelcolor": "#2C3E50",
-                    "xtick.color": "#2C3E50",
-                    "ytick.color": "#2C3E50",
-                    "text.color": "#2C3E50",
-                    "grid.color": "#E4E7EB",
-                    "axes.spines.top": False,
-                    "axes.spines.right": False,
-                }
-            )
+        # Sync matplotlib theme.  The palette is the single source of truth
+        # (see ``theme_colors``), so a canvas created *after* the switch
+        # inherits the same colours through rcParams.
+        t = self.theme_colors()
+        plt.rcParams.update(
+            {
+                "axes.facecolor": t["axes_bg"],
+                "figure.facecolor": t["figure_bg"],
+                "axes.edgecolor": t["border"],
+                "axes.labelcolor": t["text"],
+                "xtick.color": t["text"],
+                "ytick.color": t["text"],
+                "text.color": t["text"],
+                "grid.color": t["grid"],
+                "axes.spines.top": False,
+                "axes.spines.right": False,
+            }
+        )
 
         # Update figure background
         c = get_palette(is_dark)
@@ -366,7 +406,129 @@ class InteractivePlotCanvas(QWidget):
 
         # Redraw if there's an active plot
         if self._current_plot_type and self._ax is not None:
+            self._apply_axes_theme()
             self._canvas.draw_idle()
+
+    # =========================================================================
+    # Theme helpers
+    # =========================================================================
+
+    def theme_colors(self) -> dict[str, str]:
+        """
+        Matplotlib-facing colours for the currently selected theme.
+
+        Derived from the application design-system palette so the Qt chrome
+        and the matplotlib surfaces can never drift apart.  ``plot_*``
+        methods must read their surfaces/text colours from here instead of
+        hard-coding the light-theme literals, otherwise a canvas switched to
+        the dark theme keeps painting white backgrounds.
+        """
+        c = get_palette(self._is_dark_theme)
+        return {
+            "text": c.text_primary,
+            "text_muted": c.text_secondary,
+            "axes_bg": c.bg_secondary,
+            "figure_bg": c.bg_primary,
+            "border": c.border_light,
+            "grid": c.border_light,
+            "legend_bg": c.bg_primary,
+            "legend_edge": c.border_light,
+            "reference": c.text_secondary,
+        }
+
+    def _legend_kwargs(self, loc: str = "upper right", **overrides) -> dict:
+        """Legend keyword arguments tinted with the current theme."""
+        t = self.theme_colors()
+        kwargs = {
+            "loc": loc,
+            "framealpha": 0.95,
+            "facecolor": t["legend_bg"],
+            "edgecolor": t["legend_edge"],
+            "labelcolor": t["text"],
+        }
+        kwargs.update(overrides)
+        return kwargs
+
+    def _apply_axes_theme(self, ax=None) -> None:
+        """
+        Re-tint an axes (and its figure) to the current theme.
+
+        Only *colours* are touched - grids, spines visibility and reference
+        lines are left exactly as the plotting method arranged them.
+        """
+        target = self._ax if ax is None else ax
+        t = self.theme_colors()
+        if target is not None:
+            with contextlib.suppress(Exception):
+                target.set_facecolor(t["axes_bg"])
+                target.tick_params(colors=t["text"])
+                target.xaxis.label.set_color(t["text"])
+                target.yaxis.label.set_color(t["text"])
+                target.title.set_color(t["text"])
+                for spine in target.spines.values():
+                    spine.set_color(t["border"])
+        with contextlib.suppress(Exception):
+            self._figure.patch.set_facecolor(t["figure_bg"])
+
+    # =========================================================================
+    # Axes lifecycle helpers
+    # =========================================================================
+
+    def _adopt_axes(self, ax):
+        """
+        Make ``ax`` the axes every interaction handler operates on.
+
+        Tooltips (:meth:`_on_motion`), scroll zoom, the toolbar zoom/reset
+        buttons, the label & ellipse toggles and the rectangle/lasso
+        selectors all read ``self._ax``.  A plotting method that creates a
+        fresh axes without adopting it leaves all of them pointed at an
+        axes that is no longer part of the figure.
+        """
+        self._ax = ax
+        selector = getattr(self, "_selector", None)
+        if selector is not None:
+            # ``update_axes`` exists on both selectors since matplotlib 3.6;
+            # suppress so a custom/older widget cannot break the redraw.
+            with contextlib.suppress(Exception):
+                selector.update_axes(ax)
+        return ax
+
+    def _reset_axes(self, *args, **kwargs):
+        """
+        Clear the figure and create (and adopt) a single fresh axes.
+
+        Equivalent to the historic ``self._figure.clear()`` +
+        ``self._figure.add_subplot(111)`` pair, but keeps ``self._ax`` in
+        sync so interactivity survives a replot.
+        """
+        self._figure.clear()
+        if not args and not kwargs:
+            return self._adopt_axes(self._figure.add_subplot(111))
+        return self._adopt_axes(self._figure.add_subplot(*args, **kwargs))
+
+    def _adopt_first_axes(self):
+        """
+        Adopt the first axes of a multi-panel figure.
+
+        Used by the grid plots, which create one axes per panel: the
+        interaction handlers only understand a single axes, so panel one is
+        adopted (better a live axes than a destroyed one).
+        """
+        if self._figure.axes:
+            return self._adopt_axes(self._figure.axes[0])
+        return None
+
+    def _finalise_grid_plot(self) -> None:
+        """
+        Post-process a multi-panel figure.
+
+        Adopts panel one for the interaction handlers and re-tints every
+        panel with the active theme (the historical code only ever painted
+        light-theme surfaces).
+        """
+        self._adopt_first_axes()
+        for ax in self._figure.axes:
+            self._apply_axes_theme(ax)
 
     def _setup_connections(self) -> None:
         """Setup signal connections."""
@@ -466,27 +628,10 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_ylabel(_("PC{0} ({1:.1f}% variance)").format(pc2 + 1, var_pc2))
         self._ax.set_title(_("PCA Scores Plot"))
 
-        # Style
-        self._ax.set_facecolor("#FAFBFC")
-        self._ax.tick_params(colors="#2C3E50")
-        self._ax.xaxis.label.set_color("#2C3E50")
-        self._ax.yaxis.label.set_color("#2C3E50")
-        self._ax.title.set_color("#2C3E50")
-
-        for spine in self._ax.spines.values():
-            spine.set_color("#E4E7EB")
-
+        # Style: shared theme helper (grid + zero reference lines included)
         if len(unique_groups) > 1:
-            self._ax.legend(
-                loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB", labelcolor="#2C3E50"
-            )
-
-        # Add grid
-        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
-
-        # Draw reference lines
-        self._ax.axhline(y=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
-        self._ax.axvline(x=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+            self._ax.legend(**self._legend_kwargs("upper right"))
+        self._apply_axis_style()
 
         self._canvas.draw()
 
@@ -746,17 +891,17 @@ class InteractivePlotCanvas(QWidget):
             self._ax.legend(
                 loc="upper right",
                 framealpha=0.95,
-                facecolor="#FFFFFF",
-                edgecolor="#E4E7EB",
-                labelcolor="#2C3E50",
+                facecolor=self.theme_colors()["figure_bg"],
+                edgecolor=self.theme_colors()["border"],
+                labelcolor=self.theme_colors()["text"],
             )
 
         # Reference lines
-        self._ax.axhline(y=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
-        self._ax.axvline(x=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+        self._ax.axhline(y=0, color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
+        self._ax.axvline(x=0, color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
 
         # Grid
-        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
+        self._ax.grid(True, alpha=0.3, color=self.theme_colors()["grid"])
 
         self._canvas.draw()
 
@@ -828,9 +973,9 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot original grid (reference) - light gray dashed
         for i in range(grid_shape[0]):
-            self._ax.plot(xx_orig[i, :], yy_orig[i, :], color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+            self._ax.plot(xx_orig[i, :], yy_orig[i, :], color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
         for j in range(grid_shape[1]):
-            self._ax.plot(xx_orig[:, j], yy_orig[:, j], color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+            self._ax.plot(xx_orig[:, j], yy_orig[:, j], color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
 
         # Plot warped grid - colored lines
         for i in range(grid_shape[0]):
@@ -884,7 +1029,7 @@ class InteractivePlotCanvas(QWidget):
         self._apply_axis_style()
 
         # Legend
-        self._ax.legend(loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB")
+        self._ax.legend(loc="upper right", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"])
 
         # Aspect ratio
         self._ax.set_aspect("equal", adjustable="box")
@@ -1024,15 +1169,15 @@ class InteractivePlotCanvas(QWidget):
                 textcoords="offset points",
                 ha="center",
                 va="bottom",
-                color="#2C3E50",
+                color=self.theme_colors()["text"],
                 fontweight="bold",
             )
 
         # Labels
         self._ax.set_xticks(x_pos)
-        self._ax.set_xticklabels(labels, color="#2C3E50")
-        self._ax.set_ylabel(_("Index Value"), color="#2C3E50")
-        self._ax.set_title(_("Biodiversity Indices"), color="#2C3E50")
+        self._ax.set_xticklabels(labels, color=self.theme_colors()["text"])
+        self._ax.set_ylabel(_("Index Value"), color=self.theme_colors()["text"])
+        self._ax.set_title(_("Biodiversity Indices"), color=self.theme_colors()["text"])
 
         # Style
         self._apply_axis_style()
@@ -1080,13 +1225,13 @@ class InteractivePlotCanvas(QWidget):
             self._ax.plot(x, y, color=color, linewidth=2, marker="o", markersize=4, alpha=0.7, label=sample)
 
         # Labels
-        self._ax.set_xlabel(_("Number of Individuals"), color="#2C3E50")
-        self._ax.set_ylabel(_("Expected Species Richness"), color="#2C3E50")
-        self._ax.set_title(_("Rarefaction Curves"), color="#2C3E50")
+        self._ax.set_xlabel(_("Number of Individuals"), color=self.theme_colors()["text"])
+        self._ax.set_ylabel(_("Expected Species Richness"), color=self.theme_colors()["text"])
+        self._ax.set_title(_("Rarefaction Curves"), color=self.theme_colors()["text"])
 
         # Legend
         self._ax.legend(
-            loc="lower right", framealpha=0.9, facecolor="#2C3E50", edgecolor="#34495E", labelcolor="#ECF0F1"
+            loc="lower right", framealpha=0.9, facecolor=self.theme_colors()["text"], edgecolor="#34495E", labelcolor="#ECF0F1"
         )
 
         # Style
@@ -1260,7 +1405,7 @@ class InteractivePlotCanvas(QWidget):
             va="bottom",
             fontsize=12,
             fontweight="bold",
-            color="#2C3E50",
+            color=self.theme_colors()["text"],
         )
 
         # Significance annotation
@@ -1349,7 +1494,7 @@ class InteractivePlotCanvas(QWidget):
                 va="center",
                 fontsize=10,
                 fontweight="bold",
-                color="#2C3E50",
+                color=self.theme_colors()["text"],
             )
         else:
             # Single group or zero between-group SS: show text instead of pie
@@ -1367,7 +1512,7 @@ class InteractivePlotCanvas(QWidget):
                 ha="center",
                 va="center",
                 fontsize=11,
-                color="#2C3E50",
+                color=self.theme_colors()["text"],
                 transform=self._ax.transAxes,
             )
 
@@ -1387,10 +1532,8 @@ class InteractivePlotCanvas(QWidget):
         self._record_plot_call("plot_simper_results", result)
         self._current_plot_type = "simper"
         self._simper_result = result  # Store for replotting
-        self._figure.clear()
-
         # Use twiny() for cumulative contribution line on top
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
         ax_top = self._ax.twiny()
 
         # Get top contributors (flat list from SimperResult)
@@ -1422,7 +1565,7 @@ class InteractivePlotCanvas(QWidget):
                 f"{val:.1f}%",
                 va="center",
                 fontsize=8,
-                color="#2C3E50",
+                color=self.theme_colors()["text"],
             )
 
         # Cumulative contribution line on top axis
@@ -1432,7 +1575,7 @@ class InteractivePlotCanvas(QWidget):
         ax_top.set_xlim([0, 100])
 
         # Style
-        self._ax.set_facecolor("#FAFBFC")
+        self._ax.set_facecolor(self.theme_colors()["axes_bg"])
         self._ax.spines["top"].set_color(self.COLORS[0])
         ax_top.spines["top"].set_color(self.COLORS[3])
 
@@ -1445,8 +1588,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot boxplot comparing groups for a variable."""
         self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         self._current_plot_type = "anova_boxplot"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         unique_groups = sorted(set(groups))
         if group_names is None:
@@ -1471,8 +1613,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot LDA scatter plot with confidence ellipses."""
         self._record_plot_call("plot_lda_scores", result)
         self._current_plot_type = "lda"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         scores = result.scores
         n_dims = scores.shape[1]
@@ -1530,18 +1671,11 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(_("Linear Discriminant Analysis"))
 
         # Style
-        self._ax.set_facecolor("#FAFBFC")
-        self._ax.tick_params(colors="#2C3E50")
-        self._ax.xaxis.label.set_color("#2C3E50")
-        self._ax.yaxis.label.set_color("#2C3E50")
-        self._ax.title.set_color("#2C3E50")
-
-        for spine in self._ax.spines.values():
-            spine.set_color("#E4E7EB")
+        self._apply_axes_theme()
 
         if len(unique_groups) > 1:
             self._ax.legend(
-                loc="upper right", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB", labelcolor="#2C3E50"
+                loc="upper right", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"], labelcolor=self.theme_colors()["text"]
             )
 
         self._figure.tight_layout()
@@ -1551,8 +1685,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot hierarchical clustering dendrogram."""
         self._record_plot_call("plot_dendrogram", result, labels=labels)
         self._current_plot_type = "dendrogram"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
 
@@ -1574,8 +1707,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot rose diagram for directional data."""
         self._record_plot_call("plot_rose_diagram", bin_centers, counts, mean_direction_deg=mean_direction_deg)
         self._current_plot_type = "rose"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111, projection="polar")
+        self._ax = self._reset_axes(projection="polar")
 
         n_bins = len(counts)
         bin_width = 2 * np.pi / n_bins
@@ -1602,8 +1734,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot original vs reconstructed EFA contours."""
         self._record_plot_call("plot_efa_contours", original, reconstructed, title=title)
         self._current_plot_type = "efa"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         self._ax.plot(
             original[:, 0], original[:, 1], "o-", color=self.COLORS[0], markersize=2, linewidth=1, label=_("Original")
@@ -1618,13 +1749,76 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
+    def plot_gpa_aligned(self, coords: np.ndarray, title: str = "") -> None:
+        """
+        Plot GPA-aligned landmark configurations as an overlay scatter.
+
+        Parameters:
+            coords: either a single configuration ``(n_landmarks, 2)`` or a
+                stack of aligned configurations ``(n_specimens, n_landmarks, 2)``
+            title: axes title
+
+        This replaces the previous call site that passed a single positional
+        argument to :meth:`plot_efa_contours` (which needs both an original
+        *and* a reconstructed contour), which raised ``TypeError`` as soon as
+        a GPA result was 2-D.
+        """
+        self._record_plot_call("plot_gpa_aligned", coords, title=title)
+        self._current_plot_type = "gpa_aligned"
+        self._ax = self._reset_axes()
+
+        coords = np.asarray(coords, dtype=float)
+        if coords.ndim == 1:
+            coords = coords.reshape(-1, 2)
+
+        if coords.ndim == 2:
+            # A single aligned configuration.
+            self._ax.plot(
+                coords[:, 0],
+                coords[:, 1],
+                "-o",
+                color=self.COLORS[0],
+                markersize=4,
+                linewidth=1,
+                label=_("Specimen"),
+            )
+        elif coords.ndim == 3:
+            for specimen in coords:
+                self._ax.plot(
+                    specimen[:, 0],
+                    specimen[:, 1],
+                    "-o",
+                    color=self.COLORS[0],
+                    alpha=0.3,
+                    markersize=3,
+                )
+            mean_shape = coords.mean(axis=0)
+            self._ax.plot(
+                mean_shape[:, 0],
+                mean_shape[:, 1],
+                "-o",
+                color=self.COLORS[3],
+                linewidth=2.0,
+                markersize=5,
+                label=_("Mean shape"),
+            )
+        else:
+            raise ValueError(f"plot_gpa_aligned expects a 2-D or 3-D coordinate array, got {coords.ndim}-D")
+
+        self._ax.set_aspect("equal")
+        self._ax.legend(**self._legend_kwargs("best"))
+        self._ax.grid(True, linestyle="--", alpha=0.3, color=self.theme_colors()["grid"])
+        self._ax.set_title(title or _("GPA Aligned Landmarks"))
+        self._ax.set_xlabel("X")
+        self._ax.set_ylabel("Y")
+        self._figure.tight_layout()
+        self._canvas.draw()
+
     def plot_she_curve(self, result: Any) -> None:
         """Plot SHE analysis curves (S, H, E vs sample size)."""
         self._record_plot_call("plot_she_curve", result)
         self._current_plot_type = "she"
-        self._figure.clear()
-
-        ax1 = self._figure.add_subplot(111)
+        ax1 = self._reset_axes()
         ax2 = ax1.twinx()
 
         ax1.plot(result.sample_sizes, result.s_values, "o-", color=self.COLORS[0], markersize=3, label="S (Richness)")
@@ -1676,7 +1870,7 @@ class InteractivePlotCanvas(QWidget):
         self._ax.plot(r_values, l_values, color="#E74C3C", linewidth=2.5, label=_("L(r) - r"))
 
         # Plot zero reference line
-        self._ax.axhline(y=0, color="#2C3E50", linestyle="--", linewidth=1, alpha=0.7)
+        self._ax.axhline(y=0, color=self.theme_colors()["text"], linestyle="--", linewidth=1, alpha=0.7)
 
         # Labels
         self._ax.set_xlabel(_("Distance (r)"))
@@ -1684,11 +1878,11 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(_("Ripley's K Spatial Point Pattern Analysis"))
 
         # Legend
-        self._ax.legend(loc="upper left", framealpha=0.95, facecolor="#FFFFFF", edgecolor="#E4E7EB")
+        self._ax.legend(loc="upper left", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"])
 
         # Style
         self._apply_axis_style()
-        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
+        self._ax.grid(True, alpha=0.3, color=self.theme_colors()["grid"])
 
         # Interpretation text
         interp = result.interpretation
@@ -1700,7 +1894,7 @@ class InteractivePlotCanvas(QWidget):
             fontsize=9,
             verticalalignment="bottom",
             horizontalalignment="right",
-            bbox=dict(boxstyle="round", facecolor="#F8F9F9", edgecolor="#E4E7EB", alpha=0.9),
+            bbox=dict(boxstyle="round", facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"], alpha=0.9),
         )
 
         self._canvas.draw()
@@ -1709,8 +1903,7 @@ class InteractivePlotCanvas(QWidget):
         """Plot rank-abundance curves with fitted models."""
         self._record_plot_call("plot_abundance_models", results)
         self._current_plot_type = "abundance_models"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         for i, (name, fit) in enumerate(results.items()):
             obs = np.sort(fit.observed)[::-1]
@@ -1719,7 +1912,7 @@ class InteractivePlotCanvas(QWidget):
             ranks = np.arange(1, n + 1)
 
             if i == 0:
-                self._ax.scatter(ranks, obs, s=20, color="#2C3E50", alpha=0.6, label=_("Observed"), zorder=5)
+                self._ax.scatter(ranks, obs, s=20, color=self.theme_colors()["text"], alpha=0.6, label=_("Observed"), zorder=5)
 
             self._ax.plot(
                 ranks,
@@ -1796,19 +1989,13 @@ class InteractivePlotCanvas(QWidget):
                 self._ax.add_patch(ellipse)
 
     def _apply_axis_style(self) -> None:
-        """Apply consistent axis styling."""
-        self._ax.set_facecolor("#FAFBFC")
-        self._ax.tick_params(colors="#2C3E50")
-        self._ax.xaxis.label.set_color("#2C3E50")
-        self._ax.yaxis.label.set_color("#2C3E50")
-        self._ax.title.set_color("#2C3E50")
+        """Apply the *current theme* plus grid and zero reference lines."""
+        t = self.theme_colors()
+        self._apply_axes_theme()
 
-        for spine in self._ax.spines.values():
-            spine.set_color("#E4E7EB")
-
-        self._ax.grid(True, alpha=0.3, color="#E4E7EB")
-        self._ax.axhline(y=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
-        self._ax.axvline(x=0, color="#BDC3C7", linestyle="--", linewidth=0.5, alpha=0.5)
+        self._ax.grid(True, alpha=0.3, color=t["grid"])
+        self._ax.axhline(y=0, color=t["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
+        self._ax.axvline(x=0, color=t["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
 
     # =========================================================================
     # Interaction Methods
@@ -1833,6 +2020,10 @@ class InteractivePlotCanvas(QWidget):
             return
 
         if self._scores is None:
+            return
+
+        if getattr(self._scores, "ndim", 0) != 2:
+            # Not a score matrix (a 1-D series): no hover geometry to hit-test.
             return
 
         # Find nearest point
@@ -1882,12 +2073,19 @@ class InteractivePlotCanvas(QWidget):
 
             # Show tooltip
             label = self._labels[nearest_idx] if nearest_idx < len(self._labels) else f"Point {nearest_idx}"
-            group = self._group_labels[nearest_idx] if self._group_labels is not None else 0
+            # ``_group_labels`` can be shorter than the score matrix (a
+            # result may carry group assignments for only part of the
+            # samples), so bound-check before indexing.
+            group_labels = self._group_labels
+            if group_labels is not None and nearest_idx < len(group_labels):
+                group = group_labels[nearest_idx]
+            else:
+                group = 0
 
             tooltip = f"{label}\n"
             tooltip += f"X: {self._scores[nearest_idx, d1]:.4f}\n"
             tooltip += f"Y: {self._scores[nearest_idx, d2]:.4f}\n"
-            if self._group_labels is not None:
+            if group_labels is not None and nearest_idx < len(group_labels):
                 tooltip += f"Group: {group + 1}"
 
             # Draw annotation
@@ -1897,7 +2095,7 @@ class InteractivePlotCanvas(QWidget):
                 xytext=(20, 20),
                 textcoords="offset points",
                 arrowprops=dict(arrowstyle="->", color="white", lw=1),
-                bbox=dict(boxstyle="round", facecolor="#2C3E50", alpha=0.9),
+                bbox=dict(boxstyle="round", facecolor=self.theme_colors()["text"], alpha=0.9),
                 color="#ECF0F1",
                 fontsize=9,
             )
@@ -1966,6 +2164,9 @@ class InteractivePlotCanvas(QWidget):
 
     def _on_rectangle_select(self, eclick, erelease) -> None:
         """Handle rectangle selection."""
+        if self._scores is None or eclick.xdata is None or erelease.xdata is None:
+            return
+
         x1, y1 = eclick.xdata, eclick.ydata
         x2, y2 = erelease.xdata, erelease.ydata
 
@@ -1980,6 +2181,9 @@ class InteractivePlotCanvas(QWidget):
 
     def _on_lasso_select(self, verts) -> None:
         """Handle lasso selection."""
+        if self._scores is None:
+            return
+
         from matplotlib.path import Path
 
         path = Path(verts)
@@ -2037,8 +2241,7 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_allometry", result)
         self._current_plot_type = "allometry"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         log_cs = result.log_centroid_sizes
         coef = result.regression_coefficients
@@ -2058,7 +2261,7 @@ class InteractivePlotCanvas(QWidget):
         self._ax.scatter(
             log_cs,
             residuals if residuals.ndim == 1 else residuals[:, 0],
-            c="#2C3E50",
+            c=self.theme_colors()["text"],
             s=80,
             alpha=0.7,
             edgecolors="white",
@@ -2089,6 +2292,9 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(f"Allometry: Size-Shape Relationship (R² = {r_squared:.4f})", fontsize=12, fontweight="bold")
         self._ax.legend(loc="best")
         self._ax.grid(True, linestyle="--", alpha=0.3)
+        # Repaint: without this the canvas keeps showing the previous plot
+        # even though the axes objects were rewritten.
+        self._canvas.draw()
 
     def plot_evolution_rate(self, result: Any) -> None:
         """
@@ -2100,10 +2306,9 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_evolution_rate", result)
         self._current_plot_type = "evolution_rate"
-        self._figure.clear()
 
         # Main phenogram subplot
-        self._ax = self._figure.add_subplot(211)
+        self._ax = self._reset_axes(2, 1, 1)
 
         # Use actual trait_series from result if available
         if result.trait_series is not None and len(result.trait_series) > 0:
@@ -2167,6 +2372,7 @@ class InteractivePlotCanvas(QWidget):
                 ax2.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{w:.3f}", va="center")
 
         self._figure.tight_layout()
+        self._canvas.draw()
 
     def plot_extinction_ranges(self, result: Any) -> None:
         """
@@ -2178,8 +2384,7 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_extinction_ranges", result)
         self._current_plot_type = "extinction"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         lad_positions = result.lad_positions
         ci_lower = result.confidence_interval_lower
@@ -2241,6 +2446,7 @@ class InteractivePlotCanvas(QWidget):
         ]
         self._ax.legend(handles=legend_elements, loc="lower right", frameon=True)
         self._ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+        self._canvas.draw()
 
     def plot_beta_diversity(self, result: Any) -> None:
         """
@@ -2252,8 +2458,7 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_beta_diversity", result)
         self._current_plot_type = "beta_diversity"
-        self._figure.clear()
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
 
         # Plot heatmap of total beta diversity
         matrix = result.total_beta
@@ -2277,6 +2482,7 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(
             f"Beta Diversity Decomposition ({result.decomposition_type.upper()})", fontsize=12, fontweight="bold"
         )
+        self._canvas.draw()
 
     def plot_null_model(self, result: Any) -> None:
         """
@@ -2288,10 +2494,9 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_null_model", result)
         self._current_plot_type = "null_model"
-        self._figure.clear()
 
         # Histogram of simulated scores
-        self._ax = self._figure.add_subplot(111)
+        self._ax = self._reset_axes()
         simulated = result.simulated_scores
         self._ax.hist(simulated, bins=50, color="#3498DB", alpha=0.7, edgecolor="black", label="Simulated")
 
@@ -2335,6 +2540,7 @@ class InteractivePlotCanvas(QWidget):
             fontweight="bold",
         )
         self._ax.legend(loc="best")
+        self._canvas.draw()
 
     def _record_plot_call(self, method_name: str, *args, **kwargs) -> None:
         """Record the last plot call for replotting."""
@@ -2535,6 +2741,7 @@ class InteractivePlotCanvas(QWidget):
 
         self._figure.suptitle(_("Descriptive Statistics"), fontsize=13, fontweight="bold")
         self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._finalise_grid_plot()
         self._canvas.draw()
 
     def plot_normality_qq(self, data: np.ndarray, col_names: list[str], normality_results: list[Any] | None = None) -> None:
@@ -2582,6 +2789,7 @@ class InteractivePlotCanvas(QWidget):
 
         self._figure.suptitle(_("Normality Test (Q-Q Plots)"), fontsize=13, fontweight="bold")
         self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._finalise_grid_plot()
         self._canvas.draw()
 
     def plot_group_comparison(self, data: np.ndarray, groups: list[int] | np.ndarray,
@@ -2648,6 +2856,7 @@ class InteractivePlotCanvas(QWidget):
 
         self._figure.suptitle(_("{0} — Group Comparison").format(test_name), fontsize=13, fontweight="bold")
         self._figure.tight_layout(rect=[0, 0, 1, 0.95])
+        self._finalise_grid_plot()
         self._canvas.draw()
 
     def plot_coniss_dendrogram(self, linkage_matrix: np.ndarray, n_zones: int,
@@ -2663,11 +2872,10 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_coniss_dendrogram", linkage_matrix, n_zones, sample_names, zone_boundaries)
         self._current_plot_type = "coniss_dendrogram"
-        self._figure.clear()
 
         from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
 
-        ax = self._figure.add_subplot(111)
+        ax = self._reset_axes()
 
         # Use sample names as labels if available
         labels = sample_names if sample_names and len(sample_names) == linkage_matrix.shape[0] + 1 else None
@@ -2707,9 +2915,8 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_scree", eigenvalues, explained_var, cumulative_var, method)
         self._current_plot_type = "scree"
-        self._figure.clear()
 
-        ax1 = self._figure.add_subplot(111)
+        ax1 = self._reset_axes()
         n = len(eigenvalues)
         components = np.arange(1, n + 1)
 
@@ -2751,11 +2958,14 @@ class InteractivePlotCanvas(QWidget):
             trait_values: Optional {taxon_name: value} for coloring tips
             title: Plot title
         """
-        self._record_plot_call("plot_phylo_tree", tree)
+        # Bug fix: the replot record must carry every argument the method
+        # consumes - trait_values drives the tip colours and title the
+        # caption, and dropping them made _replot_current() (theme switch,
+        # label/ellipse toggles) repaint a different picture.
+        self._record_plot_call("plot_phylo_tree", tree, trait_values=trait_values, title=title)
         self._current_plot_type = "phylo_tree"
-        self._figure.clear()
 
-        ax = self._figure.add_subplot(111)
+        ax = self._reset_axes()
 
         root = tree.root if hasattr(tree, "root") else tree
         if root is None:
@@ -2788,7 +2998,7 @@ class InteractivePlotCanvas(QWidget):
         def draw_node(node, x_start):
             if node.is_leaf:
                 y = leaf_y[id(node)]
-                ax.plot([x_start, 0], [y, y], color="#2C3E50", linewidth=1)
+                ax.plot([x_start, 0], [y, y], color=self.theme_colors()["text"], linewidth=1)
                 label = node.name or ""
                 color = "#E74C3C" if trait_values and label in trait_values else "#2C3E50"
                 ax.text(-0.02 * max_depth, y, f" {label}", va="center", fontsize=8, color=color)
@@ -2805,12 +3015,12 @@ class InteractivePlotCanvas(QWidget):
                 cy = draw_node(child, child_x)
                 child_ys.append(cy)
                 # Horizontal line from parent to child x
-                ax.plot([x_start, child_x], [cy, cy], color="#2C3E50", linewidth=1)
+                ax.plot([x_start, child_x], [cy, cy], color=self.theme_colors()["text"], linewidth=1)
 
             # Vertical connector
             if child_ys:
                 y_min, y_max = min(child_ys), max(child_ys)
-                ax.plot([x_start, x_start], [y_min, y_max], color="#2C3E50", linewidth=1)
+                ax.plot([x_start, x_start], [y_min, y_max], color=self.theme_colors()["text"], linewidth=1)
                 mid_y = (y_min + y_max) / 2
                 # Support value
                 if node.support is not None and node.support > 0:
@@ -2843,9 +3053,8 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_eigenshape_scores", scores, explained_var, specimen_labels)
         self._current_plot_type = "eigenshape_scores"
-        self._figure.clear()
 
-        ax = self._figure.add_subplot(111)
+        ax = self._reset_axes()
         x = scores[:, 0]
         y = scores[:, 1] if scores.shape[1] > 1 else np.zeros_like(x)
 
@@ -2879,9 +3088,8 @@ class InteractivePlotCanvas(QWidget):
         """
         self._record_plot_call("plot_markov_heatmap", transition_matrix, facies_names, chi2_stat, p_value)
         self._current_plot_type = "markov_heatmap"
-        self._figure.clear()
 
-        ax = self._figure.add_subplot(111)
+        ax = self._reset_axes()
 
         # Normalize to probabilities (row-wise)
         row_sums = transition_matrix.sum(axis=1, keepdims=True)

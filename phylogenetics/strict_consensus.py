@@ -150,48 +150,46 @@ class StrictConsensusTree:
         """
         构建严格一致性树
 
+        实现说明:
+            采用 **有根 clade (分支集)** 表示而非无根分割表示。同一批输入树
+            中共同出现的 clade 天然构成层级 (laminar) 族，因此可以按 clade
+            大小降序自顶向下对称地重建拓扑；旧的"分割 + 单侧递归"实现在两侧
+            递归不对称时会丢失 clade（连 build([T, T]) 都无法还原 T）。
+
         Parameters:
             trees: 输入树列表
 
         Returns:
-            一致性树
+            一致性树 (单棵树输入时返回其深拷贝，不与入参共享节点)
+
+        Raises:
+            ValueError: 输入树列表为空
         """
         if not trees:
             raise ValueError("No input trees provided")
 
         if len(trees) == 1:
-            return trees[0]
+            # 返回深拷贝: 直接把入参别名返回会让调用方修改一致性树时改写原树
+            return self._clone_tree(trees[0])
 
         # 获取所有分类单元
         all_taxa = set(trees[0].leaf_names)
         for tree in trees[1:]:
             all_taxa |= set(tree.leaf_names)
 
-        # 统计频率: 以"包含该分割的树数 / 总树数"计。
-        # 旧实现用出现总次数 / 树数——同一棵树内多条边可归一化为同一
-        # 分割 (如根的子节点 (A,B) 与 (C,D) 各给出一条 AB|CD), 出现
-        # 次数超过树数 (3/2=1.5), 严格分割因此被整体丢弃。
-        tree_counts: Counter = Counter()
-        for tree in trees:
-            if tree.root is None:
-                continue
-            for s in set(self._extract_all_splits([tree])):
-                tree_counts[s] += 1
+        clade_counts = self._count_clades(trees)
         n_trees = len(trees)
 
-        splits_with_freq: list[Split] = []
-        for split_set, count in tree_counts.items():
-            freq = count / n_trees
-            splits_with_freq.append(Split(set1=split_set.set1, set2=split_set.set2, frequency=freq))
+        frequencies = {clade: count / n_trees for clade, count in clade_counts.items()}
+        strict_clades = [clade for clade, freq in frequencies.items() if abs(freq - 1.0) < 1e-10]
 
-        # 筛选严格一致性分割 (频率=1.0)
-        strict_splits = [s for s in splits_with_freq if abs(s.frequency - 1.0) < 1e-10]
+        self._logger.info(
+            f"Extracted {len(frequencies)} unique clades, {len(strict_clades)} are strict consensus"
+        )
 
-        self._logger.info(f"Extracted {len(splits_with_freq)} unique splits, {len(strict_splits)} are strict consensus")
-
-        # 构建一致性树
-        consensus_tree = self._build_tree_from_splits(strict_splits, all_taxa)
-
+        consensus_tree = self._build_tree_from_clades(strict_clades, all_taxa)
+        consensus_tree.metadata["consensus_clades"] = len(strict_clades)
+        consensus_tree.metadata["input_trees"] = n_trees
         return consensus_tree
 
     def build_majority_rule(self, trees: list[PhyloTree], threshold: float = 0.5) -> PhyloTree:
@@ -203,7 +201,8 @@ class StrictConsensusTree:
             threshold: 支持率阈值 (默认0.5 = 50%)
 
         Returns:
-            一致性树
+            一致性树。结果树的 ``metadata["conflicting_clades"]`` 记录彼此不兼容
+            (无法同时容纳在同一棵树中) 的 clade 对数。
 
         注意:
             当threshold < 1.0且输入树有冲突拓扑时，
@@ -214,46 +213,134 @@ class StrictConsensusTree:
             raise ValueError("No input trees provided")
 
         if len(trees) == 1:
-            return trees[0]
+            return self._clone_tree(trees[0])
 
         all_taxa = set(trees[0].leaf_names)
         for tree in trees[1:]:
             all_taxa |= set(tree.leaf_names)
 
-        # 统计频率: 以"包含该分割的树数 / 总树数"计 (与 build() 相同,
-        # 出现总次数会在同一树内被重复计数)
-        tree_counts: Counter = Counter()
+        clade_counts = self._count_clades(trees)
+        n_trees = len(trees)
+
+        frequencies = {clade: count / n_trees for clade, count in clade_counts.items()}
+        majority_clades = [clade for clade, freq in frequencies.items() if freq >= threshold - 1e-12]
+
+        # 统计互不兼容的 clade 对 (两侧交集非空且互不包含)
+        conflicts = self._count_conflicts(majority_clades)
+        if conflicts:
+            self._logger.warning(
+                f"Majority rule consensus: found {conflicts} incompatible clade pairs. "
+                f"The resulting tree may be unresolved (star tree) or invalid. "
+                f"Consider using a higher threshold or checking input tree compatibility."
+            )
+
+        consensus_tree = self._build_tree_from_clades(majority_clades, all_taxa)
+        consensus_tree.metadata["consensus_clades"] = len(majority_clades)
+        consensus_tree.metadata["conflicting_clades"] = conflicts
+        consensus_tree.metadata["input_trees"] = n_trees
+        consensus_tree.metadata["threshold"] = threshold
+        return consensus_tree
+
+    # ------------------------------------------------------------------
+    # clade 统计与树重建
+    # ------------------------------------------------------------------
+    def _count_clades(self, trees: list[PhyloTree]) -> Counter:
+        """统计每个有根 clade (叶名集合) 出现在多少棵树中。"""
+        clade_counts: Counter = Counter()
         for tree in trees:
             if tree.root is None:
                 continue
-            for s in set(self._extract_all_splits([tree])):
-                tree_counts[s] += 1
-        n_trees = len(trees)
+            for clade in set(self._extract_clades_from_tree(tree)):
+                clade_counts[clade] += 1
+        return clade_counts
 
-        # 筛选超过阈值的分割
-        majority_splits = []
-        for split_set, count in tree_counts.items():
-            freq = count / n_trees
-            if freq >= threshold:
-                split_obj = Split(set1=split_set.set1, set2=split_set.set2, frequency=freq)
-                majority_splits.append(split_obj)
+    def _extract_clades_from_tree(self, tree: PhyloTree) -> list[frozenset[str]]:
+        """
+        提取单棵树的全部有根 clade (含全分类单元根 clade)。
 
-        # 检查分割兼容性
-        if len(majority_splits) > 1:
-            conflicts = []
-            for i, split1 in enumerate(majority_splits):
-                for split2 in majority_splits[i + 1 :]:
-                    if not split1.is_compatible_with(split2):
-                        conflicts.append((split1, split2))
+        Returns:
+            frozenset(叶名) 列表
+        """
+        clades: list[frozenset[str]] = []
+        for node in tree.root.preorder_traverse():
+            if node.is_leaf:
+                continue
+            leaves = frozenset(leaf.name for leaf in node.get_leaves())
+            if len(leaves) >= 2:
+                clades.append(leaves)
+        return clades
 
-            if conflicts:
-                self._logger.warning(
-                    f"Majority rule consensus: found {len(conflicts)} incompatible split pairs. "
-                    f"The resulting tree may be unresolved (star tree) or invalid. "
-                    f"Consider using a higher threshold or checking input tree compatibility."
-                )
+    @staticmethod
+    def _count_conflicts(clades: list[frozenset[str]]) -> int:
+        """统计互不兼容 (相交且互不包含) 的 clade 对数。"""
+        unique = list(set(clades))
+        conflicts = 0
+        for i, c1 in enumerate(unique):
+            for c2 in unique[i + 1 :]:
+                if c1 & c2 and not (c1 <= c2 or c2 <= c1):
+                    conflicts += 1
+        return conflicts
 
-        return self._build_tree_from_splits(majority_splits, all_taxa)
+    def _build_tree_from_clades(self, clades: list[frozenset[str]], all_taxa: set[str]) -> PhyloTree:
+        """
+        从 clade 族自顶向下对称建树。
+
+        算法:
+            1. 当前 clade 的直接子 clade = 其中极大真子集 (按大小降序贪心选取，
+               已被子 clade 覆盖的分类单元不再重复挂载，从而对不兼容 clade 免疫)
+            2. 未被任何子 clade 覆盖的分类单元作为叶节点直接挂到当前节点
+            3. 对每个子 clade 递归
+
+        Parameters:
+            clades: clade 族 (叶名集合)
+            all_taxa: 全部分类单元
+
+        Returns:
+            一致性树
+        """
+        taxa = set(all_taxa)
+        if not taxa:
+            return PhyloTree()
+        if len(taxa) == 1:
+            return PhyloTree(root=PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF))
+
+        # 仅保留真子集 clade，按大小降序 (自顶向下)
+        usable = sorted({c for c in clades if c and c < taxa}, key=len, reverse=True)
+
+        def build_group(group: set[str]) -> PhyloNode:
+            remaining = set(group)
+            children: list[tuple[str, PhyloNode]] = []
+            for clade in usable:
+                if clade >= group:
+                    # 必须是当前组的真子集
+                    continue
+                if not clade <= remaining:
+                    # 与已选取的子 clade 重叠 (不兼容) 或不属于本组
+                    continue
+                if len(clade) == 1:
+                    child: PhyloNode = PhyloNode(name=next(iter(clade)), node_type=NodeType.LEAF)
+                else:
+                    child = build_group(set(clade))
+                children.append((min(clade), child))
+                remaining -= clade
+            for taxon in sorted(remaining):
+                children.append((taxon, PhyloNode(name=taxon, node_type=NodeType.LEAF)))
+
+            node = PhyloNode(name="", node_type=NodeType.INTERNAL)
+            # 按最小叶名排序，保证输出稳定且与常规 Newick 阅读顺序一致
+            for _, child in sorted(children, key=lambda item: item[0]):
+                node.add_child(child)
+            return node
+
+        root = build_group(taxa)
+        return PhyloTree(root=root)
+
+    def _clone_tree(self, tree: PhyloTree) -> PhyloTree:
+        """深拷贝一棵树 (不共享节点对象)。"""
+        if tree.root is None:
+            return PhyloTree(name=tree.name, metadata=dict(tree.metadata))
+        new_root = tree.root._copy_subtree()
+        return PhyloTree(root=new_root, name=tree.name, metadata=dict(tree.metadata))
 
     def _extract_all_splits(self, trees: list[PhyloTree]) -> list[Split]:
         """
@@ -302,7 +389,7 @@ class StrictConsensusTree:
 
             # 对于每个子节点，计算由该子节点定义的分割
             # (该子节点的叶节点 vs 所有其他叶节点)
-            for child_idx, child in enumerate(node.children):
+            for child in node.children:
                 child_leaves = set(c.name for c in child.get_leaves())
                 set1 = frozenset(child_leaves)
 
@@ -313,22 +400,21 @@ class StrictConsensusTree:
                 if not set1 or not set2:
                     continue
 
-                # 确保set1 < set2 (保持唯一性)
-                if set1 > set2:
-                    set1, set2 = set2, set1
-
+                # 规范化由 Split.__post_init__ 完成 (按最小元素定序)。
+                # 此处不再有 "if set1 > set2: swap" 的必要——frozenset 的 ">"
+                # 是超集关系而非大小关系，该分支在两侧互不包含时永远不成立。
                 splits.append(Split(set1=set1, set2=set2))
 
         return splits
 
     def _build_tree_from_splits(self, splits: list[Split], all_taxa: set[str]) -> PhyloTree:
         """
-        从分割列表构建树
+        从分割列表构建树 (兼容旧接口)
 
-        使用迭代方式:
-            1. 选择最小分割 (最小集合)
-            2. 创建一个内部节点
-            3. 递归处理剩余分类单元
+        历史实现采用"最小分割 + 单侧递归"的方式，只在分割的一侧递归、另一侧
+        按叶展开，因此两棵相同的树求共识也会丢 clade（如 ((A,B),(C,D)) 与自身
+        的共识退化为 ((A,B),C,D)）。现改为把分割转成有根 clade 族后交给
+        :meth:`_build_tree_from_clades` 对称重建。
 
         Parameters:
             splits: 分割列表
@@ -341,85 +427,16 @@ class StrictConsensusTree:
             # 没有分割，返回星形树
             return self._build_star_tree(all_taxa)
 
-        if len(all_taxa) <= 2:
-            # 基础情况
-            taxa_list = list(all_taxa)
-            if len(taxa_list) == 1:
-                root = PhyloNode(name=taxa_list[0], node_type=NodeType.LEAF)
-            else:
-                root = PhyloNode(name="", node_type=NodeType.INTERNAL)
-                root.add_child(PhyloNode(name=taxa_list[0], node_type=NodeType.LEAF))
-                root.add_child(PhyloNode(name=taxa_list[1], node_type=NodeType.LEAF))
-            return PhyloTree(root=root)
-
-        # 找最小非平凡分割
-        non_trivial = [s for s in splits if not s.is_trivial]
-
-        if not non_trivial:
-            return self._build_star_tree(all_taxa)
-
-        return self._build_recursive(splits, all_taxa)
-
-    def _build_recursive(self, splits: list[Split], taxa: set[str]) -> PhyloTree:
-        """
-        递归构建树
-
-        适用性规则: 分割在当前 clade 内生效当且仅当 set1∩taxa 与
-        set2∩taxa 均非空 (全局分割的另一侧是补集, 旧实现要求双侧都
-        ⊆ taxa, 使嵌套分割永远找不到; 而对无分割的 2-taxa 子集构建
-        "星形树"会生成输入中不存在的二叉 clade, 例如
-        ((A,B),C,D) 与自身的严格一致树被错误输出为 ((A,B),(C,D)))。
-
-        Parameters:
-            splits: 分割列表
-            taxa: 当前分类单元集合
-
-        Returns:
-            树
-        """
-        if len(taxa) <= 1:
-            if not taxa:
-                return PhyloTree()
-            node = PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF)
-            return PhyloTree(root=node)
-
-        applicable = []
+        taxa = frozenset(all_taxa)
+        clades: list[frozenset[str]] = []
         for split in splits:
-            if split.is_trivial:
-                continue
-            side1 = split.set1 & taxa
-            side2 = split.set2 & taxa
-            if side1 and side2:
-                applicable.append((side1, side2))
+            for side in (split.set1, split.set2):
+                side = frozenset(side)
+                # 只保留作为"子 clade"有意义的侧: 真子集且至少 2 个分类单元
+                if len(side) >= 2 and side < taxa:
+                    clades.append(side)
 
-        if not applicable:
-            # 无分割在 clade 内部生效: 按多分叉展开 (不制造分辨节点)
-            return self._build_star_tree(taxa)
-
-        # 选择在 taxa 内部分割得最均衡的分割, 以较小侧作为子 clade
-        side1, side2 = min(applicable, key=lambda p: abs(len(p[0]) - len(p[1])))
-        if len(side1) > len(side2):
-            side1, side2 = side2, side1
-
-        subtree = self._build_recursive(splits, side1)
-
-        # 另一侧: 若仍有分割在其内部生效则递归, 否则作为叶直接挂载
-        rest_partitioned = any(
-            (s.set1 & side2) and (s.set2 & side2) for s in splits if not s.is_trivial
-        )
-
-        root = PhyloNode(name="", node_type=NodeType.INTERNAL)
-        if subtree.root:
-            root.add_child(subtree.root)
-        if rest_partitioned:
-            rest_tree = self._build_recursive(splits, side2)
-            if rest_tree.root:
-                root.add_child(rest_tree.root)
-        else:
-            for taxon in sorted(side2):
-                root.add_child(PhyloNode(name=taxon, node_type=NodeType.LEAF))
-
-        return PhyloTree(root=root)
+        return self._build_tree_from_clades(clades, set(all_taxa))
 
     def _build_star_tree(self, taxa: set[str]) -> PhyloTree:
         """

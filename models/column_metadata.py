@@ -459,9 +459,18 @@ class ColumnMetadataManager:
         """
         with self._lock:
             for idx, meta_dict in metadata_dict.items():
+                if idx >= self._n_columns:
+                    continue
+                name = meta_dict.get("name")
+                if name is None:
+                    name = (
+                        self._column_labels[idx]
+                        if idx < len(self._column_labels)
+                        else f"Var_{idx + 1}"
+                    )
                 self._metadata[idx] = ColumnMetadata(
                     column_index=idx,
-                    name=meta_dict.get("name", self._column_labels[idx]),
+                    name=name,
                     data_type=meta_dict.get("data_type", DataType.CONTINUOUS),
                     group=meta_dict.get("group"),
                     color=meta_dict.get("color", CHART_COLORS[idx % len(CHART_COLORS)]),
@@ -474,22 +483,31 @@ class ColumnMetadataManager:
         self,
         metadata_dict: dict[int, dict[str, Any]],
         new_labels: list[str],
+        old_labels: list[str] | None = None,
     ) -> None:
         """Restore metadata whose *label* still exists in ``new_labels``.
 
         ``metadata_dict`` is keyed by the *old* column index. For each
-        entry we look up the corresponding label in the manager's
-        ``_column_labels`` (the labels that existed when the metadata
-        was captured), then re-apply the metadata at the position of
-        the same label in ``new_labels`` if it survives.
+        entry we look up the corresponding label in ``old_labels`` (the
+        labels that existed when the metadata was captured), then
+        re-apply the metadata at the position of the same label in
+        ``new_labels`` if it survives.
+
+        Parameters:
+            metadata_dict: Snapshot keyed by the *old* column index.
+            new_labels: Labels of the new dataset.
+            old_labels: Labels in effect when the snapshot was taken.
+                Must be supplied when applying the snapshot to a
+                manager already re-created with the *new* labels.
         """
         if not metadata_dict:
             return
+        labels = self._column_labels if old_labels is None else old_labels
         with self._lock:
             for old_idx, meta_dict in metadata_dict.items():
-                if old_idx >= len(self._column_labels):
+                if old_idx >= len(labels):
                     continue
-                old_label = self._column_labels[old_idx]
+                old_label = labels[old_idx]
                 if old_label not in new_labels:
                     continue
                 new_idx = new_labels.index(old_label)

@@ -90,19 +90,30 @@ def compute_pic(
     参数:
         tree: PhyloTree 或 PhyloNode 对象，表示系统发育树
         traits: {tip_name: trait_value} 字典，性状数据
-        root_variance: 根节点的累积方差 (默认为 0)
+        root_variance: 根节点的累积方差。仅为 API 兼容保留：Felsenstein (1985)
+            的标准化对比 IC=(x_i-x_j)/sqrt(v_i+v_j) 中 v 为"到根"的累积枝长和，
+            给根附加常数方差会在分子分母同步缩放，不改变任何对比值，因此本实现
+            不使用它。传负值报错。
 
     返回:
         (contrasts, contrast_pairs):
-            - contrasts: 独立对比值列表
+            - contrasts: 独立对比值列表 (退化对为 NaN)
             - contrast_pairs: 每个对比对应的节点对列表 [(node_name1, node_name2), ...]
+
+    缺失与退化处理:
+        - 树中存在 traits 未覆盖的终端分类单元时，这些叶被从本次分析的**工作
+          拷贝**中剔除 (不再静默按 0.0 代入)，并记录 warning；剔除的叶名同时
+          写入 ``tree.metadata['pic_missing_tips']`` (若 tree 为 PhyloTree)。
+        - 方差和为 0 (退化，如两侧枝长全为 0) 时对比值无定义：写入 NaN 并把
+          该对记录到 ``tree.metadata['pic_degenerate_pairs']``，而不是用 1e-10
+          把噪声放大约 1e5 倍。
 
     算法 (Felsenstein 1985):
         1. 后序遍历计算每个节点的累积方差 v_i
         2. 对每个内部节点计算独立对比:
            - 二叉节点: contrast = (x_i - x_j) / sqrt(v_i + v_j)
            - polytomy: 使用迭代组合法产生 k-1 个独立对比
-           - unary 退化: contrast = child_contrast / sqrt(2)
+           - unary 退化: 透传重建值，不产生对比
 
     示例:
         >>> from phylogenetics import PhyloTree
@@ -111,15 +122,98 @@ def compute_pic(
         >>> contrasts, pairs = compute_pic(tree, traits)
         >>> print(f"Contrast: {contrasts[0]:.4f}")
     """
-    # 获取根节点
-    if hasattr(tree, 'root'):
+    root, dropped = _resolve_pic_root(tree, traits, root_variance)
+
+    if root is None:
+        logger.warning("PIC: no tips with trait data remain after excluding missing values")
+        contrasts, pairs = [], []
+    else:
+        contrasts, pairs, _ = _pic_core(root, traits)
+
+    _record_pic_diagnostics(tree, root, dropped, pairs, contrasts)
+    return contrasts, pairs
+
+
+def _resolve_pic_root(tree, traits: dict[str, float], root_variance: float = 0.0):
+    """校验输入并把缺性状的叶剔除，返回 (工作根节点, 被剔除的叶名)。"""
+    if hasattr(tree, "root"):
         root = tree.root
     else:
         root = tree
 
-    # 初始化
-    contrasts = []
-    contrast_pairs = []
+    if root is None:
+        raise ValueError("Cannot compute PIC: tree has no root node (empty tree)")
+
+    if not traits:
+        raise ValueError("Cannot compute PIC: no trait values supplied")
+
+    if root_variance is not None and root_variance < 0:
+        raise ValueError(f"root_variance must be non-negative, got {root_variance}")
+
+    leaves = root.get_leaves()
+    if not leaves:
+        raise ValueError("Cannot compute PIC: tree has no terminal taxa")
+
+    missing = sorted(
+        {leaf.name for leaf in leaves if traits.get(leaf.name) is None},
+        key=str,
+    )
+    if missing:
+        logger.warning(
+            "Trait value(s) not found for %d tip(s): %s. These tips are excluded from the PIC "
+            "analysis instead of being imputed with 0.0.",
+            len(missing),
+            ", ".join(str(name) for name in missing[:10]),
+        )
+        working = root._copy_subtree()
+        _drop_missing_tips(working, set(missing))
+        if not working.get_leaves():
+            return None, missing
+        return working, missing
+
+    return root, []
+
+
+def _drop_missing_tips(node, missing: set[str]) -> None:
+    """就地从 (拷贝的) 树中移除性状缺失的叶。"""
+    for child in list(node.children):
+        if child.is_leaf:
+            if child.name in missing:
+                node.remove_child(child)
+        else:
+            _drop_missing_tips(child, missing)
+
+
+def _record_pic_diagnostics(tree, root, dropped, pairs, contrasts) -> None:
+    """把剔除/退化信息记录到日志与 tree.metadata (若可用)。"""
+    degenerate = [pair for pair, value in zip(pairs, contrasts, strict=False) if not np.isfinite(value)]
+    if degenerate:
+        logger.warning(
+            "PIC: %d contrast pair(s) have zero accumulated variance and are reported as NaN: %s",
+            len(degenerate),
+            degenerate[:5],
+        )
+    if not hasattr(tree, "metadata"):
+        return
+    if dropped:
+        tree.metadata["pic_missing_tips"] = list(dropped)
+    if degenerate:
+        tree.metadata["pic_degenerate_pairs"] = list(degenerate)
+
+
+def _pic_core(root, traits: dict[str, float]) -> tuple[list[float], list[tuple[str, str]], dict[str, Any]]:
+    """
+    PIC 核心递归。
+
+    Returns:
+        (contrasts, contrast_pairs, info); info 含 ``degenerate_pairs``。
+    """
+    contrasts: list[float] = []
+    contrast_pairs: list[tuple[str, str]] = []
+    degenerate_pairs: list[tuple[str, str]] = []
+    # 多分叉迭代组合的伪节点名必须全局唯一，否则不同节点产生的
+    # "_combined_1" 在 contrast_pairs 中互相歧义。
+    combined_counter = 0
 
     def recurse(node):
         """
@@ -133,11 +227,16 @@ def compute_pic(
         - 节点向上传递的方差 = v_A·v_B/(v_A+v_B) (加权重建值的方差);
         - polytomy: 迭代组合产生 k-1 个对比; unary: 透传不产生对比。
         """
+        nonlocal combined_counter
+
         if node.is_leaf:
             val = traits.get(node.name)
             if val is None:
-                logger.warning(f"Trait value not found for tip '{node.name}', using 0.0")
-                val = 0.0
+                # 缺失叶已在入口处剔除；这里只可能是调用方直接传入的孤立节点。
+                raise ValueError(
+                    f"Trait value not found for tip '{node.name}'; supply trait data for every tip "
+                    "or prune the tip before calling compute_pic()."
+                )
             val = float(val)
             node.data = PICNodeData(trait=val, variance=0.0)
             return val, 0.0
@@ -146,6 +245,10 @@ def compute_pic(
         for child in node.children:
             val, cvar = recurse(child)
             child_results.append((val, cvar + (child.branch_length or 0.0), child.name))
+
+        if len(child_results) == 0:
+            node.data = PICNodeData(variance=0.0, trait=0.0)
+            return 0.0, 0.0
 
         if len(child_results) == 1:
             # Unary 退化: 透传, 不产生对比 (旧实现 contrast/sqrt(2) 无依据)
@@ -158,14 +261,20 @@ def compute_pic(
             val1, var1, name1 = res1
             var_sum = var0 + var1
             if var_sum <= 0:
-                var_sum = 1e-10
-            contrast = (val0 - val1) / np.sqrt(var_sum)
+                # 零方差对: 对比无定义。旧实现把 var_sum 夹到 1e-10，等价于
+                # 把 (x0 - x1) 放大 1e5 倍，制造出巨大的伪对比。此处记为 NaN
+                # 并由调用方/下游统计流程跳过。
+                contrast = float("nan")
+                degenerate_pairs.append((name0, name1))
+            else:
+                contrast = float((val0 - val1) / np.sqrt(var_sum))
             if var0 > 0 and var1 > 0:
                 recon = (val0 / var0 + val1 / var1) / (1.0 / var0 + 1.0 / var1)
+                pooled = var0 * var1 / var_sum
             else:
                 recon = (val0 + val1) / 2.0
-            pooled = var0 * var1 / var_sum
-            contrasts.append(float(contrast))
+                pooled = max(var0, var1)
+            contrasts.append(contrast)
             contrast_pairs.append((name0, name1))
             return recon, pooled
 
@@ -176,11 +285,10 @@ def compute_pic(
 
         # Polytomy (k > 2): 迭代组合, 产生 k-1 个独立对比
         active = list(child_results)
-        combined_idx = 0
         while len(active) > 1:
             recon, pooled = _combine(active[0], active[1])
-            combined_idx += 1
-            active = [(recon, pooled, f"_combined_{combined_idx}"), *active[2:]]
+            combined_counter += 1
+            active = [(recon, pooled, f"_combined_{combined_counter}"), *active[2:]]
 
         node.data = PICNodeData(
             variance=active[0][1],
@@ -193,7 +301,7 @@ def compute_pic(
 
     logger.info(f"PIC computation complete: {len(contrasts)} contrasts computed")
 
-    return contrasts, contrast_pairs
+    return contrasts, contrast_pairs, {"degenerate_pairs": degenerate_pairs}
 
 
 def _compute_variances(node, parent_variance: float) -> None:
@@ -228,39 +336,46 @@ def compute_pic_with_ancestral_states(
     参数:
         tree: PhyloTree 或 PhyloNode 对象
         traits: {tip_name: trait_value} 字典
-        root_variance: 根节点的累积方差
+        root_variance: 根节点的累积方差 (仅为 API 兼容保留，见 compute_pic)
 
     返回:
         (contrasts, contrast_pairs, ancestral_states):
-            - contrasts: 独立对比值列表
+            - contrasts: 独立对比值列表 (退化对为 NaN)
             - contrast_pairs: 每个对比对应的节点对
-            - ancestral_states: {node_name: estimated_trait_value} 字典
+            - ancestral_states: {node_key: estimated_trait_value} 字典
 
     注意:
-        祖先状态是基于对比计算的节点性状估计值。
-        对于二叉节点，祖先状态 = (child0_trait + child1_trait) / 2
-        对于 polytomy，使用加权平均。
+        - 祖先状态取自与 contrasts **同一次** `_pic_core` 递归写入的
+          ``node.data.trait``，即 Brown 运动下的逆方差加权 (极大似然) 重建值；
+          两支方差相等时退化为简单平均。旧实现在此独立地做了一次
+          ``np.mean(child_traits)`` 简单平均，既与对比计算脱节，又依赖
+          ``node.data`` 是否残留。
+        - **无名内部节点不再共用 '_internal_' 键** (旧实现会让多个无名节点互相
+          覆盖，只剩最后一个)；改用 ``_internal_<序号>`` 的唯一键。
+        - 缺失性状的叶按 compute_pic 的规则剔除，因此这些叶所在的祖先节点
+          基于剩余数据估计；被剔除的叶不会出现在结果里。
     """
-    contrasts, pairs = compute_pic(tree, traits, root_variance)
+    root, dropped = _resolve_pic_root(tree, traits, root_variance)
 
-    if hasattr(tree, 'root'):
-        root = tree.root
+    if root is None:
+        logger.warning("PIC: no tips with trait data remain after excluding missing values")
+        contrasts, pairs, ancestral_states = [], [], {}
     else:
-        root = tree
+        contrasts, pairs, _ = _pic_core(root, traits)
+        ancestral_states = {}
+        internal_idx = 0
+        for node in root.preorder_traverse():
+            if node.is_leaf:
+                continue
+            if node.name:
+                key = node.name
+            else:
+                internal_idx += 1
+                key = f"_internal_{internal_idx}"
+            trait_value = node.data.trait if isinstance(node.data, PICNodeData) else float("nan")
+            ancestral_states[key] = float(trait_value)
 
-    ancestral_states = {}
-
-    def compute_ancestral(node):
-        """递归计算祖先状态"""
-        if node.is_leaf:
-            return node.data.trait if node.data else traits.get(node.name, 0.0)
-
-        child_traits = [compute_ancestral(child) for child in node.children]
-        ancestral = np.mean(child_traits)  # 简单平均
-        ancestral_states[node.name if node.name else '_internal_'] = ancestral
-        return ancestral
-
-    compute_ancestral(root)
+    _record_pic_diagnostics(tree, root, dropped, pairs, contrasts)
     return contrasts, pairs, ancestral_states
 
 

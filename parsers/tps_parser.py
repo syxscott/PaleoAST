@@ -83,6 +83,14 @@ class TPSSpecimen:
     curve_points: dict | None = None
     raw_data: dict | None = None
 
+    # curve_points layout (written by the parser):
+    #   {
+    #     "curves": [{"order": [...ints from CO=...],
+    #                 "points": [[x, y(, z)], ...]}, ...],   # one per CO= line
+    #     "order":   <order of the LAST curve>,    # legacy single-curve keys,
+    #     "points":  <points list of the LAST curve>,  # kept as live aliases
+    #   }
+
 
 @dataclass
 class TPSFile:
@@ -112,6 +120,60 @@ class TPSFile:
         ]
         return "\n".join(lines)
 
+    def get_curves(self, n_fixed: int) -> list[list[int]]:
+        """
+        Convert CO=/POINTS= curve data into the index-triples form used by
+        ``morphometrics.partial_gpa`` / :func:`morphometrics.validate_curves`.
+
+        Convention (geomorph ``gpagen`` "curves"): every curve is an ordered
+        list of landmark indices whose first and last entries are fixed
+        endpoints and whose interior entries slide.  TPS files readable by
+        this method store ALL digitised points in the ``LM=`` block: the
+        ``n_fixed`` fixed landmarks first, then one contiguous block of
+        curve points per CO= curve, in file order (each block includes its
+        two endpoint landmarks, so a curve needs >= 3 points).
+
+        Parameters:
+            n_fixed: Number of leading fixed landmarks before the curve
+                blocks start.
+
+        Returns:
+            ``list[list[int]]`` — one index list per curve (from the first
+            specimen that carries curve data).
+
+        Raises:
+            ValueError: if no specimen has curves, block lengths disagree
+                across specimens, or the blocks overflow ``n_landmarks``.
+        """
+        lengths: list[int] | None = None
+        for spec in self.specimens:
+            curves = (spec.curve_points or {}).get("curves") or []
+            if not curves:
+                continue
+            spec_lengths = [len(c.get("points") or []) for c in curves]
+            if lengths is None:
+                lengths = spec_lengths
+            elif spec_lengths != lengths:
+                raise ValueError(
+                    f"Specimen '{spec.id}': curve point counts {spec_lengths} "
+                    f"disagree with first specimen {lengths}"
+                )
+
+        if lengths is None:
+            raise ValueError("No CO=/POINTS= curve data found in this TPS file")
+
+        offset = n_fixed
+        result: list[list[int]] = []
+        for k in lengths:
+            result.append(list(range(offset, offset + k)))
+            offset += k
+        if offset > self.n_landmarks:
+            raise ValueError(
+                f"Curve blocks need {offset} landmarks but LM= declares "
+                f"{self.n_landmarks} (n_fixed={n_fixed})"
+            )
+        return result
+
 
 class TPSParser:
     """Parser for TPS (Thin Plate Spline) format files."""
@@ -135,6 +197,7 @@ class TPSParser:
         self._current_line_content: str = ""
         self._current_landmarks: list = []
         self._in_curve: bool = False
+        self._current_curve: dict | None = None
         self._strict_mode = strict_mode
         self._parse_errors: TPSParseErrorSummary = TPSParseErrorSummary()
 
@@ -162,6 +225,8 @@ class TPSParser:
         self.comments = []
         self._current_spec = None
         self._current_landmarks = []
+        self._in_curve = False
+        self._current_curve = None
         # Reset instance state variables for re-use
         self.n_landmarks = 0
         self.n_dimensions = 0
@@ -221,6 +286,22 @@ class TPSParser:
             comments=self.comments,
             file_path=file_path,
         )
+
+    def _curve_target(self) -> TPSSpecimen | None:
+        """
+        Specimen that curve (CO=/POINTS=) data belongs to.
+
+        Standard TPS layout puts the CO section AFTER the specimen's
+        landmark block — but once ``LM`` points are collected the parser
+        has already auto-finalized the specimen (``_current_spec`` is
+        None). Curve data then attaches to the most recently finalized
+        specimen instead of being silently dropped.
+        """
+        if self._current_spec is not None:
+            return self._current_spec
+        if self.specimens:
+            return self.specimens[-1]
+        return None
 
     def _parse_line(self, line: str, line_num: int = 0) -> None:
         """Parse a single line of TPS format.
@@ -295,19 +376,25 @@ class TPSParser:
                     id=value, landmarks=np.array([]), scale=self._current_scale, curve_points=None, raw_data={"id": value}
                 )
                 self._current_landmarks = []
-                # Reset curve state: ``_in_curve`` belongs to the previous
-                # specimen. Without this reset, a later specimen with a
-                # POINTS= line but no preceding CO= left ``_in_curve``
-                # True while ``curve_points`` was None and crashed.
+                # Reset curve state: ``_in_curve``/``_current_curve`` belong
+                # to the previous specimen. Without this reset, a later
+                # specimen with a POINTS= line but no preceding CO= left
+                # ``_in_curve`` True and appended the previous specimen's
+                # curve points (or crashed on None).
                 self._in_curve = False
+                self._current_curve = None
             elif key == "CO":
-                # Curve order
-                if self._current_spec is not None:
-                    if self._current_spec.curve_points is None:
-                        self._current_spec.curve_points = {}
+                # Curve order. A CO= line starts a NEW curve: files with
+                # several curves per specimen used to overwrite the single
+                # "order" key and merge every POINTS= into one list.
+                # Curves now accumulate under curve_points["curves"]; the
+                # top-level "order"/"points" keys remain as live aliases of
+                # the most recent curve for legacy consumers.
+                target = self._curve_target()
+                if target is not None:
                     self._in_curve = True
                     try:
-                        self._current_spec.curve_points["order"] = [int(x) for x in value.split()]
+                        order = [int(x) for x in value.split()]
                     except ValueError as e:
                         raise TPSParseError(
                             f"Invalid CO (curve order) value '{value}': {e}",
@@ -315,25 +402,33 @@ class TPSParser:
                             line_number=line_num,
                             line_content=line,
                         )
+                    if target.curve_points is None:
+                        target.curve_points = {"curves": []}
+                    self._current_curve = {"order": order, "points": []}
+                    target.curve_points["curves"].append(self._current_curve)
+                    target.curve_points["order"] = order
+                    target.curve_points["points"] = self._current_curve["points"]
             elif key == "POINTS":
-                # Curve points for current curve
-                if self._current_spec is not None and self._in_curve:
-                    if self._current_spec.curve_points is None:
-                        # POINTS= without a preceding CO= line. Initialise
-                        # an empty curve container instead of crashing on
-                        # ``"points" not in None``.
+                # Curve points for the current CO curve
+                target = self._curve_target() if self._in_curve else None
+                if target is not None:
+                    if self._current_curve is None:
+                        # POINTS= without a preceding CO= line. Start a
+                        # fresh curve instead of crashing or silently
+                        # merging into the previous specimen's last curve.
                         self._logger.warning(
                             "POINTS= line at %s line %d without preceding CO=; "
-                            "initialising empty curve points",
+                            "starting an anonymous curve",
                             self._parse_errors.file_path,
                             line_num,
                         )
-                        self._current_spec.curve_points = {}
-                    if "points" not in self._current_spec.curve_points:
-                        self._current_spec.curve_points["points"] = []
+                        if target.curve_points is None:
+                            target.curve_points = {"curves": []}
+                        self._current_curve = {"order": [], "points": []}
+                        target.curve_points["curves"].append(self._current_curve)
+                        target.curve_points["points"] = self._current_curve["points"]
                     try:
                         coords = [float(x) for x in value.split()]
-                        self._current_spec.curve_points["points"].append(coords)
                     except ValueError as e:
                         raise TPSParseError(
                             f"Invalid POINTS value '{value}': {e}",
@@ -341,13 +436,21 @@ class TPSParser:
                             line_number=line_num,
                             line_content=line,
                         )
+                    self._current_curve["points"].append(coords)
             elif key == "END":
                 # End of specimen
                 if self._current_spec is not None and self._current_landmarks:
                     self._finalize_specimen()
             return
 
-        # No '=' sign: this is a landmark coordinate line ``x y [z]``.
+        # No '=' sign.  Inside a CO section tpsDig writes a free-text curve
+        # name line; outside a curve section it is a landmark coordinate
+        # line ``x y [z]``.
+        if self._in_curve:
+            target = self._curve_target()
+            if target is not None and self._current_curve is not None:
+                self._current_curve["name"] = line
+            return
         tokens = line.split()
         if not tokens:
             return

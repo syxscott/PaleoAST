@@ -38,6 +38,7 @@ version: 1.1.0
 
 import logging
 import threading
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -47,6 +48,8 @@ import numpy.typing as npt
 from config.constants import GPA_CONVERGENCE_TOLERANCE, GPA_MAX_ITERATIONS
 from config.i18n import _
 from utils.exceptions import ComputationError, MorphometricsError
+
+from .curves import validate_curves
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +150,7 @@ class GPAAnalyzer:
         tolerance: float | None = None,
         n_landmarks: int | None = None,
         n_dims: int | None = None,
+        no_reflect: bool = True,
     ) -> GPAResult:
         """
         Perform Generalized Procrustes Analysis.
@@ -161,6 +165,10 @@ class GPAAnalyzer:
             n_landmarks: Number of landmarks per specimen (resolves ambiguous flat dimensions)
             n_dims: Number of dimensions per landmark (2 for 2D, 3 for 3D).
                    If None, inferred from shape heuristics.
+            no_reflect: If True (default), only proper rotations (det = +1) are
+                   allowed. If False, reflections may be used when they give a
+                   better fit (improper rotations, det = -1), following
+                   morphops/geomorph's ``no_reflect``/``reflection`` options.
 
         Returns:
             GPAResult: GPA analysis results
@@ -196,7 +204,7 @@ class GPAAnalyzer:
             for iteration in range(n_iterations):
                 # Step 1: Compute current centroids and translate to common origin
                 for i in range(n_specimens):
-                    centroid = np.mean(aligned[i], axis=0)
+                    centroid = self._nanmean(aligned[i], axis=0)
                     aligned[i] = aligned[i] - centroid
                     if iteration == 0:
                         original_centroids[i] = centroid
@@ -204,21 +212,33 @@ class GPAAnalyzer:
                 # Step 2: Scale to unit size
                 sizes = self._compute_sizes(aligned)
                 for i in range(n_specimens):
+                    if sizes[i] <= np.finfo(float).eps:
+                        raise MorphometricsError(
+                            f"Specimen {i} has zero centroid size after centring: "
+                            "all its landmarks coincide, so it carries no shape "
+                            "information and cannot be Procrustes-superimposed."
+                        )
                     aligned[i] = aligned[i] / sizes[i]
                     scales[i] *= sizes[i]
 
-                # Step 3: Compute consensus (mean)
-                consensus = np.mean(aligned, axis=0)
-
-                # Step 4: Rotate each specimen to consensus
+                # Step 3: Rotate each specimen toward the leave-one-out mean
+                # of the other specimens (morphops / Ten Berge).  Rotating to
+                # the mean *excluding* the specimen keeps each subproblem a
+                # plain Procrustes fit and guarantees the sum of squares does
+                # not increase across sweeps.
                 new_aligned = np.zeros_like(aligned)
                 iter_rotations = []
+                total = aligned.sum(axis=0)
 
                 for i in range(n_specimens):
-                    rotation = self._find_rotation(consensus, aligned[i])
+                    if n_specimens > 1:
+                        target_mean = (total - aligned[i]) / (n_specimens - 1)
+                    else:
+                        target_mean = aligned[i]
+                    rotation = self._find_rotation(target_mean, aligned[i], no_reflect=no_reflect)
                     iter_rotations.append(rotation)
-                    # _find_rotation(consensus, target) returns the Kabsch
-                    # rotation R such that ``R @ target ≈ consensus`` (the
+                    # _find_rotation(reference, target) returns the Kabsch
+                    # rotation R such that ``R @ target ≈ reference`` (the
                     # standard left-multiplication convention). Because the
                     # rotation is applied on the *left* but our specimens
                     # are stored with landmarks on the rows (k x m), the
@@ -229,16 +249,21 @@ class GPAAnalyzer:
                 aligned = new_aligned
                 rotations = iter_rotations
 
-                # Compute sum of squared Procrustes distances
-                sse = 0.0
-                for i in range(n_specimens):
-                    diff = aligned[i] - consensus
-                    sse += np.sum(diff**2)
+                # Step 4: Recompute the consensus and the sum of squared
+                # Procrustes distances AFTER the rotation sweep, so the SSE
+                # reported for this iteration reflects the configuration the
+                # next iteration starts from (the pre-rotation consensus used
+                # to understate the residual and could mask oscillation).
+                consensus = self._nanmean(aligned, axis=0)
+                sse = float(np.sum((aligned - consensus) ** 2))
 
                 self._logger.debug(f"GPA iteration {iteration + 1}: SSE={sse:.6f}, delta={abs(prev_sse - sse):.6e}")
 
-                # Check convergence
-                if abs(prev_sse - sse) < tolerance:
+                # Convergence: require a *monotone* decrease below tolerance
+                # (morphops' ``is_ssq_ok``); an |Δ| test alone would stop on
+                # an oscillation that has not actually converged.
+                decrease = prev_sse - sse
+                if 0.0 <= decrease <= tolerance:
                     self._logger.info(f"GPA converged after {iteration + 1} iterations with final SSE={sse:.6f}")
                     result = GPAResult(
                         aligned_configurations=aligned,
@@ -400,7 +425,43 @@ class GPAAnalyzer:
                 "Configurations must be 2D (n_specimens, k*m) or 3D (n_specimens, k, m)"
             )
 
-        return X.astype(float)
+        X = np.asarray(X, dtype=float)
+
+        # Explicit post-conditions instead of silently continuing with a
+        # meaningless shape (geomorph's gpagen validates n_landmarks/n_dims
+        # the same way before superimposing).
+        n_specimens, n_landmarks, n_dims_eff = X.shape
+        if n_dims_eff not in (2, 3):
+            raise MorphometricsError(
+                f"Landmark data must be 2D or 3D per landmark, got n_dims={n_dims_eff}. "
+                "Provide explicit n_landmarks or n_dims to reshape flat input."
+            )
+        if n_landmarks < 2:
+            raise MorphometricsError(
+                f"At least 2 landmarks are required for Procrustes superimposition, got {n_landmarks}"
+            )
+        if n_specimens < 1:
+            raise MorphometricsError("Need at least one specimen configuration")
+        if not np.any(np.isfinite(X)):
+            raise MorphometricsError("Configurations contain no finite coordinates")
+
+        return X
+
+    @staticmethod
+    def _nanmean(a: npt.NDArray, axis: int | None = None, keepdims: bool = False) -> npt.NDArray:
+        """Mean that ignores NaNs when present, plain mean otherwise.
+
+        Partial landmark data (missing coordinates) must not poison centroids
+        and consensus configurations with NaN propagation.
+        """
+        arr = np.asarray(a, dtype=float)
+        if np.isnan(arr).any():
+            with warnings.catch_warnings():
+                # All-NaN slices legitimately warn; the caller decides if
+                # the resulting NaN is acceptable.
+                warnings.simplefilter("ignore", RuntimeWarning)
+                return np.nanmean(arr, axis=axis, keepdims=keepdims)
+        return np.mean(arr, axis=axis, keepdims=keepdims)
 
     def _compute_sizes(self, configurations: npt.NDArray) -> npt.NDArray:
         """
@@ -411,15 +472,20 @@ class GPAAnalyzer:
         where X is the centered configuration matrix.
         """
         # Vectorized: compute mean for all configurations at once
-        means = np.mean(configurations, axis=1, keepdims=True)  # (n, 1, m)
+        means = self._nanmean(configurations, axis=1, keepdims=True)  # (n, 1, m)
         centered = configurations - means  # Broadcasting
 
         # Compute centroid sizes for all at once
-        sizes = np.sqrt(np.sum(centered**2, axis=(1, 2)))
+        sizes = np.sqrt(np.nansum(centered**2, axis=(1, 2)))
 
         return sizes
 
-    def _find_rotation(self, reference: npt.NDArray, target: npt.NDArray) -> npt.NDArray:
+    def _find_rotation(
+        self,
+        reference: npt.NDArray,
+        target: npt.NDArray,
+        no_reflect: bool = True,
+    ) -> npt.NDArray:
         """
         Find optimal rotation to align target to reference using SVD.
 
@@ -429,12 +495,17 @@ class GPAAnalyzer:
         Solution: R = V * U' where U * Σ * V' = X' * Y
 
         When det(R) < 0, a reflection is detected (improper rotation).
-        The standard fix (following Bookstein 1989, Dryden & Mardia 2016) is to
-        flip the sign of the last singular vector in Vt only, then recompute R.
-        This ensures det(R) = +1 while preserving the optimal least-squares fit.
+        With ``no_reflect=True`` the standard fix (following Bookstein 1989,
+        Dryden & Mardia 2016) flips the sign of the last singular vector in
+        Vt only, then recomputes R, ensuring det(R) = +1 while preserving the
+        optimal least-squares proper rotation.  With ``no_reflect=False`` the
+        raw SVD solution is returned, which may include a reflection when that
+        gives a better fit (geomorph ``gpagen(reflection=TRUE)`` / morphops
+        ``no_reflect=False`` behaviour, used for symmetric or mirrored
+        configurations).
 
         Returns:
-            npt.NDArray: Rotation matrix R with det(R) = +1
+            npt.NDArray: Rotation matrix R; det(R) = +1 when no_reflect=True
 
         References:
             - Bookstein, F.L. (1989). Principal warps: thin-plate splines and
@@ -456,9 +527,10 @@ class GPAAnalyzer:
         # Ensure proper rotation (determinant = +1)
         # Only flip Vt to avoid in-place modification issues; this follows
         # the standard approach (Morpho::procSym in R, procrustes.py)
-        if np.linalg.det(R) < 0:
+        if no_reflect and np.linalg.det(R) < 0:
+            Vt = Vt.copy()
             Vt[-1, :] *= -1
-        R = Vt.T @ U.T
+            R = Vt.T @ U.T
 
         return R
 
@@ -486,10 +558,11 @@ class GPAAnalyzer:
 def partial_gpa(
     configurations: npt.NDArray,
     fixed_landmarks: list[int] | npt.NDArray,
+    curves: list[list[int]] | None = None,
+    surfaces: list[list[int]] | None = None,
     curve_indices: list[list[int]] | None = None,
     surface_indices: list[list[int]] | None = None,
     n_dims: Literal[2, 3] = 2,
-    sliding_weight: float = 1.0,
     n_iterations: int = 20,
     tolerance: float = 1e-6,
     n_landmarks: int | None = None,
@@ -497,21 +570,31 @@ def partial_gpa(
     """
     Perform Partial GPA with semilandmark sliding.
 
-    This implements the Bookstein (1997) and Gunz et al. (2005) algorithm for
-    sliding semilandmarks along curves (2D) or surfaces (3D) to minimize
-    bending energy while maintaining Procrustes alignment with fixed landmarks.
+    This implements the Bookstein (1997) / Gunz et al. (2005) algorithm for
+    sliding semilandmarks along curves (2D) or surfaces (3D) with *closed-form
+    projections* (geomorph's slidingsemilandmarks2 criteria):
+
+    - ``minPerp`` for curves: every interior semilandmark is orthogonally
+      projected onto the chord through its two neighbours of the *same*
+      specimen (Bookstein 1997).  No grid search.
+    - surface sliding: interior semilandmarks are projected onto the local
+      consensus tangent plane along its normal.
 
     Parameters:
         configurations: Landmark configurations of shape (n_specimens, n_landmarks, n_dims)
                       or (n_specimens, n_landmarks * n_dims) for flat format.
         fixed_landmarks: Indices of fixed (non-sliding) landmarks.
-        curve_indices: For 2D, list of lists where each sublist contains indices
-                      of semilandmarks that slide along the same curve.
-                      e.g., [[3, 4, 5, 6], [7, 8, 9]] for two separate curves.
-        surface_indices: For 3D, analogous to curve_indices but for surfaces.
+        curves: Curve topology in geomorph's triples convention: each curve
+                      is a list of >= 3 landmark indices in path order whose
+                      FIRST and LAST entries are fixed endpoints and whose
+                      interior entries slide along the curve.
+        surfaces: Same triples convention for 3D surface patches.
+        curve_indices: Legacy form of ``curves``: each sublist is treated as
+                      a complete curve, so its endpoints are pinned and only
+                      interior points slide (previously endpoints were also
+                      slid with one-sided tangents).
+        surface_indices: Legacy form of ``surfaces``.
         n_dims: Number of dimensions (2 for 2D, 3 for 3D).
-        sliding_weight: Weight for bending energy in the objective function.
-                       Higher values = more smoothing (default: 1.0).
         n_iterations: Maximum number of sliding iterations.
         tolerance: Convergence tolerance for sliding.
         n_landmarks: Number of landmarks (required if ambiguous from shape).
@@ -525,16 +608,13 @@ def partial_gpa(
     Notes:
         The sliding algorithm works as follows:
         1. Perform standard GPA on all landmarks
-        2. For each semilandmark curve/surface:
-           - Hold fixed landmarks stationary
-           - Slide semilandmarks along tangent directions
-           - Find positions that minimize: Procrustes_distance + λ * bending_energy
-        3. Iterate until convergence (typically 5-10 iterations)
+        2. For each curve/surface: slide the interior semilandmarks with the
+           closed-form projection above (endpoints stay pinned)
+        3. Re-GPA and iterate until the SSE change falls below tolerance
 
-        Bending energy is computed using the TPS (Thin Plate Spline) formulation:
-            B(f) = Σ Σ w_i * K_ij * w_j
-
-        where K_ij = ||x_i - x_j||² * log(||x_i - x_j||) is the TPS kernel.
+        Bending energies are reported with the TPS formulation of Bookstein
+        (1989): B(f) = w' K w with kernel K_ij = ||x_i - x_j||^2 log||x_i - x_j||
+        (2D) or K_ij = ||x_i - x_j|| (3D).
 
     References:
         - Bookstein, F.L. (1997). Morphometric tools for landmark data.
@@ -549,32 +629,50 @@ def partial_gpa(
         fixed_landmarks = np.array(fixed_landmarks)
     fixed_landmarks = fixed_landmarks.astype(int)
 
-    # Get sliding indices (semilandmarks)
-    all_sliding_indices: list[int] = []
-    if curve_indices is not None:
-        for curve in curve_indices:
-            all_sliding_indices.extend(curve)
-    if surface_indices is not None:
-        for surface in surface_indices:
-            all_sliding_indices.extend(surface)
-    sliding_indices = np.array(all_sliding_indices) if all_sliding_indices else np.array([], dtype=int)
+    # Determine the configuration size up front so curve topology can be
+    # validated against it.
+    probe = np.asarray(configurations, dtype=float)
+    if probe.ndim == 3:
+        n_total_landmarks = probe.shape[1]
+    elif n_landmarks is not None:
+        n_total_landmarks = n_landmarks
+    else:
+        raise MorphometricsError(
+            "partial_gpa needs n_landmarks (or a 3D configuration array) to "
+            "validate curve topology"
+        )
 
-    # Prepare configurations
-    if configurations.ndim == 2:
-        n_specimens = configurations.shape[0]
-        flat_dim = configurations.shape[1]
-        if n_landmarks is not None:
-            inferred_dims = flat_dim // n_landmarks
-            if inferred_dims in [2, 3]:
-                n_dims = inferred_dims
-        elif flat_dim % 3 == 0 and flat_dim % 2 == 0:
+    # Curves in triples form; merge the legacy arguments into the same list
+    # (they carry the same structure, endpoints included).
+    merged_curves: list[list[int]] = []
+    if curves:
+        merged_curves.extend(curves)
+    if curve_indices:
+        merged_curves.extend(curve_indices)
+    merged_surfaces: list[list[int]] = []
+    if surfaces:
+        merged_surfaces.extend(surfaces)
+    if surface_indices:
+        merged_surfaces.extend(surface_indices)
+
+    merged_curves = validate_curves(merged_curves, n_total_landmarks, name="curves")
+    merged_surfaces = validate_curves(merged_surfaces, n_total_landmarks, name="surfaces")
+
+    # Interior sliders must not overlap the fixed landmark set.
+    fixed_set = set(int(x) for x in fixed_landmarks)
+    for curve in merged_curves + merged_surfaces:
+        overlap = fixed_set.intersection(curve[1:-1])
+        if overlap:
             raise MorphometricsError(
-                f"Ambiguous flat_dim={flat_dim}. Provide n_landmarks parameter."
+                f"Slider landmarks {sorted(overlap)} are also declared fixed"
             )
-        elif flat_dim % n_dims != 0:
-            raise MorphometricsError(
-                f"flat_dim={flat_dim} not divisible by n_dims={n_dims}"
-            )
+
+    slide_curves = merged_curves if n_dims == 2 else []
+    slide_surfaces = merged_surfaces if n_dims == 3 else []
+    if n_dims == 2 and merged_surfaces and not merged_curves:
+        raise MorphometricsError("n_dims=2 requires curve definitions, not surfaces")
+    if n_dims == 3 and merged_curves and not merged_surfaces:
+        slide_surfaces = merged_curves  # accept curves-as-surfaces for 3D patches
 
     # Initialize GPA analyzer
     gpa = GPAAnalyzer()
@@ -582,6 +680,7 @@ def partial_gpa(
     # Iterative partial GPA with sliding
     current_configs = configurations.copy()
     prev_sse = float("inf")
+    iteration = 0
 
     for iteration in range(n_iterations):
         # Step 1: Standard GPA alignment
@@ -593,16 +692,14 @@ def partial_gpa(
 
         logger.debug(f"Partial GPA iteration {iteration + 1}: SSE={sse:.6f}")
 
-        # Step 2: Slide semilandmarks
-        if len(sliding_indices) > 0 and (curve_indices is not None or surface_indices is not None):
+        # Step 2: Slide semilandmarks (closed-form projections)
+        if slide_curves or slide_surfaces:
             aligned = _slide_semilandmarks(
                 aligned=aligned,
                 consensus=consensus,
-                fixed_landmarks=fixed_landmarks,
-                curve_indices=curve_indices,
-                surface_indices=surface_indices,
+                slide_curves=slide_curves,
+                slide_surfaces=slide_surfaces,
                 n_dims=n_dims,
-                sliding_weight=sliding_weight,
             )
 
         # Step 3: Check convergence
@@ -635,186 +732,86 @@ def partial_gpa(
 def _slide_semilandmarks(
     aligned: npt.NDArray,
     consensus: npt.NDArray,
-    fixed_landmarks: npt.NDArray,
-    curve_indices: list[list[int]] | None,
-    surface_indices: list[list[int]] | None,
+    slide_curves: list[list[int]],
+    slide_surfaces: list[list[int]],
     n_dims: Literal[2, 3],
-    sliding_weight: float,
 ) -> npt.NDArray:
     """
-    Slide semilandmarks along their tangent directions to minimize bending energy.
+    Slide interior semilandmarks with closed-form projections.
 
-    For each semilandmark, the algorithm finds the position along the curve/surface
-    that minimizes the combined Procrustes distance and bending energy objective.
+    Curves (2D): ``minPerp`` — each interior point is orthogonally projected
+    onto the chord through its two neighbours of the same specimen.
+    Surfaces (3D): each interior point is projected onto the local consensus
+    tangent plane along its normal.
+
+    Curve endpoints (first/last index of every curve/surface) are never
+    moved here; they are fixed landmarks.
     """
-    n_specimens, n_landmarks, _ = aligned.shape
     result = aligned.copy()
 
-    # Process each curve/surface
-    if n_dims == 2 and curve_indices is not None:
-        for curve in curve_indices:
-            result = _slide_2d_curve(
-                configs=result,
-                consensus=consensus,
-                curve=curve,
-                fixed_landmarks=fixed_landmarks,
-                sliding_weight=sliding_weight,
-            )
-    elif n_dims == 3 and surface_indices is not None:
-        for surface in surface_indices:
-            result = _slide_3d_surface(
-                configs=result,
-                consensus=consensus,
-                surface=surface,
-                fixed_landmarks=fixed_landmarks,
-                sliding_weight=sliding_weight,
-            )
+    for spec_idx in range(result.shape[0]):
+        config = result[spec_idx]
+        for curve in slide_curves:
+            config = _slide_curve_minperp(config, curve)
+        for surface in slide_surfaces:
+            config = _slide_surface_tangent_plane(config, consensus, surface, n_dims)
+        result[spec_idx] = config
 
     return result
 
 
-def _slide_2d_curve(
-    configs: npt.NDArray,
-    consensus: npt.NDArray,
-    curve: list[int],
-    fixed_landmarks: npt.NDArray,
-    sliding_weight: float,
-) -> npt.NDArray:
+def _slide_curve_minperp(config: npt.NDArray, curve: list[int]) -> npt.NDArray:
     """
-    Slide semilandmarks along a 2D curve.
+    Bookstein (1997) minimum-perpendicular-distance sliding for one curve.
 
-    For each semilandmark on the curve, computes the tangent direction from
-    adjacent landmarks and slides along this tangent to minimize the
-    objective: Procrustes_distance + λ * bending_energy.
+    Interior point ``c`` is moved to the foot of the perpendicular onto the
+    line through its neighbours ``c-1`` and ``c+1`` (of the same specimen):
+
+        new = a + ((p - a) . d / d . d) * d,   d = b - a
+
+    which is the exact minimiser of the perpendicular distance, replacing the
+    old +/-0.1 golden-section grid search.
     """
-    n_specimens = configs.shape[0]
-    result = configs.copy()
-
-    # Build tangent directions for each curve point using consensus
-    tangents = _compute_curve_tangents(consensus, curve)
-
-    for i, lm_idx in enumerate(curve):
-        # Tangent direction at this point
-        tangent = tangents[i]
-        if np.linalg.norm(tangent) < 1e-10:
+    out = config.copy()
+    for i in range(1, len(curve) - 1):
+        a = out[curve[i - 1]]
+        b = out[curve[i + 1]]
+        p = out[curve[i]]
+        d = b - a
+        dd = float(d @ d)
+        if dd <= np.finfo(float).eps:
             continue
-
-        tangent = tangent / np.linalg.norm(tangent)
-
-        for spec_idx in range(n_specimens):
-            # Current position
-            current_pos = result[spec_idx, lm_idx].copy()
-
-            # Search for optimal position along tangent
-            # Use golden section search for efficiency
-            best_pos = current_pos.copy()
-            best_score = float("inf")
-
-            # Try multiple positions along tangent
-            for delta in np.linspace(-0.1, 0.1, 21):
-                candidate_pos = current_pos + delta * tangent
-                test_config = result[spec_idx].copy()
-                test_config[lm_idx] = candidate_pos
-
-                # Compute objective: Procrustes + λ * bending
-                proc_dist = np.linalg.norm(test_config - consensus)
-                bend_energy = _compute_local_bending_energy(
-                    test_config, consensus, lm_idx, fixed_landmarks
-                )
-                score = proc_dist + sliding_weight * bend_energy
-
-                if score < best_score:
-                    best_score = score
-                    best_pos = candidate_pos
-
-            result[spec_idx, lm_idx] = best_pos
-
-    return result
+        t = float((p - a) @ d) / dd
+        out[curve[i]] = a + t * d
+    return out
 
 
-def _slide_3d_surface(
-    configs: npt.NDArray,
+def _slide_surface_tangent_plane(
+    config: npt.NDArray,
     consensus: npt.NDArray,
     surface: list[int],
-    fixed_landmarks: npt.NDArray,
-    sliding_weight: float,
+    n_dims: Literal[2, 3],
 ) -> npt.NDArray:
     """
-    Slide semilandmarks along a 3D surface.
+    Slide interior surface semilandmarks onto the consensus tangent plane.
 
-    Similar to 2D curve sliding but uses surface normals and tangent plane
-    for sliding directions.
+    The point is moved along the local consensus normal until it lies in the
+    plane through the consensus point spanned by the tangent basis; the
+    in-plane (meaningful, normal-direction) deviation is preserved exactly.
     """
-    n_specimens = configs.shape[0]
-    result = configs.copy()
-
-    # Compute surface normals and tangent plane basis
+    if n_dims != 3:
+        return config
+    out = config.copy()
     normals, tangent_basis = _compute_surface_tangents_and_normals(consensus, surface)
-
-    for i, lm_idx in enumerate(surface):
+    for i in range(1, len(surface) - 1):
+        lm_idx = surface[i]
         normal = normals[i]
-        basis = tangent_basis[i]
-
         if np.linalg.norm(normal) < 1e-10:
             continue
-
         normal = normal / np.linalg.norm(normal)
-
-        for spec_idx in range(n_specimens):
-            current_pos = result[spec_idx, lm_idx].copy()
-
-            best_pos = current_pos.copy()
-            best_score = float("inf")
-
-            # Search in tangent plane (2D grid)
-            for du in np.linspace(-0.1, 0.1, 11):
-                for dv in np.linspace(-0.1, 0.1, 11):
-                    candidate_pos = current_pos + du * basis[0] + dv * basis[1]
-                    test_config = result[spec_idx].copy()
-                    test_config[lm_idx] = candidate_pos
-
-                    proc_dist = np.linalg.norm(test_config - consensus)
-                    bend_energy = _compute_local_bending_energy(
-                        test_config, consensus, lm_idx, fixed_landmarks
-                    )
-                    score = proc_dist + sliding_weight * bend_energy
-
-                    if score < best_score:
-                        best_score = score
-                        best_pos = candidate_pos
-
-            result[spec_idx, lm_idx] = best_pos
-
-    return result
-
-
-def _compute_curve_tangents(consensus: npt.NDArray, curve: list[int]) -> npt.NDArray:
-    """
-    Compute tangent directions for points on a curve.
-
-    For interior points, tangent is the normalized difference between
-    adjacent points. For endpoints, uses the direction to the nearest point.
-    """
-    n_points = len(curve)
-    tangents = np.zeros((n_points, consensus.shape[1]))
-
-    for i, idx in enumerate(curve):
-        if i == 0:
-            # First point: tangent toward next
-            if n_points > 1:
-                next_idx = curve[1]
-                tangents[i] = consensus[next_idx] - consensus[idx]
-        elif i == n_points - 1:
-            # Last point: tangent from previous
-            prev_idx = curve[i - 1]
-            tangents[i] = consensus[idx] - consensus[prev_idx]
-        else:
-            # Interior: average of both directions
-            prev_idx = curve[i - 1]
-            next_idx = curve[i + 1]
-            tangents[i] = (consensus[next_idx] - consensus[prev_idx]) / 2
-
-    return tangents
+        offset = out[lm_idx] - consensus[lm_idx]
+        out[lm_idx] = out[lm_idx] - float(offset @ normal) * normal
+    return out
 
 
 def _compute_surface_tangents_and_normals(
@@ -963,62 +960,3 @@ def _compute_bending_energy(
     bending_energy = float(np.sum(w * (K @ w)))
 
     return bending_energy
-
-
-def _compute_local_bending_energy(
-    config: npt.NDArray,
-    consensus: npt.NDArray,
-    lm_idx: int,
-    fixed_landmarks: npt.NDArray,
-) -> float:
-    """
-    Compute the TPS bending energy of the warp consensus → config.
-
-    这是滑动半标志点的 Bookstein (1997) 弯曲能判据: 最小化 consensus 到
-    标本形变的薄板样条弯曲能 wᵀKw。旧实现返回
-    ||config[lm] - consensus[lm]||², 惩罚任何偏离共识的位移, 会把半标志
-    点全部拉到共识点上, 抹掉真实形状变异 (实测方差 0.160 → 0.001)。
-    真正的弯曲能判据允许半标志点沿曲线光滑滑动 (能量低), 只惩罚造成
-    局部"折痕"的偏离。
-
-    Parameters:
-        config: 候选标本配置 (n_landmarks, n_dims)
-        consensus: 共识配置 (形状不变, 作为 TPS 源)
-        lm_idx: 被滑动的半标志点索引 (仅为 API 兼容保留)
-        fixed_landmarks: 固定标志点索引 (仅为 API 兼容保留)
-
-    Returns:
-        bending energy w^T K w (>= 0)
-    """
-    n_landmarks = config.shape[0]
-    n_dims = config.shape[1]
-    if n_landmarks < 3:
-        return 0.0
-
-    # Kernel matrix over the consensus configuration (warp source)
-    K = np.zeros((n_landmarks, n_landmarks))
-    for i in range(n_landmarks):
-        for j in range(i + 1, n_landmarks):
-            r = np.linalg.norm(consensus[i] - consensus[j])
-            if r > 1e-10:
-                val = r * r * np.log(r)
-                K[i, j] = val
-                K[j, i] = val
-
-    P = np.column_stack([np.ones(n_landmarks), consensus])
-    n_affine = P.shape[1]
-    L = np.vstack([np.hstack([K, P]), np.hstack([P.T, np.zeros((n_affine, n_affine))])])
-
-    diff = config - consensus
-    energy = 0.0
-    for d in range(n_dims):
-        rhs = np.zeros(n_landmarks + n_affine)
-        rhs[:n_landmarks] = diff[:, d]
-        try:
-            solution = np.linalg.solve(L, rhs)
-        except np.linalg.LinAlgError:
-            solution, _, _, _ = np.linalg.lstsq(L, rhs, rcond=None)
-        w = solution[:n_landmarks]
-        energy += float(w @ (K @ w))
-
-    return max(energy, 0.0)

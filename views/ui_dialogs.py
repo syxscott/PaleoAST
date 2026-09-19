@@ -1826,7 +1826,7 @@ class WaveletDialog(BaseAnalysisDialog):
         min_layout = QHBoxLayout()
         min_layout.addWidget(QLabel(_("Min scale:")))
         self._min_scale = QSpinBox()
-        self._min_scale.setRange(1, 50)
+        self._min_scale.setRange(1, 199)
         self._min_scale.setValue(2)
         min_layout.addWidget(self._min_scale)
         scale_layout.addLayout(min_layout)
@@ -1834,10 +1834,32 @@ class WaveletDialog(BaseAnalysisDialog):
         max_layout = QHBoxLayout()
         max_layout.addWidget(QLabel(_("Max scale:")))
         self._max_scale = QSpinBox()
-        self._max_scale.setRange(10, 200)
+        # The two ranges used to be independent (min 1-50, max 10-200), so a
+        # min >= max pair produced an empty scale vector and the analysis
+        # crashed on an empty CWT grid.  The bounds are now linked so that
+        # cannot be expressed in the UI any more.
+        self._max_scale.setRange(2, 200)
         self._max_scale.setValue(50)
+        self._max_scale.setMinimum(self._min_scale.value() + 1)
         max_layout.addWidget(self._max_scale)
         scale_layout.addLayout(max_layout)
+
+        self._min_scale.valueChanged.connect(self._on_min_scale_changed)
+        self._max_scale.valueChanged.connect(self._on_max_scale_changed)
+
+    def _on_min_scale_changed(self, value: int) -> None:
+        """Keep ``max_scale`` strictly above ``min_scale``."""
+        if self._max_scale.minimum() != value + 1:
+            self._max_scale.setMinimum(min(value + 1, self._max_scale.maximum()))
+
+    def _on_max_scale_changed(self, value: int) -> None:
+        """Keep ``min_scale`` strictly below ``max_scale``."""
+        if self._min_scale.maximum() != value - 1:
+            self._min_scale.setMaximum(max(value - 1, self._min_scale.minimum()))
+
+    def _validate_parameters(self) -> bool:
+        """Reject an inverted or degenerate scale range."""
+        return self._min_scale.value() < self._max_scale.value()
 
     def get_parameters(self) -> dict[str, Any]:
         self._parameters = {

@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T")
 
+# Guards lazy per-instance lock creation in thread_safe
+_lock_creation_guard = threading.Lock()
+
 
 def thread_safe(method: Callable[P, T]) -> Callable[P, T]:
     """
@@ -63,11 +66,16 @@ def thread_safe(method: Callable[P, T]) -> Callable[P, T]:
 
     @functools.wraps(method)
     def wrapper(self: Any, *args: P.args, **kwargs: P.kwargs) -> T:
-        # Get or create lock
+        # Get or create lock. Creation must itself be guarded: without
+        # the guard two threads could each create a *different* RLock
+        # and run the method concurrently, defeating the decorator.
         lock = getattr(self, "_lock", None)
         if lock is None:
-            lock = threading.RLock()
-            self._lock = lock
+            with _lock_creation_guard:
+                lock = getattr(self, "_lock", None)
+                if lock is None:
+                    lock = threading.RLock()
+                    self._lock = lock
 
         with lock:
             return method(self, *args, **kwargs)
@@ -225,7 +233,7 @@ def log_execution_time(
                 else:
                     log.log(level, f"{f.__name__} failed after {duration_str}: {error}")
 
-            assert result is not None  # for type checkers; only reached on success
+            assert success  # only reached when the call did not raise
             return result
 
         return wrapper

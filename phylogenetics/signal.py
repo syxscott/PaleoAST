@@ -31,18 +31,24 @@ PaleoAST Phylogenetics - Phylogenetic Signal (Blomberg's K & Pagel's λ)
 
 2. Pagel's λ (Pagel 1999, Nature):
    ----------------------------------------------------
-   λ 是一个通过最大似然估计的进化参数:
+   λ 是一个通过最大似然估计的进化参数，对 BM 方差-协方差矩阵做
+   "相关强度" 变换:
 
-       λ 变换树的枝长: D(λ) = (1-λ)*D_original + λ*D_internal
-
-   其中 D_original 是原始距离矩阵, D_internal 是内部节点距离矩阵。
+       V_ij(λ) = λ · V_ij   (i ≠ j)
+       V_ii(λ) = V_ii
 
    λ 的解释:
        - λ = 1: 完全符合 BM 进化
        - λ = 0: 性状完全独立于系统发育 (star tree)
        - λ 接近 0 但不为 0: 弱系统发育依赖
 
-   优化方法: 使用 scipy.optimize 最大化似然函数
+   优化方法: 使用 scipy.optimize 最大化 (对根状态与速率剖面后的)
+   多元正态对数似然
+
+   注: 旧代码另有一个用 "D(λ) = (1-λ)·D_original + λ·D_internal" 形式构造
+   矩阵的 _compute_variance_covariance_matrix()，该形式并非 Pagel λ 的定义
+   (它把 λ 变成协方差的线性插值系数而非相关性缩放)，且从未被任何调用点
+   使用，已删除。
 
 参考文献:
 ----------
@@ -101,75 +107,7 @@ class PhylogeneticSignalResult:
     trait_name: str | None = None
 
 
-def _compute_variance_covariance_matrix(tree, lambda_: float = 1.0) -> np.ndarray:
-    """
-    [DEPRECATED - 使用 _compute_vcv_matrix 替代]
-    计算树对应的方差-协方差矩阵 (使用错误的距离形式)
-
-    在 Brown 运动进化模型下，节点 i 和 j 之间的协方差等于
-    它们到最近公共祖先 (LCA) 的枝长之和。
-
-    参数:
-        tree: PhyloTree 或 PhyloNode 对象
-        lambda_: Pagel's λ 变换参数 (0 到 1 之间)
-
-    返回:
-        V: n × n 方差-协方差矩阵
-    """
-    if hasattr(tree, 'root'):
-        root = tree.root
-    else:
-        root = tree
-
-    leaves = root.get_leaves()
-    n = len(leaves)
-    V = np.zeros((n, n))
-
-    # 创建叶子名称到索引的映射
-    leaf_names = [leaf.name for leaf in leaves]
-    name_to_idx = {name: i for i, name in enumerate(leaf_names)}
-
-    # 计算每对叶子之间的距离 (协方差)
-    for i, leaf1 in enumerate(leaves):
-        for j, leaf2 in enumerate(leaves):
-            if i <= j:
-                # 获取路径
-                path1 = set(leaf1.get_path_to_root())
-                path2 = leaf2.get_path_to_root()
-
-                # 找 LCA
-                lca = None
-                for node in path2:
-                    if node in path1:
-                        lca = node
-                        break
-
-                if lca is None:
-                    lca = root
-
-                # 计算到 LCA 的枝长
-                dist1 = leaf1._distance_to_ancestor(lca)
-                dist2 = leaf2._distance_to_ancestor(lca)
-
-                # 原始协方差 = dist_to_lca(leaf1) + dist_to_lca(leaf2)
-                cov_original = dist1 + dist2
-
-                # 计算内部距离 (从每个叶子到 root 的距离中减去到 LCA 的部分)
-                # 内部距离矩阵 D_internal: 共享祖先越多，协方差越大
-                root_dist1 = leaf1._distance_to_ancestor(root)
-                root_dist2 = leaf2._distance_to_ancestor(root)
-
-                # 内部距离 = 共享的祖先枝长
-                internal_dist = root_dist1 + root_dist2 - cov_original
-
-                # λ 变换: D(λ) = (1-λ)*D_original + λ*D_internal
-                V[i, j] = (1 - lambda_) * cov_original + lambda_ * internal_dist
-                V[j, i] = V[i, j]
-
-    return V
-
-
-def _compute_vcv_matrix(tree) -> np.ndarray:
+def _compute_vcv_matrix(tree, leaves=None) -> np.ndarray:
     """
     计算 Brown 运动模型下的方差-协方差 (VCV) 矩阵
 
@@ -179,6 +117,8 @@ def _compute_vcv_matrix(tree) -> np.ndarray:
 
     参数:
         tree: PhyloTree 或 PhyloNode 对象
+        leaves: 可选的 tip 子集 (与 tree.get_leaves() 中的对象相同)。用于只
+            有部分 tip 有性状数据时构造边际 VCV；缺省为全部 tip。
 
     返回:
         V: n × n VCV 矩阵
@@ -188,7 +128,8 @@ def _compute_vcv_matrix(tree) -> np.ndarray:
     else:
         root = tree
 
-    leaves = root.get_leaves()
+    if leaves is None:
+        leaves = root.get_leaves()
     n = len(leaves)
     V = np.zeros((n, n))
 
@@ -213,6 +154,60 @@ def _compute_vcv_matrix(tree) -> np.ndarray:
                     V[j, i] = dist_root_to_lca
 
     return V
+
+
+def _align_traits_to_tree(tree, traits: dict[str, float], method: str):
+    """
+    把性状字典与树的 tip 对齐，返回 (root, tips, y, dropped)。
+
+    缺失处理 (修复): 旧实现用 ``traits.get(name, 0.0)`` 把缺失性状静默填成
+    0.0 —— 0 是有物理意义的数值，会凭空造出巨大对比/信号 (K、λ 均被拉偏)。
+    现在改为把这些 tip 从分析中剔除 (BM 下观测 tip 的边际分布仍是 BM，故
+    剔除在统计上合法)，并记录 warning + ``tree.metadata['signal_missing_tips']``。
+
+    Raises:
+        ValueError: 树为空、无 tip、性状字典为空、或有效 tip 少于 3 个。
+    """
+    if hasattr(tree, 'root'):
+        root = tree.root
+    else:
+        root = tree
+
+    if root is None:
+        raise ValueError(f"Cannot compute {method}: tree has no root node (empty tree)")
+
+    all_leaves = root.get_leaves()
+    if not all_leaves:
+        raise ValueError(f"Cannot compute {method}: tree has no terminal taxa")
+
+    if not traits:
+        raise ValueError(f"Cannot compute {method}: no trait values supplied")
+
+    kept = [leaf for leaf in all_leaves if traits.get(leaf.name) is not None]
+    dropped = sorted(
+        {leaf.name for leaf in all_leaves if traits.get(leaf.name) is None},
+        key=str,
+    )
+    if dropped:
+        logger.warning(
+            "%s: trait value(s) not found for %d tip(s): %s. These tips are excluded "
+            "from the analysis instead of being imputed with 0.0.",
+            method,
+            len(dropped),
+            ", ".join(str(name) for name in dropped[:10]),
+        )
+        if hasattr(tree, 'metadata'):
+            tree.metadata['signal_missing_tips'] = [str(name) for name in dropped]
+
+    if len(kept) < 3:
+        raise ValueError(
+            f"Need at least 3 taxa with trait data for {method}, got {len(kept)} "
+            f"of {len(all_leaves)} tip(s); missing trait values are excluded, not imputed with 0.0"
+        )
+
+    y = np.array([float(traits[leaf.name]) for leaf in kept], dtype=float)
+    return root, kept, y, dropped
+
 
 
 def _blomberg_k_from_vcv(y: np.ndarray, V: np.ndarray) -> float:
@@ -263,6 +258,7 @@ def blomberg_k(
     traits: dict[str, float],
     n_permutations: int = 999,
     trait_name: str | None = None,
+    seed: int | np.random.Generator | None = None,
 ) -> PhylogeneticSignalResult:
     """
     计算 Blomberg's K 统计量
@@ -272,6 +268,10 @@ def blomberg_k(
         traits: {tip_name: trait_value} 字典
         n_permutations: 置换检验的置换次数
         trait_name: 性状名称 (用于结果记录)
+        seed: 置换检验的随机种子 (int / np.random.Generator / None)。
+            None 时每次调用得到不同的 p 值。修复点: 旧实现直接调用全局
+            ``np.random.shuffle``，既污染全局随机状态，又使结果只能靠调用方
+            预先 ``np.random.seed()`` 才复现。
 
     返回:
         PhylogeneticSignalResult 对象，包含 K 值和 p 值
@@ -283,38 +283,34 @@ def blomberg_k(
         K 对性状量纲不变 (此前实现随单位缩放, 已修正)。
         置换 p 值采用 add-one 修正: p = (1 + #{K_perm >= K}) / (n_perm + 1)。
 
+    缺失性状:
+        traits 未覆盖的 tip 被剔除而不是按 0.0 代入 (见 _align_traits_to_tree)。
+
     示例:
         >>> from phylogenetics import PhyloTree
         >>> tree = PhyloTree.from_newick("(A:1,B:1,C:1)D:1;")
         >>> traits = {"A": 2.0, "B": 4.0, "C": 3.0}
-        >>> result = blomberg_k(tree, traits)
+        >>> result = blomberg_k(tree, traits, seed=0)
         >>> print(f"K = {result.K:.4f}, p-value = {result.K_pvalue:.4f}")
     """
-    if hasattr(tree, 'root'):
-        root = tree.root
-    else:
-        root = tree
+    if n_permutations < 1:
+        raise ValueError(f"n_permutations must be >= 1, got {n_permutations}")
 
-    leaves = root.get_leaves()
-    n = len(leaves)
+    _, tips, trait_values, _ = _align_traits_to_tree(tree, traits, "Blomberg's K")
+    n = len(tips)
 
-    if n < 3:
-        raise ValueError(f"Need at least 3 taxa for Blomberg's K, got {n}")
-
-    # 构建有序的性状向量
-    trait_values = np.array([traits.get(leaf.name, 0.0) for leaf in leaves])
-
-    # 计算 VCV 矩阵
-    V = _compute_vcv_matrix(tree)
+    # 计算 VCV 矩阵 (仅覆盖参与分析的 tip)
+    V = _compute_vcv_matrix(tree, leaves=tips)
 
     # 规范 K 统计量 (量纲不变)
     K = _blomberg_k_from_vcv(trait_values, V)
 
+    rng = np.random.default_rng(seed) if not isinstance(seed, np.random.Generator) else seed
+
     # 置换检验: 打乱性状在端元间的分配, 重算 K
     permuted_Ks = np.zeros(n_permutations)
     for i in range(n_permutations):
-        perm_traits = trait_values.copy()
-        np.random.shuffle(perm_traits)
+        perm_traits = rng.permutation(trait_values)
         permuted_Ks[i] = _blomberg_k_from_vcv(perm_traits, V)
 
     # add-one 修正的 p 值
@@ -334,13 +330,13 @@ def blomberg_k(
     return result
 
 
-def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> float:
+def _pagel_log_likelihood(V_base: np.ndarray, y: np.ndarray, lambda_: float) -> float:
     """
-    计算给定 λ 值下的对数似然
+    给定 λ 与预计算的 BM VCV / 性状向量时的对数似然。
 
     参数:
-        tree: PhyloTree 或 PhyloNode 对象
-        traits: 性状字典
+        V_base: BM (λ=1) 下的 VCV 矩阵，仅覆盖参与分析的 tip
+        y: 与 V_base 行/列同序的性状向量
         lambda_: λ 参数值
 
     返回:
@@ -350,16 +346,8 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
         使用标准 Pagel λ 变换: V_ij(λ) = λ × V_ij (i ≠ j), V_ii(λ) = V_ii
         参考: Pagel (1999) Nature
     """
-    if hasattr(tree, 'root'):
-        root = tree.root
-    else:
-        root = tree
-
-    leaves = root.get_leaves()
-    n = len(leaves)
-
-    # 使用标准 BM VCV 矩阵 (Felsenstein 1985)
-    V = _compute_vcv_matrix(tree)
+    n = len(y)
+    V = np.array(V_base, dtype=float, copy=True)
 
     # 应用 Pagel λ 变换: V_ij(λ) = λ × V_ij for i ≠ j
     # 对角线保持不变
@@ -378,9 +366,6 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
         # 如果不正定，添加更大的正则化
         V = V + np.eye(n) * 1e-6
 
-    # 构建性向向量, 用 GLS/ML 均值中心化 (算术均值会使 λ̂ 系统性偏移)
-    trait_values = np.array([traits.get(leaf.name, 0.0) for leaf in leaves])
-
     try:
         sign, logdet = np.linalg.slogdet(V)
         if sign <= 0:
@@ -390,12 +375,13 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
         ones = np.ones(n)
         one_vi_one = float(ones @ V_inv @ ones)
         if one_vi_one > 0:
-            a_hat = float(ones @ V_inv @ trait_values) / one_vi_one
+            # GLS/ML 均值; 算术均值会使 λ̂ 系统性偏移
+            a_hat = float(ones @ V_inv @ y) / one_vi_one
         else:
-            a_hat = float(np.mean(trait_values))
-        y = trait_values - a_hat
+            a_hat = float(np.mean(y))
+        resid = y - a_hat
 
-        quad_form = float(y @ V_inv @ y)
+        quad_form = float(resid @ V_inv @ resid)
 
         # BM 多元正态对数似然, 剖出速率参数 σ² (关键: 此前实现缺失
         # -(n/2)·log σ̂² 项, log|V| 随 λ 增大的效应主导似然, 使 λ̂ 恒
@@ -408,7 +394,24 @@ def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> f
     except np.linalg.LinAlgError:
         log_lik = -np.inf
 
-    return log_lik
+    return float(log_lik)
+
+
+def _compute_log_likelihood(tree, traits: dict[str, float], lambda_: float) -> float:
+    """
+    计算给定 λ 值下的对数似然 (兼容入口: 内部完成 tip 对齐与 VCV 计算)
+
+    参数:
+        tree: PhyloTree 或 PhyloNode 对象
+        traits: 性状字典
+        lambda_: λ 参数值
+
+    返回:
+        log_likelihood: 对数似然值
+    """
+    _, tips, y, _ = _align_traits_to_tree(tree, traits, "Pagel's λ likelihood")
+    V_base = _compute_vcv_matrix(tree, leaves=tips)
+    return _pagel_log_likelihood(V_base, y, lambda_)
 
 
 def pagel_lambda(
@@ -430,10 +433,17 @@ def pagel_lambda(
         PhylogeneticSignalResult 对象，包含 λ 值和似然比检验 p 值
 
     算法 (Pagel 1999):
-        1. 计算 λ=0 和 λ=1 时的对数似然
+        1. 计算 λ=0 时的对数似然 (H0)
         2. 优化 λ 在 (0, 1) 区间内的似然，找到最大似然估计 λ̂
         3. 似然比检验: λ=0 vs λ=λ̂
-        4. λ̂ 的 p 值: 根据 0.5*χ²(1) 分布计算
+        4. λ̂ 的 p 值: 根据 0.5*χ²(1) 分布计算 (边界校正)
+
+    缺失性状:
+        traits 未覆盖的 tip 被剔除而不是按 0.0 代入 (见 _align_traits_to_tree)。
+
+    AIC:
+        AIC = 2k - 2logL，k=3 (根状态 a、速率 σ²、λ)；logL 为对 a 与 σ²
+        剖面后的多元正态似然。
 
     示例:
         >>> from phylogenetics import PhyloTree
@@ -442,26 +452,18 @@ def pagel_lambda(
         >>> result = pagel_lambda(tree, traits)
         >>> print(f"λ = {result.lambda_:.4f}, p-value = {result.lambda_pvalue:.4f}")
     """
-    if hasattr(tree, 'root'):
-        root = tree.root
-    else:
-        root = tree
+    _, tips, trait_values, _ = _align_traits_to_tree(tree, traits, "Pagel's λ")
+    n = len(tips)
+    V_base = _compute_vcv_matrix(tree, leaves=tips)
 
-    leaves = root.get_leaves()
-    n = len(leaves)
-
-    if n < 3:
-        raise ValueError(f"Need at least 3 taxa for Pagel's λ, got {n}")
-
-    # 计算 λ=0 和 λ=1 时的似然
-    log_lik_0 = _compute_log_likelihood(tree, traits, 0.0)
-    log_lik_1 = _compute_log_likelihood(tree, traits, 1.0)
-    log_lik_fitted = log_lik_0  # 初始化
+    # 计算 λ=0 时的似然 (H0)。λ=1 的似然无需单独计算: 它已包含在
+    # bounded 优化的候选区间端点里 (旧实现算完 log_lik_1 后从未使用)。
+    log_lik_0 = _pagel_log_likelihood(V_base, trait_values, 0.0)
 
     # 优化 λ 在 (0, 1) 区间
     def neg_log_lik(lambda_: float) -> float:
         """负对数似然 (用于最小化)"""
-        return -_compute_log_likelihood(tree, traits, lambda_)
+        return -_pagel_log_likelihood(V_base, trait_values, lambda_)
 
     # 使用bounded优化
     result = minimize_scalar(
@@ -483,14 +485,21 @@ def pagel_lambda(
         p_value = float(0.5 * stats.chi2.sf(max(LR, 0.0), df=1))
     else:
         # 优化似然不超过 λ=0: λ̂ 取 0, LR=0, p=1
-        LR = 0.0
         p_value = 1.0
         lambda_fitted = 0.0
 
     # 计算 AIC (可选)
+    #
+    # 修复: 旧实现用 k=1 (只数 λ)。但上面的 logL 是对 σ² 与根状态 a 做过
+    # 剖面 (profile) 的多元正态似然 —— 模型实际估计 3 个参数
+    # (a, σ², λ)。按 AIC = 2k - 2logL 的常规定义取 k=3；λ=0 的零模型为
+    # k=2。由于两个模型只在 λ 上嵌套，似然比检验的自由度仍为 1。
     AIC = None
     if return_AIC:
-        AIC = 2 * 1 - 2 * log_lik_fitted  # k=1 参数
+        if not np.isfinite(log_lik_fitted):
+            AIC = float("inf")
+        else:
+            AIC = 2 * 3 - 2 * log_lik_fitted  # k = (a, σ², λ)
 
     signal_result = PhylogeneticSignalResult(
         lambda_=lambda_fitted,
@@ -514,6 +523,7 @@ def phylogenetic_signal(
     traits: dict[str, float],
     n_permutations: int = 999,
     trait_name: str | None = None,
+    seed: int | np.random.Generator | None = None,
 ) -> PhylogeneticSignalResult:
     """
     综合计算系统发育信号 (Blomberg's K 和 Pagel's λ)
@@ -523,6 +533,7 @@ def phylogenetic_signal(
         traits: {tip_name: trait_value} 字典
         n_permutations: Blomberg's K 置换检验次数
         trait_name: 性状名称
+        seed: 置换检验随机种子 (透传给 blomberg_k)
 
     返回:
         PhylogeneticSignalResult 对象，包含 K, λ 及其 p 值
@@ -531,10 +542,10 @@ def phylogenetic_signal(
         >>> from phylogenetics import PhyloTree
         >>> tree = PhyloTree.from_newick("(A:1,B:1,C:1)D:1;")
         >>> traits = {"A": 2.0, "B": 4.0, "C": 3.0}
-        >>> result = phylogenetic_signal(tree, traits)
+        >>> result = phylogenetic_signal(tree, traits, seed=0)
         >>> print(f"K = {result.K:.4f}, λ = {result.lambda_:.4f}")
     """
-    k_result = blomberg_k(tree, traits, n_permutations, trait_name)
+    k_result = blomberg_k(tree, traits, n_permutations, trait_name, seed=seed)
     lambda_result = pagel_lambda(tree, traits, trait_name)
 
     # 合并结果
@@ -556,6 +567,7 @@ def simulate_brownian_motion(
     tree,
     root_value: float = 0.0,
     sigma: float = 1.0,
+    seed: int | np.random.Generator | None = None,
 ) -> dict[str, float]:
     """
     在树上模拟 Brown 运动进化的性状值
@@ -564,24 +576,39 @@ def simulate_brownian_motion(
         tree: PhyloTree 或 PhyloNode 对象
         root_value: 根节点的性状值
         sigma: Brown 运动的扩散率 (标准差)
+        seed: 随机种子 (int / np.random.Generator / None)。修复点: 旧实现
+            直接取用全局 ``np.random``，调用方 ``np.random.seed()`` 之外的
+            任何全局随机使用都会改变结果，且本函数会污染全局随机状态。
+            None 时每次调用产生不同性状。
 
     返回:
         {tip_name: simulated_trait_value} 字典
 
     算法:
         从根开始，每个子节点的性状值 = 父节点值 + N(0, σ² * branch_length)
+
+    Raises:
+        ValueError: 树为空 (无根节点) 或 sigma < 0
     """
     if hasattr(tree, 'root'):
         root = tree.root
     else:
         root = tree
 
+    if root is None:
+        raise ValueError("Cannot simulate Brownian motion: tree has no root node (empty tree)")
+
+    if sigma < 0:
+        raise ValueError(f"sigma must be non-negative, got {sigma}")
+
+    rng = np.random.default_rng(seed) if not isinstance(seed, np.random.Generator) else seed
+
     traits = {}
 
     def simulate(node: PhyloNode, parent_value: float) -> None:
         """递归模拟"""
         branch_len = node.branch_length if node.branch_length is not None else 0.0
-        node_value = parent_value + np.random.normal(0, sigma * np.sqrt(branch_len))
+        node_value = parent_value + rng.normal(0.0, sigma * np.sqrt(max(branch_len, 0.0)))
 
         if node.is_leaf:
             traits[node.name] = node_value

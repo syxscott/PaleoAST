@@ -234,25 +234,102 @@ class TestPICEdgeCases:
     """边界情况测试"""
 
     def test_missing_trait_warning(self, caplog):
-        """缺失性状值应产生警告"""
+        """缺失性状值应告警并把该叶剔除，而不是按 0.0 代入
+
+        更新说明: 旧断言 `len(contrasts) == 1` 固化的是 bug —— 缺失的 B 被当成
+        0.0 代入，凭空造出一个 (A, B) 对比 (值 = 1/sqrt(1))，而 B=0.0 并不是
+        观测数据。现在缺性状的叶被剔除后再计算，本例只剩 A 一个叶，
+        没有可比对的成对支，因此对比数为 0；被剔除的叶名记录在
+        tree.metadata['pic_missing_tips']。
+        """
         tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
         traits = {"A": 1.0}  # 缺少 B
 
         with caplog.at_level("WARNING"):
             contrasts, pairs = compute_pic(tree, traits)
 
-        # 应该使用默认值 0.0 继续计算
-        assert len(contrasts) == 1
+        assert contrasts == []
+        assert pairs == []
         assert "not found" in caplog.text
+        assert tree.metadata["pic_missing_tips"] == ["B"]
+        # 原树未被修改 (剔除只作用于工作拷贝)
+        assert [leaf.name for leaf in tree.root.get_leaves()] == ["A", "B"]
+
+    def test_partial_missing_traits_still_compare_remaining_tips(self):
+        """剔除缺失叶后，其余有数据的叶仍应正常产生对比"""
+        tree = PhyloTree.from_newick("((A:1,B:1)N:1,C:1)Root:1;")
+        traits = {"A": 1.0, "B": 3.0}  # 缺少 C
+
+        contrasts, pairs = compute_pic(tree, traits)
+
+        assert len(contrasts) == 1
+        assert pairs[0] == ("A", "B")
+        np.testing.assert_almost_equal(contrasts[0], (1.0 - 3.0) / np.sqrt(1 + 1), decimal=10)
 
     def test_zero_branch_length(self):
-        """零枝长应能正常处理"""
+        """零枝长: 对比无定义 (0/0)，应返回 NaN 而不是被 1e-10 放大成伪对比
+
+        更新说明: 旧实现把方差和夹到 1e-10，使 (1-3)/sqrt(1e-10) ≈ -2e5 的
+        巨大伪对比冒充真实统计量 (仍断言 len==1 掩盖了问题)。
+        """
         tree = PhyloTree.from_newick("(A:0,B:0)Root:0;")
         traits = {"A": 1.0, "B": 3.0}
 
-        # 应该不会除零
         contrasts, pairs = compute_pic(tree, traits)
+
         assert len(contrasts) == 1
+        assert pairs == [("A", "B")]
+        assert np.isnan(contrasts[0])
+        assert tree.metadata["pic_degenerate_pairs"] == [("A", "B")]
+
+    def test_empty_tree_raises(self):
+        """空树 (root=None) 应给出明确错误而不是 AttributeError"""
+        tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
+        tree.root = None
+
+        with pytest.raises(ValueError, match="no root node"):
+            compute_pic(tree, {"A": 1.0, "B": 2.0})
+
+    def test_no_traits_raises(self):
+        """空性状字典应报错而不是静默返回空结果"""
+        tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
+        with pytest.raises(ValueError, match="no trait values"):
+            compute_pic(tree, {})
+
+    def test_negative_root_variance_raises(self):
+        """root_variance 为负应报错"""
+        tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
+        with pytest.raises(ValueError, match="root_variance"):
+            compute_pic(tree, {"A": 1.0, "B": 2.0}, root_variance=-1.0)
+
+    def test_root_variance_does_not_change_contrasts(self):
+        """root_variance 仅为兼容保留: 对比值不随之改变"""
+        tree = PhyloTree.from_newick("((A:1,B:1)N:2,C:3)Root:1;")
+        traits = {"A": 1.0, "B": 3.0, "C": 2.0}
+
+        base, _ = compute_pic(tree, traits, root_variance=0.0)
+        shifted, _ = compute_pic(tree, traits, root_variance=5.0)
+
+        np.testing.assert_allclose(base, shifted, rtol=1e-12)
+
+    def test_polytomy_combined_labels_are_unambiguous(self):
+        """多个多分叉节点的伪节点名不得重复
+
+        更新说明: 旧实现每个多分叉节点都从 1 重新计数，_combined_1 在
+        contrast_pairs 中出现多次且指向不同的节点对。
+        """
+        tree = PhyloTree.from_newick("((A:1,B:1,C:1)N1:1,(D:1,E:1,F:1)N2:1)Root:0;")
+        traits = {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0, "F": 6.0}
+
+        contrasts, pairs = compute_pic(tree, traits)
+
+        labels = {label for pair in pairs for label in pair}
+        combined = [label for label in labels if label.startswith("_combined_")]
+        assert len(contrasts) == 5  # (3-1) + (3-1) + Root 的 1 个
+        # 每个伪节点名只出现一次 => 无歧义
+        assert len(combined) == len(set(combined))
+        flat = [label for pair in pairs for label in pair]
+        assert len(flat) == len(set(flat))
 
 
 class TestPICAncestralStates:
@@ -269,6 +346,26 @@ class TestPICAncestralStates:
 
         # Root 的祖先状态应为 A 和 B 的平均
         assert 'Root' in ancestral or '_internal_' in str(list(ancestral.keys()))
+        # 等方差两支 => 逆方差加权重建退化为简单平均 3.0
+        np.testing.assert_almost_equal(ancestral["Root"], 3.0, decimal=10)
+
+    def test_unnamed_internal_nodes_get_unique_keys(self):
+        """无名内部节点不得共用 '_internal_' 键而互相覆盖
+
+        更新说明: 旧实现 `ancestral_states[node.name if node.name else '_internal_']`
+        使所有无名内部节点写到同一个键，只剩最后一个节点的值。
+        """
+        from phylogenetics.pic import compute_pic_with_ancestral_states
+
+        tree = PhyloTree.from_newick("((((A:1,B:1):1,C:1):1,D:1):1,E:1):0;")
+        traits = {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0}
+
+        contrasts, pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
+
+        # 4 个无名内部节点 => 4 个不同键
+        assert len(ancestral) == 4, ancestral
+        assert sorted(ancestral) == ["_internal_1", "_internal_2", "_internal_3", "_internal_4"]
+        assert all(np.isfinite(v) for v in ancestral.values())
 
 
 if __name__ == "__main__":

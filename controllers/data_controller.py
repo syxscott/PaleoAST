@@ -68,6 +68,26 @@ class CsvLoadTask:
         return self._cancelled
 
 
+class _NoopSignal:
+    """Signal stand-in used when PyQt6 is not importable."""
+
+    def emit(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def connect(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def disconnect(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+class _NoopSignalBridge:
+    result_ready = _NoopSignal()
+    error_raised = _NoopSignal()
+    progress = _NoopSignal()
+    cancelled = _NoopSignal()
+
+
 class DataLoadTask:
     """
     QRunnable worker that loads a CSV file on a background thread.
@@ -82,18 +102,20 @@ class DataLoadTask:
     progress bar up to date without flooding the signal queue.
 
     Cancellation:
-        Call ``cancel()`` on the task object *before* submitting it to the
-        thread pool, or set ``auto_delete=False`` and call ``cancel()`` on
-        the wrapper QRunnable returned by :meth:`DataController.load_csv_async`.
-        After cancellation the task emits the ``cancelled`` signal and calls
-        ``result_ready.emit(None)`` so the caller can distinguish it from a
-        successful load.
+        Call ``cancel()`` on ``task.task`` (the underlying
+        :class:`CsvLoadTask`) before starting the task, or at any point
+        while it is queued/running.  The worker checks the flag before
+        starting and again before returning a result; after
+        cancellation it emits the ``cancelled`` signal and calls
+        ``result_ready.emit(None)`` so the caller can distinguish it
+        from a successful load.
     """
 
     # Class-level import to avoid hard PyQt6 dependency in headless environments
     _QRunnable = None
-    _pyqtSignal = None
     _QThreadPool = None
+    _SignalsClass = None
+    _pyqtImportFailed = False
 
     def __init__(
         self,
@@ -110,30 +132,52 @@ class DataLoadTask:
             has_row_labels=has_row_labels,
             missing_value=missing_value,
         )
-        self._result_ready: Any = None
-        self._error_raised: Any = None
-        self._progress: Any = None
-        self._cancelled: Any = None
+        self._signals: Any = None
         self._qrunnable: Any = None
+        self._started = False
         self._setup_pyqt()
+        if self._signals is None:
+            self._install_noop_signals()
 
     def _setup_pyqt(self) -> None:
-        """Import PyQt6 lazily only when DataLoadTask is instantiated."""
-        try:
-            from PyQt6.QtCore import QRunnable, QThreadPool, pyqtSignal
-        except ImportError:
-            logger.debug("PyQt6 not available; DataLoadTask runs synchronously")
-            return
+        """Import PyQt6 lazily and build the QObject signal bridge.
 
-        DataLoadTask._QRunnable = QRunnable
-        DataLoadTask._pyqtSignal = staticmethod(pyqtSignal)
-        DataLoadTask._QThreadPool = QThreadPool
+        ``pyqtSignal`` only works as a class attribute of a QObject
+        subclass, so the signals live on a dedicated bridge object
+        which is re-exported on this instance for API compatibility.
+        """
+        if DataLoadTask._SignalsClass is None:
+            try:
+                from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+            except ImportError:
+                logger.debug("PyQt6 not available; DataLoadTask runs synchronously")
+                DataLoadTask._pyqtImportFailed = True
+                return
 
-        # Create signal descriptors on this instance
-        self.result_ready = pyqtSignal(object)
-        self.error_raised = pyqtSignal(Exception)
-        self.progress = pyqtSignal(int, int)  # rows_loaded, total_rows
-        self.cancelled = pyqtSignal()
+            class _DataLoadSignals(QObject):
+                result_ready = pyqtSignal(object)
+                error_raised = pyqtSignal(Exception)
+                progress = pyqtSignal(int, int)  # rows_loaded, total_rows
+                cancelled = pyqtSignal()
+
+            DataLoadTask._SignalsClass = _DataLoadSignals
+            DataLoadTask._QRunnable = QRunnable
+            DataLoadTask._QThreadPool = QThreadPool
+
+        self._signals = DataLoadTask._SignalsClass()
+        self.result_ready = self._signals.result_ready
+        self.error_raised = self._signals.error_raised
+        self.progress = self._signals.progress
+        self.cancelled = self._signals.cancelled
+
+    def _install_noop_signals(self) -> None:
+        """Provide no-op signal stand-ins when PyQt6 is unavailable."""
+        bridge = _NoopSignalBridge()
+        self._signals = bridge
+        self.result_ready = bridge.result_ready
+        self.error_raised = bridge.error_raised
+        self.progress = bridge.progress
+        self.cancelled = bridge.cancelled
 
     def _create_qrunnable(self) -> Any:
         """Build the actual QRunnable wrapper (only if PyQt6 is available)."""
@@ -165,6 +209,12 @@ class DataLoadTask:
         missing_value = self._task.missing_value
 
         try:
+            # Honour cancellation requested before the worker started
+            if self._task.is_cancelled:
+                self.cancelled.emit()
+                self.result_ready.emit(None)
+                return
+
             import pandas as pd
 
             path = Path(filepath).resolve()
@@ -192,12 +242,36 @@ class DataLoadTask:
                 encoding_errors="replace",
                 low_memory=False,
             )
-            # If has_row_labels is True, exclude the first (label) column from data
+
+            if len(df) == 0:
+                raise FileOperationError("File is empty")
+
+            # Extract row labels if requested (first column)
             if has_row_labels:
                 row_labels = df.iloc[:, 0].astype(str).tolist()
                 df = df.iloc[:, 1:]
             else:
                 row_labels = None
+
+            # Mirror load_csv(): auto-detect a non-numeric first column
+            # and treat it as row labels when the user did not request
+            # has_row_labels explicitly.
+            if not has_row_labels and row_labels is None:
+                first_col = df.iloc[:, 0]
+                try:
+                    pd.to_numeric(first_col, errors="raise")
+                    first_col_is_numeric = True
+                except (ValueError, TypeError):
+                    first_col_is_numeric = False
+                if not first_col_is_numeric or (
+                    first_col.dtype == object and first_col.nunique() == len(first_col)
+                ):
+                    row_labels = first_col.astype(str).tolist()
+                    df = df.iloc[:, 1:]
+                    if df.shape[1] == 0:
+                        raise FileOperationError(
+                            "CSV contains only a label column; no numeric variables to load"
+                        )
 
             # Check cancellation before returning a result
             if self._task.is_cancelled:
@@ -205,15 +279,14 @@ class DataLoadTask:
                 self.result_ready.emit(None)
                 return
 
-            rows_processed = len(df)
-
-            # Row labels already extracted above (if has_row_labels)
-
             # Extract column labels (header row already consumed by pandas)
-            col_labels = df.columns.astype(str).tolist() if has_header else None
+            if has_header:
+                col_labels = df.columns.astype(str).tolist()
+            else:
+                col_labels = [str(c) for c in df.columns.tolist()]
 
-            # Convert to numpy array
-            data = df.to_numpy(dtype=float, na_value=np.nan)
+            # Convert remaining columns to float (coerce errors to NaN)
+            data = df.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
             rows_processed = data.shape[0]
 
             # Emit final progress
@@ -232,13 +305,13 @@ class DataLoadTask:
         """Direct access to the underlying CsvLoadTask for cancellation."""
         return self._task
 
-    def submit(self, priority: int = 0) -> Any:
+    def start(self, priority: int = 0) -> Any:
         """
-        Submit this task to the global QThreadPool.
+        Start this task on the global QThreadPool (idempotent).
 
-        Returns the QRunnable wrapper so the caller can call ``cancel()`` on
-        it if needed. If PyQt6 is not available this is a no-op and the task
-        runs synchronously on the calling thread.
+        If PyQt6 is not available the task runs synchronously on the
+        calling thread.  Returns the QRunnable wrapper, or None in the
+        synchronous case.  Calling ``start()`` twice is a no-op.
 
         Parameters:
             priority: Task priority (higher values run first; default 0).
@@ -246,13 +319,20 @@ class DataLoadTask:
         Returns:
             QRunnable or None
         """
+        if self._started:
+            return self._qrunnable
         qrunnable = self._create_qrunnable()
         if qrunnable is not None:
             DataLoadTask._QThreadPool.globalInstance().start(qrunnable, priority=priority)
         else:
             # Fallback: run synchronously when PyQt6 is unavailable
             self._run()
+        self._started = True
         return qrunnable
+
+    def submit(self, priority: int = 0) -> Any:
+        """Deprecated alias of :meth:`start` kept for backward compatibility."""
+        return self.start(priority=priority)
 
 
 class DataController:
@@ -365,6 +445,10 @@ class DataController:
                     if not first_col_is_numeric or (first_col.dtype == object and first_col.nunique() == len(first_col)):
                         row_labels = first_col.astype(str).tolist()
                         df = df.iloc[:, 1:]
+                        if df.shape[1] == 0:
+                            raise FileOperationError(
+                                "CSV contains only a label column; no numeric variables to load"
+                            )
 
                 # Extract column labels (header row already consumed by pandas)
                 if has_header:
@@ -409,6 +493,7 @@ class DataController:
         has_header: bool = True,
         has_row_labels: bool = False,
         missing_value: str | None = None,
+        start: bool = True,
     ) -> DataLoadTask:
         """
         Load data from CSV file on a background thread (non-blocking).
@@ -423,26 +508,28 @@ class DataController:
         * Connect to ``error_raised(Exception)`` to handle errors.
         * Call ``task.task.cancel()`` to cancel a pending load.
 
-        The returned QRunnable is created with ``auto_delete=False`` so
-        the caller can call ``cancel()`` on it safely after submission.
-
         Parameters:
             filepath: Path to CSV file
             delimiter: Column delimiter
             has_header: Whether file has header row
             has_row_labels: Whether first column contains row labels
             missing_value: String representing missing values
+            start: When True (default) the task is submitted to the
+                thread pool immediately.  Pass False to connect to the
+                signals first and then call ``task.start()`` yourself,
+                which avoids racing with early signal emission.
 
         Returns:
             DataLoadTask: Task object with signals for result, progress, and errors
 
         Example::
 
-            task = controller.load_csv_async("data.csv")
+            task = controller.load_csv_async("data.csv", start=False)
             task.result_ready.connect(lambda m: print(f"Loaded {m.shape}"))
             task.progress.connect(lambda r, t: bar.setRange(0, t) or bar.setValue(r))
             task.error_raised.connect(lambda e: show_error(e))
-            # To cancel before it starts:
+            task.start()
+            # To cancel a started but not yet finished load:
             # task.task.cancel()
         """
         task = DataLoadTask(
@@ -452,9 +539,8 @@ class DataController:
             has_row_labels=has_row_labels,
             missing_value=missing_value,
         )
-        qrunnable = task.submit()
-        if qrunnable is not None:
-            qrunnable.setAutoDelete(False)
+        if start:
+            task.start()
         return task
 
     def load_excel(
@@ -568,10 +654,17 @@ class DataController:
                 with open(filepath, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f, delimiter=delimiter)
 
+                    # Hoist label/data accessors out of the loop: ``matrix.data``
+                    # and label properties copy under a lock, so reading them
+                    # per row made export O(n^2) and froze the GUI on big files.
+                    raw = matrix.raw_data
+                    row_labels = matrix.row_labels
+                    col_labels = matrix.col_labels
+
                     # Write header
                     if include_labels:
-                        if matrix.col_labels:
-                            header = ["", *list(matrix.col_labels)]
+                        if col_labels:
+                            header = ["", *list(col_labels)]
                         else:
                             header = [""] + [f"Var_{i + 1}" for i in range(matrix.n_variables)]
                         writer.writerow(header)
@@ -579,13 +672,13 @@ class DataController:
                     # Write data rows
                     for i in range(matrix.n_samples):
                         if include_labels:
-                            if matrix.row_labels:
-                                row = [matrix.row_labels[i]]
+                            if row_labels:
+                                row = [row_labels[i]]
                             else:
                                 row = [f"Sample_{i + 1}"]
-                            row.extend(matrix.data[i].tolist())
+                            row.extend(raw[i].tolist())
                         else:
-                            row = matrix.data[i].tolist()
+                            row = raw[i].tolist()
                         writer.writerow(row)
 
                 self._state.mark_saved(filepath)

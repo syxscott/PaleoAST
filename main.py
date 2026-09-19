@@ -199,7 +199,15 @@ class ExceptionHandler:
 
             quit_btn = QPushButton(_("Quit"))
             quit_btn.setStyleSheet("background-color: #E74C3C; color: white;")
-            quit_btn.clicked.connect(lambda: sys.exit(1))
+
+            def _quit_app() -> None:
+                # sys.exit() inside a Qt slot raises SystemExit within the
+                # event loop (swallowed or re-routed back into this hook);
+                # close the dialog and quit through the QApplication API.
+                dialog.reject()
+                app.quit()
+
+            quit_btn.clicked.connect(_quit_app)
 
             btn_layout.addWidget(export_btn)
             btn_layout.addWidget(continue_btn)
@@ -233,7 +241,9 @@ class ExceptionHandler:
 
             from config.i18n import _
 
-            path, _ = QFileDialog.getSaveFileName(
+            # NOTE: do not unpack into ``_`` here — it would shadow the
+            # translation function used below.
+            path, _selected_filter = QFileDialog.getSaveFileName(
                 None,
                 _("Export Error Log"),
                 str(Path.home() / "Desktop" / filename),

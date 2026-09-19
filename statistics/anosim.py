@@ -10,12 +10,17 @@ based on distance/similarity matrices.
 Mathematical Foundation:
 
 ANOSIM statistic R:
-    R = (r̄_B - r̄_W) / [½ * n(n-1)]
+    R = (r̄_B - r̄_W) / [n(n-1)/4]
 
 where:
     r̄_B = mean rank of between-group similarities
     r̄_W = mean rank of within-group similarities
     n = total number of samples
+
+The denominator is half of the total number of pairs, n(n-1)/4, which keeps
+R within [-1, 1]: R ≈ 1 means the groups are more dissimilar between each
+other than within, R ≈ 0 means no structure, R < 0 means the groups are more
+similar to each other than within.
 
 Significance is assessed via permutation test.
 
@@ -33,7 +38,7 @@ import numpy.typing as npt
 
 from config.constants import PERMUTATION_TESTS
 from config.i18n import _
-from utils.exceptions import ComputationError, MatrixDimensionError
+from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -116,23 +121,51 @@ class ANOSIMAnalyzer:
 
         Returns:
             ANOSIMResult: ANOSIM analysis results
+
+        Raises:
+            ValidationError: if the design cannot produce both between- and
+                within-group pairs (fewer than 2 samples or 2 groups).
         """
         with self._lock:
             # Validate input
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
 
             n = D.shape[0]
-            unique_groups = sorted(set(groups), key=lambda x: str(x))
-            self._logger.info(
-                f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
-                f"n_permutations={n_permutations}, random_seed={random_seed}"
-            )
 
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError("Distance matrix must be square")
 
             if len(groups) != n:
                 raise ComputationError("Group assignments must match distance matrix size")
+
+            # Group bookkeeping is validated *before* it is used (both for the
+            # log message and for the result), and it needs the sample count
+            # check above to have run first.
+            unique_groups = sorted(set(groups), key=lambda x: str(x))
+            self._logger.info(
+                f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
+                f"n_permutations={n_permutations}, random_seed={random_seed}"
+            )
+
+            # ANOSIM contrasts between- with within-group rank sums, so both
+            # kinds of pair have to exist (mirrors vegan::anosim, which
+            # requires at least two groups plus replication).  Without these
+            # checks the statistic silently degenerates: an empty side is
+            # treated as a mean rank of 0 and R leaves its [-1, 1] range.
+            if n < 2:
+                raise ValidationError("ANOSIM requires at least 2 samples", details={"n_samples": n})
+            if len(unique_groups) < 2:
+                raise ValidationError(
+                    "ANOSIM requires at least 2 groups",
+                    details={"n_groups": len(unique_groups)},
+                )
+            if n == len(unique_groups):
+                # Every group holds exactly one sample -> no within-group pairs.
+                raise ValidationError(
+                    "ANOSIM requires at least one within-group pair, so at least "
+                    "one group must contain 2 or more samples",
+                    details={"n_samples": n, "n_groups": len(unique_groups)},
+                )
 
             if n_permutations is None:
                 n_permutations = self._n_permutations
@@ -159,9 +192,6 @@ class ANOSIMAnalyzer:
             # Calculate p-value
             p_value = float((1 + np.sum(permuted_R >= R_obs)) / (n_permutations + 1))
 
-            # Get unique groups
-            unique_groups = sorted(set(groups), key=lambda x: str(x))
-
             result = ANOSIMResult(
                 statistic=R_obs,
                 p_value=p_value,
@@ -180,9 +210,23 @@ class ANOSIMAnalyzer:
         """
         Compute ANOSIM R statistic.
 
-        R = (r̄_B - r̄_W) / [½ * n(n-1)]
+        R = (r̄_B - r̄_W) / [n(n-1)/4]
+
+        The denominator is half of the total number of pairs N = n(n-1)/2
+        (Legendre & Fortin 1989; identical to ``m <- n*(n-1)/4`` in
+        vegan::anosim), which keeps R within [-1, 1].
+
+        Raises:
+            ValidationError: if either the between- or the within-group pair
+                set is empty.  Averaging over an empty set used to be silently
+                replaced by 0, which produced out-of-range statistics such as
+                R = 2.0 or R = -1.02.
         """
         n = D.shape[0]
+        if n < 2:
+            raise ValidationError(
+                "ANOSIM requires at least 2 samples", details={"n_samples": n}
+            )
 
         # Compute all pairwise similarities (1 - distance)
         S = 1 - D
@@ -233,12 +277,25 @@ class ANOSIMAnalyzer:
                 else:
                     r_W_list.append(ranks[i, j])
 
-        r_B = np.mean(r_B_list) if r_B_list else 0
-        r_W = np.mean(r_W_list) if r_W_list else 0
+        if not r_B_list:
+            raise ValidationError(
+                "ANOSIM needs at least one between-group pair: every sample "
+                "belongs to the same group",
+                details={"n_samples": n},
+            )
+        if not r_W_list:
+            raise ValidationError(
+                "ANOSIM needs at least one within-group pair: at least one "
+                "group must contain 2 or more samples",
+                details={"n_samples": n, "n_groups": len(set(groups))},
+            )
+        r_B = float(np.mean(r_B_list))
+        r_W = float(np.mean(r_W_list))
 
         # Compute R statistic
-        # ANOSIM R = (r_B - r_W) / (N/2) where N = n(n-1)/2 is the total number of pairs
-        # The denominator N/2 = n(n-1)/4 represents the scaling factor
+        # ANOSIM R = (r_B - r_W) / (N/2) where N = n(n-1)/2 is the total number
+        # of pairs.  The denominator N/2 = n(n-1)/4 is the scaling factor that
+        # keeps R bounded by [-1, 1].
         N = n * (n - 1) / 2
         R = (r_B - r_W) / (N / 2)
 

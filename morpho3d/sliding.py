@@ -89,7 +89,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .gpa3d import GPA3D, GPA3DResult
+from .gpa3d import GPA3D, GPA3DResult, RotationMatrix
 from .tps3d import TPS3D
 
 logger = logging.getLogger(__name__)
@@ -231,7 +231,6 @@ class SemiLandmarkSlider:
             raise ValueError("Must call set_landmarks() first")
 
         n_samples = len(configs)
-        configs[0].shape[0]
         n_semi = len(self._semi_indices)
 
         self._logger.info(
@@ -254,55 +253,74 @@ class SemiLandmarkSlider:
             n_iterations = iteration + 1
 
             # 步骤1: 使用固定界标执行GPA
-            gpa_result = self._gpa_with_fixed_landmarks(current_configs)
+            gpa_result, centroids, _scales, _rots = self._gpa_with_fixed_landmarks(current_configs)
 
             # 步骤2: 计算当前平均形状
             current_mean = gpa_result.mean_config
 
-            # 检查收敛
+            # 检查收敛 (相对判据: 绝对阈值会随坐标尺度变化提前/延后
+            # 退出, 破坏滑动的尺度不变性)
             if prev_mean is not None:
                 # 计算半标志点区域的变化
                 semi_mean_diff = np.linalg.norm(current_mean[self._semi_indices] - prev_mean[self._semi_indices])
+                denom = np.linalg.norm(prev_mean[self._semi_indices])
+                rel_diff = semi_mean_diff / denom if denom > 0.0 else 0.0
 
                 if self._verbose:
-                    self._logger.debug(f"Iteration {iteration}: semi-diff = {semi_mean_diff:.2e}")
+                    self._logger.debug(f"Iteration {iteration}: rel-diff = {rel_diff:.2e}")
 
-                if semi_mean_diff < self._tolerance:
+                if rel_diff < self._tolerance:
                     self._logger.info(f"Converged after {n_iterations} iterations")
                     break
 
             prev_mean = current_mean.copy()
 
-            # 步骤3: 滑动半标志点
+            # 步骤3: 滑动半标志点 (在GPA对齐坐标系中计算, 再经各自的
+            # 逆相似变换映回原始坐标系)。旧实现在对齐系中算位移、却把
+            # 它直接加到原始坐标上 (两套坐标混用), 且把对齐系的共识/
+            # 对齐位置写回原始构型, 滑动结果随坐标系尺度随机漂移。
             for i in range(n_samples):
+                aligned_config = gpa_result.aligned_configs[i]
                 if self._surface_mesh is not None:
                     # 曲面滑动
-                    new_semi = self._slide_surface_points(
-                        current_configs[i], gpa_result.aligned_configs[i], current_mean
-                    )
+                    new_semi_aligned = self._slide_surface_points(aligned_config, current_mean)
                 else:
                     # 曲线滑动
-                    new_semi = self._slide_curve_points(current_configs[i], gpa_result.aligned_configs[i], current_mean)
+                    new_semi_aligned = self._slide_curve_points(aligned_config, current_mean)
 
-                # 更新构型
+                rot = gpa_result.rotations[i]
+                cs = gpa_result.centroid_sizes[i]
+                scaled = gpa_result.centroid_sizes[i] > 1e-10
+
+                # 逆变换: raw = aligned @ R * cs + centroid
+                slid_raw = new_semi_aligned @ rot
+                if scaled:
+                    slid_raw = slid_raw * cs
+                slid_raw = slid_raw + centroids[i]
+
                 new_config = current_configs[i].copy()
-                new_config[self._semi_indices] = new_semi
+                new_config[self._semi_indices] = slid_raw
                 current_configs[i] = new_config
 
-            # 记录历史
+            # 记录历史 (弯曲能在对齐坐标系内计算: 共识与标本构型同帧,
+            # 否则 BE 随原始坐标尺度漂移)
             history.append(
                 {
                     "iteration": iteration,
                     "mean_shape": current_mean.copy(),
-                    "bending_energy": self._compute_bending_energy(current_configs, current_mean),
+                    "bending_energy": self._compute_bending_energy(
+                        gpa_result.aligned_configs, current_mean
+                    ),
                 }
             )
 
         # 最终GPA
-        final_gpa = self._gpa_with_fixed_landmarks(current_configs)
+        final_gpa, _fc, _fs, _fr = self._gpa_with_fixed_landmarks(current_configs)
 
         # 计算最终弯曲能量
-        final_be = self._compute_bending_energy(current_configs, final_gpa.mean_config)
+        final_be = self._compute_bending_energy(
+            final_gpa.aligned_configs, final_gpa.mean_config
+        )
 
         self._logger.info(f"Sliding complete: {n_iterations} iterations, final bending energy = {final_be:.4f}")
 
@@ -315,7 +333,9 @@ class SemiLandmarkSlider:
             convergence_error=semi_mean_diff if prev_mean is not None else 0.0,
         )
 
-    def _gpa_with_fixed_landmarks(self, configs: list[np.ndarray]) -> GPA3DResult:
+    def _gpa_with_fixed_landmarks(
+        self, configs: list[np.ndarray]
+    ) -> tuple[GPA3DResult, np.ndarray, list[np.ndarray], np.ndarray]:
         """
         对固定界标执行GPA, 并把每个标本的变换 (平移+缩放+旋转)
         应用到完整构型上。
@@ -323,151 +343,185 @@ class SemiLandmarkSlider:
         旧实现只返回固定界标子集的对齐结果 (n_fixed 个点), 随后用
         全树索引 aligned[self._semi_indices] / mean[self._semi_indices]
         访问 → 正常配置下直接 IndexError 崩溃 (2026-09 复审)。
+        另一版实现复用 GPA3D 返回的 rotations/centroid_sizes 做逆变换,
+        但那是相对"第一轮原始构型"的变换, 而这里的重缩放/重旋转是相对
+        已收敛的固定界标子集 —— 复合变换不再是相似变换, 破坏滑动的
+        几何正确性与尺度不变性。现在在本函数内为每个标本计算自洽的
+        (centroid, cs, R): aligned_full = (config - centroid) / cs @ R.T,
+        逆变换 raw = aligned @ R * cs + centroid 精确成立。
 
         参数:
             configs: 构型列表
 
         返回:
-            GPA3DResult (aligned_configs/mean_config 均为完整构型)
+            (GPA3DResult, centroids, scales, rotations):
+            aligned_configs/mean_config 均为完整构型; centroids 为每个
+            标本所用平移中心 (固定界标质心, 原始坐标系); scales/rotations
+            为与 aligned_configs 自洽的缩放/旋转, 供滑动后逆映射使用。
         """
         # 提取固定界标并执行GPA
         fixed_configs = [config[self._fixed_indices] for config in configs]
         gpa = GPA3D(tolerance=self._tolerance, verbose=False)
         result = gpa.analyze(fixed_configs)
 
-        # 把固定界标 GPA 的每个标本变换 (平移 + 缩放 + 旋转) 应用到
-        # 完整构型: aligned_fixed = (fixed - centroid) [/cs] @ R.T
+        # 对收敛后的固定界标子集重新取心/取尺度, 并求对齐到固定界标
+        # 均值的旋转 —— 保证与 aligned_full 使用同一变换。
+        n_dims = np.asarray(configs[0]).shape[1]
         aligned_full: list[np.ndarray] = []
-        for config, rot, cs in zip(configs, result.rotations, result.centroid_sizes):
+        centroids = np.zeros((len(configs), n_dims))
+        scales = np.ones(len(configs))
+        rotations: list[np.ndarray] = []
+
+        mean_fixed = np.mean(np.stack(result.aligned_configs), axis=0)
+        mean_fixed_c = mean_fixed - mean_fixed.mean(axis=0)
+
+        for k, config in enumerate(configs):
             fixed_pts = config[self._fixed_indices]
-            centered = config - fixed_pts.mean(axis=0)
-            if gpa._scale and cs > 1e-10:
-                centered = centered / cs
-            aligned_full.append(centered @ rot.T)
+            centroid = fixed_pts.mean(axis=0)
+            centered_fixed = fixed_pts - centroid
+            cs = float(np.sqrt(np.sum(centered_fixed**2)))
+            if cs <= 1e-12:
+                cs = 1.0
+            scaled_fixed = centered_fixed / cs
+            rot = RotationMatrix.from_svd(scaled_fixed, mean_fixed_c)
+            centroids[k] = centroid
+            scales[k] = cs
+            rotations.append(rot)
+            aligned_full.append((config - centroid) / cs @ rot.T)
 
         mean_full = np.mean(np.stack(aligned_full), axis=0)
 
-        return GPA3DResult(
+        gpa_result = GPA3DResult(
             aligned_configs=aligned_full,
             mean_config=mean_full,
-            centroid_sizes=result.centroid_sizes,
-            rotations=result.rotations,
+            centroid_sizes=scales,
+            rotations=rotations,
             n_iterations=result.n_iterations,
             final_spread=result.final_spread,
             procrustes_distances=None,
         )
+        return gpa_result, centroids, scales, rotations
 
-    def _slide_curve_points(self, original: np.ndarray, aligned: np.ndarray, mean_shape: np.ndarray) -> np.ndarray:
+    def _slide_curve_points(self, aligned: np.ndarray, mean_shape: np.ndarray) -> np.ndarray:
         """
-        沿曲线滑动半标志点
+        沿曲线滑动半标志点 (GPA对齐坐标系内计算)
 
         参数:
-            original: 原始构型
-            aligned: 对齐后的构型
-            mean_shape: 平均形状
+            aligned: 该标本对齐后的完整构型 (n_landmarks, 3)
+            mean_shape: 对齐系共识构型
 
         返回:
-            滑动后的半标志点位置
+            滑动后半标志点的对齐系坐标 (n_semi, 3)
+
+        准则:
+            procrustes → Bookstein (1997) minPerp 闭式投影: 内部半标志点
+            正交投影到同一标本相邻两点的连线上 (精确极小值, 取代旧版
+            沿共识切向的 +/-0.1 网格搜索; 端点不滑动)。
+            bending_energy → 保持曲率一致的光滑代理: 位移为与共识的
+            拉普拉斯(二阶差分)差, 投影到切向后按 sliding_factor 阻尼。
         """
+        semi_aligned = np.array(aligned[self._semi_indices], dtype=float, copy=True)
         n_semi = len(self._semi_indices)
-        n_total = original.shape[0]
 
-        # 获取半标志点
-        semi_original = original[self._semi_indices].copy()
-        semi_aligned = aligned[self._semi_indices]
-        semi_mean = mean_shape[self._semi_indices]
-
-        # 重新编号的半标志点
-        semi_positions = self._semi_indices - self._fixed_indices.min()
-
-        # 计算切向量
-        tangents = self._compute_curve_tangents(semi_mean, positions=semi_positions, n_total=n_total)
-
-        # 计算滑动方向
-        if self._criterion == self.CRITERION_BENDING_ENERGY:
-            # 最小弯曲能量 (离散代理): 使标本半标志点曲线的曲率
-            # (二阶差分) 与共识形状一致。对光滑的沿曲线滑动, 该位移
-            # 切向且不把半标志点拉向共识位置。旧实现两条分支完全
-            # 相同, 弯曲能量判据形同虚设。
-            lap_mean = np.zeros_like(semi_mean)
-            lap_aligned = np.zeros_like(semi_aligned)
-            for i in range(n_semi):
-                im = i - 1 if i > 0 else i + 1
-                ip = i + 1 if i < n_semi - 1 else i - 1
-                if im == i or ip == i or im == ip or n_semi < 3:
+        if self._criterion == self.CRITERION_PROCRUSTES:
+            # closed-form minPerp: project interior points onto the chord
+            # through their neighbours of the same specimen
+            for i in range(1, n_semi - 1):
+                a = semi_aligned[i - 1]
+                b = semi_aligned[i + 1]
+                d = b - a
+                dd = float(d @ d)
+                if dd <= np.finfo(float).eps:
                     continue
-                lap_mean[i] = semi_mean[im] - 2.0 * semi_mean[i] + semi_mean[ip]
-                lap_aligned[i] = semi_aligned[im] - 2.0 * semi_aligned[i] + semi_aligned[ip]
-            displacement = lap_mean - lap_aligned
-        else:
-            # 最小 Procrustes 距离: 向共识的切向分量滑动
-            displacement = semi_mean - semi_aligned
+                t = float((semi_aligned[i] - a) @ d) / dd
+                semi_aligned[i] = a + t * d
+            return semi_aligned
 
-        # 投影到切线方向
+        # Bending-energy proxy (aligned frame only):
+        # 使标本半标志点曲线的曲率 (二阶差分) 向共识一致。位移只保留
+        # 切向分量, 不把半标志点拉向共识位置, 保留真实法向形状变异。
+        semi_mean = mean_shape[self._semi_indices]
+        tangents = self._compute_curve_tangents(semi_aligned)
+        displacement = np.zeros_like(semi_aligned)
+        if n_semi >= 3:
+            for i in range(1, n_semi - 1):
+                lap_mean = semi_mean[i - 1] - 2.0 * semi_mean[i] + semi_mean[i + 1]
+                lap_aligned = (
+                    semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
+                )
+                displacement[i] = lap_mean - lap_aligned
+
         for i in range(n_semi):
             t = tangents[i]
-            d = displacement[i]
+            proj = float(displacement[i] @ t) * t
+            semi_aligned[i] += self._sliding_factor * proj
 
-            # 投影: d_proj = (d·t) t
-            proj = np.dot(d, t) * t
+        return semi_aligned
 
-            # 应用滑动因子
-            semi_original[i] += self._sliding_factor * proj
-
-        return semi_original
-
-    def _slide_surface_points(self, original: np.ndarray, aligned: np.ndarray, mean_shape: np.ndarray) -> np.ndarray:
+    def _slide_surface_points(self, aligned: np.ndarray, mean_shape: np.ndarray) -> np.ndarray:
         """
-        在曲面上滑动半标志点
+        在曲面上滑动半标志点 (GPA对齐坐标系内计算)
 
         参数:
-            original: 原始构型
-            aligned: 对齐后的构型
-            mean_shape: 平均形状
+            aligned: 该标本对齐后的完整构型
+            mean_shape: 对齐系共识构型
 
         返回:
-            滑动后的半标志点位置
+            滑动后半标志点的对齐系坐标 (n_semi, 3)
+
+        旧实现的两条准则分支完全相同 (弯曲能量判据形同虚设), 且法向量
+        取自原始坐标系半标志点、位移却来自对齐系 (坐标系混用)。
         """
         if self._surface_mesh is None:
             raise ValueError("Surface mesh not set")
 
         n_semi = len(self._semi_indices)
 
-        # 获取半标志点
-        semi_original = original[self._semi_indices].copy()
-        semi_aligned = aligned[self._semi_indices]
+        # 获取对齐系半标志点
+        semi_aligned = np.array(aligned[self._semi_indices], dtype=float, copy=True)
         semi_mean = mean_shape[self._semi_indices]
 
-        # 计算切平面法向量
-        normals = self._compute_surface_normals(semi_original)
+        # 计算切平面法向量 (对齐系)
+        normals = self._compute_surface_normals(semi_aligned)
 
-        # 计算位移
+        # 计算位移 (对齐系内)
         if self._criterion == self.CRITERION_BENDING_ENERGY:
-            displacement = semi_mean - semi_aligned
+            # 曲率一致代理: 与共识的拉普拉斯差, 只保留切平面内分量
+            displacement = np.zeros_like(semi_aligned)
+            if n_semi >= 3:
+                for i in range(1, n_semi - 1):
+                    lap_mean = semi_mean[i - 1] - 2.0 * semi_mean[i] + semi_mean[i + 1]
+                    lap_aligned = (
+                        semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
+                    )
+                    displacement[i] = lap_mean - lap_aligned
         else:
+            # 最小 Procrustes: 向共识的切平面内位移
             displacement = semi_mean - semi_aligned
 
         # 投影到切平面
         for i in range(n_semi):
             n = normals[i]
+            norm = np.linalg.norm(n)
+            if norm < 1e-10:
+                continue
+            n = n / norm
             d = displacement[i]
 
             # 投影到切平面: d_proj = d - (d·n)n
-            proj = d - np.dot(d, n) * n
+            proj = d - float(d @ n) * n
 
             # 应用滑动因子
-            semi_original[i] += self._sliding_factor * proj
+            semi_aligned[i] += self._sliding_factor * proj
 
-        return semi_original
+        return semi_aligned
 
-    def _compute_curve_tangents(self, points: np.ndarray, positions: np.ndarray, n_total: int) -> np.ndarray:
+    def _compute_curve_tangents(self, points: np.ndarray) -> np.ndarray:
         """
-        计算曲线的单位切向量
+        计算曲线的单位切向量 (中心差分, 端点用单侧差分)
 
         参数:
-            points: 半标志点坐标 (n_semi, 3)
-            positions: 半标志点在完整构型中的位置
-            n_total: 完整构型的标志点总数
+            points: 半标志点坐标 (n_semi, 3), 沿曲线有序排列
 
         返回:
             切向量 (n_semi, 3)
@@ -475,32 +529,19 @@ class SemiLandmarkSlider:
         n_semi = len(points)
         tangents = np.zeros((n_semi, 3))
 
-        for i, (pos, point) in enumerate(zip(positions, points, strict=False)):
-            # 获取前后邻居 — the previous version computed
-            # ``pos - 1 if ... else pos + 1`` and discarded the
-            # result (dead code). Use ``pos`` for documentation
-            # purposes but the actual neighbours are taken from
-            # ``points[i-1]`` / ``points[i+1]`` below.
-            if pos > 0:
-                _prev_pos = pos - 1
-            else:
-                _prev_pos = pos + 1
-            if pos < n_total - 1:
-                _next_pos = pos + 1
-            else:
-                _next_pos = pos - 1
-
-            # 需要获取完整曲线上的邻居
-            # 这里简化为使用半标志点内部的邻居
-            if i > 0:
+        for i in range(n_semi):
+            if n_semi == 1:
+                tangents[i] = np.array([1.0, 0.0, 0.0])
+                continue
+            if i == 0:
+                prev_point = 2.0 * points[0] - points[1]  # mirror for forward diff
+                next_point = points[1]
+            elif i == n_semi - 1:
                 prev_point = points[i - 1]
+                next_point = 2.0 * points[i] - points[i - 1]  # mirror for backward diff
             else:
-                prev_point = points[i + 1] - (points[i + 1] - points[i])
-
-            if i < n_semi - 1:
+                prev_point = points[i - 1]
                 next_point = points[i + 1]
-            else:
-                next_point = points[i - 1] + (points[i] - points[i - 1])
 
             # 中心差分
             tangent = next_point - prev_point

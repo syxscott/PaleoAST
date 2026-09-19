@@ -393,9 +393,18 @@ class RowMetadataManager:
         """
         with self._lock:
             for idx, meta_dict in metadata_dict.items():
+                if idx >= self._n_rows:
+                    continue
+                label = meta_dict.get("label")
+                if label is None:
+                    label = (
+                        self._row_labels[idx]
+                        if idx < len(self._row_labels)
+                        else f"Sample_{idx + 1}"
+                    )
                 self._metadata[idx] = RowMetadata(
                     row_index=idx,
-                    label=meta_dict.get("label", self._row_labels[idx]),
+                    label=label,
                     group=meta_dict.get("group"),
                     color=meta_dict.get("color", CHART_COLORS[idx % len(CHART_COLORS)]),
                     marker=meta_dict.get("marker", CHART_MARKERS[idx % len(CHART_MARKERS)]),
@@ -409,6 +418,7 @@ class RowMetadataManager:
         self,
         metadata_dict: dict[int, dict[str, Any]],
         new_labels: list[str],
+        old_labels: list[str] | None = None,
     ) -> None:
         """Restore metadata whose *label* still exists in ``new_labels``.
 
@@ -416,14 +426,24 @@ class RowMetadataManager:
         when loading a new dataset that reuses some of the existing
         row labels so the user does not silently lose group/colour
         assignments.
+
+        Parameters:
+            metadata_dict: Snapshot keyed by the *old* row index.
+            new_labels: Labels of the new dataset.
+            old_labels: Labels that were in effect when the snapshot was
+                taken.  Must be supplied when the snapshot is applied to
+                a manager that was already re-created with the *new*
+                labels; otherwise indices would be resolved against the
+                wrong label list.
         """
         if not metadata_dict:
             return
+        labels = self._row_labels if old_labels is None else old_labels
         with self._lock:
             for old_idx, meta_dict in metadata_dict.items():
-                if old_idx >= len(self._row_labels):
+                if old_idx >= len(labels):
                     continue
-                old_label = self._row_labels[old_idx]
+                old_label = labels[old_idx]
                 if old_label not in new_labels:
                     continue
                 new_idx = new_labels.index(old_label)

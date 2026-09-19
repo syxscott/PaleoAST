@@ -154,8 +154,14 @@ class ARMAAnalyzer:
             falls back to Yule-Walker (AR) and innovation algorithm (MA).
         """
         with self._lock:
-            t = validate_data_array(times, allow_nan=False, name="times")
-            y = validate_data_array(values, allow_nan=False, name="values")
+            # ``validate_data_array`` reshapes 1-D input to a column vector
+            # (n, 1).  Every downstream routine (np.diff, np.correlate,
+            # statsmodels ARIMA, cumsum-based back-transformation) assumes a
+            # *flat* series, so the arrays are flattened right here; otherwise
+            # ``np.diff`` runs along the singleton axis and silently returns an
+            # (n, 0) array (2026-09 review).
+            t = np.asarray(validate_data_array(times, allow_nan=False, name="times")).reshape(-1)
+            y = np.asarray(validate_data_array(values, allow_nan=False, name="values")).reshape(-1)
 
             if t.shape != y.shape:
                 raise ComputationError(f"Times and values must have same shape: {t.shape} vs {y.shape}")
@@ -168,14 +174,23 @@ class ARMAAnalyzer:
             # Apply differencing if needed
             if d > 0:
                 y_diff = self._difference(y, d)
+                if len(y_diff) <= max(p, q) + 1:
+                    raise ComputationError(
+                        f"Series too short for ARIMA({p},{d},{q}): {len(y_diff)} differenced "
+                        f"observations remain, need more than {max(p, q) + 1}"
+                    )
             else:
                 y_diff = y.copy()
 
-            # Try statsmodels first, otherwise use manual implementation
+            # Try statsmodels first, otherwise use manual implementation.
+            # The fallback used to catch ImportError only, so a statsmodels
+            # version mismatch (AttributeError on ``.values``, ValueError from
+            # a failed optimizer, LinAlgError from the Kalman filter) crashed
+            # the whole analysis instead of degrading to the manual AR fit.
             try:
                 result = self._fit_statsmodels(y_diff, p, q, include_intercept)
-            except ImportError:
-                self._logger.info("statsmodels not available, using manual ARMA")
+            except (ImportError, AttributeError, ValueError, np.linalg.LinAlgError) as e:
+                self._logger.info(f"statsmodels ARMA path unavailable ({type(e).__name__}: {e}); using manual AR")
                 result = self._fit_manual_ar(y_diff, p, q, include_intercept)
 
             # Compute predictions (back-transform if differenced)
@@ -226,19 +241,30 @@ class ARMAAnalyzer:
             - With intercept:    [intercept, ar.L1, ..., ar.Lp, ma.L1, ..., ma.Lq, sigma2]
             - Without intercept: [ar.L1, ..., ar.Lp, ma.L1, ..., ma.Lq, sigma2]
         We therefore offset the slice by 1 when ``include_intercept``.
+
+        Two further caveats (2026-09 review):
+            * ``fit.params`` is a plain ``numpy.ndarray`` for statsmodels
+              >= 0.13, so ``fit.params.values`` raised ``AttributeError``.
+              ``np.asarray(fit.params)`` works for both the ndarray and the
+              legacy pandas-Series result.
+            * ``trend`` must be pinned down explicitly: the statsmodels
+              default is ``trend='c'``, which keeps fitting a constant even
+              when ``include_intercept`` is False, and that constant is then
+              reported as an AR coefficient (the parameter vector is offset
+              by one).
         """
         from statsmodels.tsa.arima.model import ARIMA
 
-        model = ARIMA(y, order=(p, 0, q))
+        model = ARIMA(y, order=(p, 0, q), trend="n" if not include_intercept else "c")
         fit = model.fit()
 
         offset = 1 if include_intercept else 0
-        params = fit.params.values
+        params = np.asarray(fit.params)
         return {
             "ar_params": params[offset : offset + p],
             "ma_params": params[offset + p : offset + p + q],
-            "predicted": fit.fittedvalues,
-            "residuals": fit.resid,
+            "predicted": np.asarray(fit.fittedvalues),
+            "residuals": np.asarray(fit.resid),
             "n_params": p + q + (1 if include_intercept else 0),
         }
 
@@ -249,40 +275,73 @@ class ARMAAnalyzer:
         q: int,
         include_intercept: bool,
     ) -> dict[str, Any]:
-        """Manual AR fit using Yule-Walker for AR part."""
-        n = len(y)
+        """Manual AR fit using Yule-Walker for AR part.
 
-        # Yule-Walker for AR coefficients
+        The MA coefficients are *not* estimated on this path (no innovation
+        algorithm is implemented), so ``q`` must not be counted in the
+        number of fitted parameters: inflating ``k`` biases AIC/BIC.
+
+        Yule-Walker normal equations (Box & Jenkins):
+
+            Σ_j φ_j γ(|i-j|) = γ(i),  i = 1..p
+
+        i.e. the right-hand side is the autocovariance vector γ₁..γ_p, *not*
+        γ₀..γ_{p-1} (whose first entry is the variance). The previous
+        implementation passed the whole ``gamma`` array (length p+1) to
+        ``np.linalg.solve`` with a p×p matrix, which raised
+        ``ValueError: ... object too deep``/shape mismatch and made the
+        fallback path — the only path available without statsmodels — fail
+        outright.
+        """
+        y = np.asarray(y, dtype=float).reshape(-1)
+        n = len(y)
+        mu = float(np.mean(y))
+
+        # Yule-Walker for AR coefficients, on the mean-centred series
         ar_params = np.zeros(p)
         if p > 0:
-            # Compute autocovariance
-            gamma = np.correlate(y, y, mode="full")
-            gamma = gamma[n - 1 : n + p]
-
-            # Build Toeplitz matrix
-            R = np.zeros((p, p))
-            for i in range(p):
-                for j in range(p):
-                    lag = abs(i - j)
-                    if lag < len(gamma):
-                        R[i, j] = gamma[lag]
-
-            try:
-                ar_params = np.linalg.solve(R, gamma)
-            except np.linalg.LinAlgError:
+            y_centered = y - mu
+            # Biased autocovariance estimates γ_0 .. γ_p (dividing by n keeps
+            # the Toeplitz system positive semi-definite).
+            autocov = np.correlate(y_centered, y_centered, mode="full")
+            autocov = autocov[n - 1 : n + p] / n
+            gamma0 = float(autocov[0])
+            if gamma0 <= 0 or not np.isfinite(gamma0):
+                # Constant (or degenerate) series: no AR structure to fit.
                 ar_params = np.zeros(p)
+            else:
+                R = np.empty((p, p), dtype=float)
+                for i in range(p):
+                    for j in range(p):
+                        R[i, j] = autocov[abs(i - j)]
+                rhs = autocov[1 : p + 1]
+                try:
+                    ar_params = np.linalg.solve(R, rhs)
+                except np.linalg.LinAlgError:
+                    self._logger.warning("Yule-Walker system is singular; falling back to least squares")
+                    ar_params = np.linalg.lstsq(R, rhs, rcond=None)[0]
 
-        # Innovation algorithm for MA part (simplified)
+        # Innovation algorithm for MA part (simplified): MA coefficients are
+        # left at zero and therefore *not* counted as fitted parameters.
         ma_params = np.zeros(q)
+        if q > 0:
+            self._logger.warning(
+                "statsmodels unavailable: MA(%d) parameters are not estimated by the manual "
+                "Yule-Walker fallback; reported AIC/BIC reflect an AR(%d) model only",
+                q,
+                p,
+            )
 
-        # Compute residuals
+        # Constant term: for a stationary AR(p) with mean mu the intercept is
+        # c = (1 - Σφ) * mu. The previous code used mean(y[:p]) (the mean of
+        # the burn-in window), which is unrelated to the process mean.
+        intercept = (1.0 - float(np.sum(ar_params))) * mu if include_intercept else 0.0
+
         predicted = np.zeros(n)
         residuals = np.zeros(n)
 
         for t in range(p, n):
-            pred = np.dot(ar_params, y[t - p : t][::-1])
-            if include_intercept:
-                pred += np.mean(y[:p])
+            pred = float(np.dot(ar_params, y[t - p : t][::-1])) + intercept
             predicted[t] = pred
             residuals[t] = y[t] - pred
 
@@ -291,22 +350,53 @@ class ARMAAnalyzer:
             "ma_params": ma_params,
             "predicted": predicted,
             "residuals": residuals,
-            "n_params": p + q + (1 if include_intercept else 0),
+            "n_params": p + (1 if include_intercept else 0),
         }
 
     def _difference(self, y: npt.NDArray, d: int) -> npt.NDArray:
-        """Apply differencing."""
-        result = y.copy()
+        """Apply differencing.
+
+        ``y`` is flattened first: ``np.diff`` works along the *last* axis by
+        default, so a (n, 1) column vector would be turned into an (n, 0)
+        array.
+        """
+        result = np.asarray(y, dtype=float).reshape(-1).copy()
         for _ in range(d):
             result = np.diff(result)
         return result
 
     def _inverse_difference(self, original: npt.NDArray, differenced: npt.NDArray, d: int) -> npt.NDArray:
-        """Reverse differencing for predictions."""
-        result = differenced.copy()
-        for _ in range(d):
-            result = np.cumsum(result)
-            result += original[0]
+        """Reverse differencing for predictions.
+
+        Integrating a d-th difference back to the observed scale consumes the
+        first value of each difference order, so the initial conditions are
+        taken from ``original`` one order at a time. The previous
+        implementation added ``original[0]`` to the whole cumsum at every
+        order, which returned a curve shorter than ``original`` (breaking
+        ``residuals = y - predicted``) and with the wrong offset.
+        """
+        original = np.asarray(original, dtype=float).reshape(-1)
+        result = np.asarray(differenced, dtype=float).reshape(-1).copy()
+
+        if result.shape[0] != original.shape[0] - d:
+            # Unexpected geometry (e.g. a predictor that returned the
+            # undifferenced length): fall back to the caller's series so the
+            # residual computation stays well-defined.
+            self._logger.warning(
+                "Cannot back-transform %d predictions against %d observations (d=%d); "
+                "returning predictions unchanged",
+                result.shape[0],
+                original.shape[0],
+                d,
+            )
+            return result
+
+        for order in range(d, 0, -1):
+            # ``init`` is the first element of the (order-1)-th difference of
+            # the observed series; integrating adds it to the running cumsum.
+            init = float(np.diff(original, n=order - 1)[0])
+            result = np.concatenate(([init], init + np.cumsum(result)))
+
         return result
 
     def predict(

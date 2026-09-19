@@ -724,19 +724,38 @@ class DataMatrix:
                 column_metadata=new_column_meta,
             )
 
+    @staticmethod
+    def _normalize_indices(indices: Union[list, npt.NDArray]) -> npt.NDArray:
+        """Normalise index input for subset_* to an integer array.
+
+        - boolean masks are expanded with ``np.where`` (label lookups
+          below iterate indices, which breaks on True/False values);
+        - empty lists would otherwise become float64 arrays, which
+          numpy rejects as indices.
+        """
+        arr = np.asarray(indices)
+        if arr.dtype == bool:
+            arr = np.where(arr)[0]
+        elif not np.issubdtype(arr.dtype, np.integer):
+            if arr.size == 0:
+                arr = arr.astype(np.intp)
+            else:
+                raise TypeError(f"indices must be integers or a boolean mask, got dtype {arr.dtype}")
+        return arr
+
     def subset_rows(self, indices: Union[list[int], npt.NDArray]) -> "DataMatrix":
         """
         Create a new DataMatrix with only the specified rows.
 
         Parameters:
-            indices: List or array of row indices to include
+            indices: List or array of row indices to include, or a
+                boolean mask of length ``n_samples``
 
         Returns:
             DataMatrix: Matrix with subset of rows, preserving specimen metadata
         """
         with self._lock:
-            if isinstance(indices, list):
-                indices = np.array(indices)
+            indices = self._normalize_indices(indices)
 
             self._logger.debug(f"subset_rows: selecting {len(indices)} rows from {self._data.shape[0]}")
 
@@ -759,14 +778,14 @@ class DataMatrix:
         Create a new DataMatrix with only the specified columns.
 
         Parameters:
-            indices: List or array of column indices to include
+            indices: List or array of column indices to include, or a
+                boolean mask of length ``n_variables``
 
         Returns:
             DataMatrix: Matrix with subset of columns, preserving column metadata
         """
         with self._lock:
-            if isinstance(indices, list):
-                indices = np.array(indices)
+            indices = self._normalize_indices(indices)
 
             self._logger.debug(f"subset_columns: selecting {len(indices)} columns from {self._data.shape[1]}")
 
@@ -1015,7 +1034,6 @@ class DataMatrix:
             incomplete_indices = np.where(has_nan)[0]
 
             for idx in incomplete_indices:
-                result[idx]
                 row_nan = nan_mask[idx]
 
                 if not np.any(row_nan):

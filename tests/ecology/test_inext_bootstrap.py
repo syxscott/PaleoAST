@@ -230,7 +230,7 @@ class TestINEXTBootstrapHillNumbers:
         assert all(result.expected_richness >= 0)
 
     def test_bootstrap_q2_simpson(self):
-        """Test bootstrap for q=2 (Simpson concentration)."""
+        """Test bootstrap for q=2 (inverse Simpson Hill number)."""
         from ecology.beta_diversity import coverage_rarefaction_hill
 
         abundance = np.array([[100, 50, 30, 15, 5]])
@@ -240,9 +240,9 @@ class TestINEXTBootstrapHillNumbers:
         )
 
         assert result.method == "coverage_rarefaction_hill_q2"
-        # Simpson concentration should be between 0 and 1
-        assert all(result.expected_richness >= 0)
-        assert all(result.expected_richness <= 1)
+        # Hill-number scale: 1 <= ^2D = 1/lambda <= S (effective species)
+        assert all(result.expected_richness >= 1)
+        assert all(result.expected_richness <= 5)
 
 
 if __name__ == "__main__":

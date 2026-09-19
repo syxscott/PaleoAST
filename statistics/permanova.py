@@ -18,10 +18,14 @@ where:
     g = number of groups
     n = total number of samples
 
-SS_B and SS_W are computed from distance matrices:
-    SS_T = Σᵢ Σⱼ d²_ij / n
-    SS_B = Σ_g n_g * d̄²_g. - SS_T/n * Σ_g n_g
-    SS_W = SS_T - SS_B
+SS_B and SS_W are computed from the distance matrix (Anderson 2001):
+    SS_T = (1/n) * Σ_{i<j} d²_ij          (upper triangle, unordered pairs)
+    SS_W = Σ_g (1/n_g) * Σ_{i<j in g} d²_ij
+    SS_B = SS_T - SS_W
+
+A design without replication (n - g <= 0) or with zero within-group
+dispersion has no defined F ratio; such tests raise ComputationError rather
+than being reported as F = inf.
 
 Author: PaleoAST Development Team
 version: 1.0.1
@@ -132,11 +136,6 @@ class PERMANOVAAnalyzer:
             D = validate_data_array(distance_matrix, allow_nan=False, name="distance_matrix")
 
             n = D.shape[0]
-            unique_groups = sorted(set(groups), key=lambda x: str(x))
-            self._logger.info(
-                f"PERMANOVA analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
-                f"n_permutations={n_permutations}, random_seed={random_seed}"
-            )
 
             if D.shape[0] != D.shape[1]:
                 raise MatrixDimensionError("Distance matrix must be square")
@@ -144,15 +143,28 @@ class PERMANOVAAnalyzer:
             if len(groups) != n:
                 raise ComputationError("Group assignments must match distance matrix size")
 
-            if n_permutations is None:
-                n_permutations = self._n_permutations
-
+            # Derived group bookkeeping is computed *after* the checks above
+            # (the previous code read ``groups`` before its length had been
+            # validated and then recomputed it once more below).
             groups_array = np.array(groups)
             unique_groups = sorted(set(groups), key=lambda x: str(x))
             g = len(unique_groups)
+            self._logger.info(
+                f"PERMANOVA analyze started: n_samples={n}, n_groups={g}, "
+                f"n_permutations={n_permutations}, random_seed={random_seed}"
+            )
 
-            # Compute observed F statistic
-            F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(D, groups_array, g, n)
+            if n_permutations is None:
+                n_permutations = self._n_permutations
+
+            # Compute observed F statistic.  ``strict=True`` rejects designs in
+            # which F cannot be defined (no residual df, zero within-group
+            # dispersion) instead of returning F = inf and a meaningless
+            # p-value; the permutation draws below stay non-strict so a single
+            # degenerate resampling cannot abort the test.
+            F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(
+                D, groups_array, g, n, strict=True
+            )
 
             # Permutation test. Use a dedicated Generator when a seed is
             # supplied so the test is fully reproducible; fall back to
@@ -197,7 +209,7 @@ class PERMANOVAAnalyzer:
             self._logger.info(f"PERMANOVA completed: F={F_obs:.4f}, p-value={p_value:.4f}")
             return result
 
-    def _compute_F_statistic(self, D: npt.NDArray, groups: np.ndarray, g: int, n: int) -> tuple:
+    def _compute_F_statistic(self, D: npt.NDArray, groups: np.ndarray, g: int, n: int, strict: bool = False) -> tuple:
         """
         Compute PERMANOVA F statistic from distance matrix.
 
@@ -207,8 +219,25 @@ class PERMANOVAAnalyzer:
             SS_B = SS_T - SS_W
             F = (SS_B / (g-1)) / (SS_W / (n-g))
 
+        Parameters:
+            D: Square distance matrix
+            groups: Group assignment per sample
+            g: Number of distinct groups
+            n: Total number of samples
+            strict: When True (used for the *observed* statistic only), an
+                F statistic that cannot be defined raises ComputationError
+                instead of being reported as ``inf``.  Permutation draws keep
+                ``strict=False`` so that a degenerate resampling never aborts
+                the test half way through.
+
         Returns:
             tuple: (F, SS_B, SS_W, df_g, df_res)
+
+        Raises:
+            ComputationError: if ``strict`` and the residual degrees of
+                freedom are not positive, or the within-group mean square is
+                zero (both make F infinite and the permutation p-value
+                meaningless).
         """
         # Square distances
         D_sq = D**2
@@ -252,13 +281,43 @@ class PERMANOVAAnalyzer:
         if df_g <= 0:
             # Single group - test not applicable
             F = 0.0
-        elif df_res <= 0:
-            # Perfect separation (all within-group variance is zero)
-            F = float("inf")
+            undefined_reason = ""
         else:
             MS_between = ss_between / df_g
-            MS_within = ss_within / df_res
-            F = MS_between / MS_within if MS_within > 0 else float("inf")
+            MS_within = ss_within / df_res if df_res > 0 else 0.0
+            if df_res <= 0:
+                undefined_reason = (
+                    f"no residual degrees of freedom (n = {n} samples, g = {g} groups, "
+                    f"n - g = {df_res})"
+                )
+                F = float("inf")
+            elif MS_within <= 0:
+                undefined_reason = (
+                    "zero within-group dispersion (MS_within = 0): every group is a set of "
+                    "identical samples, so the F ratio cannot be scaled"
+                )
+                F = float("inf")
+            else:
+                undefined_reason = ""
+                F = MS_between / MS_within
+
+            if strict and undefined_reason:
+                # Reporting F = inf would leave the caller to decide the
+                # p-value from "inf >= inf" comparisons; that number is
+                # meaningless.  Fail loudly instead.
+                raise ComputationError(
+                    "PERMANOVA F statistic is undefined: "
+                    f"{undefined_reason}. Suggestions: add more replicates per group "
+                    "(n > g), merge nearly identical samples, or check for "
+                    "duplicated/constant rows in the input data.",
+                    details={
+                        "n_samples": n,
+                        "n_groups": g,
+                        "df_between": df_g,
+                        "df_within": df_res,
+                        "ss_within": float(ss_within),
+                    },
+                )
 
         return F, ss_between, ss_within, df_g, df_res
 

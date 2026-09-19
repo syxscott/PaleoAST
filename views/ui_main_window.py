@@ -2456,6 +2456,30 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, _("Transpose Error"), str(e))
 
+    @staticmethod
+    def _filter_labels(labels: list[str] | None, keep: "np.ndarray", n_expected: int, kind: str) -> list[str] | None:
+        """
+        Apply a boolean keep-mask to a label list.
+
+        Returns ``None`` (so ``DataMatrix`` regenerates default labels) when
+        the incoming list does not describe the pre-imputation axis - a
+        mismatched label list is worse than a generic one.
+        """
+        import numpy as np
+
+        if labels is None or len(labels) != n_expected:
+            logging.getLogger(__name__).warning(
+                "Imputation: %s label count %s != %s; regenerating default labels.",
+                kind,
+                len(labels) if labels is not None else None,
+                n_expected,
+            )
+            return None
+        keep = np.asarray(keep, dtype=bool)
+        if keep.size != n_expected:
+            return None
+        return [label for label, k in zip(labels, keep) if bool(k)]
+
     def _on_run_imputation(self) -> None:
         """Open missing value imputation dialog."""
         if not self._state.has_data:
@@ -2514,8 +2538,28 @@ class MainWindow(QMainWindow):
                 result = impute(data, method, k=k)
 
                 # Update state
-                row_labels = self._state.data_matrix.row_labels
-                col_labels = self._state.data_matrix.col_labels
+                row_labels = list(self._state.data_matrix.row_labels)
+                col_labels = list(self._state.data_matrix.col_labels)
+
+                # ``ImputationResult`` only carries the matrix for the
+                # removal strategies - no kept-index information - so the
+                # labels must be filtered here from the *original* NaN mask,
+                # using exactly the predicate config.imputation applies.
+                # Passing full-length labels to a shortened matrix made
+                # DataMatrix raise MatrixDimensionError.
+                if method == ImputationMethod.REMOVE_ROWS:
+                    keep = ~np.any(nan_mask, axis=1)
+                    row_labels = self._filter_labels(row_labels, keep, data.shape[0], "row")
+                elif method == ImputationMethod.REMOVE_COLUMNS:
+                    keep = ~np.any(nan_mask, axis=0)
+                    col_labels = self._filter_labels(col_labels, keep, data.shape[1], "column")
+                else:
+                    # mean / median / knn keep the original shape; guard
+                    # against a stale label list of the wrong length.
+                    if len(row_labels) != result.data.shape[0]:
+                        row_labels = None
+                    if len(col_labels) != result.data.shape[1]:
+                        col_labels = None
 
                 new_matrix = DataMatrix(
                     result.data,
@@ -2525,8 +2569,8 @@ class MainWindow(QMainWindow):
                 self._state.set_data_matrix(new_matrix)
                 self._spreadsheet.load_data(
                     result.data,
-                    row_labels=row_labels,
-                    col_labels=col_labels,
+                    row_labels=new_matrix.row_labels,
+                    col_labels=new_matrix.col_labels,
                     update_state=False,
                 )
 
@@ -4499,51 +4543,26 @@ class MainWindow(QMainWindow):
             self._status_bar.setProgress(100, 100)
 
             import numpy as np  # local import keeps the module-level namespace tidy
+
             plot = InteractivePlotCanvas()
-            # Plot GPA-aligned landmarks
+            plot.setDarkTheme(self._is_dark_theme)
+            # Plot GPA-aligned landmarks.  Both branches go through
+            # ``plot_gpa_aligned``: the 2-D case used to call
+            # ``plot_efa_contours(coords, title=...)`` with a single
+            # positional argument and raised TypeError (plot_efa_contours
+            # needs an original *and* a reconstructed contour).
             if hasattr(result, "aligned_configurations"):
                 coords = np.asarray(result.aligned_configurations)
-                if coords.ndim == 3:
-                    # Overlay all specimens + mean shape. The original
-                    # implementation only plotted the first specimen,
-                    # which made the visualisation misleading.
-                    from matplotlib.figure import Figure
-
-                    fig = Figure(figsize=(6, 6))
-                    ax = fig.add_subplot(111)
-                    for specimen in coords:
-                        ax.plot(
-                            specimen[:, 0],
-                            specimen[:, 1],
-                            "-o",
-                            color="#3498DB",
-                            alpha=0.3,
-                            markersize=3,
-                        )
-                    mean_shape = coords.mean(axis=0)
-                    ax.plot(
-                        mean_shape[:, 0],
-                        mean_shape[:, 1],
-                        "-o",
-                        color="#E74C3C",
-                        linewidth=2.0,
-                        markersize=5,
-                        label=_("Mean shape"),
-                    )
-                    ax.set_title(_("GPA Aligned Landmarks"))
-                    ax.set_aspect("equal")
-                    ax.legend(loc="best")
-                    ax.grid(True, linestyle="--", alpha=0.3)
-                    self._embed_figure_in_workspace(
-                        fig, _("GPA Alignment"), dark_theme=self._is_dark_theme
-                    )
-                else:
-                    plot.plot_efa_contours(coords, title=_("GPA Aligned Landmarks"))
-                    plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
-                    self._workspace.setCurrentIndex(plot_index)
+                plot.plot_gpa_aligned(coords, title=_("GPA Aligned Landmarks"))
             else:
-                plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
-                self._workspace.setCurrentIndex(plot_index)
+                # No aligned configurations on the result (e.g. the 1-D
+                # summary path): show an empty canvas instead of a blank tab.
+                plot.get_figure().clear()
+                plot.get_figure().text(0.5, 0.5, _("No aligned configurations"), ha="center")
+                plot.get_figure().canvas.draw_idle()
+
+            plot_index = self._add_plot_to_workspace(plot, _("GPA Alignment"))
+            self._workspace.setCurrentIndex(plot_index)
 
             self._status_bar.setInfo(_("GPA analysis completed"))
 
@@ -4655,7 +4674,10 @@ class MainWindow(QMainWindow):
                 from stratigraphy.spectral_analysis import SpectralAnalyzer
 
                 analyzer = SpectralAnalyzer()
-                scales = np.arange(params.get("min_scale", 2), params.get("max_scale", 50))
+                # ``arange`` excludes its stop value; the dialog's "max scale"
+                # is inclusive, so +1 keeps the requested top scale (and keeps
+                # the vector non-empty now that min < max is enforced).
+                scales = np.arange(params.get("min_scale", 2), params.get("max_scale", 50) + 1)
                 result = analyzer.wavelet_transform(
                     time,
                     values,

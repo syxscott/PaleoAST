@@ -78,9 +78,8 @@ def test_nmds_stress_matches_reference_formula(small_distance_matrix):
     This test verifies the stress formula is correct by computing it manually.
     """
     from scipy.spatial.distance import cdist
-    from sklearn.isotonic import IsotonicRegression
 
-    from statistics.nmds import NMDSAnalyzer
+    from statistics.nmds import NMDSAnalyzer, _pava_increasing
 
     # Get NMDS result
     analyzer = NMDSAnalyzer()
@@ -103,9 +102,11 @@ def test_nmds_stress_matches_reference_formula(small_distance_matrix):
     D_hat = cdist(X, X, metric="euclidean")
     d_hat = D_hat[iu, ju]
 
-    # Isotonic regression
-    iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
-    d_tilde = iso.fit_transform(d_target, d_hat)
+    # Isotonic regression (PAVA on d_hat sorted by d_target)
+    order = np.argsort(d_target, kind="stable")
+    inv = np.empty_like(order)
+    inv[order] = np.arange(len(order))
+    d_tilde = _pava_increasing(d_hat[order])[inv]
 
     # Reference stress formula
     diff = d_hat - d_tilde
@@ -148,16 +149,16 @@ def test_nmds_different_restarts_give_different_results():
 
 
 # ---------------------------------------------------------------------------
-# IsotonicRegression reuse — source-code inspection test
+# Dependency-free isotonic step — source-code inspection test
 # ---------------------------------------------------------------------------
 
 
-def test_smacof_creates_isotonic_regression_once_per_restart():
-    """Verify that IsotonicRegression is instantiated once per restart by source inspection.
+def test_smacof_uses_builtin_pava_not_sklearn():
+    """SMACOF's isotonic step must use the built-in PAVA helper.
 
-    The old buggy implementation created a new IsotonicRegression() on every
-    SMACOF iteration inside the for loop. The fixed version creates it once
-    before the loop. We verify the fix by checking the source code of _smacof.
+    The old implementation hard-imported sklearn.IsotonicRegression, which
+    broke NMDS entirely when scikit-learn was not installed. Verify by
+    source inspection that the hot loop is dependency-free.
     """
     import inspect
 
@@ -165,30 +166,10 @@ def test_smacof_creates_isotonic_regression_once_per_restart():
 
     source = inspect.getsource(NMDSAnalyzer._smacof)
 
-    # The fixed version should have the IsotonicRegression line BEFORE
-    # the "for iteration in range" loop, not inside it.
-    lines = source.split("\n")
-
-    # Find line numbers of key constructs (match the assignment specifically)
-    iso_line = None
-    for_loop_line = None
-
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("iso = IsotonicRegression("):
-            iso_line = i
-        if "for iteration in range" in line:
-            for_loop_line = i
-
-    assert iso_line is not None, "iso = IsotonicRegression() not found in _smacof source"
-    assert for_loop_line is not None, "for iteration loop not found in _smacof source"
-
-    # IsotonicRegression must be instantiated BEFORE (above) the for loop
-    assert iso_line < for_loop_line, (
-        f"iso = IsotonicRegression() at source line {iso_line} must be created BEFORE "
-        f"the for loop at source line {for_loop_line} (fixed: once per restart). "
-        f"Old buggy code created it INSIDE the loop (once per iteration)."
-    )
+    assert "from sklearn" not in source and "import sklearn" not in source, \
+        "_smacof must not import sklearn"
+    assert "IsotonicRegression(" not in source, "_smacof must not use sklearn's isotonic regression"
+    assert "_pava_increasing(" in source, "_smacof must call the built-in PAVA helper"
 
 
 # ---------------------------------------------------------------------------
@@ -229,79 +210,59 @@ def test_analyze_accepts_progress_callback():
 
 
 # ---------------------------------------------------------------------------
-# Performance benchmarks
+# Isotonic (PAVA) helper and performance
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
-def test_smacof_performance_isotonic_reuse():
-    """Optimised SMACOF should be >5x faster than naive per-iteration allocation.
+def test_pava_increasing_matches_known_isotonic_fits():
+    """_pava_increasing must equal the least-squares isotonic fit."""
+    from statistics.nmds import _pava_increasing
 
-    We compare the wall-clock time of:
-    1. Naive: IsotonicRegression() inside the loop (old buggy code)
-    2. Optimised: IsotonicRegression() outside the loop (fixed code)
+    # Already increasing: identity
+    y = np.array([1.0, 2.0, 3.0, 4.0])
+    np.testing.assert_allclose(_pava_increasing(y), y)
+
+    # One violation: pool [3, 2] -> [2.5, 2.5]
+    y = np.array([1.0, 3.0, 2.0, 4.0])
+    np.testing.assert_allclose(_pava_increasing(y), [1.0, 2.5, 2.5, 4.0])
+
+    # Fully decreasing: one pooled block
+    y = np.array([3.0, 2.0, 1.0])
+    np.testing.assert_allclose(_pava_increasing(y), [2.0, 2.0, 2.0])
+
+    # Multiple blocks
+    y = np.array([10.0, 1.0, 2.0, 9.0, 3.0])
+    np.testing.assert_allclose(
+        _pava_increasing(y), [13.0 / 3.0, 13.0 / 3.0, 13.0 / 3.0, 6.0, 6.0]
+    )
+
+
+@pytest.mark.slow
+def test_smacof_runs_without_sklearn():
+    """SMACOF must handle a realistic workload using the built-in PAVA fit.
+
+    Replaces the old sklearn-vs-sklearn benchmark: the hot loop no longer
+    imports scikit-learn at all, so the meaningful regression check is that
+    a 50-point, 10-restart analysis completes quickly with good stress.
     """
     from scipy.spatial.distance import cdist
 
-    from sklearn.isotonic import IsotonicRegression
-
     from statistics.nmds import NMDSAnalyzer
 
-    # Larger matrix for measurable timing
     np.random.seed(42)
     data = np.random.rand(50, 10)
     D = cdist(data, data, metric="euclidean")
 
-    n_restarts = 10
-    max_iter = 200
-
-    # --- Naive timing (new IsotonicRegression each iteration) ---
-    iu, ju = np.triu_indices(50, k=1)
-    d_target = D[iu, ju]
-
-    np.random.seed(42)
-    start_naive = time.perf_counter()
-    for _ in range(n_restarts):
-        X = np.random.randn(50, 2) * 0.01
-        for _ in range(max_iter):
-            diff = X[:, None, :] - X[None, :, :]
-            D_hat = np.sqrt(np.sum(diff**2, axis=2))
-            d_hat = D_hat[iu, ju]
-            # Naive: new instance every iteration
-            iso = IsotonicRegression(increasing=True, out_of_bounds="clip")
-            d_tilde = iso.fit_transform(d_target, d_hat)
-            # Guttman step (abbreviated)
-            D_tilde = np.zeros_like(D)
-            D_tilde[iu, ju] = d_tilde
-            D_tilde[ju, iu] = d_tilde
-            B = np.zeros_like(D)
-            mask = D_hat > 0
-            B[mask] = -D_tilde[mask] / D_hat[mask]
-            np.fill_diagonal(B, 0)
-            row_sums = np.sum(B, axis=1)
-            np.fill_diagonal(B, -row_sums)
-            X = (B @ X) / 50
-
-    naive_elapsed = time.perf_counter() - start_naive
-
-    # --- Optimised timing (IsotonicRegression reused) ---
     analyzer = NMDSAnalyzer()
-    start_opt = time.perf_counter()
+    start = time.perf_counter()
     result = analyzer.analyze(
         D,
         n_dimensions=2,
-        n_restarts=n_restarts,
-        max_iterations=max_iter,
+        n_restarts=10,
+        max_iterations=200,
     )
-    opt_elapsed = time.perf_counter() - start_opt
+    elapsed = time.perf_counter() - start
 
-    speedup = naive_elapsed / opt_elapsed
-
-    assert speedup > 3.0, (
-        f"Expected >5x speedup, got {speedup:.1f}x "
-        f"(naive={naive_elapsed:.2f}s, optimised={opt_elapsed:.2f}s)"
-    )
-
-    # Sanity-check result quality
+    assert elapsed < 60.0, f"NMDS took {elapsed:.1f}s for a 50-point matrix"
     assert result.stress < 0.2, f"Stress {result.stress} is unexpectedly high"
     assert result.n_iterations > 0

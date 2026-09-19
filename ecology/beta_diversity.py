@@ -43,11 +43,19 @@ Nestedness component (Baselga 2012 / Baselga 2010):
 
 Coverage-based Rarefaction:
 
-Coverage: C = 1 - (f1/N) * qD_1
-where f1 = singletons, N = total individuals, qD_1 = Hill number of order 1
+Sample coverage (Chao & Jost 2012, Eq. 3):
+    Chat_n = 1 - (f1/n) * ((n-1)*f1 / ((n-1)*f1 + 2*f2))
+
+Interpolated coverage of a rarefied subsample of m individuals
+(Chao & Jost 2012, Eq. 4; Chao et al. 2014, Table 1):
+    Chat(m) = 1 - sum_i (x_i/N) * C(N-x_i, m-1) / C(N-1, m-1)
+
+All diversity values reported by this module are Hill numbers
+(^0D = S, ^1D = exp(H'), ^2D = 1/lambda), including the q=1 and q=2
+asymptotic estimators.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.0.2
 """
 
 from __future__ import annotations
@@ -60,6 +68,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+from scipy.special import gammaln
 from scipy.stats import norm
 
 from config.i18n import _
@@ -345,6 +354,433 @@ class BetaDiversityAnalyzer:
 # =============================================================================
 
 
+def _integerize_abundances(values: npt.NDArray, context: str = "") -> npt.NDArray:
+    """
+    Round an abundance array to whole counts, preserving its shape.
+
+    Abundances are expected to be whole numbers, but they can arrive as floats
+    from parsed files, from arithmetic on matrices or from a multinomial
+    bootstrap.  Values are matched to the nearest integer with ``np.isclose``
+    (a plain ``astype(int)`` would truncate 4.9999999 to 4 and silently change
+    the frequency spectrum); any deviation beyond the tolerance is reported
+    through the module logger.  Non-finite and non-positive entries are
+    zeroed.
+
+    Parameters
+    ----------
+    values : array-like
+        Species abundances of any shape.
+    context : str, optional
+        Extra text for the warning message.
+
+    Returns
+    -------
+    np.ndarray
+        Array of the same shape holding integer-valued counts.
+    """
+    arr = np.asarray(values, dtype=np.float64)
+    keep = np.isfinite(arr) & (arr > 0)
+    if arr.size and not np.allclose(arr[keep], np.rint(arr[keep]), rtol=0.0, atol=1e-6):
+        deviations = np.abs(arr[keep] - np.rint(arr[keep]))
+        logger.warning(
+            "Non-integer species abundances%s were rounded to the nearest "
+            "count for the frequency-spectrum estimators (max deviation %.6g); "
+            "abundance data should be whole numbers.",
+            f" in {context}" if context else "",
+            float(deviations.max()) if deviations.size else 0.0,
+        )
+    return np.where(keep, np.rint(np.where(np.isfinite(arr), arr, 0.0)), 0.0)
+
+
+def _as_positive_counts(species_counts: npt.NDArray, context: str = "") -> npt.NDArray:
+    """
+    Flatten an abundance vector to strictly positive whole counts.
+
+    Parameters
+    ----------
+    species_counts : array-like
+        Species abundances (zeros and negatives are discarded).
+    context : str, optional
+        Extra text for the rounding warning.
+
+    Returns
+    -------
+    np.ndarray
+        Strictly positive integer-valued abundances as float64.
+    """
+    counts = _integerize_abundances(species_counts, context=context).reshape(-1)
+    return counts[counts > 0]
+
+
+def _frequency_classes(counts: npt.NDArray) -> tuple[float, float]:
+    """
+    Number of singleton (``f1``) and doubleton (``f2``) species.
+
+    ``np.isclose`` is used instead of ``==`` because the counts may carry
+    floating-point noise (e.g. ``0.99999999``), which ``== 1`` would drop and
+    thereby bias the coverage estimate low.
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive integer-valued abundances (see :func:`_as_positive_counts`).
+
+    Returns
+    -------
+    tuple of float
+        ``(f1, f2)``.
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    if counts.size == 0:
+        return 0.0, 0.0
+    f1 = float(np.count_nonzero(np.isclose(counts, 1.0)))
+    f2 = float(np.count_nonzero(np.isclose(counts, 2.0)))
+    return f1, f2
+
+
+def _sample_coverage(counts: npt.NDArray, n: float, f1: float, f2: float) -> float:
+    """
+    Sample coverage of an individual-based sample (Chao & Jost 2012, Eq. 3).
+
+    .. math:: \\hat C_n = 1 - \\frac{f_1}{n}\\,\\frac{(n-1)f_1}{(n-1)f_1 + 2f_2}
+
+    With ``f2 = 0`` the correction factor tends to 1 and the estimator reduces
+    to the Good-Turing coverage ``1 - f1/n``; with ``f1 = 0`` the sample is
+    declared complete (coverage 1).
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive abundances (only used for the empty-sample shortcut).
+    n : float
+        Total number of individuals.
+    f1, f2 : float
+        Numbers of singleton and doubleton species.
+
+    Returns
+    -------
+    float
+        Coverage estimate in ``[0, 1]``.
+    """
+    n = float(n)
+    if n <= 0 or counts is None or len(counts) == 0:
+        return 0.0
+    if f1 <= 0:
+        return 1.0
+    if n < 2:
+        # A single individual is necessarily a singleton: coverage is zero.
+        return 0.0
+    denom = (n - 1.0) * f1 + 2.0 * f2
+    gamma = ((n - 1.0) * f1) / denom if denom > 0 else 0.0
+    return float(min(1.0, max(0.0, 1.0 - (f1 / n) * gamma)))
+
+
+def _chao1_unseen(f1: float, f2: float) -> float:
+    """
+    Chao (1984) lower-bound estimate of the number of unseen species.
+
+    ``f1^2 / (2 f2)`` when doubletons exist, otherwise the bias-corrected
+    ``f1 (f1 - 1) / 2`` (which also handles the ``f2 = 0`` case without a
+    division by zero).
+
+    Parameters
+    ----------
+    f1, f2 : float
+        Numbers of singleton and doubleton species.
+
+    Returns
+    -------
+    float
+        Estimated number of unseen species (``>= 0``).
+    """
+    if f1 <= 0:
+        return 0.0
+    if f2 > 0:
+        return float((f1 * f1) / (2.0 * f2))
+    return float(max(0.0, (f1 * (f1 - 1.0)) / 2.0))
+
+
+def _chao_shen_proportions(
+    counts: npt.NDArray, n: float, f1: float
+) -> tuple[npt.NDArray, float]:
+    """
+    Bias-corrected relative abundances of the observed species.
+
+    Chao & Shen (1992) completeness correction, used by Chao & Jost (2012) and
+    iNEXT to turn the observed sample into the "complete" (asymptotic) sample:
+
+    .. math:: \\hat p_i = \\frac{i}{n}\\Bigl[1 - \\frac{f_1}{n}
+              \\frac{(i+1)f_{i+1}}{i f_i + \\delta_{i1}f_1}\\Bigr]
+
+    The correction deflates rare species, so ``sum(p_hat)`` is strictly smaller
+    than 1 whenever singletons are present; the residual probability mass is
+    carried by the unseen species (see :func:`_chao1_unseen`).
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive integer-valued abundances.
+    n : float
+        Total number of individuals.
+    f1 : float
+        Number of singleton species.
+
+    Returns
+    -------
+    tuple
+        ``(p_hat, residual)`` with ``p_hat`` the corrected proportions of the
+        observed species and ``residual = 1 - sum(p_hat)``.
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    n = float(n)
+    if counts.size == 0 or n <= 0:
+        return np.zeros(counts.size), 0.0
+    x = np.rint(counts).astype(int)
+    freq = np.bincount(x, minlength=int(x.max()) + 2).astype(np.float64)
+    p_hat = np.zeros(counts.size, dtype=np.float64)
+    if f1 > 0:
+        for k, i in enumerate(x):
+            denom = i * freq[i] + (f1 if i == 1 else 0.0)
+            correction = 0.0
+            if denom > 0:
+                correction = (f1 / n) * ((i + 1) * freq[i + 1]) / denom
+            p_hat[k] = (i / n) * max(0.0, 1.0 - correction)
+    else:
+        p_hat = x / n
+    residual = float(max(0.0, 1.0 - float(np.sum(p_hat))))
+    return p_hat, residual
+
+
+def _hill_number(counts: npt.NDArray, n: float, q: int) -> float:
+    """
+    Observed Hill number of order ``q`` for a vector of abundances.
+
+    ``q=0`` returns species richness, ``q=1`` ``exp(H')`` and ``q=2``
+    ``1/lambda`` (inverse Simpson concentration).
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive abundances.
+    n : float
+        Total number of individuals.
+    q : int
+        Hill order (0, 1 or 2).
+
+    Returns
+    -------
+    float
+        Hill number (``>= 0``).
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    counts = counts[counts > 0]
+    if counts.size == 0 or n <= 0:
+        return 0.0
+    if q == 0:
+        return float(counts.size)
+    p = counts / float(n)
+    if q == 1:
+        return float(math.exp(-float(np.sum(p * np.log(p)))))
+    lam = float(np.sum(p * p))
+    return float(1.0 / lam) if lam > 0 else 0.0
+
+
+def _hill_from_index(value: float, q: int) -> float:
+    """
+    Convert an entropy / concentration index into the Hill number of order q.
+
+    ``q=0`` passes the richness through, ``q=1`` exponentiates a Shannon
+    entropy and ``q=2`` inverts a Simpson concentration ``1 - lambda``
+    (the form returned by :func:`_rarefaction_simpson`).
+
+    Parameters
+    ----------
+    value : float
+        Index value on the natural scale used by the rarefaction helpers.
+    q : int
+        Hill order.
+
+    Returns
+    -------
+    float
+        Hill number of order ``q``.
+    """
+    if q == 0:
+        return float(value)
+    if q == 1:
+        return float(math.exp(max(-700.0, min(700.0, float(value)))))
+    # q == 2: value is the Gini-Simpson index 1 - lambda
+    lam = 1.0 - float(value)
+    if lam <= 1e-12:
+        lam = 1e-12
+    return float(1.0 / lam)
+
+
+def _hill_asymptote(
+    counts: npt.NDArray, n: float, q: int, f1: float, f2: float, s_obs: int
+) -> float:
+    """
+    Asymptotic (complete-sample) Hill number of order ``q``.
+
+    - ``q=0``: Chao1 richness, ``S_obs + f1^2/(2 f2)``.
+    - ``q=1``: ``exp(H_inf)`` with the Chao-Shen corrected proportions and the
+      residual mass spread over the Chao1 number of unseen species; reduces to
+      ``exp(H')`` when ``f1 = 0``.
+    - ``q=2``: ``1 / lambda_inf`` on the same corrected proportions; reduces to
+      the observed inverse Simpson when ``f1 = 0``.
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive integer-valued abundances.
+    n : float
+        Total number of individuals.
+    q : int
+        Hill order (0, 1 or 2).
+    f1, f2 : float
+        Numbers of singleton and doubleton species.
+    s_obs : int
+        Observed richness.
+
+    Returns
+    -------
+    float
+        Asymptotic Hill number, guaranteed ``>=`` the observed Hill number.
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    if counts.size == 0 or n <= 0:
+        return 0.0
+    if q == 0:
+        return float(s_obs) + _chao1_unseen(f1, f2)
+
+    p_hat, residual = _chao_shen_proportions(counts, n, f1)
+    n_unseen = _chao1_unseen(f1, f2)
+    observed = _hill_number(counts, n, q)
+    if n_unseen <= 0 or residual <= 0:
+        return observed
+
+    p0 = residual / n_unseen
+    if q == 1:
+        positive = p_hat[p_hat > 0]
+        entropy = -float(np.sum(positive * np.log(positive))) if positive.size else 0.0
+        entropy -= n_unseen * p0 * math.log(p0)
+        asymptote = float(math.exp(entropy))
+    else:  # q == 2
+        lam = float(np.sum(p_hat * p_hat)) + n_unseen * p0 * p0
+        asymptote = float(1.0 / lam) if lam > 0 else observed
+    # The asymptotic estimate may not be smaller than the observed diversity.
+    return max(asymptote, observed)
+
+
+def _sample_size_for_coverage(counts: npt.NDArray, n: int, target: float) -> int:
+    """
+    Invert the interpolated coverage curve (Chao & Jost 2012, Eq. 4).
+
+    Returns the subsample size ``m`` whose interpolated coverage ``Chat(m)`` is
+    closest to ``target``.  ``Chat(m)`` is monotone increasing in ``m``, so a
+    plain integer bisection finds the crossing point; the previous linear
+    heuristic ``m = n * c / Chat(n)`` was not the coverage of the rarefied
+    sample and mis-aligned the curve (most visibly for uneven samples).
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive integer-valued abundances.
+    n : int
+        Total number of individuals in the sample.
+    target : float
+        Target coverage in ``[0, 1]``.
+
+    Returns
+    -------
+    int
+        Subsample size in ``[1, n]``.
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    n = int(n)
+    if n <= 1 or counts.size == 0:
+        return max(1, min(n, 1))
+    top = _rarefied_coverage(counts, n, n)
+    if target >= top:
+        return n
+    if target <= 0.0:
+        return 1
+
+    lo, hi = 1, n  # Chat(lo) <= target < Chat(hi)
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if _rarefied_coverage(counts, mid, n) <= target:
+            lo = mid
+        else:
+            hi = mid
+    # Return whichever endpoint is closest to the requested coverage.
+    c_lo = _rarefied_coverage(counts, lo, n)
+    c_hi = _rarefied_coverage(counts, hi, n)
+    return lo if abs(target - c_lo) <= abs(c_hi - target) else hi
+
+
+def _coverage_curve_point(
+    counts: npt.NDArray,
+    n: int,
+    q: int,
+    c_level: float,
+    coverage_i: float,
+    asymptote: float,
+) -> float:
+    """
+    Hill number of order ``q`` at a target coverage (CRÉ curve).
+
+    Covers both branches of Chao & Jost (2012) in one place so the rarefaction
+    (interpolation), the extrapolation and the asymptote share a single
+    transform:
+
+    - ``c_level < Chat``: classic individual-based rarefaction of the observed
+      sample, evaluated at the subsample size ``m`` solving ``Chat(m) = c_level``.
+    - ``c_level >= Chat``: linear in the *standardised coverage*
+      ``(c - Chat)/(1 - Chat)`` between the observed Hill number and the
+      asymptotic Hill number, i.e. the asymptote is reached at coverage 1.
+
+    Parameters
+    ----------
+    counts : np.ndarray
+        Positive integer-valued abundances.
+    n : int
+        Total number of individuals.
+    q : int
+        Hill order (0, 1 or 2).
+    c_level : float
+        Target coverage.
+    coverage_i : float
+        Sample coverage ``Chat`` of the full sample.
+    asymptote : float
+        Asymptotic Hill number from :func:`_hill_asymptote`.
+
+    Returns
+    -------
+    float
+        Diversity value of order ``q`` at ``c_level``.
+    """
+    counts = np.asarray(counts, dtype=np.float64).reshape(-1)
+    counts = counts[counts > 0]
+    if counts.size == 0 or n <= 0:
+        return 0.0
+    observed = _hill_number(counts, n, q)
+    if coverage_i <= 0:
+        return observed
+    if c_level < coverage_i:
+        m = _sample_size_for_coverage(counts, n, c_level)
+        m = int(min(max(1, m), n))
+        if q == 0:
+            return float(_rarefaction_species(counts, m))
+        if q == 1:
+            return _hill_from_index(_rarefaction_shannon(counts, m, n), 1)
+        return _hill_from_index(_rarefaction_simpson(counts, m, n), 2)
+    if coverage_i >= 1.0 or c_level >= 1.0:
+        return float(asymptote)
+    frac = (c_level - coverage_i) / (1.0 - coverage_i)
+    return float(observed + (asymptote - observed) * frac)
+
+
 def coverage_rarefaction_hill(
     abundance_matrix: npt.NDArray,
     sample_names: list[str] | None = None,
@@ -371,8 +807,8 @@ def coverage_rarefaction_hill(
     q : int, default=0
         Order of the Hill number:
         - q=0: species richness (S)
-        - q=1: Shannon entropy (exp(H'))
-        - q=2: Simpson concentration (1/D)
+        - q=1: Shannon diversity (^1D = exp(H'))
+        - q=2: inverse Simpson diversity (^2D = 1/lambda)
     n_points : int, default=50
         Number of coverage levels to evaluate.
     confidence_level : float, default=0.95
@@ -391,16 +827,24 @@ def coverage_rarefaction_hill(
     Notes
     -----
     **Coverage estimator** (Chao & Jost 2012, Eq. 3):
-        C_n = 1 - (f_1/n) · ((n-1)·f_1 / ((n-1)·f_1 + 2·f_2))
+        Chat_n = 1 - (f_1/n) · ((n-1)·f_1 / ((n-1)·f_1 + 2·f_2))
 
-    **Asymptotic diversity estimators** (Chao et al. 2014):
-        - q=0: S_hat = S_obs + f_1² / (2·f_2)  (Chao1)
-        - q=1: S_hat = S_obs + f_1 · γ  where γ = (n-1)·f_1 / ((n-1)·f_1 + 2·f_2)
-        - q=2: S_hat = S_obs + f_1 · γ²
+    **Asymptotic diversity estimators** (Chao et al. 2014), all on the
+    Hill-number scale so that the rarefaction curve, the extrapolation and
+    the asymptote are directly comparable:
+        - q=0: ^0D_inf = S_obs + f_1²/(2·f_2)          (Chao1 richness)
+        - q=1: ^1D_inf = exp(H_inf) on the Chao-Shen bias-corrected
+          proportions, with the residual mass carried by the unseen
+          species; degenerates to exp(H') when f_1 = 0.
+        - q=2: ^2D_inf = 1/lambda_inf on the same corrected proportions;
+          degenerates to the observed 1/lambda when f_1 = 0.
 
     **Rarefaction/extrapolation** (Chao & Jost 2012):
-        For coverage C < C_obs: interpolate using classic rarefaction
-        For coverage C > C_obs: extrapolate toward asymptotic estimator
+        For coverage C < Chat: interpolate with the classic rarefaction
+        formula evaluated at the sample size m solving Chat(m) = C
+        (inversion of Eq. 4, see :func:`_sample_size_for_coverage`).
+        For coverage C > Chat: scale linearly in (C - Chat)/(1 - Chat)
+        from the observed Hill number toward the asymptotic Hill number.
 
     **Bootstrap CI**: Uses local RNG (np.random.default_rng(seed))
     to avoid polluting global random state.
@@ -422,6 +866,11 @@ def coverage_rarefaction_hill(
         raise ValidationError(_("Abundance matrix must be 2D"))
     if abundance_matrix.shape[0] == 0 or abundance_matrix.shape[1] == 0:
         raise ValidationError(_("Abundance matrix cannot be empty"))
+
+    # The frequency-spectrum estimators need whole-number abundances: round
+    # once for the whole matrix (single warning) instead of truncating row by
+    # row, which also drops stray negative / non-finite cells.
+    abundance_matrix = _integerize_abundances(abundance_matrix, context="abundance_matrix")
 
     n_samples, n_species = abundance_matrix.shape
 
@@ -454,53 +903,25 @@ def coverage_rarefaction_hill(
 
     for i in range(n_samples):
         row = abundance_matrix[i]
-        total_n = int(np.sum(row))
         species_counts = row[row > 0]
+        total_n = int(np.sum(species_counts))
+        s_obs = int(species_counts.size)
 
-        if total_n == 0 or len(species_counts) == 0:
+        if total_n == 0 or s_obs == 0:
             sample_coverage[i] = 0.0
             asymptote[i] = 0.0
             continue
 
-        # Count singletons and doubletons
-        f1 = float(np.sum(species_counts == 1))
-        f2 = float(np.sum(species_counts == 2))
-        s_obs = len(species_counts)
+        # Count singletons and doubletons (np.isclose based: floats from
+        # parsed files must not silently drop out of the frequency spectrum)
+        f1, f2 = _frequency_classes(species_counts)
 
         # ---- Coverage estimator (Chao & Jost 2012, Eq. 3) ----
-        if f1 > 0 and total_n > 1:
-            gamma_factor = ((total_n - 1) * f1) / ((total_n - 1) * f1 + 2 * f2) if ((total_n - 1) * f1 + 2 * f2) > 0 else 0.0
-        else:
-            gamma_factor = 0.0
-        coverage_i = 1.0 - (f1 / total_n) * gamma_factor if total_n > 0 else 0.0
+        coverage_i = _sample_coverage(species_counts, total_n, f1, f2)
         sample_coverage[i] = coverage_i
 
-        # ---- Asymptotic diversity estimator (Chao et al. 2014) ----
-        if q == 0:
-            # Chao1 for species richness
-            if f2 > 0:
-                asymptote[i] = s_obs + (f1**2) / (2 * f2)
-            elif f1 > 1:
-                asymptote[i] = s_obs + f1 * (f1 - 1) / 2
-            else:
-                asymptote[i] = float(s_obs)
-        elif q == 1:
-            # Shannon entropy estimator (Chao et al. 2014)
-            if f1 > 0 and f2 >= 0:
-                asymptote[i] = s_obs + f1 * gamma_factor
-            else:
-                # Observed Shannon diversity
-                p = species_counts / total_n
-                n0 = s_obs - np.sum(p * np.log(p))
-                asymptote[i] = s_obs + n0
-        else:  # q == 2
-            # Simpson concentration estimator (Chao et al. 2014)
-            if f1 > 0 and f2 >= 0:
-                asymptote[i] = s_obs + f1 * (gamma_factor**2)
-            else:
-                p = species_counts / total_n
-                n0 = s_obs - np.sum(p**2)
-                asymptote[i] = s_obs + n0
+        # ---- Asymptotic Hill number (Chao et al. 2014) ----
+        asymptote[i] = _hill_asymptote(species_counts, total_n, q, f1, f2, s_obs)
 
         # ---- Rarefaction/extrapolation at each coverage level ----
         # True non-parametric bootstrap: resample from multinomial (Chao & Jost 2012)
@@ -508,82 +929,27 @@ def coverage_rarefaction_hill(
         for _bootstrap_idx in range(n_bootstrap):
             # Multinomial resampling: sample N individuals from p_hat
             boot_counts = _multinomial_resample(species_counts, total_n, rng)
+            boot_counts = _as_positive_counts(boot_counts)
             boot_N = int(np.sum(boot_counts))
-            boot_species = boot_counts[boot_counts > 0] if boot_N > 0 else np.array([])
 
-            if boot_N == 0 or len(boot_species) == 0:
-                # Empty resample: use observed curve
-                boot_curve = np.zeros(n_points)
-                for j, c_level in enumerate(coverage_levels):
-                    if c_level <= coverage_i:
-                        m = max(1, int(total_n * c_level / coverage_i)) if coverage_i > 0 else 1
-                        m = min(m, total_n - 1)
-                        if q == 0:
-                            boot_curve[j] = _rarefaction_species(species_counts, m)
-                        elif q == 1:
-                            boot_curve[j] = _rarefaction_shannon(species_counts, m, total_n)
-                        else:
-                            boot_curve[j] = _rarefaction_simpson(species_counts, m, total_n)
-                    else:
-                        ratio = c_level / coverage_i if coverage_i > 0 else 1.0
-                        boot_curve[j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
-                        boot_curve[j] = min(boot_curve[j], asymptote[i])
-                bootstrap_curves.append(boot_curve)
+            if boot_N == 0 or boot_counts.size == 0:
+                # Empty resample: fall back to the observed sample
+                bootstrap_curves.append(np.zeros(n_points))
                 continue
 
-            # Compute coverage for resampled data
-            boot_f1 = float(np.sum(boot_species == 1))
-            boot_f2 = float(np.sum(boot_species == 2))
-            boot_s_obs = len(boot_species)
-
-            if boot_f1 > 0 and boot_N > 1:
-                boot_gamma = ((boot_N - 1) * boot_f1) / ((boot_N - 1) * boot_f1 + 2 * boot_f2)
-            else:
-                boot_gamma = 0.0
-            boot_coverage = 1.0 - (boot_f1 / boot_N) * boot_gamma if boot_N > 0 else 0.0
-
-            # Compute asymptotic estimator for resampled data
-            if q == 0:
-                if boot_f2 > 0:
-                    boot_asymptote = boot_s_obs + (boot_f1**2) / (2 * boot_f2)
-                elif boot_f1 > 1:
-                    boot_asymptote = boot_s_obs + boot_f1 * (boot_f1 - 1) / 2
-                else:
-                    boot_asymptote = float(boot_s_obs)
-            elif q == 1:
-                if boot_f1 > 0 and boot_f2 >= 0:
-                    boot_asymptote = boot_s_obs + boot_f1 * boot_gamma
-                else:
-                    p = boot_species / boot_N
-                    boot_asymptote = boot_s_obs - np.sum(p * np.log(p))
-            else:  # q == 2
-                if boot_f1 > 0 and boot_f2 >= 0:
-                    boot_asymptote = boot_s_obs + boot_f1 * (boot_gamma**2)
-                else:
-                    p = boot_species / boot_N
-                    boot_asymptote = boot_s_obs - np.sum(p**2)
-
-            # Rarefaction/extrapolation curve for this resample
-            boot_curve = np.zeros(n_points)
-            for j, c_level in enumerate(coverage_levels):
-                if c_level <= boot_coverage and boot_coverage > 0:
-                    # Interpolation (rarefaction)
-                    m = max(1, int(boot_N * c_level / boot_coverage))
-                    m = min(m, boot_N - 1)
-                    if q == 0:
-                        boot_curve[j] = _rarefaction_species(boot_species, m)
-                    elif q == 1:
-                        boot_curve[j] = _rarefaction_shannon(boot_species, m, boot_N)
-                    else:
-                        boot_curve[j] = _rarefaction_simpson(boot_species, m, boot_N)
-                else:
-                    # Extrapolation toward asymptote
-                    if boot_coverage > 0:
-                        ratio = c_level / boot_coverage
-                        boot_curve[j] = boot_s_obs + (boot_asymptote - boot_s_obs) * (ratio - 1)
-                        boot_curve[j] = min(boot_curve[j], boot_asymptote)
-                    else:
-                        boot_curve[j] = boot_s_obs
+            boot_f1, boot_f2 = _frequency_classes(boot_counts)
+            boot_coverage = _sample_coverage(boot_counts, boot_N, boot_f1, boot_f2)
+            boot_asymptote = _hill_asymptote(
+                boot_counts, boot_N, q, boot_f1, boot_f2, int(boot_counts.size)
+            )
+            boot_curve = np.array(
+                [
+                    _coverage_curve_point(
+                        boot_counts, boot_N, q, c_level, boot_coverage, boot_asymptote
+                    )
+                    for c_level in coverage_levels
+                ]
+            )
             bootstrap_curves.append(boot_curve)
 
         bootstrap_curves = np.array(bootstrap_curves) if bootstrap_curves else np.zeros((0, n_points))
@@ -592,23 +958,14 @@ def coverage_rarefaction_hill(
         # Chao et al. (2014) compute the rarefaction/extrapolation point
         # estimate from the observed data; bootstrap replicates are used
         # only to estimate the standard error / confidence bounds.
-        observed_curve = np.zeros(n_points)
-        for j, c_level in enumerate(coverage_levels):
-            if coverage_i > 0 and c_level <= coverage_i:
-                # Interpolation (rarefaction) of the observed sample
-                m = max(1, int(total_n * c_level / coverage_i))
-                m = min(m, total_n - 1)
-                if q == 0:
-                    observed_curve[j] = _rarefaction_species(species_counts, m)
-                elif q == 1:
-                    observed_curve[j] = _rarefaction_shannon(species_counts, m, total_n)
-                else:
-                    observed_curve[j] = _rarefaction_simpson(species_counts, m, total_n)
-            else:
-                # Extrapolation toward the asymptotic estimator
-                ratio = c_level / coverage_i if coverage_i > 0 else 1.0
-                observed_curve[j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
-                observed_curve[j] = min(observed_curve[j], asymptote[i])
+        observed_curve = np.array(
+            [
+                _coverage_curve_point(
+                    species_counts, total_n, q, c_level, coverage_i, asymptote[i]
+                )
+                for c_level in coverage_levels
+            ]
+        )
         richness_curve[i] = observed_curve
 
         # ---- Bootstrap replicates feed only the s.e. / CI bounds ----
@@ -642,46 +999,60 @@ def _rarefied_coverage(species_counts: npt.NDArray, n: int, N: int) -> float:
     last row): the coverage of a rarefied subsample of ``n`` individuals
     drawn without replacement from the observed sample of ``N`` individuals,
 
-        C(n) = 1 - sum_i (x_i / N) * C(N - x_i, n) / C(N - 1, n)
+        C(n) = 1 - sum_i (x_i / N) * C(N - x_i, n - 1) / C(N - 1, n - 1)
 
-    where x_i is the abundance of species i. Singletons contribute exactly
-    1/N each (a singleton is represented in the subsample with probability
-    n/N and then contributes x_i/n = 1/n), while rarer species are
-    increasingly likely to be missed, so C(n) < C(N-1) = 1 - f1/N for
-    n < N-1 and the curve is strictly increasing in n.
+    which is the Good-Turing deficiency recomputed with the *expected* number
+    of singletons of the subsample: a species with abundance x_i is a
+    singleton in the subsample with probability
+    ``x_i * C(N - x_i, n - 1) / C(N, n)``, and dividing that expectation by
+    ``n`` gives the summand above because ``n * C(N, n) = N * C(N-1, n-1)``.
+    The previous implementation used ``C(N - x_i, n) / C(N - 1, n)``, i.e.
+    ``n`` in place of ``n - 1``, which is not the coverage of any subsample
+    (it does not reduce to ``1 - f1/N`` at ``n = N`` and is not monotone in
+    ``n``).
+
+    Singletons contribute exactly 1/N each at n = N, and rarer species are
+    increasingly likely to be missed, so C(n) < C(N) for n < N and the curve
+    is strictly increasing in n.
 
     Parameters
     ----------
     species_counts : array-like
         Species abundances in the full sample (positive counts).
     n : int
-        Rarefied sample size (n < N for interpolation).
+        Rarefied sample size (n <= N).
     N : int
         Total sample size of the full sample.
 
     Returns
     -------
     float
-        Estimated coverage C(n) of the rarefied sample.
+        Estimated coverage C(n) of the rarefied sample, in ``[0, 1]``.
     """
-    if n <= 0:
+    counts = np.asarray(species_counts, dtype=np.float64).reshape(-1)
+    counts = counts[counts > 0]
+    N = float(N)
+    n = int(n)
+    if n <= 0 or counts.size == 0 or N <= 0:
         return 0.0
     if n >= N:
-        # At (or beyond) the full sample size the Good-Turing estimate applies
-        f1 = float(np.sum(species_counts == 1))
-        return 1.0 - f1 / N if N > 0 else 0.0
+        # At (or beyond) the full sample size the Good-Turing estimate applies,
+        # which is exactly the n = N limit of the formula below.
+        f1, _ = _frequency_classes(counts)
+        return float(min(1.0, max(0.0, 1.0 - f1 / N)))
 
-    # log C(N-1, n): denominator binomial coefficient
-    log_ref = _lgamma(N) - _lgamma(n + 1) - _lgamma(N - n)
-    deficiency = 0.0
-    for x in species_counts:
-        if x > N - n:
-            # Species is necessarily present in every subsample of size n
-            continue
-        # log C(N - x, n)
-        log_num = _lgamma(N - x + 1) - _lgamma(n + 1) - _lgamma(N - x - n + 1)
-        deficiency += (x / N) * math.exp(log_num - log_ref)
-    return max(0.0, 1.0 - deficiency)
+    k = n - 1  # Eq. 4 uses n - 1 in both binomial coefficients
+    # log C(N-1, k): denominator binomial coefficient
+    log_ref = gammaln(N) - gammaln(k + 1) - gammaln(N - k)
+    # A species with x_i > N - k cannot be a singleton of the subsample
+    # (C(N - x_i, k) = 0), so it drops out of the deficiency sum.
+    x = counts[counts <= N - k]
+    if x.size == 0:
+        return 1.0
+    # log C(N - x_i, k), vectorised over species
+    log_num = gammaln(N - x + 1) - gammaln(k + 1) - gammaln(N - x - k + 1)
+    deficiency = float(np.sum((x / N) * np.exp(log_num - log_ref)))
+    return float(min(1.0, max(0.0, 1.0 - deficiency)))
 
 
 def _rarefaction_species(species_counts: npt.NDArray, n: int) -> float:
@@ -758,7 +1129,7 @@ def _rarefaction_shannon(species_counts: npt.NDArray, n: int, N: int) -> float:
     H_N = -np.sum(p * np.log(p))
 
     # Coverage at full sample (Good-Turing)
-    f1 = float(np.sum(species_counts == 1))
+    f1, _ = _frequency_classes(species_counts)
     C_N = 1.0 - (f1 / N) if N > 0 else 0.0
 
     # Interpolated (rarefied) coverage at n (Chao & Jost 2012, Eq. 4)
@@ -795,7 +1166,9 @@ def _rarefaction_simpson(species_counts: npt.NDArray, n: int, N: int) -> float:
     Returns
     -------
     float
-        Expected Simpson concentration (1/D)
+        Simpson diversity index ``1 - lambda`` of the rarefied sample (the
+        Gini-Simpson convention used by Chao & Jost 2012, Eq. 5).  Use
+        ``_hill_from_index(value, 2)`` for the Hill number ``1/lambda``.
     """
     if n <= 0:
         return 0.0
@@ -808,7 +1181,7 @@ def _rarefaction_simpson(species_counts: npt.NDArray, n: int, N: int) -> float:
     D_N = 1.0 - np.sum(p**2)
 
     # Coverage at full sample (Good-Turing)
-    f1 = float(np.sum(species_counts == 1))
+    f1, _ = _frequency_classes(species_counts)
     C_N = 1.0 - (f1 / N) if N > 0 else 0.0
 
     # Interpolated (rarefied) coverage at n (Chao & Jost 2012, Eq. 4)
@@ -995,59 +1368,61 @@ class CoverageRarefactionAnalyzer:
         # Two-sided normal quantile for the requested confidence level
         z = float(norm.ppf(1.0 - (1.0 - confidence_level) / 2.0))
 
+        # Whole-number abundances are required by the frequency spectrum;
+        # round once (single warning) instead of mixing truncated and
+        # float-valued counts, and keep the total consistent with the counts.
+        abundance_matrix = _integerize_abundances(
+            abundance_matrix, context="abundance_matrix"
+        )
+
         for i in range(n_samples):
             row = abundance_matrix[i]
-            total_n = np.sum(row)
             species_counts = row[row > 0]
+            total_n = int(np.sum(species_counts))
 
-            if total_n == 0:
+            if total_n == 0 or species_counts.size == 0:
                 coverages[i] = 0.0
                 richness[i] = 0.0
                 asymptote[i] = 0.0
                 continue
 
-            # Count singletons, doubletons, etc.
-            f1 = np.sum(species_counts == 1)  # Singletons
-            f2 = np.sum(species_counts == 2)  # Doubletons
-            s_obs = len(species_counts)  # Observed richness
+            # Count singletons, doubletons, etc. (np.isclose based so that
+            # 0.99999999 is not silently dropped from the spectrum)
+            f1, f2 = _frequency_classes(species_counts)
+            s_obs = int(species_counts.size)  # Observed richness
 
-            # Coverage estimate (Chao et al. 2014)
-            if f1 > 0 and total_n > 0:
-                coverage_i = 1.0 - (f1 / total_n) * ((total_n - 1) / (total_n - f1 + 1))
-            else:
-                coverage_i = 1.0 - f1 / total_n if total_n > 0 else 0.0
+            # Coverage estimate (Chao & Jost 2012, Eq. 3):
+            #     Chat = 1 - (f1/n) * ((n-1) f1 / ((n-1) f1 + 2 f2))
+            coverage_i = _sample_coverage(species_counts, total_n, f1, f2)
 
             coverages[i] = coverage_i
             richness[i] = s_obs
 
-            # Estimate asymptote using Chao1-like estimator
-            if f1 > 0 and f2 > 0:
-                asymptote[i] = s_obs + (f1 * (f1 - 1)) / (2 * (f2 + 1))
-            else:
-                asymptote[i] = s_obs * 2 if f1 > 0 else s_obs
+            # Asymptotic richness: Chao1 lower bound.  The previous
+            # "2 * s_obs when singletons exist" fallback was an arbitrary
+            # doubling with no estimator behind it.
+            asymptote[i] = _hill_asymptote(species_counts, total_n, 0, f1, f2, s_obs)
 
-            # Rarefaction/extrapolation at each coverage level
+            # Rarefaction/extrapolation at each coverage level, using the same
+            # machinery as coverage_rarefaction_hill(): the interpolation
+            # sample size is obtained by inverting the interpolated coverage
+            # curve Chat(m) = c_level (Chao & Jost 2012, Eq. 4) instead of the
+            # linear ratio m = n * c / Chat, which is not the coverage of any
+            # subsample.
             for j, c_level in enumerate(coverage_levels):
-                if c_level <= coverage_i:
-                    # Interpolation (rarefaction)
-                    # Sample size that gives this coverage
-                    m = int(total_n * c_level / coverage_i) if coverage_i > 0 else 0
-                    m = max(1, min(m, total_n - 1))
-                    # Expected richness at m individuals
-                    rarefaction = self._rarefaction_at_n(species_counts, m)
-                    expected_at_coverage[i, j] = rarefaction
-                else:
-                    # Extrapolation
-                    # Use asymptotic estimator scaled by coverage ratio
-                    ratio = c_level / coverage_i if coverage_i > 0 else 1.0
-                    expected_at_coverage[i, j] = s_obs + (asymptote[i] - s_obs) * (ratio - 1)
-                    expected_at_coverage[i, j] = min(expected_at_coverage[i, j], asymptote[i])
+                expected_at_coverage[i, j] = _coverage_curve_point(
+                    species_counts, total_n, 0, c_level, coverage_i, asymptote[i]
+                )
 
-                # Approximate CI using Poisson-like variance
+                # Approximate CI using Poisson-like variance.  The upper bound
+                # is deliberately NOT clipped to n_species (the number of
+                # columns of the input matrix): the Chao1 asymptote counts
+                # species that are absent from the matrix by definition, so
+                # clipping there truncated the interval below the estimate.
                 var = expected_at_coverage[i, j] * (1 - c_level) / c_level
-                std = math.sqrt(max(0, var))
-                ci_lower[i, j] = max(0, expected_at_coverage[i, j] - z * std)
-                ci_upper[i, j] = min(n_species, expected_at_coverage[i, j] + z * std)
+                std = math.sqrt(max(0.0, var))
+                ci_lower[i, j] = max(0.0, expected_at_coverage[i, j] - z * std)
+                ci_upper[i, j] = expected_at_coverage[i, j] + z * std
 
         result = CoverageRarefactionResult(
             sample_names=sample_names,

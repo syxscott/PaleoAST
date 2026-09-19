@@ -33,6 +33,19 @@ Negative Eigenvalues:
     summary text). A large negative eigenvalue therefore cannot displace
     genuine (positive) axes from the ordination.
 
+Proportion Explained:
+    proportion_explained[i] = max(λ_i, 0) / Σ_{all j} max(λ_j, 0) * 100.
+    The denominator is the sum of *all* positive eigenvalues of the
+    double-centred matrix, i.e. normalisation happens before the axes are
+    truncated to `n_components`. Requesting fewer axes therefore lowers the
+    sum below 100% instead of silently rescaling every axis (again matching
+    R cmdscale).
+
+Input requirements:
+    `distance_matrix` must be symmetric (checked, raises ValidationError
+    otherwise) and should have a zero diagonal; a non-zero diagonal is
+    forced to zero with a warning because it would bias the double centring.
+
 Author: PaleoAST Development Team
 version: 1.1.0
 """
@@ -45,7 +58,7 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError, MatrixDimensionError
+from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -145,6 +158,31 @@ class PCoAAnalyzer:
             if n < 2:
                 raise MatrixDimensionError("PCoA requires at least 2 samples", details={"n_samples": n})
 
+            # A dissimilarity matrix must be symmetric: double centring of an
+            # asymmetric matrix silently produces a non-symmetric B, whose
+            # "eigenvalues" are meaningless. Reject it instead.
+            if not np.allclose(D, D.T, rtol=1e-5, atol=1e-8):
+                max_asymmetry = float(np.max(np.abs(D - D.T)))
+                raise ValidationError(
+                    "Distance matrix must be symmetric",
+                    details={"max_asymmetry": max_asymmetry, "shape": D.shape},
+                )
+
+            # Diagonal entries must be zero (self-dissimilarity). Any residual
+            # offset would bias the double-centring step, so it is removed
+            # before the analysis is run.
+            diagonal = np.diag(D)
+            if not np.allclose(diagonal, 0.0, rtol=0.0, atol=1e-8):
+                self._logger.warning(
+                    "PCoA: distance matrix diagonal is not zero "
+                    f"(max |diag|={float(np.max(np.abs(diagonal))):.6g}); "
+                    "forcing the diagonal to zero before double centring."
+                )
+                # validate_data_array() returns the caller's array without
+                # copying it, so an explicit copy is required before mutating.
+                D = D.copy()
+                np.fill_diagonal(D, 0.0)
+
             # Determine number of components
             if n_components is None:
                 n_components = min(n - 1, 20)
@@ -208,19 +246,23 @@ class PCoAAnalyzer:
             coords_sqrt = np.sqrt(np.maximum(eigenvalues, 0.0))
             coordinates = eigenvectors * coords_sqrt
 
+            # Proportion explained, following the R cmdscale(eig=TRUE)
+            # convention: each axis' positive eigenvalue is divided by the sum
+            # of ALL positive eigenvalues of the double-centred matrix. The
+            # normalisation is therefore performed BEFORE truncation, so that a
+            # reported proportion never depends on how many components were
+            # requested (cmdscale's `eig[1:k] / sum(eig[eig > 0])`).
+            positive_part_all = np.maximum(eigenvalues, 0.0)
+            total_positive = float(np.sum(positive_part_all))
+            if total_positive > 0:
+                proportion_all = positive_part_all / total_positive * 100
+            else:
+                proportion_all = np.zeros_like(eigenvalues, dtype=float)
+
             # Select top n_components
             coordinates = coordinates[:, :n_components]
             eigenvalues = eigenvalues[:n_components]
-
-            # Compute proportion explained from the (truncated, positive-part)
-            # eigenvalues, following the cmdscale convention in which negative
-            # eigenvalues are excluded
-            positive_part = np.maximum(eigenvalues, 0.0)
-            total_positive = float(np.sum(positive_part))
-            if total_positive > 0:
-                proportion = positive_part / total_positive * 100
-            else:
-                proportion = np.zeros(n_components)
+            proportion = proportion_all[:n_components]
 
             cumulative = np.cumsum(proportion)
 

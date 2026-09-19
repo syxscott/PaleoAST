@@ -41,7 +41,7 @@ class TestCoverageRarefactionHill:
         assert result.expected_richness[-1] >= 0
 
     def test_q2_simpson(self):
-        """Test rarefaction for q=2 (Simpson concentration)."""
+        """Test rarefaction for q=2 (inverse Simpson Hill number)."""
         from ecology.beta_diversity import coverage_rarefaction_hill
 
         abundance = np.array([[25, 10, 5]])
@@ -51,8 +51,8 @@ class TestCoverageRarefactionHill:
         )
 
         assert result.method == "coverage_rarefaction_hill_q2"
-        # Simpson concentration should be between 0 and 1
-        assert all(0 <= r <= 1 for r in result.expected_richness)
+        # Hill-number scale: 1 <= ^2D = 1/lambda <= S (effective species)
+        assert all(1 <= r <= 3 for r in result.expected_richness)
 
     def test_reproducibility_with_seed(self):
         """Test that results are reproducible with seed."""

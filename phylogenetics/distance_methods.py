@@ -62,6 +62,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from utils.exceptions import ValidationError
+
 from .tree import NodeType, PhyloNode, PhyloTree
 
 logger = logging.getLogger(__name__)
@@ -191,15 +193,51 @@ class DistanceMatrix:
         """
         从序列计算距离矩阵
 
+        本实现仅支持 p-distance（及其补 "identity" 距离）；未校正的 p-distance
+        在分歧较大时会低估真实替换数，需要 Kimura/JC/TN 等校正模型时请改用
+        专业系统发育软件。
+
         Parameters:
             sequences: {名称: 序列}
-            model: 距离模型
+            model: 距离模型，仅接受 ``"p"`` / ``"p-distance"`` /
+                ``"identity"`` / ``"identity-distance"``
 
         Returns:
             DistanceMatrix对象
+
+        Raises:
+            ValidationError: 序列集合为空、某条序列为空或序列长度不一致
+                （否则 p-distance 会出现除零或无定义比较）。
+            NotImplementedError: 请求了本实现不支持的替代模型。
         """
+        normalized_model = str(model).strip().lower()
+        if normalized_model in {"p", "p-distance", "pdistance", "p_dist", "pdist"}:
+            use_identity = False
+        elif normalized_model in {"identity", "identity-distance", "identity_distance"}:
+            use_identity = True
+        else:
+            raise NotImplementedError(
+                f"Distance model {model!r} is not implemented: only uncorrected "
+                "p-distance (and its complement 'identity') is supported by "
+                "DistanceMatrix.from_sequences."
+            )
+
         taxa = list(sequences.keys())
         n = len(taxa)
+
+        if n == 0:
+            raise ValidationError("Cannot compute a distance matrix from an empty sequence set")
+
+        lengths = {taxon: len(sequences[taxon]) for taxon in taxa}
+        empty_taxa = [taxon for taxon, length in lengths.items() if length == 0]
+        if empty_taxa:
+            raise ValidationError(
+                f"Empty sequence(s) prevent distance computation: {', '.join(empty_taxa[:5])}"
+            )
+        if len(set(lengths.values())) != 1:
+            detail = ", ".join(f"{taxon}={lengths[taxon]}" for taxon in taxa[:5])
+            raise ValidationError(f"Sequences must all have the same length, got: {detail}")
+
         distances = {}
 
         for i in range(n):
@@ -207,15 +245,11 @@ class DistanceMatrix:
                 t1, t2 = taxa[i], taxa[j]
                 seq1, seq2 = sequences[t1], sequences[t2]
 
-                if len(seq1) != len(seq2):
-                    raise ValueError(f"Sequence lengths mismatch: {t1}={len(seq1)}, {t2}={len(seq2)}")
-
                 # 计算p距离
                 diffs = sum(1 for a, b in zip(seq1, seq2, strict=False) if a != b)
                 p_dist = diffs / len(seq1)
 
-                # 简单转换 (可扩展更多模型)
-                distance = p_dist
+                distance = (1.0 - p_dist) if use_identity else p_dist
 
                 distances[(t1, t2)] = distance
                 if i != j:
@@ -278,6 +312,10 @@ class UPGMA:
 
         # 层次聚类
         active_taxa = set(taxa)
+        # 单调递增计数器: 保证内部节点名唯一。旧实现用 f"cluster_{len(members)}"
+        # 会在同规模合并 (每次合并后成员数相同) 时重名，导致 clusters 字典键被
+        # 覆盖、被覆盖簇的分类单元从树中被静默丢弃。
+        merge_step = 0
 
         while len(active_taxa) > 1:
             # 找到最近的簇对
@@ -308,8 +346,13 @@ class UPGMA:
             new_members = cluster1["members"] | cluster2["members"]
             new_size = cluster1["size"] + cluster2["size"]
 
-            # 创建新内部节点
-            new_name = f"cluster_{len(new_members)}"
+            # 创建新内部节点 (唯一名: 合并步序号 + 保证不与既有键冲突)
+            merge_step += 1
+            new_name = f"_cluster_{merge_step}"
+            suffix = 0
+            while new_name in clusters:  # pragma: no cover - 防御分类单元同名
+                suffix += 1
+                new_name = f"_cluster_{merge_step}_{suffix}"
             new_node = PhyloNode(name=new_name, node_type=NodeType.INTERNAL)
 
             # 设置枝长 = 合并高度 - 子节点已有高度
@@ -352,9 +395,24 @@ class UPGMA:
         root_name = next(iter(active_taxa))
         root_node = clusters[root_name]["node"]
 
+        tree = PhyloTree(root=root_node)
+
+        # 完整性校验: 结构损坏 (键冲突导致的分类单元丢失) 必须显式失败，
+        # 而不是静默返回一棵少了几个终端分类单元的树。
+        recovered = set(tree.leaf_names)
+        if recovered != set(taxa):
+            missing = sorted(set(taxa) - recovered)
+            unexpected = sorted(recovered - set(taxa))
+            raise RuntimeError(
+                f"UPGMA lost taxa during clustering: {len(missing)} missing "
+                f"({', '.join(missing[:10])}), {len(unexpected)} unexpected "
+                f"({', '.join(unexpected[:10])}). The distance matrix may contain"
+                " duplicate or colliding taxon names."
+            )
+
         self._logger.info(f"UPGMA tree built with {n} taxa")
 
-        return PhyloTree(root=root_node)
+        return tree
 
 
 class NeighborJoining:

@@ -47,8 +47,7 @@ class TestBlombergK:
         Blomberg's K 在 BM 进化下期望值为 1
         由于采样误差，K 通常在 0.5-2.0 之间
         """
-        np.random.seed(42)
-        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0)
+        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0, seed=42)
 
         result = blomberg_k(tree_5taxa, traits, n_permutations=99)
 
@@ -99,8 +98,7 @@ class TestBlombergK:
         对于真实 BM 数据，K 的置换检验 p 值应该不显著
         (因为 K ≈ 1 是 BM 的期望)
         """
-        np.random.seed(123)
-        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0)
+        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0, seed=123)
 
         result = blomberg_k(tree_5taxa, traits, n_permutations=99)
 
@@ -169,8 +167,7 @@ class TestPagelLambda:
 
         Pagel λ 的定义域是 [0, 1]
         """
-        np.random.seed(42)
-        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0)
+        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0, seed=42)
 
         result = pagel_lambda(tree_5taxa, traits)
 
@@ -182,8 +179,7 @@ class TestPagelLambda:
 
         比较 λ=0 (无信号) vs λ=fitted (最大似然)
         """
-        np.random.seed(42)
-        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0)
+        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0, seed=42)
 
         result = pagel_lambda(tree_5taxa, traits)
 
@@ -200,8 +196,7 @@ class TestPhylogeneticSignalCombined:
 
     def test_combined_result(self, tree_5taxa):
         """验证 phylogenetic_signal 同时返回 K 和 λ"""
-        np.random.seed(42)
-        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0)
+        traits = simulate_brownian_motion(tree_5taxa, root_value=0.0, sigma=1.0, seed=42)
 
         result = phylogenetic_signal(tree_5taxa, traits, n_permutations=99)
 

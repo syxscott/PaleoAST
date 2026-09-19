@@ -97,7 +97,9 @@ class PaleoASTError(Exception):
             import traceback
 
             lines.append("Original Exception:")
-            lines.append(
+            # format_exception returns a LIST of lines; extend (not append)
+            # so "\n".join below does not choke on a nested list element.
+            lines.extend(
                 traceback.format_exception(
                     type(self.original_exception), self.original_exception, self.original_exception.__traceback__
                 )

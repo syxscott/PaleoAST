@@ -103,6 +103,12 @@ class FitchResult:
 
         其中 m 为最简约树的最小步长数（每个字符的最小步长之和），L 为实际树长。
         对于二态字符，每个字符的最小步长为1。
+
+        近似说明 (保持既有公式，不改数值):
+            严格定义下每个字符的最小步长由该字符的状态数与分布决定
+            (k 状态字符的最小步长为 k-1，且受多态性限制)。本实现把所有
+            ``site_score > 0`` 的位点一律按 1 步计，因此对多状态字符 CI 偏
+            高，只宜作为同一数据集中不同树之间的相对参考。
         """
         if self.tree_length == 0:
             return 1.0
@@ -125,6 +131,11 @@ class FitchResult:
 
         参考: Farris, J.S. (1989). The retention index and the rescaled
         consistency index. Cladistics, 5, 417-419.
+
+        近似说明 (保持既有公式，不改数值):
+            g 按 "每个非常数位点最多 n_taxa - 1 步" 估算，未按位点实际状态数
+            细化上界，因此对多状态字符 RI 偏低；n_taxa 为 0 时无法计算，返回
+            退化值。索引值只宜作相对比较。
         """
         s = self.tree_length
         # m = minimum steps: each parsimony-informative site (site_score > 0)
@@ -181,20 +192,34 @@ class FitchAlgorithm:
 
         Parameters:
             tree: 系统发育树
-            sequences: {分类单元名: 序列} 字典
-            gap_as_missing: 是否将gap视为缺失
-            missing_char: 缺失字符标记
+            sequences: {分类单元名: 序列} 字典，所有序列必须等长
+            gap_as_missing: 是否将gap("-")视为缺失数据。默认 True，即
+                "-" 与 "?" 一样不参与状态推断（空状态集）。设为 False 时
+                "-" 被当作一个真实的第 n+1 种状态参与简约计算。
+            missing_char: 缺失字符标记（始终视为缺失）
 
         Returns:
             FitchResult对象
+
+        Raises:
+            ValueError: 树无根、序列字典为空、序列长度不一致或序列长度为 0
         """
         if tree.root is None:
             raise ValueError("Tree has no root")
 
+        if not sequences:
+            raise ValueError("No sequences provided: at least one taxon is required")
+
         # 获取所有位点
         taxon_names = list(sequences.keys())
-        first_seq = sequences[taxon_names[0]]
-        n_sites = len(first_seq)
+        lengths = {taxon: len(sequences[taxon]) for taxon in taxon_names}
+        if len(set(lengths.values())) != 1:
+            detail = ", ".join(f"{taxon}={lengths[taxon]}" for taxon in taxon_names[:5])
+            raise ValueError(f"All sequences must have the same length (alignment), got: {detail}")
+
+        n_sites = lengths[taxon_names[0]]
+        if n_sites == 0:
+            raise ValueError("Sequences are empty: no characters to score")
 
         # 初始化结果存储
         site_scores: list[int] = []
@@ -278,8 +303,8 @@ class FitchAlgorithm:
         Parameters:
             node: 当前节点
             states: 叶节点状态
-            gap_as_missing: gap是否视为缺失
-            missing_char: 缺失字符
+            gap_as_missing: gap("-")是否视为缺失 (True 时空状态集)
+            missing_char: 缺失字符 (恒为缺失)
 
         Returns:
             {节点: 状态集合} 字典
@@ -292,11 +317,15 @@ class FitchAlgorithm:
             if name in states:
                 state = states[name]
 
-                # 处理gap和缺失
-                if not gap_as_missing and state == "-":
-                    node_states[node] = set()
-                elif state == missing_char:
+                # 处理gap和缺失:
+                #   "?" (missing_char) 永远是缺失；"-" (gap) 仅在
+                #   gap_as_missing=True 时是缺失。旧实现写反了
+                #   (`not gap_as_missing and state == "-"`)，导致默认设置下
+                #   gap 被当成一个真实状态、而显式要求 gap-as-state 时反而被忽略。
+                if state == missing_char or state == "?":
                     node_states[node] = set()  # 空集表示不确定
+                elif gap_as_missing and state == "-":
+                    node_states[node] = set()
                 else:
                     node_states[node] = {state}
             else:

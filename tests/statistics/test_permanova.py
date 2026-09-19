@@ -25,6 +25,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
+from utils.exceptions import ComputationError
 
 
 class TestPERMANOVA(unittest.TestCase):
@@ -240,10 +241,13 @@ class TestPERMANOVAPermutationPvalue(unittest.TestCase):
         self.assertLessEqual(result.p_value, 1.0)
 
     def test_extreme_pvalue(self) -> None:
-        """With extreme separation, p-value should be small."""
-        # Group A at origin, Group B far away
+        """With extreme (but non-degenerate) separation, p-value should be small."""
+        # Group A at origin, Group B far away - but with a *tiny* amount of
+        # within-group variation so that MS_within > 0 and F is defined.
         group_a = np.zeros((5, 3))
         group_b = np.ones((5, 3)) * 100.0
+        group_a[0, 0] += 1e-3
+        group_b[0, 0] += 1e-3
         data = np.vstack([group_a, group_b])
         D = np.sqrt(((data[:, None, :] - data[None, :, :]) ** 2).sum(axis=2))
         groups = ["A"] * 5 + ["B"] * 5
@@ -252,6 +256,41 @@ class TestPERMANOVAPermutationPvalue(unittest.TestCase):
         # With very large separation, F is very large, p-value should be small
         self.assertLess(result.p_value, 0.05)
         self.assertGreater(result.f_statistic, 1e4)
+        self.assertTrue(np.isfinite(result.f_statistic))
+
+    def test_zero_within_group_dispersion_raises(self) -> None:
+        """Perfectly duplicated groups have no defined F ratio.
+
+        Regression note: the analyzer used to return ``F = inf`` here and then
+        let "inf >= inf" comparisons drive the permutation p-value, which
+        produced an arbitrary (and reproducible-by-luck) number such as
+        p = 0.003.  An undefined test is now reported as an error instead.
+        The previous version of ``test_extreme_pvalue`` asserted that
+        ``inf``-based behaviour and has been rewritten to perturb the groups by
+        1e-3 so the design is defined again.
+        """
+        group_a = np.zeros((5, 3))
+        group_b = np.ones((5, 3)) * 100.0
+        data = np.vstack([group_a, group_b])
+        D = np.sqrt(((data[:, None, :] - data[None, :, :]) ** 2).sum(axis=2))
+        groups = ["A"] * 5 + ["B"] * 5
+
+        with self.assertRaises(ComputationError):
+            self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
+
+    def test_no_residual_df_raises(self) -> None:
+        """One sample per group leaves n - g = 0 residual degrees of freedom."""
+        D = np.array(
+            [
+                [0.0, 1.0, 2.0],
+                [1.0, 0.0, 1.5],
+                [2.0, 1.5, 0.0],
+            ]
+        )
+        groups = ["A", "B", "C"]
+
+        with self.assertRaises(ComputationError):
+            self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
 
 
 if __name__ == "__main__":

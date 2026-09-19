@@ -32,6 +32,15 @@ from .exceptions import DataValidationError, InvalidDataTypeError
 logger = logging.getLogger(__name__)
 
 
+def _first_positions(where_result: tuple[npt.NDArray, ...], limit: int = 5) -> list[tuple[int, ...]]:
+    """Turn ``np.where`` output into position tuples for any array dimension.
+
+    Indexing ``where_result[1]`` directly (as the old code did) raised
+    ``IndexError`` for 1-D arrays kept alive by ``preserve_dimensions=True``.
+    """
+    return list(zip(*[idx[:limit].tolist() for idx in where_result], strict=False))
+
+
 def validate_data_array(
     data: Union[npt.NDArray, list, tuple],
     allow_nan: bool = True,
@@ -76,7 +85,8 @@ def validate_data_array(
     )
     # Convert to numpy array
     if isinstance(data, np.ndarray):
-        arr = data
+        # Copy so downstream edits never alias the caller's array.
+        arr = data.copy()
     elif isinstance(data, (list, tuple)):
         try:
             arr = np.array(data)
@@ -113,8 +123,12 @@ def validate_data_array(
                     details={"expected_dtype": str(dtype), "actual_dtype": str(arr.dtype)},
                 )
 
+    # NaN/inf checks only make sense for float/complex dtypes; np.isnan
+    # raises TypeError on string, int and object arrays.
+    is_inexact = np.issubdtype(arr.dtype, np.inexact)
+
     # Check for NaN values
-    nan_mask = np.isnan(arr)
+    nan_mask = np.isnan(arr) if is_inexact else np.zeros(arr.shape, dtype=bool)
     nan_count = np.sum(nan_mask)
 
     if not allow_nan and nan_count > 0:
@@ -124,12 +138,12 @@ def validate_data_array(
             f"{name} contains {nan_count} NaN value(s)",
             details={
                 "nan_count": int(nan_count),
-                "positions": list(zip(nan_positions[0][:5], nan_positions[1][:5], strict=False)),
+                "positions": _first_positions(nan_positions),
             },
         )
 
     # Check for infinite values
-    inf_mask = np.isinf(arr)
+    inf_mask = np.isinf(arr) if is_inexact else np.zeros(arr.shape, dtype=bool)
     inf_count = np.sum(inf_mask)
 
     if not allow_inf and inf_count > 0:
@@ -139,7 +153,7 @@ def validate_data_array(
             f"{name} contains {inf_count} infinite value(s)",
             details={
                 "inf_count": int(inf_count),
-                "positions": list(zip(inf_positions[0][:5], inf_positions[1][:5], strict=False)),
+                "positions": _first_positions(inf_positions),
             },
         )
 
@@ -150,7 +164,10 @@ def validate_data_array(
         # ternary used ``arr.size`` in the ``allow_nan=False`` branch
         # unconditionally, which would silently count NaN cells as
         # valid if any had slipped through earlier checks.
-        valid_count = np.sum(~np.isnan(arr)) if allow_nan else int(arr.size)
+        if is_inexact:
+            valid_count = np.sum(~np.isnan(arr)) if allow_nan else int(arr.size)
+        else:
+            valid_count = int(arr.size)
         if valid_count < min_values:
             logger.warning(f"'{name}' has {valid_count} valid values, need at least {min_values}")
             raise DataValidationError(
@@ -414,6 +431,11 @@ def check_missing_values(
         {'total_nan': 2, 'nan_proportion': 0.222..., 'rows_with_nan': 2, 'cols_with_nan': 2}
     """
     logger.debug(f"Checking for missing values in matrix of shape {matrix.shape}")
+    matrix = np.asarray(matrix)
+    if matrix.ndim == 1:
+        # Callers (e.g. macroevolution survival analyses) pass plain 1-D
+        # vectors; axis=0/1 reductions below require 2-D.
+        matrix = matrix.reshape(-1, 1)
     nan_mask = np.isnan(matrix)
     total_nan = int(np.sum(nan_mask))
     total_elements = matrix.size
@@ -470,6 +492,9 @@ def check_infinite_values(matrix: npt.NDArray) -> dict[str, Any]:
         {'has_pos_inf': True, 'has_neg_inf': True, 'total_inf': 2, ...}
     """
     logger.debug(f"Checking for infinite values in matrix of shape {matrix.shape}")
+    matrix = np.asarray(matrix)
+    if matrix.ndim == 1:
+        matrix = matrix.reshape(-1, 1)
     pos_inf_mask = np.isposinf(matrix)
     neg_inf_mask = np.isneginf(matrix)
     inf_mask = pos_inf_mask | neg_inf_mask

@@ -367,7 +367,10 @@ class ColumnHeaderMenu(QMenu):
 
         # Delete column
         delete_action = self.addAction(_("Delete Column"))
-        delete_action.setData(("delete",))
+        # Two-element payload: every consumer unpacks ``action_type, value``
+        # (see ScientificSpreadsheet._on_col_menu_action), so a 1-tuple here
+        # used to raise ``ValueError: not enough values to unpack``.
+        delete_action.setData(("delete", None))
 
 
 class RowHeaderMenu(QMenu):
@@ -429,10 +432,10 @@ class RowHeaderMenu(QMenu):
 
         # Hide/Show
         hide_action = self.addAction(_("Hide Row"))
-        hide_action.setData(("hide",))
+        hide_action.setData(("hide", None))
 
         show_all_action = self.addAction(_("Show All Rows"))
-        show_all_action.setData(("show_all",))
+        show_all_action.setData(("show_all", None))
 
 
 class ScientificSpreadsheet(QWidget):
@@ -531,6 +534,16 @@ class ScientificSpreadsheet(QWidget):
         self._table.setCornerButtonEnabled(True)
         self._table.setColumnCount(0)
         self._table.setRowCount(0)
+
+        # Cell editing. ``_on_item_changed`` implements the whole editing
+        # chain (float parsing, revert on invalid input, undo stack,
+        # StateManager sync) and ``undo()`` even stores ``("cell", ...)``
+        # entries, but every item used to be created with ItemIsEditable
+        # cleared, so the chain could never run.  Explicit triggers keep
+        # AnyKeyPressed from clobbering a value during keyboard navigation.
+        self._table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
 
         # Custom delegate
         self._delegate = SpreadsheetDelegate()
@@ -688,6 +701,7 @@ class ScientificSpreadsheet(QWidget):
                 self._col_labels = []
                 self._col_metadata = {}
                 self._row_metadata = {}
+                self._sync_delegate()
                 self.dataChanged.emit()
         finally:
             self._loading_from_event = False
@@ -760,15 +774,14 @@ class ScientificSpreadsheet(QWidget):
                         item = QTableWidgetItem("")
                     else:
                         item = QTableWidgetItem(str(value))
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     self._table.setItem(i, j, item)
         finally:
             self._table.setUpdatesEnabled(True)
             self._table.blockSignals(False)
 
         # Update delegate
-        self._delegate.set_data(self._data, self._row_labels, self._col_labels)
-        self._delegate.set_metadata(self._row_metadata, self._col_metadata)
+        self._sync_delegate()
 
         # Update state manager when this method is used as a data-entry
         # seam. EventBus/UI refresh callers pass update_state=False to
@@ -789,6 +802,20 @@ class ScientificSpreadsheet(QWidget):
             self._table.horizontalHeader().setDefaultSectionSize(80)
 
         self.dataChanged.emit()
+
+    def _sync_delegate(self) -> None:
+        """
+        Re-point the delegate at the live data / metadata containers.
+
+        ``SpreadsheetDelegate.paint`` renders the cell *text* from its own
+        cached array and reads colours from its cached metadata dicts, so
+        every operation that *rebinds* ``self._data`` or
+        ``self._col_metadata`` (sort, delete column, undo/redo) must
+        refresh the cache.  Without this the view keeps painting the
+        pre-operation buffer while the model already holds the new one.
+        """
+        self._delegate.set_data(self._data, self._row_labels, self._col_labels)
+        self._delegate.set_metadata(self._row_metadata, self._col_metadata)
 
     def get_data(self, copy: bool = True) -> np.ndarray | None:
         """
@@ -841,11 +868,16 @@ class ScientificSpreadsheet(QWidget):
     def _on_col_menu_action(self, action) -> None:
         """Handle column header menu action."""
         data = action.data()
-        if not data:
+        if data is None:
             return
 
         col = self._col_header_menu._column_index
-        action_type, value = data
+        # Tolerate payloads that carry no value (e.g. ``("delete",)``): a
+        # strict ``action_type, value = data`` unpack raised ValueError for
+        # every 1-element tuple and made Delete Column unusable.
+        payload = tuple(data)
+        action_type = payload[0]
+        value = payload[1] if len(payload) > 1 else None
 
         if action_type == "group":
             # Set group color
@@ -889,11 +921,15 @@ class ScientificSpreadsheet(QWidget):
     def _on_row_menu_action(self, action) -> None:
         """Handle row header menu action."""
         data = action.data()
-        if not data:
+        if data is None:
             return
 
         row = self._row_header_menu._row_index
-        action_type, value = data
+        # See _on_col_menu_action: 1-element payloads such as ``("hide",)``
+        # used to break a strict 2-tuple unpack and crash Hide/Show All.
+        payload = tuple(data)
+        action_type = payload[0]
+        value = payload[1] if len(payload) > 1 else None
 
         if action_type == "marker":
             # Set marker style
@@ -1007,7 +1043,7 @@ class ScientificSpreadsheet(QWidget):
                 item = self._table.item(i, col)
                 if item is None:
                     item = QTableWidgetItem()
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     self._table.setItem(i, col, item)
                 item.setText("" if np.isnan(value) else str(value))
         finally:
@@ -1066,11 +1102,15 @@ class ScientificSpreadsheet(QWidget):
                         item = QTableWidgetItem("")
                     else:
                         item = QTableWidgetItem(str(value))
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     self._table.setItem(new_row, col_idx, item)
             self._table.setVerticalHeaderLabels(self._row_labels)
         finally:
             self._table.blockSignals(False)
+
+        # ``self._data`` and ``self._row_metadata`` were rebound above, so the
+        # delegate must be pointed at the new containers.
+        self._sync_delegate()
 
         # Update state
         self._state.set_data_matrix(
@@ -1119,6 +1159,9 @@ class ScientificSpreadsheet(QWidget):
         # Update table
         self._table.removeColumn(col)
         self._table.setHorizontalHeaderLabels(self._col_labels)
+        # ``self._data``/``self._col_metadata`` were rebound: refresh the
+        # delegate so it stops painting the deleted column's buffer.
+        self._sync_delegate()
 
         # Update state. Forward undo into StateManager so the Ribbon
         # Ctrl+Z can undo the deletion too.
@@ -1253,7 +1296,7 @@ class ScientificSpreadsheet(QWidget):
             item = QTableWidgetItem("")
         else:
             item = QTableWidgetItem(str(value))
-        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
         return item
 
     def undo(self) -> None:
@@ -1293,6 +1336,9 @@ class ScientificSpreadsheet(QWidget):
                 self._table.setItem(row, col, self._make_display_item(old_value))
         finally:
             self._table.blockSignals(False)
+
+        # Undo of a column delete rebinds ``self._data`` / metadata dicts.
+        self._sync_delegate()
 
         self._state.set_data_matrix(
             DataMatrix(data=self._data, row_labels=self._row_labels, col_labels=self._col_labels),

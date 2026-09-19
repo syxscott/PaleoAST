@@ -90,7 +90,6 @@ class StateManager:
 
         # Initialize locks
         self._read_write_lock = threading.RLock()
-        self._state_lock = threading.Lock()
 
         # Initialize state variables
         self._data_matrix: DataMatrix | None = None
@@ -245,20 +244,37 @@ class StateManager:
                 # silently erasing user-defined group / colour / marker
                 # data when the dataset is replaced with a new one
                 # that happens to reuse some labels.
+                # The snapshot dicts are keyed by the OLD positional
+                # index, so the old label lists must be captured before
+                # the managers are replaced and passed explicitly —
+                # otherwise indices would be resolved against the new
+                # labels and metadata would be silently misaligned.
                 preserved_col = (
                     self._column_metadata.to_dict() if self._column_metadata else {}
                 )
                 preserved_row = (
                     self._row_metadata.to_dict() if self._row_metadata else {}
                 )
+                old_col_labels = (
+                    list(self._column_metadata._column_labels)
+                    if self._column_metadata
+                    else None
+                )
+                old_row_labels = (
+                    list(self._row_metadata._row_labels) if self._row_metadata else None
+                )
                 self._column_metadata = ColumnMetadataManager(
                     n_columns=matrix.n_variables, column_labels=matrix.col_labels
                 )
-                self._column_metadata.from_dict_by_label(preserved_col, matrix.col_labels)
+                self._column_metadata.from_dict_by_label(
+                    preserved_col, matrix.col_labels, old_labels=old_col_labels
+                )
                 self._row_metadata = RowMetadataManager(
                     n_rows=matrix.n_samples, row_labels=matrix.row_labels
                 )
-                self._row_metadata.from_dict_by_label(preserved_row, matrix.row_labels)
+                self._row_metadata.from_dict_by_label(
+                    preserved_row, matrix.row_labels, old_labels=old_row_labels
+                )
             self._analysis_cache.clear()
             if mark_modified is not None:
                 self._modified = mark_modified
@@ -379,10 +395,11 @@ class StateManager:
             self._logger.debug(f"cache_result: storing result with key='{key}'")
             if key in self._analysis_cache:
                 self._analysis_cache.move_to_end(key)
-            else:
-                if len(self._analysis_cache) >= self._MAX_CACHE_SIZE:
-                    self._analysis_cache.popitem(last=False)
-                self._analysis_cache[key] = result
+            elif len(self._analysis_cache) >= self._MAX_CACHE_SIZE:
+                self._analysis_cache.popitem(last=False)
+            # Always store the newest result (an existing key must be
+            # overwritten, not silently dropped).
+            self._analysis_cache[key] = result
 
     def get_cached_result(self, key: str) -> Any | None:
         """
@@ -446,22 +463,49 @@ class StateManager:
     # Undo/Redo Operations
     # =========================================================================
 
+    def _snapshot_state(self) -> dict[str, Any]:
+        """Capture the current data + metadata as an undo/redo snapshot.
+
+        The matrix may be ``None`` (e.g. after ``clear_data``); the snapshot
+        is still valid and must be pushed so the undo/redo chain can walk
+        back through an empty state.
+        """
+        return {
+            "data_matrix": (self._data_matrix.copy() if self._data_matrix is not None else None),
+            "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
+            "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
+        }
+
+    def _restore_state(self, state: dict[str, Any]) -> None:
+        """Install a snapshot produced by :meth:`_snapshot_state`."""
+        matrix = state["data_matrix"]
+        self._data_matrix = matrix
+        if matrix is None:
+            self._column_metadata = None
+            self._row_metadata = None
+            return
+        self._column_metadata = ColumnMetadataManager(
+            n_columns=matrix.n_variables, column_labels=matrix.col_labels
+        )
+        if state["column_metadata"] is not None:
+            self._column_metadata.from_dict(state["column_metadata"])
+        self._row_metadata = RowMetadataManager(
+            n_rows=matrix.n_samples, row_labels=matrix.row_labels
+        )
+        if state["row_metadata"] is not None:
+            self._row_metadata.from_dict(state["row_metadata"])
+
     def _push_undo(self) -> None:
         """Push current state onto undo stack."""
-        if self._data_matrix is not None:
-            state = {
-                "data_matrix": self._data_matrix.copy(),
-                "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
-                "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
-            }
-            self._undo_stack.append(state)
+        state = self._snapshot_state()
+        self._undo_stack.append(state)
 
-            # Limit undo stack size
-            if len(self._undo_stack) > 50:
-                self._undo_stack.pop(0)
+        # Limit undo stack size
+        if len(self._undo_stack) > 50:
+            self._undo_stack.pop(0)
 
-            # Clear redo stack on new action
-            self._redo_stack.clear()
+        # Clear redo stack on new action
+        self._redo_stack.clear()
 
     def can_undo(self) -> bool:
         """Check if undo is available."""
@@ -481,25 +525,12 @@ class StateManager:
             self._logger.debug(
                 f"undo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
             )
-            if self._data_matrix is not None:
-                current_state = {
-                    "data_matrix": self._data_matrix.copy(),
-                    "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
-                    "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
-                }
-                self._redo_stack.append(current_state)
+            self._redo_stack.append(self._snapshot_state())
             state = self._undo_stack.pop()
-            self._data_matrix = state["data_matrix"]
-            if state["column_metadata"] is not None and self._data_matrix:
-                self._column_metadata = ColumnMetadataManager(
-                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
-                )
-                self._column_metadata.from_dict(state["column_metadata"])
-            if state["row_metadata"] is not None and self._data_matrix:
-                self._row_metadata = RowMetadataManager(
-                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
-                )
-                self._row_metadata.from_dict(state["row_metadata"])
+            self._restore_state(state)
+            # Results computed against the discarded state must not be
+            # readable after undo.
+            self._analysis_cache.clear()
         get_event_bus().emit_undo_stack_changed()
 
     def redo(self) -> None:
@@ -510,25 +541,10 @@ class StateManager:
             self._logger.debug(
                 f"redo: undo_stack size={len(self._undo_stack)}, redo_stack size={len(self._redo_stack)}"
             )
-            if self._data_matrix is not None:
-                current_state = {
-                    "data_matrix": self._data_matrix.copy(),
-                    "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
-                    "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
-                }
-                self._undo_stack.append(current_state)
+            self._undo_stack.append(self._snapshot_state())
             state = self._redo_stack.pop()
-            self._data_matrix = state["data_matrix"]
-            if state["column_metadata"] is not None and self._data_matrix:
-                self._column_metadata = ColumnMetadataManager(
-                    n_columns=self._data_matrix.n_variables, column_labels=self._data_matrix.col_labels
-                )
-                self._column_metadata.from_dict(state["column_metadata"])
-            if state["row_metadata"] is not None and self._data_matrix:
-                self._row_metadata = RowMetadataManager(
-                    n_rows=self._data_matrix.n_samples, row_labels=self._data_matrix.row_labels
-                )
-                self._row_metadata.from_dict(state["row_metadata"])
+            self._restore_state(state)
+            self._analysis_cache.clear()
         get_event_bus().emit_undo_stack_changed()
 
     # =========================================================================

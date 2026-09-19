@@ -50,6 +50,77 @@ class NodeType(Enum):
     LEAF = auto()
 
 
+# Characters that must be quoted in a Newick label (unquoted labels terminate
+# on any of them, so a name containing one would silently break round-tripping).
+NEWICK_UNSAFE_CHARS = frozenset(",;:()[]'\"\\ \t\n\r")
+
+
+def format_newick_label(name: str) -> str:
+    """
+    Return a Newick-safe representation of ``name``.
+
+    Labels containing Newick structural characters (``, ; : ( ) [ ] '``), a
+    backslash or whitespace are wrapped in single quotes with embedded
+    apostrophes doubled (``''``), the standard escaping convention.  Plain
+    labels are returned unchanged so that numeric internal-node support
+    values keep their conventional unquoted form.
+
+    Parameters:
+        name: Node label (may be empty or ``None``).
+
+    Returns:
+        Label ready for embedding in a Newick string.
+    """
+    if not name:
+        return ""
+    if set(name) & NEWICK_UNSAFE_CHARS:
+        return "'" + name.replace("'", "''") + "'"
+    return name
+
+
+def parse_nhx_comment(comment: str) -> dict[str, Any]:
+    """
+    Parse the body of a ``[&...]`` / ``[&&NHX:...]`` annotation.
+
+    Parameters:
+        comment: Raw annotation text *without* the surrounding brackets.
+
+    Returns:
+        Mapping of key -> value.  Values that look numeric are converted;
+        everything else stays a string.  Unparseable annotations are returned
+        under the key ``"raw"`` so no information is lost.
+    """
+    body = comment.strip()
+    if body.startswith("&"):
+        body = body.lstrip("&").strip()
+    if body.upper().startswith("NHX"):
+        body = body[3:]
+    body = body.lstrip(":").strip()
+
+    if not body:
+        return {"raw": comment}
+
+    result: dict[str, Any] = {}
+    try:
+        for token in body.replace(",", ":").split(":"):
+            if not token:
+                continue
+            if "=" not in token:
+                raise ValueError(token)
+            key, _, value = token.partition("=")
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            try:
+                result[key] = float(value) if ("." in value or "e" in value.lower()) else int(value)
+            except ValueError:
+                result[key] = value
+    except ValueError:
+        logger.debug("Could not parse NHX annotation '%s' as key=value pairs", comment)
+        return {"raw": comment}
+
+    return result
+
+
 @dataclass
 class PhyloNode:
     """
@@ -89,11 +160,26 @@ class PhyloNode:
     data: Any = None
     label: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    allow_negative: bool = True
 
     def __post_init__(self):
-        """后初始化验证"""
+        """后初始化验证
+
+        负枝长处理:
+            距离法 (NJ) 与最小二乘拟合的中间步骤经常产生负枝长，
+            这是正常产物而非用户错误，因此默认 (``allow_negative=True``)
+            仅记录 warning 而不抛异常。需要严格非负约束时传入
+            ``allow_negative=False``。
+        """
         if self.branch_length is not None and self.branch_length < 0:
-            raise ValueError(f"Branch length must be non-negative, got {self.branch_length}")
+            if not self.allow_negative:
+                raise ValueError(f"Branch length must be non-negative, got {self.branch_length}")
+            logger.warning(
+                "Node '%s' has negative branch length %s; kept as-is because NJ/least-squares"
+                " methods routinely produce negative lengths.",
+                self.name,
+                self.branch_length,
+            )
 
     def __hash__(self):
         return hash(self.node_id)
@@ -372,6 +458,8 @@ class PhyloNode:
             support=self.support,
             data=self.data,
             label=self.label,
+            metadata=dict(self.metadata),
+            allow_negative=self.allow_negative,
         )
         new_node.parent = parent
 
@@ -560,7 +648,7 @@ class PhyloNode:
                 f"(lengths={branch_lengths}, internal_labels={internal_labels})"
             )
         if self.is_leaf:
-            name = self.name if self.name else ""
+            name = format_newick_label(self.name)
             if branch_lengths and self.branch_length is not None:
                 fmt = f"{{:.{precision}f}}"
                 return f"{name}:{fmt.format(self.branch_length)}"
@@ -575,7 +663,7 @@ class PhyloNode:
 
         # 添加内部节点标签
         if internal_labels and self.name:
-            subtree += self.name
+            subtree += format_newick_label(self.name)
 
         # 添加枝长
         if branch_lengths and self.branch_length is not None:
@@ -603,6 +691,23 @@ class PhyloNode:
         logger.info(f"Parsed Newick tree: {n_nodes} nodes, {n_leaves} leaves")
         return root
 
+    @classmethod
+    def from_newick_multi(cls, newick: str) -> list[PhyloNode]:
+        """
+        解析含多棵树的 Newick 字符串 (如 bootstrap/后验树文件)。
+
+        Parameters:
+            newick: 以 ``;`` 分隔的多树 Newick 文本
+
+        Returns:
+            各棵树根节点列表
+        """
+        parser = _NewickParser()
+        parser.load(newick)
+        roots = parser.parse_all()
+        logger.info("Parsed %d Newick trees from multi-tree string", len(roots))
+        return roots
+
     def __repr__(self) -> str:
         return f"PhyloNode('{self.name}', type={self.node_type.name})"
 
@@ -613,6 +718,14 @@ class PhyloNode:
 class _NewickParser:
     """
     Newick格式解析器 (内部使用)
+
+    支持的语法:
+        - 无引号标签: ``A:0.1``
+        - 单引号标签 (含 ``''`` 转义): ``'Homo sapiens'`` / ``'it''s'``；
+          引号内的 ``, ; : ( )`` 不参与分割
+        - NHX / ``[&...]`` 注释: ``((A,B)[&s=1]:0.1,C);``，注释内容写入
+          节点的 ``metadata['nhx']``
+        - 文件头 ``!`` 注释行
     """
 
     def __init__(self):
@@ -622,15 +735,24 @@ class _NewickParser:
 
     def parse(self, newick: str) -> PhyloNode:
         """
-        解析Newick字符串
+        解析单个 Newick 字符串
 
         Parameters:
             newick: Newick格式字符串
 
         Returns:
             根节点
+
+        Raises:
+            ValueError: 语法错误，或 ``;`` 之后仍有其他树内容 (多树文件请用
+                :meth:`PhyloTree.from_newick_multi`)
         """
         logger.debug(f"Starting Newick parse, input length = {len(newick)}")
+        self.load(newick)
+        return self.parse_single()
+
+    def load(self, newick: str) -> None:
+        """准备解析缓冲区 (剥离 '!' 注释行) 并重置游标。"""
         # 跳过 '!' 前缀注释行 (如 data/examples/primate_tree.nwk 的
         # 文献引注头)。带引号的标签内可能包含 '!'; 逐行判断时需
         # 剥离行首空白再检测。
@@ -639,14 +761,78 @@ class _NewickParser:
             if raw_line.lstrip().startswith("!"):
                 continue
             lines.append(raw_line)
-        newick = "\n".join(lines)
 
-        self._input = newick.strip().rstrip(";")
+        self._input = "\n".join(lines).strip()
         self._pos = 0
         self._length = len(self._input)
 
-        return self._parse_subtree()
+    # ------------------------------------------------------------------
+    # 多树支持
+    # ------------------------------------------------------------------
+    def parse_all(self) -> list[PhyloNode]:
+        """解析缓冲区中的全部树 (以 ``;`` 分隔)。
 
+        Returns:
+            各棵树的根节点列表
+        """
+        roots: list[PhyloNode] = []
+        while True:
+            self._skip_whitespace_and_comments()
+            if self._pos >= self._length:
+                break
+            start = self._pos
+            roots.append(self.parse_single(require_exhausted=False))
+            if self._pos == start:  # pragma: no cover - defensive guard
+                raise ValueError(f"Cannot parse Newick tree at position {start}")
+        return roots
+
+    def parse_single(self, require_exhausted: bool = True) -> PhyloNode:
+        """解析一棵树。
+
+        Parameters:
+            require_exhausted: 为 True 时，``;`` 之后仍有内容即报错。
+        """
+        self._skip_whitespace_and_comments()
+        if self._current() == "":
+            raise ValueError("Empty Newick input: no tree found")
+
+        root = self._parse_subtree()
+
+        # NHX 注释可出现在树尾 ('(...);[&R=true]')
+        self._collect_comments()
+
+        self._skip_whitespace_and_comments()
+        if self._current() == ";":
+            self._pos += 1
+            self._skip_whitespace_and_comments()
+
+        if require_exhausted and self._pos < self._length:
+            remainder = self._input[self._pos :].strip()
+            raise ValueError(
+                f"Unexpected content after Newick tree: {remainder[:40]!r}. "
+                "This looks like a multi-tree file; use PhyloTree.from_newick_multi() "
+                "(or parsers.newick_parser.NewickParser.parse_multi) instead."
+            )
+
+        return root
+
+    def _skip_whitespace_and_comments(self) -> None:
+        """跳过空白与成对的 ``[...]`` 注释 (供树间使用)。"""
+        while self._pos < self._length:
+            char = self._input[self._pos]
+            if char in " \t\n\r":
+                self._pos += 1
+            elif char == "[":
+                end = self._input.find("]", self._pos)
+                if end == -1:
+                    raise ValueError(f"Unterminated '[' comment at position {self._pos}")
+                self._pos = end + 1
+            else:
+                break
+
+    # ------------------------------------------------------------------
+    # 语法单元
+    # ------------------------------------------------------------------
     def _parse_subtree(self) -> PhyloNode:
         """解析子树"""
         self._skip_whitespace()
@@ -678,14 +864,19 @@ class _NewickParser:
         # 解析名称
         name = self._parse_name()
 
+        # 名称之后、枝长之前的注释: (...)[&NHX:B=95]:0.5
+        metadata = self._collect_comments()
+
         # 解析枝长
         branch_length = None
         if self._current() == ":":
             self._consume(":")
             branch_length = self._parse_number()
+            metadata.update(self._collect_comments())
 
         # 创建节点
         node = PhyloNode(name=name or "", node_type=NodeType.INTERNAL, branch_length=branch_length)
+        node.metadata.update(metadata)
 
         for child in children:
             node.add_child(child)
@@ -696,16 +887,26 @@ class _NewickParser:
         """解析叶节点"""
         name = self._parse_name()
 
+        # 名称之后、枝长之前的注释: A[&&NHX:S=human]:0.1
+        metadata = self._collect_comments()
+
         branch_length = None
         if self._current() == ":":
             self._consume(":")
             branch_length = self._parse_number()
+            # 枝长之后的注释: A:0.1[&&NHX:S=human]
+            metadata.update(self._collect_comments())
 
-        return PhyloNode(name=name or "", node_type=NodeType.LEAF, branch_length=branch_length)
+        node = PhyloNode(name=name or "", node_type=NodeType.LEAF, branch_length=branch_length)
+        node.metadata.update(metadata)
+        return node
 
     def _parse_name(self) -> str:
-        """解析节点名称"""
+        """解析节点名称 (支持单引号标签)"""
         self._skip_whitespace()
+
+        if self._current() == "'":
+            return self._parse_quoted_name()
 
         name_chars = []
         while self._pos < self._length:
@@ -715,7 +916,48 @@ class _NewickParser:
             name_chars.append(char)
             self._pos += 1
 
-        return "".join(name_chars)
+        return "".join(name_chars).strip()
+
+    def _parse_quoted_name(self) -> str:
+        """解析 ``'...'`` 引号标签，``''`` 表示一个字面量单引号。"""
+        self._consume("'")
+        chars: list[str] = []
+        while True:
+            char = self._current()
+            if char == "":
+                raise ValueError("Unterminated quoted Newick label: missing closing \"'\"")
+            if char == "'":
+                if self._peek_next() == "'":
+                    chars.append("'")
+                    self._pos += 2
+                    continue
+                self._pos += 1
+                return "".join(chars)
+            chars.append(char)
+            self._pos += 1
+
+    def _collect_comments(self) -> dict[str, Any]:
+        """收集紧随其后的所有 ``[...]`` 注释，返回可并入 metadata 的字典。"""
+        collected: dict[str, Any] = {}
+        raw: list[str] = []
+        while True:
+            self._skip_whitespace()
+            if self._current() != "[":
+                break
+            end = self._input.find("]", self._pos)
+            if end == -1:
+                raise ValueError(f"Unterminated '[' comment at position {self._pos}")
+            body = self._input[self._pos + 1 : end]
+            self._pos = end + 1
+            parsed = parse_nhx_comment(body)
+            if "raw" in parsed:
+                raw.append(body)
+            else:
+                collected.update(parsed)
+
+        if raw:
+            collected["raw_comments"] = raw
+        return collected
 
     def _parse_number(self) -> float:
         """解析数字"""
@@ -724,12 +966,20 @@ class _NewickParser:
         num_chars = []
         while self._pos < self._length:
             char = self._current()
-            if char in "(),:;[] \t\n":
+            if char in "(),:;[] \t\n\r":
                 break
             num_chars.append(char)
             self._pos += 1
 
-        return float("".join(num_chars))
+        raw = "".join(num_chars)
+        try:
+            return float(raw)
+        except ValueError:
+            context = self._input[max(0, self._pos - 12) : min(self._length, self._pos + 12)]
+            detail = f"got {raw!r}" if raw else "branch length is empty"
+            raise ValueError(
+                f"Invalid branch length after ':' ({detail}) near {context!r}"
+            ) from None
 
     def _skip_whitespace(self) -> None:
         """跳过空白"""
@@ -740,6 +990,12 @@ class _NewickParser:
         """获取当前字符"""
         if self._pos < self._length:
             return self._input[self._pos]
+        return ""
+
+    def _peek_next(self) -> str:
+        """获取下一个字符（不移动游标）"""
+        if self._pos + 1 < self._length:
+            return self._input[self._pos + 1]
         return ""
 
     def _consume(self, char: str) -> None:
@@ -855,6 +1111,21 @@ class PhyloTree:
         tree = cls(root=root, name=name)
         logger.info(f"PhyloTree created: {tree.leaf_count} leaves, {tree.node_count} nodes")
         return tree
+
+    @classmethod
+    def from_newick_multi(cls, newick: str, name: str = "") -> list[PhyloTree]:
+        """
+        从含多棵树的 Newick 字符串创建树列表。
+
+        Parameters:
+            newick: 以 ``;`` 分隔的多树 Newick 文本
+            name: 树名称前缀
+
+        Returns:
+            PhyloTree 列表
+        """
+        roots = PhyloNode.from_newick_multi(newick)
+        return [cls(root=root, name=name) for root in roots]
 
     def get_distance_matrix(self) -> dict[tuple[str, str], float]:
         """

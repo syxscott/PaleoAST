@@ -20,7 +20,7 @@ import numpy.typing as npt
 from scipy import stats as sp_stats
 
 from config.i18n import _
-from utils.exceptions import ComputationError
+from utils.exceptions import ComputationError, ValidationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,12 @@ class TTestResult:
 
 @dataclass
 class ANOVAResult:
-    """Result of one-way ANOVA with optional post-hoc."""
+    """Result of one-way ANOVA with optional post-hoc.
+
+    ``tukey_results`` holds one dict per compared pair with the keys
+    ``group_a``, ``group_b``, ``diff``, ``q_stat``, ``p_adj`` (the Tukey
+    adjusted p-value; ``p_value`` is kept as an alias) and ``significant``.
+    """
 
     f_statistic: float
     p_value: float
@@ -122,9 +127,13 @@ class ANOVAResult:
             lines.append(f"{'Group A':<10} {'Group B':<10} {'Diff':>10} {'p-adj':>10} {'Sig':>5}")
             lines.append("-" * 50)
             for r in self.tukey_results:
-                sig_mark = "**" if r["p_adj"] < 0.01 else ("*" if r["p_adj"] < 0.05 else "ns")
+                # 'p_adj' is the canonical key written by _tukey_hsd(); fall
+                # back to the legacy 'p_value' alias so a hand-built result
+                # never raises KeyError here.
+                p_adj = float(r["p_adj"]) if "p_adj" in r else float(r["p_value"])
+                sig_mark = "**" if p_adj < 0.01 else ("*" if p_adj < 0.05 else "ns")
                 lines.append(
-                    f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} {r['p_adj']:>10.4f} {sig_mark:>5}"
+                    f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} {p_adj:>10.4f} {sig_mark:>5}"
                 )
         return "\n".join(lines)
 
@@ -159,6 +168,11 @@ class UnivariateAnalyzer:
 
         Returns:
             SummaryResult
+
+        Raises:
+            ValidationError: if ``column_names`` does not cover every column
+                of ``data`` or if a requested column index is out of range.
+                Both used to surface as a bare ``IndexError`` from the loop.
         """
         with self._lock:
             data = validate_data_array(data, name="data")
@@ -168,8 +182,24 @@ class UnivariateAnalyzer:
             n_cols = data.shape[1]
             if column_names is None:
                 column_names = [f"Var_{i + 1}" for i in range(n_cols)]
+            elif len(column_names) < n_cols:
+                raise ValidationError(
+                    "column_names must provide one name per data column",
+                    details={"n_column_names": len(column_names), "n_columns": n_cols},
+                )
             if columns is None:
                 columns = list(range(n_cols))
+            else:
+                out_of_range = [
+                    idx
+                    for idx in columns
+                    if not (-n_cols <= int(idx) < n_cols)
+                ]
+                if out_of_range:
+                    raise ValidationError(
+                        "columns contains indices outside the data matrix",
+                        details={"invalid_indices": out_of_range, "n_columns": n_cols},
+                    )
 
             results = []
             for idx in columns:
@@ -230,6 +260,13 @@ class UnivariateAnalyzer:
 
         Returns:
             NormalityResult
+
+        Raises:
+            ComputationError: if fewer than 3 finite values are available, or
+                if the variable is constant.  Shapiro-Wilk silently returns
+                ``W = 1, p = 1`` ("perfectly normal") and Anderson-Darling
+                returns ``NaN`` for zero-range data, so the test is rejected
+                instead of reporting meaningless statistics.
         """
         with self._lock:
             if data.ndim == 2:
@@ -240,6 +277,14 @@ class UnivariateAnalyzer:
             valid = col[~np.isnan(col)]
             if len(valid) < 3:
                 raise ComputationError("Need at least 3 non-NaN values for normality test")
+
+            if float(np.max(valid)) == float(np.min(valid)):
+                raise ComputationError(
+                    "Normality test is undefined for a constant variable "
+                    "(variance = 0): Shapiro-Wilk and Anderson-Darling cannot "
+                    "be evaluated. Remove the column or check the grouping.",
+                    details={"n": int(len(valid)), "constant_value": float(valid[0])},
+                )
 
             # Shapiro-Wilk (best for n < 5000)
             if len(valid) <= 5000:
@@ -279,6 +324,11 @@ class UnivariateAnalyzer:
 
         Returns:
             TTestResult
+
+        Raises:
+            ComputationError: if the groups do not define exactly two samples,
+                if a paired design has unequal group sizes, or if fewer than
+                two complete observations remain.
         """
         with self._lock:
             if groups is None:
@@ -289,15 +339,31 @@ class UnivariateAnalyzer:
                 raise ComputationError(f"t-test requires exactly 2 groups, got {len(unique_groups)}")
 
             g0, g1 = unique_groups
+            idx_0 = [i for i, g in enumerate(groups) if g == g0]
+            idx_1 = [i for i, g in enumerate(groups) if g == g1]
             if data.ndim == 2:
-                vals_0 = data[[i for i, g in enumerate(groups) if g == g0], column]
-                vals_1 = data[[i for i, g in enumerate(groups) if g == g1], column]
+                vals_0 = data[idx_0, column]
+                vals_1 = data[idx_1, column]
             else:
-                vals_0 = data[[i for i, g in enumerate(groups) if g == g0]]
-                vals_1 = data[[i for i, g in enumerate(groups) if g == g1]]
+                vals_0 = data[idx_0]
+                vals_1 = data[idx_1]
 
-            vals_0 = vals_0[~np.isnan(vals_0)]
-            vals_1 = vals_1[~np.isnan(vals_1)]
+            if paired:
+                # A paired test compares the i-th member of group 0 with the
+                # i-th member of group 1, so the two vectors must stay
+                # positionally aligned: drop a pair when *either* of its two
+                # measurements is missing.  Filtering NaN independently per
+                # group (as the unpaired branch below does) shifts the
+                # remaining values against each other and tests arbitrary,
+                # wrong pairings.
+                if len(vals_0) != len(vals_1):
+                    raise ComputationError("Paired t-test requires equal sample sizes")
+                complete = ~np.isnan(vals_0) & ~np.isnan(vals_1)
+                vals_0 = vals_0[complete]
+                vals_1 = vals_1[complete]
+            else:
+                vals_0 = vals_0[~np.isnan(vals_0)]
+                vals_1 = vals_1[~np.isnan(vals_1)]
 
             if len(vals_0) < 2 or len(vals_1) < 2:
                 raise ComputationError(
@@ -305,8 +371,6 @@ class UnivariateAnalyzer:
                 )
 
             if paired:
-                if len(vals_0) != len(vals_1):
-                    raise ComputationError("Paired t-test requires equal sample sizes")
                 t_stat, p_val = sp_stats.ttest_rel(vals_0, vals_1)
                 test_type = "paired"
             else:
@@ -428,7 +492,19 @@ class UnivariateAnalyzer:
             if len(group_data) < 2:
                 raise ComputationError("Need at least 2 non-empty groups")
 
-            stat, p_val = sp_stats.kruskal(*group_data)
+            try:
+                stat, p_val = sp_stats.kruskal(*group_data)
+            except ValueError as e:
+                # scipy raises a bare ValueError e.g. when every value is
+                # identical ("All numbers are identical in kruskal") or when a
+                # group is empty.  Translate it into the project's exception
+                # hierarchy so callers (controllers/GUI) handle it uniformly.
+                raise ComputationError(
+                    "Kruskal-Wallis test could not be computed: "
+                    f"{e}. The data are probably constant across all groups.",
+                    original_exception=e,
+                    details={"n_groups": len(group_data), "group_sizes": [len(g) for g in group_data]},
+                ) from e
 
             return KruskalResult(
                 statistic=float(stat),
@@ -496,6 +572,11 @@ class UnivariateAnalyzer:
                             "group_b": group_labels[j],
                             "diff": mean_diff,
                             "q_stat": float(q_stat),
+                            # Tukey HSD p-values are already adjusted for the
+                            # family-wise error rate.  'p_adj' is the canonical
+                            # key (ANOVAResult.summary() reads it); 'p_value' is
+                            # kept as an alias for backward compatibility.
+                            "p_adj": p_adj,
                             "p_value": p_adj,
                             "significant": p_adj < 0.05,
                         }
@@ -546,6 +627,9 @@ class UnivariateAnalyzer:
                             "group_b": group_labels[j],
                             "diff": float(mean_diff),
                             "q_stat": float(q_stat),
+                            # See the note above: 'p_adj' is canonical,
+                            # 'p_value' is a backward-compatible alias.
+                            "p_adj": p_adj,
                             "p_value": p_adj,
                             "significant": p_adj < 0.05,
                         }
