@@ -224,3 +224,30 @@ class TestDiversityCurves:
         binned = bin_time(occ, five_bins_10myr, method="all")
         curve = interval_count_diversity(binned, five_bins_10myr)
         assert [c["richness"] for c in curve] == [1, 2, 2, 1, 0]
+
+
+class TestICSColors:
+    """W8: built-in scale rows carry ICS 2020 chart fills, abbreviations and
+    BT.601 font colours."""
+
+    def test_period_colours_and_abbr(self):
+        rows = {r["interval_name"]: r for r in get_scale(rank="period")}
+        assert rows["Cretaceous"]["colour"] == "#7FC64E"
+        assert rows["Cretaceous"]["abbr"] == "K"
+        assert rows["Permian"]["abbr"] == "P"
+
+    def test_font_follows_luminance(self):
+        rows = {r["interval_name"]: r for r in get_scale(rank="period")}
+        assert rows["Ordovician"]["font"] == "white"  # #009270 is dark
+        assert rows["Cretaceous"]["font"] == "black"  # #7FC64E is light
+
+    def test_eon_and_epoch_colours(self):
+        assert get_scale(rank="eon")[0]["colour"] == "#9AD9DD"
+        epochs = {r["interval_name"]: r for r in get_scale(rank="epoch")}
+        assert epochs["Miocene"]["colour"] == "#FFFF00"
+        assert epochs["Miocene"]["abbr"] is None
+
+    def test_user_scale_colour_still_wins(self):
+        scale = [{"interval_name": "X", "max_ma": 10.0, "min_ma": 0.0, "colour": "#101010"}]
+        row = get_scale(scale=scale)[0]
+        assert row["colour"] == "#101010" and row["font"] == "white"

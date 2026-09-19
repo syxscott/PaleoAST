@@ -13,6 +13,7 @@ Modules:
     - allometry_plot: Allometry and morphological integration plots
     - evo_rate_plot: Evolutionary rate and phenogram plots
     - stratigraphy_plot: Stratigraphic range and extinction interval plots
+    - strat_column: ICS-styled stratigraphic columns with geologic-time strips
 
 Author: PaleoAST Development Team
 version: 1.0.1
@@ -23,6 +24,7 @@ from .diversity_plot import DiversityPlotter
 from .evo_rate_plot import EvolutionRatePlotter
 from .pca_plot import PCAPlotter
 from .spectral_plot import SpectralPlotter
+from .strat_column import StratigraphicColumnPlotter
 from .stratigraphy_plot import StratigraphyPlotter
 
 __all__ = [
@@ -31,5 +33,6 @@ __all__ = [
     "EvolutionRatePlotter",
     "PCAPlotter",
     "SpectralPlotter",
+    "StratigraphicColumnPlotter",
     "StratigraphyPlotter",
 ]

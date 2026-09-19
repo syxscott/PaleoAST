@@ -45,7 +45,8 @@ version: 1.0.0
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -63,35 +64,38 @@ MAX_MA = "max_ma"
 # Neoproterozoic).  Stage-level binning is supported by passing a user scale.
 # =============================================================================
 
-# (interval_name, rank, max_ma (older bound), min_ma (younger bound))
-_GTS2020_ROWS: list[tuple[str, str, float, float]] = [
+# (interval_name, rank, max_ma (older bound), min_ma (younger bound),
+#  colour (ICS 2020 chart fill hex), abbr (ICS chart abbreviation or None))
+# Colours/abbreviations match palaeoverse::GTS2020 (itself from the ICS chart);
+# boundaries stay on this table's ICS v0.1 ages, so only fills are merged.
+_GTS2020_ROWS: list[tuple[str, str, float, float, str, str | None]] = [
     # Eons
-    ("Phanerozoic", "eon", 538.8, 0.0),
+    ("Phanerozoic", "eon", 538.8, 0.0, "#9AD9DD", None),
     # Eras
-    ("Cenozoic", "era", 66.0, 0.0),
-    ("Mesozoic", "era", 251.902, 66.0),
-    ("Paleozoic", "era", 538.8, 251.902),
+    ("Cenozoic", "era", 66.0, 0.0, "#F2F91D", None),
+    ("Mesozoic", "era", 251.902, 66.0, "#67C5CA", None),
+    ("Paleozoic", "era", 538.8, 251.902, "#99C08D", None),
     # Periods
-    ("Quaternary", "period", 2.58, 0.0),
-    ("Neogene", "period", 23.03, 2.58),
-    ("Paleogene", "period", 66.0, 23.03),
-    ("Cretaceous", "period", 145.0, 66.0),
-    ("Jurassic", "period", 201.4, 145.0),
-    ("Triassic", "period", 251.902, 201.4),
-    ("Permian", "period", 298.9, 251.902),
-    ("Carboniferous", "period", 358.9, 298.9),
-    ("Devonian", "period", 419.2, 358.9),
-    ("Silurian", "period", 443.8, 419.2),
-    ("Ordovician", "period", 485.4, 443.8),
-    ("Cambrian", "period", 538.8, 485.4),
+    ("Quaternary", "period", 2.58, 0.0, "#F9F97F", "Q"),
+    ("Neogene", "period", 23.03, 2.58, "#FFE619", "Ng"),
+    ("Paleogene", "period", 66.0, 23.03, "#FD9A52", "Pg"),
+    ("Cretaceous", "period", 145.0, 66.0, "#7FC64E", "K"),
+    ("Jurassic", "period", 201.4, 145.0, "#34B2C9", "J"),
+    ("Triassic", "period", 251.902, 201.4, "#812B92", "Tr"),
+    ("Permian", "period", 298.9, 251.902, "#F04028", "P"),
+    ("Carboniferous", "period", 358.9, 298.9, "#67A599", "C"),
+    ("Devonian", "period", 419.2, 358.9, "#CB8C37", "D"),
+    ("Silurian", "period", 443.8, 419.2, "#B3E1B6", "S"),
+    ("Ordovician", "period", 485.4, 443.8, "#009270", "O"),
+    ("Cambrian", "period", 538.8, 485.4, "#7FA056", "Cm"),
     # Cenozoic epochs
-    ("Holocene", "epoch", 0.0117, 0.0),
-    ("Pleistocene", "epoch", 2.58, 0.0117),
-    ("Pliocene", "epoch", 5.333, 2.58),
-    ("Miocene", "epoch", 23.03, 5.333),
-    ("Eocene", "epoch", 56.0, 33.9),
-    ("Oligocene", "epoch", 33.9, 23.03),
-    ("Paleocene", "epoch", 66.0, 56.0),
+    ("Holocene", "epoch", 0.0117, 0.0, "#FEEBD2", None),
+    ("Pleistocene", "epoch", 2.58, 0.0117, "#FFEFAF", None),
+    ("Pliocene", "epoch", 5.333, 2.58, "#FFFF99", None),
+    ("Miocene", "epoch", 23.03, 5.333, "#FFFF00", None),
+    ("Eocene", "epoch", 56.0, 33.9, "#FDB46C", None),
+    ("Oligocene", "epoch", 33.9, 23.03, "#FEC07A", None),
+    ("Paleocene", "epoch", 66.0, 56.0, "#FDA75F", None),
 ]
 # NOTE: Paleogene subdivisions are series, not epochs, in the ICS chart; the
 # epoch rank intentionally lists the six classic Cenozoic epochs plus the
@@ -165,8 +169,8 @@ def get_scale(
     if rank not in RANKS:
         raise DataValidationError(_("rank must be one of {0}").format(", ".join(RANKS)))
     table = [
-        {"interval_name": name, "rank": rk, MAX_MA: mx, MIN_MA: mn}
-        for (name, rk, mx, mn) in _GTS2020_ROWS
+        {"interval_name": name, "rank": rk, MAX_MA: mx, MIN_MA: mn, "colour": colour, "abbr": abbr}
+        for (name, rk, mx, mn, colour, abbr) in _GTS2020_ROWS
     ]
 
     if interval is not None:
@@ -285,7 +289,7 @@ def time_bins(
         if size <= 0:
             raise DataValidationError(_("size must be greater than 0"))
         total = max(r["max_ma"] for r in df) - min(r["min_ma"] for r in df)
-        k = int(round(total / size))  # banker's rounding, matching R
+        k = round(total / size)  # banker's rounding, matching R
         k = max(1, min(k, len(df)))
     else:
         k = int(n_bins)  # type: ignore[call-overload]
