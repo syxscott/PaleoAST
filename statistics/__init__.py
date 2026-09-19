@@ -30,6 +30,7 @@ from .pcm import (
 )
 from .pcoa import PCoAAnalyzer, PCoAResult
 from .permanova import PERMANOVAAnalyzer, PERMANOVAResult
+from .procD_lm import ProcDLMResult, ProcDLMTerm, procD_lm
 
 __all__ = [
     "ANOSIMAnalyzer",
@@ -51,5 +52,8 @@ __all__ = [
     "PERMANOVAResult",
     "PhyloANOVAResult",
     "PhylogeneticSignalResult",
+    "ProcDLMResult",
+    "ProcDLMTerm",
     "compute_distance_matrix",
+    "procD_lm",
 ]
