@@ -73,11 +73,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.constants import APP_VERSION
 from config.design_system import BorderRadius, Typography, get_palette
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
 from models.state_manager import get_state_manager
+from presets import ERROR, OK, RUNNING, PresetManager, RunQueue, check_guards, get_spec, write_manifest
 from utils.event_bus import get_event_bus
 from views.diagnostic_console import DiagnosticConsole
 from views.file_drop_handler import FileDropHandler
@@ -114,6 +116,7 @@ from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_null_model_dialogs import NullModelDialog
 from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
 from views.ui_plot_canvas import InteractivePlotCanvas
+from views.ui_runlist_panel import RunListPanel
 from views.ui_spreadsheet import ScientificSpreadsheet
 
 
@@ -1162,6 +1165,7 @@ class _AnalysisSignals(QObject):
 
     result_ready = pyqtSignal(object)
     error_raised = pyqtSignal(Exception)
+    progress = pyqtSignal(int, int)
 
 
 class _AnalysisTask(QRunnable):
@@ -1170,16 +1174,25 @@ class _AnalysisTask(QRunnable):
     长时间计算 (NMDS 多重启动、CONISS、GPA 迭代等) 若在 GUI 线程
     同步执行会冻结整个界面且无任何进度提示; 分析处理器应通过
     ``MainWindow._run_analysis_async`` 使用本任务。
+
+    当 ``wants_reporter`` 为真时, work 被调用为 ``work(reporter)``,
+    其中 reporter 是一个 ``(value, maximum)`` 可调用对象, 它通过
+    ``signals.progress`` 将进度安全地转发到 GUI 线程。
     """
 
-    def __init__(self, work, signals: _AnalysisSignals):
+    def __init__(self, work, signals: _AnalysisSignals, wants_reporter: bool = False):
         super().__init__()
         self._work = work
         self._signals = signals  # 持引用防垃圾回收
+        self._wants_reporter = wants_reporter
 
     def run(self):
         try:
-            result = self._work()
+            if self._wants_reporter:
+                reporter = lambda value, maximum: self._signals.progress.emit(value, maximum)  # noqa: E731
+                result = self._work(reporter)
+            else:
+                result = self._work()
             self._signals.result_ready.emit(result)
         except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
             self._signals.error_raised.emit(e)
@@ -1387,6 +1400,19 @@ class MainWindow(QMainWindow):
         # Diagnostic console (dockable)
         self._diagnostic_console = DiagnosticConsole(self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._diagnostic_console)
+
+        # Batch run queue (dockable, tabbed with the console, hidden by default)
+        self._preset_manager = PresetManager()
+        self._run_queue = RunQueue(
+            guard=self._runlist_guard,
+            executor=self._runlist_execute,
+            on_change=lambda item: self._runlist_panel.item_changed(item),
+        )
+        self._runlist_panel = RunListPanel(self._run_queue, self._preset_manager, self)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._runlist_panel)
+        self.tabifyDockWidget(self._diagnostic_console, self._runlist_panel)
+        self._runlist_panel.hide()
+        self._runlist_panel.run_all_requested.connect(self._on_runlist_run_all)
 
         # Create menu bar
         self._create_menu_bar()
@@ -1909,6 +1935,13 @@ class MainWindow(QMainWindow):
         analysis_menu.addAction(strat_action)
         self._register_data_action(strat_action)
 
+        analysis_menu.addSeparator()
+
+        runlist_action = self._runlist_panel.toggleViewAction()
+        runlist_action.setText(_("Run &Queue (batch)..."))
+        runlist_action.setToolTip(_("Show the batch run queue panel"))
+        analysis_menu.addAction(runlist_action)
+
         # Phylogenetic Comparative Methods submenu
         analysis_menu.addSeparator()
         pcm_submenu = QMenu(_("Phylogenetic Comparative Methods"), self)
@@ -2289,6 +2322,9 @@ class MainWindow(QMainWindow):
         diagnostic_console = getattr(self, "_diagnostic_console", None)
         if diagnostic_console is not None and hasattr(diagnostic_console, "setDarkTheme"):
             diagnostic_console.setDarkTheme(is_dark)
+        runlist_panel = getattr(self, "_runlist_panel", None)
+        if runlist_panel is not None:
+            runlist_panel.setDarkTheme(is_dark)
         # Re-theme any embedded matplotlib Figure widgets that we
         # added via :meth:`_embed_figure_in_workspace`. These do not
         # implement ``setDarkTheme`` themselves; the helper applies
@@ -3030,7 +3066,8 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
-    def _run_analysis_async(self, work, on_success, on_error, title: str) -> None:
+    def _run_analysis_async(self, work, on_success, on_error, title: str,
+                            wants_reporter: bool = False) -> None:
         """在后台线程运行分析并接气回调。
 
         信号桥必须是 QObject: pyqtSignal 只有挂在 QObject 实例上才能
@@ -3040,10 +3077,13 @@ class MainWindow(QMainWindow):
         signals 以 self 为父对象, 保证 emit 前不被垃圾回收。
 
         Parameters:
-            work: 无参可调用, 返回分析结果 (在worker线程执行)。
+            work: 无参可调用 (或 wants_reporter 时接收 reporter 单参),
+                返回分析结果 (在worker线程执行)。
             on_success: result -> None (GUI线程执行)。
             on_error: Exception -> None (GUI线程执行)。
             title: 状态栏显示的分析名称。
+            wants_reporter: 为真时 work 收到 ``(value, maximum)`` 进度
+                回调, 转发到状态栏进度条。
         """
         self._status_bar.setProgress(0, 0)  # indeterminate
         self._status_bar.setInfo(_("Running {0}...").format(title))
@@ -3051,9 +3091,101 @@ class MainWindow(QMainWindow):
         signals = _AnalysisSignals(self)
         signals.result_ready.connect(on_success)
         signals.error_raised.connect(on_error)
+        signals.progress.connect(
+            lambda value, maximum: self._status_bar.setProgress(value, maximum)
+        )
 
-        task = _AnalysisTask(work, signals)
+        task = _AnalysisTask(work, signals, wants_reporter=wants_reporter)
         self._thread_pool.start(task)
+
+    # ------------------------------------------------------------------
+    # Batch run queue (runlist) wiring
+    # ------------------------------------------------------------------
+
+    def _runlist_guard(self, item) -> str | None:
+        """RunQueue guard callback: report the first unmet precondition."""
+        try:
+            spec = get_spec(item.analysis_id)
+        except Exception as e:  # guard must return a reason, not raise
+            return str(e)
+        available = set()
+        if self._state.has_data:
+            available.add("has_data")
+        if self._get_groups() is not None:
+            available.add("groups")
+        for guard in spec.requires:
+            if guard.startswith("cache:"):
+                key = guard.split(":", 1)[1]
+                if self._state.get_cached_result(key) is not None:
+                    available.add(guard)
+        unmet = check_guards(spec, available)
+        if unmet is None:
+            return None
+        return _("Guard not satisfied: {0}").format(unmet)
+
+    def _runlist_execute(self, item, finish) -> None:
+        """RunQueue executor callback: dispatch to the analysis's _execute_*."""
+        dispatch = {
+            "pca": self._execute_pca,
+            "pcoa": self._execute_pcoa,
+            "nmds": self._execute_nmds,
+            "anosim": self._execute_anosim,
+            "permanova": self._execute_permanova,
+            "tps_grid": self._execute_tps_grid,
+        }
+        fn = dispatch.get(item.analysis_id)
+        if fn is None:
+            finish(ERROR, _("Unknown analysis: {0}").format(item.analysis_id))
+            return
+
+        def _done(_result):
+            finish(OK, None)
+            QTimer.singleShot(0, self._runlist_advance)
+
+        def _fail(exc):
+            finish(ERROR, str(exc))
+            QTimer.singleShot(0, self._runlist_advance)
+
+        fn(item.params, on_done=_done, on_fail=_fail)
+
+    def _on_runlist_run_all(self) -> None:
+        """Start a queue pass; re-running after a finished pass resets results."""
+        if self._run_queue.is_busy():
+            return
+        items = self._run_queue.items
+        if items and self._run_queue.is_done():
+            self._run_queue.clear_results()
+            self._runlist_panel.refresh()
+        self._runlist_advance()
+
+    def _runlist_advance(self) -> None:
+        """Start the next pending item, or finish the pass with a manifest."""
+        if self._run_queue.is_busy():
+            return
+        try:
+            item = self._run_queue.run_next()
+        except Exception as e:  # queued event handler must not raise
+            self._logger.error(f"Run queue error: {e}")
+            return
+        if item is None:
+            if self._run_queue.items and self._run_queue.is_done():
+                self._runlist_write_manifest()
+            return
+        if item.status != RUNNING:
+            # Skipped by the guard, or a synchronous executor already
+            # finished the item: continue the pass on the next event-loop
+            # tick so the UI repaints between runs.
+            QTimer.singleShot(0, self._runlist_advance)
+
+    def _runlist_write_manifest(self) -> None:
+        """Persist the JSON record of the finished pass next to the preset library."""
+        try:
+            directory = os.path.dirname(os.path.abspath(self._preset_manager.directory))
+            path = os.path.join(directory, "last_run_manifest.json")
+            write_manifest(path, self._run_queue.items, meta={"app_version": APP_VERSION})
+            self._status_bar.setInfo(_("Run manifest written to {0}").format(path))
+        except OSError as e:
+            self._logger.error(f"Failed to write run manifest: {e}")
 
     def _on_run_pca(self) -> None:
         """
@@ -3091,8 +3223,15 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        params = dialog.get_parameters()
+        self._execute_pca(dialog.get_parameters())
 
+    def _execute_pca(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Run PCA in the thread pool and plot the result.
+
+        on_done/on_fail are the batch-runlist hooks: when provided, the
+        runlist is notified instead of (interactive mode's) dialogs being
+        shown on failure.  Success always renders the plots.
+        """
         controller = self._statistics_controller
         n_components = params["n_components"]
         method = params["method"]
@@ -3101,7 +3240,19 @@ class MainWindow(QMainWindow):
             # PCA 分解在数据量大时是长计算, 后台线程执行
             return controller.run_pca(n_components=n_components, method=method)
 
-        self._run_analysis_async(_work, self._on_pca_result_ready, self._on_pca_error, _("PCA"))
+        def _done(result):
+            self._on_pca_result_ready(result)
+            if on_done is not None:
+                on_done(result)
+
+        def _fail(exc):
+            if on_fail is not None:
+                self._status_bar.setProgress(100, 100)
+                on_fail(exc)
+            else:
+                self._on_pca_error(exc)
+
+        self._run_analysis_async(_work, _done, _fail, _("PCA"))
 
     def _on_pca_result_ready(self, result) -> None:
         self._status_bar.setProgress(100, 100)
@@ -3114,7 +3265,12 @@ class MainWindow(QMainWindow):
         self._status_bar.setInfo(_("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(result.n_components, cum2))
 
         scree = InteractivePlotCanvas()
-        scree.plot_scree(result.eigenvalues_raw, result.explained_variance, result.cumulative_variance, method="PCA")
+        # explained_variance/cumulative_variance cover only the retained
+        # components while eigenvalues_raw holds all of them; plot_scree
+        # sizes its x-axis from the eigenvalue array, so pass a matching
+        # slice (otherwise matplotlib aborts the app from this slot).
+        ev_all = result.explained_variance
+        scree.plot_scree(result.eigenvalues_raw[: len(ev_all)], ev_all, result.cumulative_variance, method="PCA")
         self._add_tab_to_workspace(scree, _("PCA Scree Plot"))
 
     def _on_pca_error(self, exc: Exception) -> None:
@@ -3131,29 +3287,38 @@ class MainWindow(QMainWindow):
         dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
+            self._execute_pcoa(dialog.get_parameters())
 
-            try:
-                result = self._statistics_controller.run_pcoa(
-                    metric=params["metric"], n_components=params["n_components"]
+    def _execute_pcoa(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Run PCoA (synchronous) and plot; on_done/on_fail for the runlist."""
+        try:
+            result = self._statistics_controller.run_pcoa(
+                metric=params["metric"], n_components=params["n_components"]
+            )
+
+            plot = InteractivePlotCanvas()
+            plot.plot_pcoa_scores(result)
+
+            plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
+            self._workspace.setCurrentIndex(plot_index)
+
+            ev = result.proportion_explained
+            cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
+            self._status_bar.setInfo(
+                _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(
+                    result.n_components, cum2
                 )
+            )
 
-                plot = InteractivePlotCanvas()
-                plot.plot_pcoa_scores(result)
-
-                plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
-                self._workspace.setCurrentIndex(plot_index)
-
-                ev = result.proportion_explained
-                cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
-                self._status_bar.setInfo(
-                    _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(
-                        result.n_components, cum2
-                    )
-                )
-
-            except Exception as e:
+        except Exception as e:
+            self._logger.error(f"PCoA analysis failed: {e}")
+            if on_fail is not None:
+                on_fail(e)
+            else:
                 QMessageBox.critical(self, _("PCoA Error"), format_user_error(e, "PCoA"))
+            return
+        if on_done is not None:
+            on_done(result)
 
     def _on_run_nmds(self) -> None:
         """Run Non-metric MDS."""
@@ -3165,34 +3330,48 @@ class MainWindow(QMainWindow):
         dialog.setDarkTheme(self._is_dark_theme)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
+            self._execute_nmds(dialog.get_parameters())
 
-            def _work():
-                # 多重启动 SMACOF 是长时间计算, 必须在后台线程执行
-                # (旧实现在 GUI 线程同步运行, 大矩阵会冻结界面)
-                return self._statistics_controller.run_nmds(
-                    metric=params["metric"],
-                    n_dimensions=params["n_dimensions"],
-                    n_restarts=params["n_restarts"],
-                    max_iterations=params["max_iterations"],
-                    tolerance=params["tolerance"],
-                )
+    def _execute_nmds(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Run NMDS in the thread pool with real per-restart progress.
 
-            def _on_result(result):
-                self._status_bar.setProgress(100, 100)
-                plot = InteractivePlotCanvas()
-                plot.plot_nmds(result)
+        The analyzer calls progress_callback(restart_index, total_restarts,
+        stress) after each restart; it fires on the worker thread, so the
+        callback only emits ``signals.progress`` (queued to the GUI thread)
+        via the reporter handed to ``_run_analysis_async``.
+        """
+        def _work(reporter):
+            # 多重启动 SMACOF 是长时间计算, 必须在后台线程执行
+            # (旧实现在 GUI 线程同步运行, 大矩阵会冻结界面)
+            return self._statistics_controller.run_nmds(
+                metric=params["metric"],
+                n_dimensions=params["n_dimensions"],
+                n_restarts=params["n_restarts"],
+                max_iterations=params["max_iterations"],
+                tolerance=params["tolerance"],
+                progress_callback=lambda i, n, s: reporter(i, n),
+            )
 
-                plot_index = self._add_plot_to_workspace(plot, _("NMDS Plot"))
-                self._workspace.setCurrentIndex(plot_index)
+        def _on_result(result):
+            self._status_bar.setProgress(100, 100)
+            plot = InteractivePlotCanvas()
+            plot.plot_nmds(result)
 
-                self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
+            plot_index = self._add_plot_to_workspace(plot, _("NMDS Plot"))
+            self._workspace.setCurrentIndex(plot_index)
 
-            def _on_error(e):
-                self._status_bar.setProgress(100, 100)
+            self._status_bar.setInfo(_("NMDS: stress = {0:.4f}").format(result.stress))
+            if on_done is not None:
+                on_done(result)
+
+        def _on_error(e):
+            self._status_bar.setProgress(100, 100)
+            if on_fail is not None:
+                on_fail(e)
+            else:
                 QMessageBox.critical(self, _("NMDS Error"), format_user_error(e, "NMDS"))
 
-            self._run_analysis_async(_work, _on_result, _on_error, _("NMDS"))
+        self._run_analysis_async(_work, _on_result, _on_error, _("NMDS"), wants_reporter=True)
 
     def _on_run_diversity(self) -> None:
         """Run diversity analysis."""
@@ -3392,11 +3571,18 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._execute_anosim({})
+
+    def _execute_anosim(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Run ANOSIM (synchronous) and plot; on_done/on_fail for the runlist."""
+        groups = self._get_groups()
         try:
             self._status_bar.setProgress(0, 0)
             result = self._statistics_controller.analyze_anosim(
                 data=self._state.data_matrix.data,
                 groups=groups,
+                metric=params.get("metric", "bray_curtis"),
+                n_permutations=params.get("n_permutations", 9999),
             )
             plot = InteractivePlotCanvas()
             plot.plot_anosim_results(result)
@@ -3405,7 +3591,13 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("ANOSIM analysis completed"))
         except Exception as e:
             self._logger.error(f"ANOSIM analysis failed: {e}")
-            QMessageBox.critical(self, _("ANOSIM Error"), format_user_error(e, "ANOSIM"))
+            if on_fail is not None:
+                on_fail(e)
+            else:
+                QMessageBox.critical(self, _("ANOSIM Error"), format_user_error(e, "ANOSIM"))
+        else:
+            if on_done is not None:
+                on_done(result)
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -3427,11 +3619,18 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._execute_permanova({})
+
+    def _execute_permanova(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Run PERMANOVA (synchronous) and plot; on_done/on_fail for the runlist."""
+        groups = self._get_groups()
         try:
             self._status_bar.setProgress(0, 0)
             result = self._statistics_controller.analyze_permanova(
                 data=self._state.data_matrix.data,
                 groups=groups,
+                metric=params.get("metric", "bray_curtis"),
+                n_permutations=params.get("n_permutations", 9999),
             )
             plot = InteractivePlotCanvas()
             plot.plot_permanova_results(result)
@@ -3440,7 +3639,13 @@ class MainWindow(QMainWindow):
             self._status_bar.setInfo(_("PERMANOVA analysis completed"))
         except Exception as e:
             self._logger.error(f"PERMANOVA analysis failed: {e}")
-            QMessageBox.critical(self, _("PERMANOVA Error"), format_user_error(e, "PERMANOVA"))
+            if on_fail is not None:
+                on_fail(e)
+            else:
+                QMessageBox.critical(self, _("PERMANOVA Error"), format_user_error(e, "PERMANOVA"))
+        else:
+            if on_done is not None:
+                on_done(result)
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -4588,39 +4793,53 @@ class MainWindow(QMainWindow):
         dialog = TPSGridDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
+            self._execute_tps_grid(dialog.get_parameters())
 
-                # Get GPA result from cache for TPS visualization
-                tps_result = self._state.get_cached_result("gpa_result")
+    def _execute_tps_grid(self, params: dict, on_done=None, on_fail=None) -> None:
+        """Plot the TPS deformation grid from the cached GPA result.
 
-                if tps_result is None:
-                    QMessageBox.information(
-                        self,
-                        _("No TPS Result"),
-                        _("Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation."),
-                    )
-                    return
+        The runlist guard (``cache:gpa_result``) normally ensures the cache
+        exists; a missing cache here is a race and reported via on_fail.
+        """
+        try:
+            self._status_bar.setProgress(0, 0)
 
-                plot = InteractivePlotCanvas()
-                plot.plot_tps_deformation_grid(
-                    tps_result,
-                    grid_shape=(params.get("grid_rows", 15), params.get("grid_cols", 15)),
-                    show_vectors=params.get("show_vectors", True),
+            # Get GPA result from cache for TPS visualization
+            tps_result = self._state.get_cached_result("gpa_result")
+
+            if tps_result is None:
+                message = _(
+                    "Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation."
                 )
+                if on_fail is not None:
+                    raise RuntimeError(message)
+                QMessageBox.information(self, _("No TPS Result"), message)
+                return
 
-                plot_index = self._add_plot_to_workspace(plot, _("TPS Deformation Grid"))
-                self._workspace.setCurrentIndex(plot_index)
+            plot = InteractivePlotCanvas()
+            plot.plot_tps_deformation_grid(
+                tps_result,
+                grid_shape=(params.get("grid_rows", 15), params.get("grid_cols", 15)),
+                show_vectors=params.get("show_vectors", True),
+            )
 
-                self._status_bar.setInfo(_("TPS Deformation Grid displayed"))
-                self._logger.info("TPS deformation grid displayed")
+            plot_index = self._add_plot_to_workspace(plot, _("TPS Deformation Grid"))
+            self._workspace.setCurrentIndex(plot_index)
 
-            except Exception as e:
-                self._logger.error(f"TPS grid visualization failed: {e}")
+            self._status_bar.setInfo(_("TPS Deformation Grid displayed"))
+            self._logger.info("TPS deformation grid displayed")
+
+        except Exception as e:
+            self._logger.error(f"TPS grid visualization failed: {e}")
+            if on_fail is not None:
+                on_fail(e)
+            else:
                 QMessageBox.critical(self, _("TPS Grid Error"), format_user_error(e, "TPS网格"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+        else:
+            if on_done is not None:
+                on_done(tps_result)
+        finally:
+            self._status_bar.setProgress(100, 100)
 
     def _on_run_ripley_k(self) -> None:
         """Run Ripley's K spatial point pattern analysis."""

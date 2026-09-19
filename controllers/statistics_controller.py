@@ -216,6 +216,7 @@ class StatisticsController:
         max_iterations: int | None = None,
         tolerance: float | None = None,
         random_seed: int | None = None,
+        progress_callback=None,
     ) -> NMDSResult:
         """
         Run Non-metric Multidimensional Scaling.
@@ -226,6 +227,9 @@ class StatisticsController:
             metric: Distance metric for computation.
             n_restarts: Number of random restarts.
             random_seed: Random seed for reproducibility.
+            progress_callback: Optional callable(restart_index, total_restarts,
+                stress) forwarded to the analyzer; invoked from the worker
+                thread, so GUI callers must marshal via a signal.
 
         Returns:
             NMDSResult: NMDS analysis results
@@ -243,6 +247,7 @@ class StatisticsController:
                 max_iterations=max_iterations,
                 random_seed=random_seed,
                 tolerance=tolerance,
+                progress_callback=progress_callback,
             )
             self._state.cache_result("nmds_result", result)
             self._state.cache_result("nmds_metric", metric)
