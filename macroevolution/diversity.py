@@ -242,3 +242,80 @@ class DiversityDynamics:
             extinction_rates=ext_rates,
             turnover_rate=turnover,
         )
+
+
+# =============================================================================
+# Interval diversity curves from binned occurrences / stratigraphic ranges
+# (borrowed from palaeoverse tax_range_time / bin_time workflows)
+# =============================================================================
+
+
+def range_through_diversity(
+    ranges: list[dict],
+    bins: list[dict],
+) -> list[dict]:
+    """
+    Range-through (pass-through zone) diversity curve from FAD/LAD ranges.
+
+    Parameters:
+        ranges: rows with 'taxon', max_ma (FAD) and min_ma (LAD) — e.g. the
+            output of stratigraphy.time_bins.tax_range_time.
+        bins: time-bin rows with bin/min_ma/max_ma, oldest first.
+
+    Returns:
+        one row per bin: bin, mid_ma, richness (taxa overlapping the bin),
+        origination (richness newly entering at this bin), extinction (taxa
+        whose youngest overlap bin is this one; LAD = 0 never extinct).
+    """
+    out = []
+    for b in bins:
+        b_lo, b_hi = float(b["min_ma"]), float(b["max_ma"])
+        richness = origination = extinction = 0
+        for r in ranges:
+            lad, fad = float(r["min_ma"]), float(r["max_ma"])
+            if lad < b_hi and fad > b_lo:  # same strict overlap predicate
+                richness += 1
+                older_overlap = any(
+                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["max_ma"]) > b_hi
+                    for o in bins
+                )
+                if not older_overlap:
+                    origination += 1
+                younger_overlap = any(
+                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["min_ma"]) < b_lo
+                    for o in bins
+                )
+                if not younger_overlap and lad > 0:
+                    extinction += 1
+        out.append(
+            {
+                "bin": b.get("bin"),
+                "mid_ma": b.get("mid_ma", (b_lo + b_hi) / 2.0),
+                "richness": richness,
+                "origination": origination,
+                "extinction": extinction,
+            }
+        )
+    return out
+
+
+def interval_count_diversity(
+    binned_occurrences: list[dict],
+    bins: list[dict],
+    name: str = "taxon",
+) -> list[dict]:
+    """
+    Sampled (count) diversity: distinct taxa per bin from bin assignments.
+
+    Input rows are the output of bin_time (keys bin_assignment and a taxon
+    column); rows with a NA bin are ignored.
+    """
+    out = []
+    for b in bins:
+        taxa = {
+            str(r[name])
+            for r in binned_occurrences
+            if r.get("bin_assignment") == b["bin"] and r.get(name) is not None
+        }
+        out.append({"bin": b["bin"], "mid_ma": b.get("mid_ma"), "richness": len(taxa)})
+    return out

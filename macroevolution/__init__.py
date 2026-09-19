@@ -18,7 +18,11 @@ PaleoAST Macroevolution - Module Initialization
 """
 
 from .cohort import CohortSurvivorshipAnalysis
-from .diversity import DiversityDynamics
+from .diversity import (
+    DiversityDynamics,
+    interval_count_diversity,
+    range_through_diversity,
+)
 from .fbd import FossilizedBirthDeathProcess, GillespieSimulator
 from .survival import KaplanMeierAnalyzer, LogRankResult, SurvivalResult
 
@@ -30,4 +34,6 @@ __all__ = [
     "KaplanMeierAnalyzer",
     "LogRankResult",
     "SurvivalResult",
+    "interval_count_diversity",
+    "range_through_diversity",
 ]
