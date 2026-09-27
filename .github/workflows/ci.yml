@@ -124,7 +124,11 @@ jobs:
           # r-base-dev is not optional here. rpy2 compiles against libR, and the
           # CRAN packages below ship no Linux binaries, so they compile from
           # source too -- which needs the R headers plus a C/C++ toolchain.
-          # curl/ssl/xml2 are the system libs those R packages commonly link.
+          # curl/ssl/xml2 are the system libs those R packages commonly link;
+          # the image/graphics block is for the stack geomorph pulls in
+          # transitively -- rgl needs X11 and GLMesa headers, jpeg needs
+          # libjpeg -- and without it every archived geomorph release fails the
+          # same way. See the geomorph block below.
           #
           # The rpy2 pin in pyproject.toml (<3.6) is a constraint on THIS R, not
           # on rpy2 in the abstract: rpy2 3.6 imports `R_getVar`, which does not
@@ -134,22 +138,36 @@ jobs:
           echo "R version rpy2 will bind to:"
           R --version | head -1 || true
           sudo apt-get install -y r-base r-base-dev build-essential \
-            libcurl4-openssl-dev libssl-dev libxml2-dev
+            libcurl4-openssl-dev libssl-dev libxml2-dev \
+            libjpeg-dev libtiff-dev libpng-dev libfreetype6-dev libcairo2-dev \
+            libx11-dev libglu1-mesa-dev libfftw3-dev
           # Reported after the install, so it is the R rpy2 will actually load
           # rather than whatever the image happened to ship.
           echo "R version after install:"
           R --version | head -1
           # The runner user cannot write to site-library, so this must run under
           # sudo (an earlier version of this step failed here).
-          #
+          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT','RRPP'), repos='https://cloud.r-project.org', Ncpus=4)"
           # geomorph is installed separately, from the CRAN archive, newest
-          # archived release first. The current CRAN version (4.1.0) declares a
-          # newer R than ubuntu-24.04 provides, and R declines it with
-          #   package 'geomorph' is not available for this version of R
-          # without failing the step -- so the run continued and importr later
-          # reported the package missing. The loop below picks the newest
-          # archived version this R can actually build, and prints which.
-          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT'), repos='https://cloud.r-project.org', Ncpus=4)"
+          # archived release first.
+          #
+          # Two separate reasons it cannot come from CRAN directly, both found
+          # in the log rather than guessed:
+          #   - the current version (4.1.0) declares a newer R than
+          #     ubuntu-24.04 provides, and R declines it with
+          #     "package 'geomorph' is not available for this version of R"
+          #     -- and carries on with the other packages, so the step used to
+          #     pass and the suite used to skip;
+          #   - the archived 4.0.x releases need RRPP, rgl and jpeg, which need
+          #     the system libraries installed above. Missing those, all four
+          #     candidates fail identically with
+          #     "dependencies 'RRPP', 'rgl', 'jpeg' are not available".
+          #     RRPP is installed above so its own failure is separable from
+          #     geomorph's.
+          # The loop stops at the first version this R can build and prints
+          # which; it is four deep so a future R bump or geomorph release does
+          # not immediately require re-deriving the number. If none build, R
+          # exits non-zero rather than letting the step pass quietly.
           sudo R --slave -e '
             ok <- FALSE
             for (v in c("4.0.10", "4.0.9", "4.0.8", "4.0.7")) {
