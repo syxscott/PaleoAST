@@ -2,8 +2,10 @@
 # FILE: tests/conftest.py
 # =============================================================================
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -14,21 +16,21 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "property: property-based tests using Hypothesis")
-    config.addinivalue_line("markers", "cross_validation: cross-validation tests against R package gold standards")
+    config.addinivalue_line("markers", "cross_validation: live comparison against R reference packages")
     config.addinivalue_line("markers", "unit: unit tests")
     config.addinivalue_line("markers", "integration: integration tests")
 
 
-def pytest_collection_modifyitems(config, items):
-    try:
-        import rpy2
-
-        rpy2_available = True
-    except ImportError:
-        rpy2_available = False
-    for item in items:
-        if "cross_validation" in item.keywords and not rpy2_available:
-            item.add_marker(pytest.mark.skip(reason="rpy2 not installed"))
+# The R-bridge skip deliberately does NOT live here. It used to be a
+# collection hook that skipped anything marked `cross_validation` when rpy2 was
+# missing, which meant the dependency was declared in two places and the skip
+# was invisible at the point of use. It now lives in
+# tests/cross_validation/_rbridge.py, which does `pytest.importorskip("rpy2")`
+# at import time -- so a module without a working R bridge is skipped as a
+# whole, with a reason, at the moment its dependency is resolved.
+#
+# This matters more than tidiness: the previous arrangement let the directory
+# look populated (31 collected tests) while nothing in it ever touched R.
 
 
 @pytest.fixture

@@ -56,15 +56,21 @@ dev = [
 ]
 # The R bridge is its own extra, NOT part of `dev`, on purpose.
 #
-# Installing rpy2 needs a working R toolchain (libR headers from r-base-dev),
-# and `rpy2>=5.0.0` has no resolvable distribution for some Linux/Python
-# combinations. With it in `dev`, every job that runs
-# `pip install -e ".[dev,full]"` inherited that failure and died at the install
-# step -- 8 of the 12 matrix jobs plus the property-tests job, none of which
-# have anything to do with R. tests/cross_validation/ is skipped without rpy2
-# (see tests/conftest.py), so those jobs lose nothing by not installing it.
+# Installing rpy2 needs a working R toolchain (libR headers from r-base-dev).
+# With it in `dev`, every job that runs `pip install -e ".[dev,full]"`
+# inherited that failure and died at the install step -- 8 of the 12 matrix
+# jobs plus the property-tests job, none of which have anything to do with R.
+# tests/cross_validation/ skips itself without rpy2 (see
+# tests/cross_validation/_rbridge.py), so those jobs lose nothing here.
 crossval = [
-    "rpy2>=5.0.0; platform_system != 'Windows'",
+    # rpy2 has never released a 5.x -- 3.6.8 is the latest. The `>=5.0.0` that
+    # used to be here named a version that does not exist, so pip could not
+    # resolve it and every job that installed `[dev,full]` failed before pytest
+    # started. Capped below 4.0 as well: rpy2 3.6 re-split the package into
+    # rpy2-rinterface and rpy2-robjects, so a future major would be a real
+    # compatibility event for tests/cross_validation/ rather than something to
+    # discover in CI.
+    "rpy2>=3.6,<4; platform_system != 'Windows'",
 ]
 docs = [
     "sphinx>=7.0.0",

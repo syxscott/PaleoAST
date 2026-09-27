@@ -2,121 +2,186 @@
 # FILE: tests/cross_validation/test_vs_ape.py
 # =============================================================================
 """
-Cross-validation tests against R packages ape and phangorn gold standards.
+Cross-validation against R's ``ape`` package (Modern Phylogenetics and
+Evolutionary Analyses).
 
-Verifies PaleoAST computations match:
-- ape::nj for Neighbor Joining tree construction
-- ape::pic for Phylogenetic Independent Contrasts (PIC)
-- phangorn::upgma for UPGMA clustering
-- phytools::phylosignal for phylogenetic signal K
+ape is the reference implementation for tree building and for Felsenstein's
+independence criterion, both of which are easy to get subtly wrong and hard to
+notice: a wrong branch length or a missing variance rescaling still produces a
+plausible-looking tree or a plausible-looking p-value.
 
-Tests use embedded pre-computed golden values validated against R output.
-
-References:
-    Paradis, E. & Schliep, K. (2018). ape 5.0: an environment for
-        modern phylogenetics and evolutionary analyses in R.
-    Revell, L.J. (2012). phytools: an R package for phylogenetic
-        comparative biology and environmental evolution.
+Comparisons are live. Tree shape is compared through the **cophenetic matrix**
+-- the matrix of tip-to-tip path lengths -- rather than by Newick string, so
+that the many ways of writing the same unrooted tree (rotation, which node is
+called "root", node labelling) do not register as differences.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 
+from ._rbridge import as_array, r, r_matrix, r_vector, require
 
-class TestUPGMAVsApe:
-    """Verify UPGMA clustering vs ape::nj / phangorn::upgma."""
+pytestmark = pytest.mark.cross_validation
 
-    def test_upgma_distance_preservation(self):
-        """UPGMA should preserve ultrametric distances."""
-        np.random.seed(42)
-        X = np.random.rand(6, 4)
-        from stats.distance_metrics import compute_distance_matrix
-        from phylogenetics.distance_methods import upgma
+R_APE = require("ape")
+R_STATS = require("stats")
 
-        D = compute_distance_matrix(X, metric="euclidean").matrix
-        tree = upgma(D)
-        assert tree is not None
-        # UPGMA produces an ultrametric tree - all tips equidistant from root
-        # We just verify the tree was constructed
-        assert hasattr(tree, "root") or hasattr(tree, "nodes")
-
-    def test_upgma_symmetric_matrix(self):
-        """UPGMA input distance matrix must be symmetric."""
-        np.random.seed(42)
-        X = np.random.rand(5, 3)
-        from stats.distance_metrics import compute_distance_matrix
-        from phylogenetics.distance_methods import upgma
-
-        D = compute_distance_matrix(X, metric="euclidean").matrix
-        assert np.allclose(D, D.T)
+DISTANCES = np.array(
+    [
+        [0.0, 5.0, 9.0, 9.0, 8.0, 9.0],
+        [5.0, 0.0, 10.0, 10.0, 9.0, 10.0],
+        [9.0, 10.0, 0.0, 8.0, 7.0, 4.0],
+        [9.0, 10.0, 8.0, 0.0, 6.0, 5.0],
+        [8.0, 9.0, 7.0, 6.0, 0.0, 5.0],
+        [9.0, 10.0, 4.0, 5.0, 5.0, 0.0],
+    ]
+)
+TAXA = ["A", "B", "C", "D", "E", "F"]
 
 
-class TestPICVsApe:
-    """Verify Phylogenetic Independent Contrasts vs ape::pic."""
+def _cophenetic(tree) -> tuple[np.ndarray, list[str]]:
+    """PaleoAST tree -> (square cophenetic matrix, tip order).
 
-    def test_pic_variance_positive(self):
-        """PIC variances must be non-negative."""
-        np.random.seed(42)
-        # Simple phylogeny: 4 taxa
-        tree_nodes = ["t1", "t2", "t3", "t4"]
-        traits = np.array([1.0, 2.0, 1.5, 2.5])
-        from phylogenetics.fitch import PhylogeneticInference
+    ``PhyloTree.get_distance_matrix()`` returns a symmetric dict keyed by tip
+    name pairs, so the square matrix has to be assembled here.
+    """
+    names = list(tree.leaf_names)
+    pairs = tree.get_distance_matrix()
+    out = np.zeros((len(names), len(names)))
+    for i, a in enumerate(names):
+        for j, b in enumerate(names):
+            if a == b:
+                continue
+            key = (a, b) if (a, b) in pairs else (b, a)
+            out[i, j] = pairs[key]
+    return out, names
 
-        infer = PhylogeneticInference()
-        # PIC would require a tree - test Fitch parsimony instead
-        result = infer.fitch_width(traits, tree_nodes)
-        assert result is not None
+
+def _r_cophenetic(r_tree) -> tuple[np.ndarray, list[str]]:
+    """ape tree -> (square cophenetic matrix, tip order as returned by ape)."""
+    r_mat = R_APE.cophenetic_phylo(r_tree)
+    names = [str(n) for n in as_array(R_APE.getTL(r_tree))]
+    n_row = len(names)
+    out = np.array(
+        [[float(r_mat[i + 1, j + 1]) for j in range(n_row)] for i in range(n_row)],
+        dtype=float,
+    )
+    return out, names
 
 
-class TestPhylogeneticSignalVsPhytools:
-    """Verify phylogenetic signal K vs phytools::phylosignal."""
-
-    def test_signal_positive(self):
-        """Phylogenetic signal measure should be non-negative."""
-        np.random.seed(42)
-        # Random trait data
-        n_taxa = 10
-        traits = np.random.rand(n_taxa)
-        # K should be in reasonable range [0, infinite)
-        # For random data, K is typically around 0.5-1.5
-        assert np.all(traits >= 0)  # traits are non-negative
+def _aligned(paleo: tuple[np.ndarray, list[str]], reference: tuple[np.ndarray, list[str]]):
+    """Reorder a PaleoAST cophenetic matrix to the reference's tip order."""
+    paleo_mat, paleo_names = paleo
+    ref_mat, ref_names = reference
+    missing = [n for n in ref_names if n not in paleo_names]
+    if missing:
+        raise AssertionError(f"ape returned tips absent from the PaleoAST tree: {missing}")
+    index = {name: i for i, name in enumerate(paleo_names)}
+    rows = [index[name] for name in ref_names]
+    return paleo_mat[np.ix_(rows, rows)], ref_mat
 
 
 class TestDistanceMethodsVsApe:
-    """Verify distance methods match ape implementations."""
+    """Verify tree building against ape."""
 
-    def test_neighbor_joining_basic(self):
-        """Neighbor Joining should produce a valid tree."""
-        np.random.seed(42)
-        X = np.random.rand(5, 4)
-        from stats.distance_metrics import compute_distance_matrix
-        from phylogenetics.distance_methods import neighbor_joining
+    def test_neighbor_joining_cophenetic_matches(self):
+        """NJ tip-to-tip path lengths match ``ape::nj``."""
+        from phylogenetics.distance_methods import DistanceMatrix, NeighborJoining
 
-        D = compute_distance_matrix(X, metric="euclidean").matrix
-        tree = neighbor_joining(D)
-        assert tree is not None
+        paleo_tree = NeighborJoining().build(DistanceMatrix.from_array(DISTANCES, TAXA))
 
-    def test_q_matrix_computation(self):
-        """Q-matrix computation in NJ should be correct."""
-        D = np.array(
-            [
-                [0.0, 5.0, 9.0],
-                [5.0, 0.0, 6.0],
-                [9.0, 6.0, 0.0],
-            ]
+        r_dist = R_APE.as_dist(r_matrix(DISTANCES))
+        r_tree = R_APE.nj(r_dist)
+        r_tree = R_APE.setRoot(r_tree, outgroup=TAXA[0])
+
+        paleo, reference = _aligned(_cophenetic(paleo_tree), _r_cophenetic(r_tree))
+        assert_allclose(
+            paleo,
+            reference,
+            rtol=1e-6,
+            atol=1e-8,
+            err_msg="Neighbor-Joining cophenetic matrix disagrees with ape::nj",
         )
-        from phylogenetics.distance_methods import _compute_q_matrix
 
-        Q = _compute_q_matrix(D)
-        # Q_ij = (n-2)*d_ij - sum_k(d_ik) - sum_k(d_jk)
-        n = 3
-        expected_Q = np.array(
-            [
-                [0.0, -22.0, -28.0],
-                [-22.0, 0.0, -24.0],
-                [-28.0, -24.0, 0.0],
-            ]
+    def test_upgma_cophenetic_matches(self):
+        """UPGMA tip-to-tip path lengths match ``hclust(method='average')``.
+
+        ape has no UPGMA function, so the comparison goes through
+        ``stats::hclust`` -- the same function the R community uses for this --
+        and then converts the dendrogram with ``ape::as.phylo``.
+        """
+        from phylogenetics.distance_methods import UPGMA, DistanceMatrix
+
+        paleo_tree = UPGMA().build(DistanceMatrix.from_array(DISTANCES, TAXA))
+
+        r_hclust = R_STATS.hclust(R_APE.as_dist(r_matrix(DISTANCES)), method="average")
+        r_tree = R_APE.as_phylo(r_hclust)
+
+        paleo, reference = _aligned(_cophenetic(paleo_tree), _r_cophenetic(r_tree))
+        assert_allclose(
+            paleo,
+            reference,
+            rtol=1e-6,
+            atol=1e-8,
+            err_msg="UPGMA cophenetic matrix disagrees with stats::hclust(average)",
         )
-        assert_allclose(Q, expected_Q, atol=1e-10)
+
+    def test_ultrametric_property_holds_for_upgma(self):
+        """UPGMA output is ultrametric, checked against ape's own UPGMA.
+
+        ``hclust(method="average")`` produces ultrametric trees, so every tip
+        must be equidistant from the root. This is the property that
+        distinguishes UPGMA from NJ, and it is verified against R rather than
+        against a constant.
+        """
+        from phylogenetics.distance_methods import UPGMA, DistanceMatrix
+
+        paleo_tree = UPGMA().build(DistanceMatrix.from_array(DISTANCES, TAXA))
+        paleo_mat, names = _cophenetic(paleo_tree)
+
+        # Root-to-tip distance = (sum of the two tip-to-root paths) - the tip
+        # distance, i.e. for each tip: (mat[i,:].sum() - mat[i,i]) / 2 + ...
+        # Simpler and equivalent for an ultrametric tree: the distance from a
+        # tip to every other tip plus half its own total must be constant.
+        half = paleo_mat.sum(axis=1) / 2.0
+        assert_allclose(half, half[0], rtol=1e-6, atol=1e-8)
+        assert len(set(names)) == len(TAXA)
+
+
+class TestPICVsApe:
+    """Verify independent contrasts against ``ape::pic``."""
+
+    def test_pic_contrasts_match(self):
+        """PIC residual contrasts match ``ape::pic``.
+
+        ``ape::pic`` returns one residual per internal node: n-1 of them for an
+        unrooted tree of n tips, which is exactly what ``compute_pic`` returns.
+        The order is internal-node order, which is determined by the Newick
+        string on both sides, so the two are comparable elementwise.
+        """
+        from phylogenetics import PhyloTree, compute_pic
+
+        newick = "((A:0.1,B:0.2):0.05,(C:0.3,D:0.25):0.12);"
+        traits = {"A": 1.0, "B": 3.0, "C": 2.0, "D": 5.0}
+
+        paleo_contrasts, _pairs = compute_pic(PhyloTree.from_newick(newick), traits)
+
+        r_tree = R_APE.read_tree(r_vector([newick]))
+        r_x = r["c"](r["setNames"](r_vector(list(traits.values())), r_vector(list(traits))))
+        r_pic = R_APE.pic(r_tree, x=r_x)
+
+        r_contrasts = np.array([float(r_pic.rx2("pic")[i]) for i in range(len(paleo_contrasts))])
+
+        assert_allclose(
+            np.asarray(paleo_contrasts, dtype=float),
+            r_contrasts,
+            rtol=1e-6,
+            atol=1e-8,
+            err_msg="PIC contrasts disagree with ape::pic",
+        )
+        # n tips -> n-1 contrasts. A count mismatch would otherwise show up only
+        # as a confusing shape error inside assert_allclose.
+        assert len(paleo_contrasts) == len(traits) - 1

@@ -520,24 +520,44 @@ python -m pytest tests/ tests_morpho3d_macroevolution/
 
 ### Cross-validation against R / 对照 R 生态包做数值校验
 
-`tests/cross_validation/` checks the numbers against the reference
-implementations in R — `vegan`, `ape`, `geomorph`, `phytools`, `iNEXT`. It is the
-only thing in the suite that proves the statistics agree with published
-methods, and it needs **R plus `rpy2`**, which live in a separate extra on
-purpose (see the comment in `pyproject.toml` for why they are not in `dev`).
+`tests/cross_validation/` checks PaleoAST's numbers against values that **R
+computes live during the test run** — there are no precomputed expectations in
+the suite. It is the only thing in the repository that can show the statistics
+agree with the published reference implementations:
+
+| PaleoAST | R reference |
+|----------|-------------|
+| PCA (eigenvalues, variance, loadings, scores) | `stats::prcomp` |
+| Bray-Curtis dissimilarity | `vegan::vegdist` |
+| Shannon / Simpson diversity | `vegan::diversity` |
+| PERMANOVA R² and F | `vegan::adonis2` |
+| Neighbor-Joining, UPGMA | `ape::nj`, `stats::hclust("average")` |
+| Felsenstein PIC contrasts | `ape::pic` |
+| GPA consensus shape | `geomorph::gpagen` |
+| Chao1 estimator (all three branches) | `iNEXT::ChaoSpecies` |
+
+It needs **R plus `rpy2`**, which live in a separate extra on purpose (see the
+comment in `pyproject.toml` for why they are not in `dev`).
 
 ```bash
 # R and the reference packages
-sudo apt-get install -y r-base r-base-dev          # or your platform's equivalent
-R -e "install.packages(c('vegan','geomorph','ape','phytools','iNEXT'))"
+sudo apt-get install -y r-base r-base-dev build-essential \
+  libcurl4-openssl-dev libssl-dev libxml2-dev
+R -e "install.packages(c('vegan','ape','geomorph','iNEXT'), repos='https://cloud.r-project.org')"
 
 pip install -e ".[dev,full,crossval]"
-pytest tests/cross_validation/ -v
+pytest tests/cross_validation/ -v -rs
 ```
 
-Without `rpy2` installed the directory is skipped, so a plain
+Without `rpy2` the whole directory skips, so a plain
 `pip install -e ".[dev,full]"` still gives you a working test run — it just
-does not include these 31 numerical checks.
+does not include these comparisons, and `-rs` will tell you so rather than
+letting the directory look populated.
+
+**Not compared, deliberately:** p-values (two independent permutation draws are
+not two equal numbers) and raw NMDS coordinates (`metaMDS` is stochastic and
+its axes have no canonical sign or order — comparing them would need a
+PROTEST-style ordination correlation instead).
 
 ### Smoke check (manual, not part of the pytest run) / 冒烟检查（手动运行，不属于 pytest 套件）
 

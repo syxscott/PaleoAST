@@ -111,7 +111,7 @@ jobs:
   # Cross-Validation Tests (with rpy2)
   # =========================================================================
   cross-validation:
-    name: Cross-Validation vs R (Python 3.12, Ubuntu)
+    name: Cross-Validation vs R (vegan/ape/geomorph/iNEXT)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,8 +138,13 @@ jobs:
           # -- see the comment in pyproject.toml.
           pip install -e ".[dev,full,crossval]"
       - name: Run cross-validation tests
+        # These compare PaleoAST against values the R packages compute *during*
+        # this run -- there are no precomputed expectations in the suite, which
+        # is the point. `-rs` shows why anything skipped: a missing rpy2 or a
+        # missing CRAN package shows up as a skip reason rather than as a
+        # silent pass.
         run: |
-          pytest tests/cross_validation/ -v --tb=short
+          pytest tests/cross_validation/ -v --tb=short -rs
 
   # =========================================================================
   # Package Build & Import Smoke Test (NON-editable install)
