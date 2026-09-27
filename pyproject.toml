@@ -63,14 +63,25 @@ dev = [
 # tests/cross_validation/ skips itself without rpy2 (see
 # tests/cross_validation/_rbridge.py), so those jobs lose nothing here.
 crossval = [
-    # rpy2 has never released a 5.x -- 3.6.8 is the latest. The `>=5.0.0` that
-    # used to be here named a version that does not exist, so pip could not
-    # resolve it and every job that installed `[dev,full]` failed before pytest
-    # started. Capped below 4.0 as well: rpy2 3.6 re-split the package into
-    # rpy2-rinterface and rpy2-robjects, so a future major would be a real
-    # compatibility event for tests/cross_validation/ rather than something to
-    # discover in CI.
-    "rpy2>=3.6,<4; platform_system != 'Windows'",
+    # Two separate version traps, both found by the CI log rather than guessed.
+    #
+    # 1. `rpy2>=5.0.0` (the original) named a version that does not exist --
+    #    rpy2 has never released a 5.x, 3.6.8 is the latest. pip could not
+    #    resolve it, so every job installing `[dev,full]` died at the install
+    #    step, which is how 9 jobs stayed red for the whole history of this
+    #    workflow.
+    #
+    # 2. rpy2 3.6.x then installed but could not load against the R that
+    #    ubuntu-latest ships:
+    #        ffi.error: symbol 'R_getVar' not found in
+    #        library '/usr/lib/R/lib/libR.so'
+    #    `R_getVar` does not exist in R 4.3.3, which is what the runner provides.
+    #    The 3.5 series targets R 4.x and loads cleanly, so the ceiling is 3.6.
+    #
+    # Raise this ceiling only together with the R version in
+    # .github/workflows/ci.yml, and only after confirming the pair loads -- they
+    # are one constraint, not two independent ones.
+    "rpy2>=3.5.16,<3.6; platform_system != 'Windows'",
 ]
 docs = [
     "sphinx>=7.0.0",

@@ -125,6 +125,14 @@ jobs:
           # CRAN packages below ship no Linux binaries, so they compile from
           # source too -- which needs the R headers plus a C/C++ toolchain.
           # curl/ssl/xml2 are the system libs those R packages commonly link.
+          #
+          # The rpy2 pin in pyproject.toml (<3.6) is a constraint on THIS R, not
+          # on rpy2 in the abstract: rpy2 3.6 imports `R_getVar`, which does not
+          # exist in the R 4.3.3 that ubuntu-latest ships, and dies at import
+          # with `ffi.error: symbol 'R_getVar' not found`. If the R version here
+          # is ever raised, revisit the rpy2 pin in the same change.
+          echo "R version on this runner:"
+          R --version | head -1
           sudo apt-get install -y r-base r-base-dev build-essential \
             libcurl4-openssl-dev libssl-dev libxml2-dev
           # The runner user cannot write to site-library, so this must run under

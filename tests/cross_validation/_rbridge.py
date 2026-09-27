@@ -8,11 +8,12 @@ they do not quietly degrade into self-consistency checks.
 
 Design notes
 ------------
-* **No automatic numpy <-> R conversion.** ``rpy2.robjects.numpy2ri`` is
-  deprecated as of rpy2 3.6 and its replacement differs between 3.5 and 3.6+.
-  Matrices and vectors are therefore built and read through explicit calls
-  (``FloatVector`` + ``dim=``, and index-based extraction), which behave the same
-  on every rpy2 version this project supports.
+* **No automatic numpy <-> R conversion.** Arrays go across as ``FloatVector``
+  plus an explicit ``dim=`` call, and come back by index. rpy2 3.6 deprecated
+  ``rpy2.robjects.numpy2ri`` and its replacement differs between 3.5 and 3.6+,
+  so the explicit form is what lets the same test code work on either -- which
+  matters because the version is pinned in ``pyproject.toml`` for R-ABI reasons
+  and may move.
 * **A missing R package skips its tests, it does not fail them.** CRAN installs
   can partially fail; a skipped test is honest about that, a red test would not
   be, and neither would silently comparing against a local constant.
