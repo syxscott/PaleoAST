@@ -25,17 +25,10 @@ import numpy.typing as npt
 
 from models.data_matrix import DataMatrix
 from models.state_manager import get_state_manager
+from utils.csv_io import read_csv_with_fallback
 from utils.exceptions import FileOperationError, ValidationError
 
 logger = logging.getLogger(__name__)
-
-
-# Text encodings tried, in order, when importing a CSV. `utf-8-sig` also
-# strips a UTF-8 BOM; `gbk` covers the CP936 files produced by the Chinese
-# Excel that most Windows users actually have; `latin-1` decodes every
-# possible byte and is therefore a true last resort. Kept in sync with
-# `data/loader.py::_CSV_ENCODING_CANDIDATES`.
-_CSV_ENCODING_CANDIDATES: tuple[str, ...] = ("utf-8-sig", "gbk", "latin-1")
 
 
 # =============================================================================
@@ -422,40 +415,19 @@ class DataController:
                 # ``encoding="utf-8", encoding_errors="replace"``. That does NOT
                 # raise on a GBK/CP936-encoded Chinese CSV -- it silently
                 # substitutes U+FFFD, destroying every column header and every
-                # text row label with no warning. ``_read_csv_with_fallback``
-                # in data/loader.py already implements the correct
-                # utf-8-sig -> gbk -> latin-1 cascade (it just had no callers
-                # in the import path), so we use the same candidate order.
-                df = None
-                last_encoding_error: Exception | None = None
-                for encoding in _CSV_ENCODING_CANDIDATES:
-                    try:
-                        df = pd.read_csv(
-                            path,
-                            sep=delimiter,
-                            header=0 if has_header else None,
-                            index_col=False,  # handle row labels manually
-                            na_values=na_values,
-                            keep_default_na=True,
-                            encoding=encoding,
-                            low_memory=False,
-                        )
-                    except UnicodeDecodeError as exc:
-                        last_encoding_error = exc
-                        continue
-                    if encoding != _CSV_ENCODING_CANDIDATES[0]:
-                        logger.warning(
-                            "CSV %s is not valid UTF-8; decoded as '%s'. "
-                            "Non-ASCII text may be misdecoded.",
-                            path,
-                            encoding,
-                        )
-                    break
-                if df is None:
-                    raise FileOperationError(
-                        f"Failed to decode {path} as any of "
-                        f"{', '.join(_CSV_ENCODING_CANDIDATES)}: {last_encoding_error}"
-                    )
+                # text row label with no warning. The shared
+                # ``utils.csv_io.read_csv_with_fallback`` (utf-8-sig -> gbk ->
+                # latin-1) handles this and is now used by both this import
+                # path and the example-data loaders, so they cannot drift.
+                df, _encoding = read_csv_with_fallback(
+                    path,
+                    sep=delimiter,
+                    header=0 if has_header else None,
+                    index_col=False,  # handle row labels manually
+                    na_values=na_values,
+                    keep_default_na=True,
+                    low_memory=False,
+                )
 
                 if len(df) == 0:
                     raise FileOperationError("File is empty")
