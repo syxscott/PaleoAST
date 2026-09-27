@@ -13,7 +13,6 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-import contextlib
 import logging
 
 import matplotlib.pyplot as plt
@@ -22,9 +21,12 @@ from matplotlib.figure import Figure
 from config.colors import get_color_scheme
 from models.diversity_result import DiversityResult, RarefactionResult
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class DiversityPlotter:
     """
     Publication-quality diversity visualization engine.
@@ -39,13 +41,6 @@ class DiversityPlotter:
         self._dpi = 300
         self._font_size = 10
 
-    def _apply_style(self) -> None:
-        """Apply matplotlib style with fallback for older versions."""
-        try:
-            plt.style.use(self._style)
-        except OSError:
-            with contextlib.suppress(OSError):
-                plt.style.use(self._style.replace("v0_8-", ""))
 
     def plot_rarefaction(self, result: RarefactionResult, show_ci: bool = False, title: str | None = None) -> Figure:
         """
@@ -59,7 +54,6 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
         self._logger.info(f"plot_rarefaction called: sample_name='{result.sample_name}'")
 
         fig, ax = plt.subplots(figsize=self._figure_size)
@@ -108,7 +102,6 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
 
         fig, ax = plt.subplots(figsize=self._figure_size)
 
@@ -150,7 +143,6 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
 
         fig, ax = plt.subplots(figsize=self._figure_size)
 
@@ -206,7 +198,6 @@ class DiversityPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
         self._logger.info(
             f"plot_diversity_summary called: sample_name='{result.sample_name}', taxa_count={result.taxa_count}"
         )

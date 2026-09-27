@@ -22,9 +22,12 @@ import numpy.typing as npt
 from matplotlib.figure import Figure
 from scipy import stats
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class AllometryPlotter:
     """
     Publication-quality allometry visualization engine.
@@ -46,12 +49,6 @@ class AllometryPlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-    def set_style(self, style: str) -> None:
-        """Set matplotlib style."""
-        try:
-            plt.style.use(style)
-        except (OSError, ValueError) as e:
-            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
 
     def plot_allometry_scatter(
         self,
@@ -88,10 +85,23 @@ class AllometryPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         centroid_sizes = np.asarray(centroid_sizes, dtype=np.float64)
         shape_scores = np.asarray(shape_scores, dtype=np.float64)
+        # A plain list has no .ndim; the code below branches on it.
+        if regression_coefficients is not None:
+            regression_coefficients = np.asarray(regression_coefficients, dtype=np.float64)
+        if regression_intercept is not None:
+            regression_intercept = np.asarray(regression_intercept, dtype=np.float64)
+        # Centroid sizes are a distance and therefore positive, but a caller
+        # handing in a non-positive value used to produce log() NaNs that
+        # propagated into the fitted line silently.
+        if np.any(centroid_sizes <= 0):
+            raise ValueError(
+                "centroid_sizes must be positive to take the logarithm; got "
+                f"{int(np.sum(centroid_sizes <= 0))} non-positive value(s). "
+                "Pass unscaled centroid sizes, not GPA output."
+            )
         log_cs = np.log(centroid_sizes)
 
         fig = Figure(figsize=self._figure_size)
@@ -206,7 +216,6 @@ class AllometryPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         centroid_sizes = np.asarray(centroid_sizes, dtype=np.float64)
         residuals = np.asarray(residuals, dtype=np.float64)
@@ -268,7 +277,6 @@ class AllometryPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         left_scores = np.asarray(left_scores, dtype=np.float64)
         right_scores = np.asarray(right_scores, dtype=np.float64)

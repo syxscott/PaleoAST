@@ -16,7 +16,6 @@ version: 1.0.1
 
 import logging
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from matplotlib.figure import Figure
@@ -24,9 +23,12 @@ from matplotlib.figure import Figure
 from config.colors import get_color_scheme
 from statistics.pca import PCAResult
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class PCAPlotter:
     """
     Publication-quality PCA visualization engine.
@@ -42,12 +44,6 @@ class PCAPlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-    def set_style(self, style: str) -> None:
-        """Set matplotlib style."""
-        try:
-            plt.style.use(style)
-        except (OSError, ValueError) as e:
-            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
 
     def plot_scores(
         self,
@@ -78,9 +74,6 @@ class PCAPlotter:
         Returns:
             matplotlib Figure object
         """
-        # Set style
-        self.set_style(self._style)
-
         # Create figure
         fig = Figure(figsize=self._figure_size)
         ax = fig.add_subplot(111)
@@ -161,7 +154,6 @@ class PCAPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         fig = Figure(figsize=self._figure_size)
         ax = fig.add_subplot(111)
@@ -218,7 +210,6 @@ class PCAPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         fig = Figure(figsize=self._figure_size)
         ax = fig.add_subplot(111)

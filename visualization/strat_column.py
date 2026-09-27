@@ -36,7 +36,6 @@ import math
 from collections.abc import Mapping, Sequence
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
@@ -44,6 +43,8 @@ from matplotlib.patches import PathPatch, Rectangle
 from matplotlib.text import Text
 
 from stratigraphy.time_bins import get_scale
+
+from ._style_scope import scoped_plot_methods
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ def _resolve_style(lithology: object, table: Mapping[str, tuple[str, str]]) -> t
     return best if best is not None else UNKNOWN_LITHOLOGY_STYLE
 
 
+@scoped_plot_methods
 class StratigraphicColumnPlotter:
     """
     Publication-quality stratigraphic columns with ICS geologic-time strips.
@@ -129,12 +131,6 @@ class StratigraphicColumnPlotter:
         self._title_font_size = 12
         self.lithology_styles: dict[str, tuple[str, str]] = dict(DEFAULT_LITHOLOGY_STYLES)
 
-    def set_style(self, style: str) -> None:
-        """Set matplotlib style."""
-        try:
-            plt.style.use(style)
-        except (OSError, ValueError) as e:
-            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
 
     # ------------------------------------------------------------------
     # Public plots
@@ -197,7 +193,6 @@ class StratigraphicColumnPlotter:
         self._validate_log(bounds, log_scale)
 
         ranks = tuple(geo_ranks) if mode == "age" else ()
-        self.set_style(self._style)
         self._logger.info(f"plot_column: {n_beds} beds, mode={mode}, ranks={list(ranks)}")
 
         cells = [_resolve_style(lit, self.lithology_styles) for lit in lithologies]
@@ -263,7 +258,6 @@ class StratigraphicColumnPlotter:
         lo = min(float(b[0]) for _, b, _ in parsed)
         hi = max(float(b[-1]) for _, b, _ in parsed)
         self._validate_log(np.array([lo, hi]), log_scale)
-        self.set_style(self._style)
         self._logger.info(f"plot_correlated_columns: {len(parsed)} sections, window [{lo}, {hi}] Ma")
 
         ranks = tuple(geo_ranks)

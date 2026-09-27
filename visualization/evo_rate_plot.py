@@ -21,9 +21,12 @@ import numpy as np
 import numpy.typing as npt
 from matplotlib.figure import Figure
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class EvolutionRatePlotter:
     """
     Publication-quality evolutionary rate visualization engine.
@@ -44,12 +47,6 @@ class EvolutionRatePlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-    def set_style(self, style: str) -> None:
-        """Set matplotlib style."""
-        try:
-            plt.style.use(style)
-        except (OSError, ValueError) as e:
-            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
 
     def plot_phenogram(
         self,
@@ -80,7 +77,6 @@ class EvolutionRatePlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         trait_series = np.asarray(trait_series, dtype=np.float64)
         n = len(trait_series)
@@ -89,6 +85,16 @@ class EvolutionRatePlotter:
         if time_intervals is None:
             time_intervals = np.ones(n - 1)
         time_intervals = np.asarray(time_intervals, dtype=np.float64)
+        # Without this the mismatch surfaced as
+        # "ValueError: could not broadcast input array from shape (4,) into
+        # shape (3,)" from the line below. EvolutionRateAnalyzer.analyze
+        # enforces the same rule; do it here too, with a message that says
+        # which argument is wrong.
+        if time_intervals.size != n - 1:
+            raise ValueError(
+                f"time_intervals must have one entry per gap between the {n} "
+                f"measurements, i.e. {n - 1}; got {time_intervals.size}."
+            )
         time_points = np.zeros(n)
         time_points[1:] = np.cumsum(time_intervals)
 
@@ -194,7 +200,6 @@ class EvolutionRatePlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         fig = Figure(figsize=self._figure_size)
         ax = fig.add_subplot(111)
@@ -250,7 +255,6 @@ class EvolutionRatePlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         trait_series = np.asarray(trait_series, dtype=np.float64)
 

@@ -27,9 +27,12 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class StratigraphyPlotter:
     """
     Publication-quality stratigraphic visualization engine.
@@ -50,12 +53,6 @@ class StratigraphyPlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-    def set_style(self, style: str) -> None:
-        """Set matplotlib style."""
-        try:
-            plt.style.use(style)
-        except (OSError, ValueError) as e:
-            logger.debug(f"Could not apply matplotlib style '{style}': {e}")
 
     def plot_extinction_ranges(
         self,
@@ -88,11 +85,16 @@ class StratigraphyPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         lad_positions = np.asarray(lad_positions, dtype=np.float64)
         ci_lower = np.asarray(ci_lower, dtype=np.float64)
         ci_upper = np.asarray(ci_upper, dtype=np.float64)
+        # Without this a plain list raised
+        # "TypeError: only integer scalar arrays can be converted to a scalar
+        # index" at the fancy-index below, because `list[int][ndarray]` is
+        # a TypeError rather than an index.
+        if true_extinction_layer is not None:
+            true_extinction_layer = np.asarray(true_extinction_layer)
 
         n_taxa = len(lad_positions)
         if taxon_names is None:
@@ -249,7 +251,6 @@ class StratigraphyPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         layer_thicknesses = np.asarray(layer_thicknesses, dtype=np.float64)
         n_layers = len(layer_thicknesses)
@@ -353,7 +354,6 @@ class StratigraphyPlotter:
         Returns:
             matplotlib Figure object
         """
-        self.set_style(self._style)
 
         sample_positions = np.asarray(sample_positions, dtype=np.float64)
         diversity_values = np.asarray(diversity_values, dtype=np.float64)
@@ -431,7 +431,6 @@ class StratigraphyPlotter:
             and line-width controlled by the per-pair DTW similarity
             score.
         """
-        self.set_style(self._style)
 
         # Defer heavy imports to keep module import cost low
         from stratigraphy.correlation import StratigraphicCorrelationResult

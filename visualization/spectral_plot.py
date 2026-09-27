@@ -13,7 +13,6 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-import contextlib
 import logging
 
 import matplotlib.pyplot as plt
@@ -22,9 +21,12 @@ from matplotlib.figure import Figure
 
 from stratigraphy.spectral_analysis import SpectralResult
 
+from ._style_scope import scoped_plot_methods
+
 logger = logging.getLogger(__name__)
 
 
+@scoped_plot_methods
 class SpectralPlotter:
     """
     Publication-quality spectral visualization engine.
@@ -39,13 +41,6 @@ class SpectralPlotter:
         self._dpi = 300
         self._font_size = 10
 
-    def _apply_style(self) -> None:
-        """Apply matplotlib style with fallback for older versions."""
-        try:
-            plt.style.use(self._style)
-        except OSError:
-            with contextlib.suppress(OSError):
-                plt.style.use(self._style.replace("v0_8-", ""))
 
     def plot_periodogram(
         self, result: SpectralResult, show_peaks: bool = True, peak_threshold: float = 0.5, title: str | None = None
@@ -62,7 +57,6 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
         self._logger.info(
             f"plot_periodogram called: n_frequencies={len(result.frequencies)}, peak_period={result.peak_period}"
         )
@@ -136,7 +130,6 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
         self._logger.info(f"plot_frequency_spectrum called: n_frequencies={len(result.frequencies)}")
 
         fig, ax = plt.subplots(figsize=self._figure_size)
@@ -178,7 +171,6 @@ class SpectralPlotter:
         Returns:
             matplotlib Figure object
         """
-        self._apply_style()
         self._logger.info(
             f"plot_spectral_summary called: n_frequencies={len(result.frequencies)}, "
             f"n_peaks={len(peaks) if peaks else 0}"
