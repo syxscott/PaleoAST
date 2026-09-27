@@ -518,6 +518,27 @@ PaleoAST 自动配置中文字体（微软雅黑/黑体）。如果中文仍不�
 python -m pytest tests/ tests_morpho3d_macroevolution/
 ```
 
+### Cross-validation against R / 对照 R 生态包做数值校验
+
+`tests/cross_validation/` checks the numbers against the reference
+implementations in R — `vegan`, `ape`, `geomorph`, `phytools`, `iNEXT`. It is the
+only thing in the suite that proves the statistics agree with published
+methods, and it needs **R plus `rpy2`**, which live in a separate extra on
+purpose (see the comment in `pyproject.toml` for why they are not in `dev`).
+
+```bash
+# R and the reference packages
+sudo apt-get install -y r-base r-base-dev          # or your platform's equivalent
+R -e "install.packages(c('vegan','geomorph','ape','phytools','iNEXT'))"
+
+pip install -e ".[dev,full,crossval]"
+pytest tests/cross_validation/ -v
+```
+
+Without `rpy2` installed the directory is skipped, so a plain
+`pip install -e ".[dev,full]"` still gives you a working test run — it just
+does not include these 31 numerical checks.
+
 ### Smoke check (manual, not part of the pytest run) / 冒烟检查（手动运行，不属于 pytest 套件）
 
 ```bash

@@ -20,9 +20,9 @@ Every other CI job does ``pip install -e .``, which puts the repository root on
 
 This script is meant to run with the CWD **outside** the source tree, against a
 clean venv holding only the built wheel. It asserts the opposite of the above:
-that every declared package really is importable, that each one resolved to the
-installed copy rather than the checkout, and that the package data and the
-console-script entry point survived packaging.
+that every declared package really is importable, that each one resolved inside
+``sys.prefix`` (i.e. to the installed copy, not the checkout), and that the
+package data and the console-script entry point survived packaging.
 
 Usage
 -----
@@ -109,17 +109,37 @@ def _is_inside(child: Path, parent: Path) -> bool:
 # ---------------------------------------------------------------------------
 # Checks
 # ---------------------------------------------------------------------------
-def check_imports_resolve_outside_source_tree() -> None:
-    """Every declared package and py-module must import, and must come from
-    the installed location -- not from the checkout.
+def _module_locations(module) -> list[Path]:
+    """Every filesystem location a module could have been loaded from.
 
-    The source-tree half of this is the whole point: if ``sys.path`` still
-    contains the repository (editable install, or a stray ``PYTHONPATH``), a
-    package missing from the wheel would import anyway and the wheel would be
-    silently broken.
+    Prefers ``__file__``; falls back to ``__path__`` for namespace packages,
+    which have no single file.
     """
+    module_file = getattr(module, "__file__", None)
+    if module_file:
+        return [Path(module_file)]
+    return [Path(p) for p in (getattr(module, "__path__", None) or [])]
+
+
+def check_imports_resolve_to_the_installed_environment() -> None:
+    """Every declared package and py-module must import from the installed
+    environment, not from the checkout.
+
+    The assertion is "does it live under ``sys.prefix``", **not** "is it
+    outside the repository". The latter is wrong the moment the venv is nested
+    inside the checkout: ``$GITHUB_WORKSPACE/smoke-venv/lib/.../site-packages``
+    sits under the repo root, so a perfectly correct install was reported as
+    "resolved from the source checkout" and turned the CI job red. Asking
+    where the module *should* be is correct regardless of where the venv
+    lives, and is a stronger statement than ruling out one specific directory.
+
+    With that fixed, the remaining way for a module to resolve wrongly is the
+    checkout sitting on ``sys.path`` ahead of site-packages, which is what
+    ``check_not_on_source_path`` covers.
+    """
+    env_root = Path(sys.prefix).resolve()
     source_root = _locate_source_root()
-    # The script itself lives at <root>/scripts/import_smoke.py.
+
     for name in DECLARED_PACKAGES + DECLARED_PY_MODULES:
         try:
             module = importlib.import_module(name)
@@ -127,30 +147,22 @@ def check_imports_resolve_outside_source_tree() -> None:
             _fail(f"import {name!r} raised {type(exc).__name__}: {exc}")
             continue
 
-        module_file = getattr(module, "__file__", None)
-        if module_file is None:
-            # Namespace package: has no single file, so check its search
-            # locations instead.
-            locations = [Path(p) for p in (getattr(module, "__path__", None) or [])]
-            if not locations:
-                _fail(f"{name!r} imported but has no __file__ and no __path__")
-                continue
-            if source_root and any(_is_inside(loc, source_root) for loc in locations):
-                _fail(f"{name!r} resolved into the source tree: {locations[0]}")
-                continue
-            _ok(f"{name!r} -> {locations[0]}")
+        locations = _module_locations(module)
+        if not locations:
+            _fail(f"{name!r} imported but has no __file__ and no __path__")
             continue
 
-        path = Path(module_file)
-        if source_root and _is_inside(path, source_root):
-            _fail(
-                f"{name!r} resolved to the source checkout, not the installed "
-                f"package: {path}\n"
-                f"          This masks packaging bugs. Run this from OUTSIDE "
-                f"{source_root} against a wheel install."
-            )
+        stray = [loc for loc in locations if not _is_inside(loc, env_root)]
+        if stray:
+            hint = ""
+            if source_root and _is_inside(stray[0], source_root):
+                hint = (
+                    f"\n          that path is inside the source checkout "
+                    f"({source_root}), so the installed package was shadowed"
+                )
+            _fail(f"{name!r} did not resolve inside the installed environment ({env_root}): {stray[0]}{hint}")
             continue
-        _ok(f"{name!r} -> {path}")
+        _ok(f"{name!r} -> {locations[0]}")
 
 
 def check_not_on_source_path() -> None:
@@ -383,7 +395,7 @@ def main() -> int:
     # follow, so it has to run first.
     check_not_on_source_path()
     _check_matches_pyproject()
-    check_imports_resolve_outside_source_tree()
+    check_imports_resolve_to_the_installed_environment()
     check_package_data()
     check_console_script()
     check_manifest()

@@ -118,16 +118,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install R and rpy2
+      - name: Install R toolchain and reference packages
         run: |
-          sudo apt-get update && sudo apt-get install -y r-base
-          # runner 用户对 site-library 无写权限, 必须 sudo (旧步骤在此失败)
+          sudo apt-get update
+          # r-base-dev is not optional here. rpy2 compiles against libR, and the
+          # CRAN packages below ship no Linux binaries, so they compile from
+          # source too -- which needs the R headers plus a C/C++ toolchain.
+          # curl/ssl/xml2 are the system libs those R packages commonly link.
+          sudo apt-get install -y r-base r-base-dev build-essential \
+            libcurl4-openssl-dev libssl-dev libxml2-dev
+          # The runner user cannot write to site-library, so this must run under
+          # sudo (an earlier version of this step failed here).
           sudo R -e "install.packages(c('vegan','geomorph','ape','phytools','iNEXT'), repos='https://cloud.r-project.org', Ncpus=4)"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,full]"
-          pip install rpy2 hypothesis
+          # `crossval` is the extra that carries rpy2. It used to sit in `dev`,
+          # where it broke the install step of every job that had no use for R
+          # -- see the comment in pyproject.toml.
+          pip install -e ".[dev,full,crossval]"
       - name: Run cross-validation tests
         run: |
           pytest tests/cross_validation/ -v --tb=short
@@ -166,10 +175,15 @@ jobs:
 
       - name: Install the wheel into a clean venv
         run: |
-          python -m venv smoke-venv
+          # Deliberately NOT inside the checkout. A venv nested in the workspace
+          # puts every installed path under the repository root, which made the
+          # smoke test report a perfectly good install as "resolved from the
+          # source checkout" on this runner. The venv has to sit outside it for
+          # the shadowing check to mean anything.
+          python -m venv "$RUNNER_TEMP/smoke-venv"
           # deps come from the project metadata, the wheel under test does not
-          smoke-venv/bin/python -m pip install --upgrade pip
-          smoke-venv/bin/python -m pip install dist/*.whl
+          "$RUNNER_TEMP/smoke-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/smoke-venv/bin/python" -m pip install dist/*.whl
 
       - name: Import smoke test (from outside the source tree)
         env:
@@ -178,11 +192,11 @@ jobs:
           # job sets this.
           QT_QPA_PLATFORM: offscreen
         run: |
-          # Run from $RUNNER_TEMP, not the checkout: running the script by path
-          # adds only scripts/ to sys.path, but staying out of the checkout
-          # removes any doubt that the wheel is what got imported.
+          # Run from $RUNNER_TEMP as well: running the script by path adds only
+          # scripts/ to sys.path, but staying out of the checkout removes any
+          # doubt that the wheel is what got imported.
           cd "$RUNNER_TEMP"
-          "$GITHUB_WORKSPACE/smoke-venv/bin/python" \
+          "$RUNNER_TEMP/smoke-venv/bin/python" \
             "$GITHUB_WORKSPACE/scripts/import_smoke.py" --verbose
 
       - name: Console script resolves to a callable entry point
@@ -190,7 +204,7 @@ jobs:
           # A generated wrapper that raises ModuleNotFoundError on first run is
           # a packaging bug the import smoke test cannot see: it only checks
           # the entry point is *declared*, not that it *loads*.
-          smoke-venv/bin/python -c "from importlib.metadata import entry_points; \
+          "$RUNNER_TEMP/smoke-venv/bin/python" -c "from importlib.metadata import entry_points; \
             ep = next(e for e in entry_points(group='console_scripts') if e.name == 'paleoast'); \
             print(ep.module + ':' + ep.attr, '->', ep.load()); \
             assert callable(ep.load())"
