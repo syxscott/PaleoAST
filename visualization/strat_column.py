@@ -131,7 +131,6 @@ class StratigraphicColumnPlotter:
         self._title_font_size = 12
         self.lithology_styles: dict[str, tuple[str, str]] = dict(DEFAULT_LITHOLOGY_STYLES)
 
-
     # ------------------------------------------------------------------
     # Public plots
     # ------------------------------------------------------------------
@@ -275,9 +274,7 @@ class StratigraphicColumnPlotter:
             self._draw_strips(fig, ax, ranks, lo, hi, log_scale)
         for j, (name, bounds, lithologies) in enumerate(parsed):
             x0 = j * span
-            self._draw_beds(
-                ax, bounds, [_resolve_style(l, self.lithology_styles) for l in lithologies], x0, x0 + 1.0
-            )
+            self._draw_beds(ax, bounds, [_resolve_style(l, self.lithology_styles) for l in lithologies], x0, x0 + 1.0)
             self._column_header(ax, x0 + 0.5, name)
         ax.axvline(0.0, color="black", linewidth=0.8)
         ax.set_title(title, fontsize=self._title_font_size, y=1.03)
@@ -351,9 +348,7 @@ class StratigraphicColumnPlotter:
                 _, hatch = palette[idx]
                 if hatch:
                     ax.add_patch(
-                        PathPatch(
-                            path, facecolor="none", edgecolor="black", hatch=hatch, linewidth=0.0, zorder=3
-                        )
+                        PathPatch(path, facecolor="none", edgecolor="black", hatch=hatch, linewidth=0.0, zorder=3)
                     )
         finally:
             mpl.rcParams["hatch.linewidth"] = old_hatch_lw
@@ -452,13 +447,9 @@ class StratigraphicColumnPlotter:
         """Shrink-to-fit, then abbreviation, then blank (palaeoverse autofit_text)."""
         ax_box = ax.get_window_extent(renderer)
         x_span = ax.get_xlim()[1] - ax.get_xlim()[0]
-        cell_h_px = abs(
-            float(ax.transData.transform((0.0, y1))[1]) - float(ax.transData.transform((0.0, y0))[1])
-        )
+        cell_h_px = abs(float(ax.transData.transform((0.0, y1))[1]) - float(ax.transData.transform((0.0, y0))[1]))
         cell_w_px = ax_box.width * (_STRIP_UNIT / x_span) if x_span else ax_box.width
-        txt = ax.text(
-            x_centre, y_centre, "", ha="center", va="center", color=colour, fontsize=base_fs, zorder=4
-        )
+        txt = ax.text(x_centre, y_centre, "", ha="center", va="center", color=colour, fontsize=base_fs, zorder=4)
         for label in candidates:
             txt.set_text(label)
             fs = base_fs

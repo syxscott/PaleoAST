@@ -119,9 +119,7 @@ class TPSFile:
 
         widths = {int(np.asarray(spec.landmarks).size) for spec in self.specimens}
         if len(widths) > 1:
-            detail = ", ".join(
-                f"{spec.id}={np.asarray(spec.landmarks).size}" for spec in self.specimens
-            )
+            detail = ", ".join(f"{spec.id}={np.asarray(spec.landmarks).size}" for spec in self.specimens)
             raise TPSParseError(
                 f"Cannot build a landmark matrix from specimens with different "
                 f"landmark counts ({sorted(widths)}): {detail}"
@@ -173,8 +171,7 @@ class TPSFile:
                 lengths = spec_lengths
             elif spec_lengths != lengths:
                 raise ValueError(
-                    f"Specimen '{spec.id}': curve point counts {spec_lengths} "
-                    f"disagree with first specimen {lengths}"
+                    f"Specimen '{spec.id}': curve point counts {spec_lengths} disagree with first specimen {lengths}"
                 )
 
         if lengths is None:
@@ -187,8 +184,7 @@ class TPSFile:
             offset += k
         if offset > self.n_landmarks:
             raise ValueError(
-                f"Curve blocks need {offset} landmarks but LM= declares "
-                f"{self.n_landmarks} (n_fixed={n_fixed})"
+                f"Curve blocks need {offset} landmarks but LM= declares {self.n_landmarks} (n_fixed={n_fixed})"
             )
         return result
 
@@ -295,7 +291,9 @@ class TPSParser:
         self._logger.info(f"Parsed {len(self.specimens)} specimens")
 
         if self._parse_errors.has_errors():
-            self._logger.warning(f"Parse completed with {len(self._parse_errors.errors)} errors:\n{self._parse_errors.summary()}")
+            self._logger.warning(
+                f"Parse completed with {len(self._parse_errors.errors)} errors:\n{self._parse_errors.summary()}"
+            )
 
         return TPSFile(
             specimens=self.specimens,
@@ -391,7 +389,11 @@ class TPSParser:
                     self._finalize_specimen()
 
                 self._current_spec = TPSSpecimen(
-                    id=value, landmarks=np.array([]), scale=self._current_scale, curve_points=None, raw_data={"id": value}
+                    id=value,
+                    landmarks=np.array([]),
+                    scale=self._current_scale,
+                    curve_points=None,
+                    raw_data={"id": value},
                 )
                 self._current_landmarks = []
                 # Reset curve state: ``_in_curve``/``_current_curve`` belong
@@ -435,8 +437,7 @@ class TPSParser:
                         # fresh curve instead of crashing or silently
                         # merging into the previous specimen's last curve.
                         self._logger.warning(
-                            "POINTS= line at %s line %d without preceding CO=; "
-                            "starting an anonymous curve",
+                            "POINTS= line at %s line %d without preceding CO=; starting an anonymous curve",
                             self._parse_errors.file_path,
                             line_num,
                         )

@@ -308,9 +308,7 @@ class SemiLandmarkSlider:
                 {
                     "iteration": iteration,
                     "mean_shape": current_mean.copy(),
-                    "bending_energy": self._compute_bending_energy(
-                        gpa_result.aligned_configs, current_mean
-                    ),
+                    "bending_energy": self._compute_bending_energy(gpa_result.aligned_configs, current_mean),
                 }
             )
 
@@ -318,9 +316,7 @@ class SemiLandmarkSlider:
         final_gpa, _fc, _fs, _fr = self._gpa_with_fixed_landmarks(current_configs)
 
         # 计算最终弯曲能量
-        final_be = self._compute_bending_energy(
-            final_gpa.aligned_configs, final_gpa.mean_config
-        )
+        final_be = self._compute_bending_energy(final_gpa.aligned_configs, final_gpa.mean_config)
 
         self._logger.info(f"Sliding complete: {n_iterations} iterations, final bending energy = {final_be:.4f}")
 
@@ -446,9 +442,7 @@ class SemiLandmarkSlider:
         if n_semi >= 3:
             for i in range(1, n_semi - 1):
                 lap_mean = semi_mean[i - 1] - 2.0 * semi_mean[i] + semi_mean[i + 1]
-                lap_aligned = (
-                    semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
-                )
+                lap_aligned = semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
                 displacement[i] = lap_mean - lap_aligned
 
         for i in range(n_semi):
@@ -491,9 +485,7 @@ class SemiLandmarkSlider:
             if n_semi >= 3:
                 for i in range(1, n_semi - 1):
                     lap_mean = semi_mean[i - 1] - 2.0 * semi_mean[i] + semi_mean[i + 1]
-                    lap_aligned = (
-                        semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
-                    )
+                    lap_aligned = semi_aligned[i - 1] - 2.0 * semi_aligned[i] + semi_aligned[i + 1]
                     displacement[i] = lap_mean - lap_aligned
         else:
             # 最小 Procrustes: 向共识的切平面内位移

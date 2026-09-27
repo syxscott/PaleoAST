@@ -112,7 +112,7 @@ def _font_for_colour(colour: str | None) -> str:
     c = colour.lstrip("#")
     if len(c) != 6:
         return "black"
-    r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(c[i : i + 2], 16) for i in (0, 2, 4))
     lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
     return "black" if lum > 0.5 else "white"
 
@@ -352,9 +352,7 @@ def _check_occurrences(occurrences: list[dict[str, Any]]) -> None:
         except (TypeError, ValueError) as exc:
             raise DataValidationError(_("occurrences row {0} has non-numeric ages").format(i)) from exc
         if hi < lo:
-            raise DataValidationError(
-                _("occurrences row {0}: max_ma must be >= min_ma").format(i)
-            )
+            raise DataValidationError(_("occurrences row {0}: max_ma must be >= min_ma").format(i))
 
 
 def _overlap_list(occurrences: list[dict[str, Any]], bins: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -440,8 +438,7 @@ def bin_time(
             rows.append(row)
         if warned:
             logger.warning(
-                "bin_time('mid'): some occurrence midpoints fall on bin boundaries; "
-                "those rows have bin_assignment = NA"
+                "bin_time('mid'): some occurrence midpoints fall on bin boundaries; those rows have bin_assignment = NA"
             )
         return rows
 
@@ -507,8 +504,10 @@ def bin_time(
     # method == "point"
     rng = np.random.default_rng(seed)
     if fun is None:
+
         def fun(x: npt.NDArray) -> npt.NDArray:  # uniform density
             return np.ones_like(np.asarray(x, dtype=float))
+
     picks = []
     for occ in occurrences:
         lo, hi = float(occ[MIN_MA]), float(occ[MAX_MA])

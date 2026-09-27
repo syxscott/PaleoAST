@@ -30,6 +30,7 @@ class TestChao1VsINEXT:
         """Chao1 formula: S + f1^2 / (2*f2)."""
         abundances = np.array([10.0, 5.0, 2.0, 1.0, 1.0])
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         # f1 = 2 (singletons: the two 1s)
         # f2 = 1 (doubletons: the 2)
@@ -40,6 +41,7 @@ class TestChao1VsINEXT:
         """Chao1 adjusted formula when f2=0 but f1>0."""
         abundances = np.array([10.0, 5.0, 1.0, 1.0, 1.0])
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         # f1 = 3, f2 = 0, S = 5
         # Since f2=0, use: S + f1*(f1-1)/2 = 5 + 3*2/2 = 8
@@ -49,6 +51,7 @@ class TestChao1VsINEXT:
         """Chao1 = S when no rare species observed."""
         abundances = np.array([10.0, 5.0, 3.0])
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         # f1 = 0, f2 = 0, so chao1 = S = 3
         assert_allclose(result.indices["chao1"].value, 3.0, atol=1e-6)
@@ -59,6 +62,7 @@ class TestChao1VsINEXT:
         # Chao1 = 10 + 4/(2*1) = 12
         abundances = np.array([10.0, 8.0, 5.0, 5.0, 3.0, 2.0, 2.0, 1.0, 1.0, 0.0])
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         expected_chao1 = 10 + (2**2) / (2 * 1)  # = 12
         assert_allclose(result.indices["chao1"].value, expected_chao1, atol=1e-3)
@@ -71,6 +75,7 @@ class TestRarefactionVsINEXT:
         """Species richness should increase with sample coverage."""
         abundance = np.array([[25, 10, 5], [15, 20, 8]])
         from ecology.beta_diversity import CoverageRarefactionAnalyzer
+
         analyzer = CoverageRarefactionAnalyzer()
         result = analyzer.analyze(abundance)
         # At higher coverage, we should estimate more species
@@ -82,6 +87,7 @@ class TestRarefactionVsINEXT:
         """Asymptotic estimate should be >= observed richness."""
         abundance = np.array([[25, 10, 5, 3, 2], [15, 20, 8, 4, 1]])
         from ecology.beta_diversity import CoverageRarefactionAnalyzer
+
         analyzer = CoverageRarefactionAnalyzer()
         result = analyzer.analyze(abundance)
         # Asymptotic estimate is always >= observed
@@ -95,6 +101,7 @@ class TestRarefactionVsINEXT:
         """Lower CI <= expected <= upper CI."""
         abundance = np.array([[25, 10, 5], [15, 20, 8]])
         from ecology.beta_diversity import CoverageRarefactionAnalyzer
+
         analyzer = CoverageRarefactionAnalyzer()
         result = analyzer.analyze(abundance)
         for i in range(len(result.expected_richness)):
@@ -105,6 +112,7 @@ class TestRarefactionVsINEXT:
         """Sample sizes should match input totals."""
         abundance = np.array([[25, 10, 5, 3], [15, 20, 8, 2]])
         from ecology.beta_diversity import CoverageRarefactionAnalyzer
+
         analyzer = CoverageRarefactionAnalyzer()
         result = analyzer.analyze(abundance)
         expected_sizes = [43.0, 45.0]

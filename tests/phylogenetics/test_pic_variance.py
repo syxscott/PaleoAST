@@ -80,10 +80,10 @@ class TestPICVariance4TaxaTree:
         """验证二叉树满足 PIC 假设"""
         result = validate_pic_assumptions(tree_4taxa)
 
-        assert result['is_rooted'], "Tree should be rooted"
-        assert result['has_branch_lengths'], "Tree should have branch lengths"
-        assert result['polytomy_count'] == 0, "Binary tree should have 0 polytomies"
-        assert result['assumptions_satisfied'], "Binary tree should satisfy PIC assumptions"
+        assert result["is_rooted"], "Tree should be rooted"
+        assert result["has_branch_lengths"], "Tree should have branch lengths"
+        assert result["polytomy_count"] == 0, "Binary tree should have 0 polytomies"
+        assert result["assumptions_satisfied"], "Binary tree should satisfy PIC assumptions"
 
 
 class TestPICVariancePolytomy:
@@ -105,8 +105,8 @@ class TestPICVariancePolytomy:
         """验证 polytomy 被正确检测"""
         result = validate_pic_assumptions(tree_5taxa_polytomy)
 
-        assert result['polytomy_count'] > 0, "Polytomy should be detected"
-        assert not result['assumptions_satisfied'], "Polytomy tree should NOT satisfy standard PIC assumptions"
+        assert result["polytomy_count"] > 0, "Polytomy should be detected"
+        assert not result["assumptions_satisfied"], "Polytomy tree should NOT satisfy standard PIC assumptions"
 
     def test_polytomy_pic_computation(self, tree_5taxa_polytomy, traits_5taxa):
         """验证 polytomy 树的 PIC 仍能正确计算"""

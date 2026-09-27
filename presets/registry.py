@@ -167,9 +167,7 @@ def get_spec(analysis_id: str) -> AnalysisSpec:
     try:
         return ANALYSIS_REGISTRY[analysis_id]
     except KeyError:
-        raise PresetError(
-            f"Unknown analysis '{analysis_id}'; registered ids: {sorted(ANALYSIS_REGISTRY)}"
-        ) from None
+        raise PresetError(f"Unknown analysis '{analysis_id}'; registered ids: {sorted(ANALYSIS_REGISTRY)}") from None
 
 
 def check_guards(spec: AnalysisSpec, available: set[str]) -> str | None:

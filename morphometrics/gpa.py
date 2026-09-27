@@ -349,17 +349,14 @@ class GPAAnalyzer:
             elif n_landmarks is not None and n_dims is not None:
                 if n_landmarks * n_dims != flat_dim:
                     raise MorphometricsError(
-                        f"Flat dimension {flat_dim} does not match "
-                        f"n_landmarks ({n_landmarks}) * n_dims ({n_dims})"
+                        f"Flat dimension {flat_dim} does not match n_landmarks ({n_landmarks}) * n_dims ({n_dims})"
                     )
                 X = configurations.reshape(n_specimens, n_landmarks, n_dims)
 
             # Case 2: Explicit n_dims provided, infer n_landmarks
             elif n_dims is not None:
                 if flat_dim % n_dims != 0:
-                    raise MorphometricsError(
-                        f"Flat dimension {flat_dim} not divisible by n_dims={n_dims}"
-                    )
+                    raise MorphometricsError(f"Flat dimension {flat_dim} not divisible by n_dims={n_dims}")
                 n_landmarks = flat_dim // n_dims
                 X = configurations.reshape(n_specimens, n_landmarks, n_dims)
 
@@ -374,9 +371,7 @@ class GPAAnalyzer:
                         )
                     X = configurations.reshape(n_specimens, n_landmarks, n_dims)
                 else:
-                    raise MorphometricsError(
-                        f"Flat dimension {flat_dim} not divisible by n_landmarks={n_landmarks}"
-                    )
+                    raise MorphometricsError(f"Flat dimension {flat_dim} not divisible by n_landmarks={n_landmarks}")
 
             # Case 4: Heuristic inference (ambiguous cases require explicit params)
             else:
@@ -384,8 +379,7 @@ class GPAAnalyzer:
                 if flat_dim in [2, 3]:
                     # Single specimen with 2 or 3 landmarks in 1D... unlikely but handle
                     raise MorphometricsError(
-                        f"Ambiguous case: flat_dim={flat_dim}. "
-                        f"Provide explicit n_landmarks and n_dims parameters."
+                        f"Ambiguous case: flat_dim={flat_dim}. Provide explicit n_landmarks and n_dims parameters."
                     )
 
                 # Check divisibility
@@ -416,14 +410,11 @@ class GPAAnalyzer:
         elif configurations.ndim == 3:
             if n_dims is not None and configurations.shape[2] != n_dims:
                 raise MorphometricsError(
-                    f"Explicit n_dims={n_dims} does not match "
-                    f"configuration shape {configurations.shape}"
+                    f"Explicit n_dims={n_dims} does not match configuration shape {configurations.shape}"
                 )
             X = configurations
         else:
-            raise MorphometricsError(
-                "Configurations must be 2D (n_specimens, k*m) or 3D (n_specimens, k, m)"
-            )
+            raise MorphometricsError("Configurations must be 2D (n_specimens, k*m) or 3D (n_specimens, k, m)")
 
         X = np.asarray(X, dtype=float)
 
@@ -555,6 +546,7 @@ class GPAAnalyzer:
 # Partial GPA (Semilandmark Sliding)
 # =============================================================================
 
+
 def partial_gpa(
     configurations: npt.NDArray,
     fixed_landmarks: list[int] | npt.NDArray,
@@ -638,8 +630,7 @@ def partial_gpa(
         n_total_landmarks = n_landmarks
     else:
         raise MorphometricsError(
-            "partial_gpa needs n_landmarks (or a 3D configuration array) to "
-            "validate curve topology"
+            "partial_gpa needs n_landmarks (or a 3D configuration array) to validate curve topology"
         )
 
     # Curves in triples form; merge the legacy arguments into the same list
@@ -663,9 +654,7 @@ def partial_gpa(
     for curve in merged_curves + merged_surfaces:
         overlap = fixed_set.intersection(curve[1:-1])
         if overlap:
-            raise MorphometricsError(
-                f"Slider landmarks {sorted(overlap)} are also declared fixed"
-            )
+            raise MorphometricsError(f"Slider landmarks {sorted(overlap)} are also declared fixed")
 
     slide_curves = merged_curves if n_dims == 2 else []
     slide_surfaces = merged_surfaces if n_dims == 3 else []
@@ -713,10 +702,12 @@ def partial_gpa(
     final_result = gpa.analyze(aligned)
 
     # Compute bending energies
-    bending_energies = np.array([
-        _compute_bending_energy(spec, consensus, fixed_landmarks, n_dims)
-        for spec in final_result.aligned_configurations
-    ])
+    bending_energies = np.array(
+        [
+            _compute_bending_energy(spec, consensus, fixed_landmarks, n_dims)
+            for spec in final_result.aligned_configurations
+        ]
+    )
 
     return PartialGPAResult(
         aligned_configurations=final_result.aligned_configurations,

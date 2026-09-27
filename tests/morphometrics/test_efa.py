@@ -47,7 +47,7 @@ def test_contour_reconstruction():
     # 验证轮廓是闭合的
     start = result.reconstructed[0]
     end = result.reconstructed[-1]
-    assert np.sqrt(np.sum((start - end)**2)) < 0.1, "Reconstructed contour is not closed"
+    assert np.sqrt(np.sum((start - end) ** 2)) < 0.1, "Reconstructed contour is not closed"
 
     # Verify shape similarity by checking that the original and reconstructed
     # have similar aspect ratio and orientation after appropriate scaling.
@@ -116,7 +116,7 @@ def test_normalize_starting_point_size_normalization():
     result = analyzer.analyze(coords, n_harmonics=5, n_points=100)
 
     a1 = result.coefficients[0, 0]
-    a1_magnitude = np.sqrt(a1**2 + result.coefficients[0, 1]**2)
+    a1_magnitude = np.sqrt(a1**2 + result.coefficients[0, 1] ** 2)
     assert np.isclose(a1_magnitude, 1.0, atol=1e-10), f"Size normalization failed: |a1| = {a1_magnitude}"
 
 
@@ -175,7 +175,7 @@ def test_normalize_starting_point_rotation_invariance():
 
     # Both should satisfy the same invariants: |a1|=1, b1=0, a0=c0=0
     for result in [result_orig, result_rot]:
-        a1_amp = np.sqrt(result.coefficients[0, 0]**2 + result.coefficients[0, 1]**2)
+        a1_amp = np.sqrt(result.coefficients[0, 0] ** 2 + result.coefficients[0, 1] ** 2)
         assert np.isclose(a1_amp, 1.0, atol=1e-10), f"Rotation test: |a1| should be 1.0"
         assert np.isclose(result.a0, 0.0, atol=1e-10), f"Rotation test: a0 should be 0"
         assert np.isclose(result.c0, 0.0, atol=1e-10), f"Rotation test: c0 should be 0"
@@ -230,9 +230,13 @@ def test_normalize_starting_point_unit_circle():
 
     # High harmonics should be near zero for a circle
     for i in range(1, min(5, result.n_harmonics)):
-        amp = np.sqrt(result.coefficients[i, 0]**2 + result.coefficients[i, 1]**2 +
-                      result.coefficients[i, 2]**2 + result.coefficients[i, 3]**2)
-        assert amp < 0.01, f"Harmonic {i+1} should be near zero for circle, got {amp}"
+        amp = np.sqrt(
+            result.coefficients[i, 0] ** 2
+            + result.coefficients[i, 1] ** 2
+            + result.coefficients[i, 2] ** 2
+            + result.coefficients[i, 3] ** 2
+        )
+        assert amp < 0.01, f"Harmonic {i + 1} should be near zero for circle, got {amp}"
 
 
 def test_normalize_starting_point_ellipse():
@@ -247,7 +251,7 @@ def test_normalize_starting_point_ellipse():
     result = analyzer.analyze(coords, n_harmonics=5, n_points=100)
 
     # Size normalization: |a1| should be 1.0
-    a1_amp = np.sqrt(result.coefficients[0, 0]**2 + result.coefficients[0, 1]**2)
+    a1_amp = np.sqrt(result.coefficients[0, 0] ** 2 + result.coefficients[0, 1] ** 2)
     assert np.isclose(a1_amp, 1.0, atol=1e-10), f"Ellipse |a1| should be 1.0, got {a1_amp}"
 
     # b1 should be ~0 (ellipse major axis along x-axis after normalization)

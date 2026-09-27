@@ -176,9 +176,7 @@ def build_manifest(items: list[RunQueueItem], meta: dict[str, Any] | None = None
                 "started_at": item.started_at,
                 "finished_at": item.finished_at,
                 "duration_s": (
-                    round(item.finished_at - item.started_at, 3)
-                    if item.started_at and item.finished_at
-                    else None
+                    round(item.finished_at - item.started_at, 3) if item.started_at and item.finished_at else None
                 ),
             }
         )

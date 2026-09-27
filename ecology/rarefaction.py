@@ -199,12 +199,7 @@ def compute_sample_based_rarefaction(
         if denom <= 0:
             expected_species[j] = 0.0
             continue
-        terms = np.array(
-            [
-                1.0 - _combinations(n_total - int(occ), k_int) / denom
-                for occ in occurrences
-            ]
-        )
+        terms = np.array([1.0 - _combinations(n_total - int(occ), k_int) / denom for occ in occurrences])
         expected_species[j] = float(np.sum(terms))
 
     return [

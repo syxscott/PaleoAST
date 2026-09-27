@@ -57,13 +57,14 @@ def read_csv_with_fallback(path: str, **kwargs: Any) -> tuple[pd.DataFrame, str]
             continue
         if encoding != CSV_ENCODING_CANDIDATES[0]:
             logger.warning(
-                "CSV %s could not be read as %s; fell back to encoding '%s'. "
-                "Non-ASCII text may be misdecoded.",
+                "CSV %s could not be read as %s; fell back to encoding '%s'. Non-ASCII text may be misdecoded.",
                 path,
                 CSV_ENCODING_CANDIDATES[0],
                 encoding,
             )
         return df, encoding
-    raise last_error if last_error is not None else UnicodeDecodeError(
-        "utf-8", b"", 0, 1, "could not decode CSV with any known encoding"
+    raise (
+        last_error
+        if last_error is not None
+        else UnicodeDecodeError("utf-8", b"", 0, 1, "could not decode CSV with any known encoding")
     )

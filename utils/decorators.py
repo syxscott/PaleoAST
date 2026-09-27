@@ -374,8 +374,7 @@ def cache_result(
                     cache_key = key_func(*args, **kwargs)
                 except TypeError:
                     logging.getLogger(__name__).debug(
-                        "cache_result: key_func raised TypeError for %s; "
-                        "computing result without caching",
+                        "cache_result: key_func raised TypeError for %s; computing result without caching",
                         getattr(func, "__qualname__", repr(func)),
                     )
                     return func(*args, **kwargs)

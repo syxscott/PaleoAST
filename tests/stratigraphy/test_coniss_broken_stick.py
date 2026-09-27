@@ -120,18 +120,15 @@ class TestCONISSWithBrokenStick:
         n_vars = 5
 
         # Create data with 3 distinct zones
-        data = np.vstack([
-            np.random.randn(7, n_vars) + np.array([1.0, 1.0, 0.5, 0.3, 0.2]),
-            np.random.randn(7, n_vars) + np.array([0.0, 0.0, 0.0, 0.0, 0.0]),
-            np.random.randn(6, n_vars) + np.array([-1.0, -0.8, -0.5, -0.3, -0.2]),
-        ])
-
-        result, broken_stick = analyzer.analyze(
-            data,
-            n_zones=3,
-            compute_broken_stick=True,
-            n_permutations=99
+        data = np.vstack(
+            [
+                np.random.randn(7, n_vars) + np.array([1.0, 1.0, 0.5, 0.3, 0.2]),
+                np.random.randn(7, n_vars) + np.array([0.0, 0.0, 0.0, 0.0, 0.0]),
+                np.random.randn(6, n_vars) + np.array([-1.0, -0.8, -0.5, -0.3, -0.2]),
+            ]
         )
+
+        result, broken_stick = analyzer.analyze(data, n_zones=3, compute_broken_stick=True, n_permutations=99)
 
         assert result is not None
         assert broken_stick is not None
@@ -147,11 +144,7 @@ class TestCONISSWithBrokenStick:
 
         data = np.random.randn(10, 4)
 
-        result, broken_stick = analyzer.analyze(
-            data,
-            n_zones=3,
-            compute_broken_stick=False
-        )
+        result, broken_stick = analyzer.analyze(data, n_zones=3, compute_broken_stick=False)
 
         assert result is not None
         assert broken_stick is None
@@ -166,6 +159,7 @@ class TestCONISSWithBrokenStick:
 
         # Check result type
         from stratigraphy.coniss import CONISSResult
+
         assert isinstance(result, CONISSResult)
         assert isinstance(broken_stick, dict)
 
@@ -180,17 +174,19 @@ class TestCONISSWithBrokenStick:
 
         # Create data with very clear zones
         np.random.seed(123)
-        data = np.vstack([
-            np.random.randn(5, 3) + [2.0, 2.0, 2.0],
-            np.random.randn(5, 3) + [0.0, 0.0, 0.0],
-            np.random.randn(5, 3) + [-2.0, -2.0, -2.0],
-        ])
+        data = np.vstack(
+            [
+                np.random.randn(5, 3) + [2.0, 2.0, 2.0],
+                np.random.randn(5, 3) + [0.0, 0.0, 0.0],
+                np.random.randn(5, 3) + [-2.0, -2.0, -2.0],
+            ]
+        )
 
         result, broken_stick = analyzer.analyze(
             data,
             n_zones=3,
             compute_broken_stick=True,
-            n_permutations=199  # More permutations for better estimate
+            n_permutations=199,  # More permutations for better estimate
         )
 
         # Count significant p-values

@@ -70,9 +70,7 @@ class TestStateManagerThreadSafety:
         first_instance = instances[0]
         assert first_instance is not None
         for i, instance in enumerate(instances):
-            assert instance is first_instance, (
-                f"Thread {i} got different instance than thread 0"
-            )
+            assert instance is first_instance, f"Thread {i} got different instance than thread 0"
 
     def test_concurrent_get_instance_via_executor(self) -> None:
         """
@@ -91,9 +89,7 @@ class TestStateManagerThreadSafety:
         first_instance = instances[0]
         assert first_instance is not None
         for i, instance in enumerate(instances):
-            assert instance is first_instance, (
-                f"Future {i} got different instance"
-            )
+            assert instance is first_instance, f"Future {i} got different instance"
 
     def test_reset_instance_creates_new_instance(self) -> None:
         """
@@ -135,10 +131,7 @@ class TestStateManagerThreadSafety:
 
                     # Verify the setting was set
                     retrieved = state.get_visualization_setting(key)
-                    assert retrieved == value, (
-                        f"Thread {thread_id}, iteration {i}: "
-                        f"expected {value}, got {retrieved}"
-                    )
+                    assert retrieved == value, f"Thread {thread_id}, iteration {i}: expected {value}, got {retrieved}"
             except Exception as e:
                 errors.append(e)
 
@@ -159,9 +152,7 @@ class TestStateManagerThreadSafety:
                 key = f"setting_{thread_id}_{i}"
                 value = f"value_{thread_id}_{i}"
                 retrieved = state.get_visualization_setting(key)
-                assert retrieved == value, (
-                    f"Final verification failed for {key}: expected {value}, got {retrieved}"
-                )
+                assert retrieved == value, f"Final verification failed for {key}: expected {value}, got {retrieved}"
 
     def test_concurrent_read_write_operations(self) -> None:
         """
@@ -198,10 +189,7 @@ class TestStateManagerThreadSafety:
             try:
                 barrier.wait()
                 for i in range(iterations):
-                    state.set_visualization_setting(
-                        f"writer_{writer_id}_iter_{i}",
-                        f"value_{writer_id}_{i}"
-                    )
+                    state.set_visualization_setting(f"writer_{writer_id}_iter_{i}", f"value_{writer_id}_{i}")
             except Exception as e:
                 errors.append(e)
 

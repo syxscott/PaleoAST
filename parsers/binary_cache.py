@@ -299,9 +299,7 @@ class BinaryCache:
                 # 头部只认上述 4 种 dtype。此前不支持的 dtype (如 numpy 2.x
                 # 默认的 int64) 会按原始字节写入、却把头部标成 FLOAT64,
                 # 读取时按 float64 重解释 → 静默数据损坏。这里先安全转换。
-                self._logger.debug(
-                    f"Unsupported dtype {matrix.dtype} for binary cache; casting to float64"
-                )
+                self._logger.debug(f"Unsupported dtype {matrix.dtype} for binary cache; casting to float64")
                 matrix = matrix.astype(np.float64)
                 dtype = DataType.FLOAT64
 

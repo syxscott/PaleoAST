@@ -910,7 +910,10 @@ class PhyloTree:
         """
         if self.root is None:
             return ";"
-        return self.root.to_newick(branch_lengths=branch_lengths, internal_labels=internal_labels, precision=precision) + ";"
+        return (
+            self.root.to_newick(branch_lengths=branch_lengths, internal_labels=internal_labels, precision=precision)
+            + ";"
+        )
 
     @classmethod
     def from_newick(cls, newick: str, name: str = "") -> PhyloTree:

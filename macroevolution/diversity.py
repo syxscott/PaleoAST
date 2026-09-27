@@ -293,14 +293,12 @@ def range_through_diversity(
             if lad < b_hi and fad > b_lo:  # same strict overlap predicate
                 richness += 1
                 older_overlap = any(
-                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["max_ma"]) > b_hi
-                    for o in bins
+                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["max_ma"]) > b_hi for o in bins
                 )
                 if not older_overlap:
                     origination += 1
                 younger_overlap = any(
-                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["min_ma"]) < b_lo
-                    for o in bins
+                    lad < float(o["max_ma"]) and fad > float(o["min_ma"]) and float(o["min_ma"]) < b_lo for o in bins
                 )
                 if not younger_overlap and lad > 0:
                     extinction += 1
@@ -330,9 +328,7 @@ def interval_count_diversity(
     out = []
     for b in bins:
         taxa = {
-            str(r[name])
-            for r in binned_occurrences
-            if r.get("bin_assignment") == b["bin"] and r.get(name) is not None
+            str(r[name]) for r in binned_occurrences if r.get("bin_assignment") == b["bin"] and r.get(name) is not None
         }
         out.append({"bin": b["bin"], "mid_ma": b.get("mid_ma"), "richness": len(taxa)})
     return out

@@ -192,9 +192,7 @@ class TestDataMatrixMetadata:
             {"id": "S1", "geo": {"lat": 40.0, "lon": -100.0}},
             {"id": "S2", "geo": {"lat": 41.0, "lon": -101.0}},
         ]
-        col_meta = {
-            "X": {"description": "Test", "coding": {"0": "absent", "1": "present"}}
-        }
+        col_meta = {"X": {"description": "Test", "coding": {"0": "absent", "1": "present"}}}
 
         original = DataMatrix(
             [[0, 1], [1, 0]],

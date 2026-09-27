@@ -22,18 +22,18 @@ def test_foote_cohort_basic():
     records = [
         (12.0, 3.0),  # Through-timer: o=12>10 (older), L=3<5 (younger)
         (12.0, 8.0),  # Backward-only: o=12>10, L=8 in [5,10]
-        (8.0, 3.0),   # Forward-only: o=8 in [5,10], L=3<5
-        (8.0, 6.0),   # Both-in: o=8 in [5,10], L=6 in [5,10]
+        (8.0, 3.0),  # Forward-only: o=8 in [5,10], L=3<5
+        (8.0, 6.0),  # Both-in: o=8 in [5,10], L=6 in [5,10]
     ]
     intervals = [(5.0, 10.0)]
 
     result = analysis.analyze(records, intervals)
 
     # Sanity: result exposes the Foote cohort rates
-    assert hasattr(result, 'foote97_origination')
-    assert hasattr(result, 'foote97_extinction')
-    assert hasattr(result, 'foote00_origination')
-    assert hasattr(result, 'foote00_extinction')
+    assert hasattr(result, "foote97_origination")
+    assert hasattr(result, "foote97_extinction")
+    assert hasattr(result, "foote00_origination")
+    assert hasattr(result, "foote00_extinction")
 
     # Classification under the (o, L) = (origin, extinction) interpretation
     # with interval treated as closed at both ends:
@@ -113,8 +113,8 @@ def test_foote2000_simplified_rates():
     records = [
         (12.0, 3.0),  # through-timer  → n_surv, n_bt, n_ft
         (12.0, 8.0),  # backward-only  → n_lb,  n_bt, n_fl
-        (8.0, 3.0),   # forward-only   → n_fb,  n_bl, n_ft
-        (8.0, 6.0),   # both-in        → n_bl,  n_fl
+        (8.0, 3.0),  # forward-only   → n_fb,  n_bl, n_ft
+        (8.0, 6.0),  # both-in        → n_bl,  n_fl
     ]
     intervals = [(5.0, 10.0)]
 
@@ -173,14 +173,14 @@ def test_interval_sequence():
     # interval so that the "through-timer" classification is unambiguous.
     records = [
         (20.0, 2.0),  # through-timer across all intervals
-        (16.0, 12.0), # through interval 1, extinct in interval 2
-        (8.0, 3.0),   # originated in interval 2
-        (7.0, 2.0),   # through interval 2
+        (16.0, 12.0),  # through interval 1, extinct in interval 2
+        (8.0, 3.0),  # originated in interval 2
+        (7.0, 2.0),  # through interval 2
     ]
 
     intervals = [
         (10.0, 15.0),  # Interval 1
-        (5.0, 10.0),   # Interval 2
+        (5.0, 10.0),  # Interval 2
     ]
 
     result = analysis.analyze(records, intervals)
@@ -214,8 +214,7 @@ def test_empty_interval():
 
     # The taxon is a boundary crosser (n_lb = 1), so n_total must be 1
     assert result.intervals[0].n_total > 0, (
-        f"Expected n_total > 0, got {result.intervals[0].n_total}; "
-        f"interval_data={result.intervals[0]}"
+        f"Expected n_total > 0, got {result.intervals[0].n_total}; interval_data={result.intervals[0]}"
     )
     assert result.intervals[0].n_lb == 1
     assert result.intervals[0].n_total == 1

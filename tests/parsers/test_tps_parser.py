@@ -25,7 +25,9 @@ class TestTPSParserBOM:
             assert result.n_landmarks == 3
             assert len(result.specimens) == 1
             assert result.specimens[0].id == "Specimen1"
-            np.testing.assert_array_almost_equal(result.specimens[0].landmarks, [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]])
+            np.testing.assert_array_almost_equal(
+                result.specimens[0].landmarks, [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]]
+            )
         finally:
             Path(filepath).unlink()
 
@@ -315,9 +317,7 @@ class TestTPSCurveSections:
     """CO=/POINTS= curve accumulation and get_curves() wiring (W2)."""
 
     def _write(self, content: str) -> str:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", suffix=".tps", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".tps", delete=False) as f:
             f.write(content)
         return f.name
 

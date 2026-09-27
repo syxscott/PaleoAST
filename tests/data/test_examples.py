@@ -217,9 +217,7 @@ class TestPrimateTraitsDataset:
         tree_species = set(tree.leaf_names)
         trait_species = set(traits["species"].values)
 
-        assert tree_species == trait_species, (
-            f"Tree species {tree_species} do not match trait species {trait_species}"
-        )
+        assert tree_species == trait_species, f"Tree species {tree_species} do not match trait species {trait_species}"
 
     def test_load_primate_traits_no_nans(self):
         """Test that trait data contains no NaN values in numeric columns."""

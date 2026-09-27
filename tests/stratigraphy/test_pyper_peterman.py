@@ -40,9 +40,7 @@ def test_pyper_peterman_white_noise():
 
     # For white noise, n_eff should be close to n
     assert n_orig == n, f"Original n should be {n}, got {n_orig}"
-    assert 0.5 * n <= n_eff <= n, (
-        f"For white noise, n_eff should be between 0.5*n and n, got {n_eff}"
-    )
+    assert 0.5 * n <= n_eff <= n, f"For white noise, n_eff should be between 0.5*n and n, got {n_eff}"
 
 
 def test_pyper_peterman_ar1_high_autocorrelation():
@@ -63,9 +61,7 @@ def test_pyper_peterman_ar1_high_autocorrelation():
 
     assert n_orig == n
     # With phi=0.9, effective sample size should be much smaller
-    assert n_eff < 0.5 * n, (
-        f"With phi={phi}, n_eff should be < 0.5*n={0.5*n}, got {n_eff}"
-    )
+    assert n_eff < 0.5 * n, f"With phi={phi}, n_eff should be < 0.5*n={0.5 * n}, got {n_eff}"
 
 
 def test_pyper_peterman_ar1_low_autocorrelation():
@@ -109,9 +105,7 @@ def test_pyper_peterman_vs_pearsonr():
 
     # The corrected p-value should be larger than uncorrected
     # for autocorrelated data (more conservative)
-    assert p_corr >= p_uncorr - 1e-10, (
-        f"Corrected p={p_corr} should be >= uncorrected p={p_uncorr}"
-    )
+    assert p_corr >= p_uncorr - 1e-10, f"Corrected p={p_corr} should be >= uncorrected p={p_uncorr}"
     assert n_eff <= n_orig
 
 
@@ -134,7 +128,7 @@ def test_pyper_peterman_nan_handling():
     r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
 
     # Should handle NaNs gracefully
-    assert n_orig == n - 3, f"Expected n_orig={n-3}, got {n_orig}"
+    assert n_orig == n - 3, f"Expected n_orig={n - 3}, got {n_orig}"
     assert not np.isnan(r)
     assert not np.isnan(p_corr)
 

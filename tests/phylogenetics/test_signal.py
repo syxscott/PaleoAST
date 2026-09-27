@@ -60,8 +60,7 @@ class TestBlombergK:
         tree = PhyloTree.from_newick("(A:1,B:1,C:1,D:1)Root:1;")
 
         # 随机性状 (无信号)
-        traits = {"A": np.random.normal(), "B": np.random.normal(),
-                  "C": np.random.normal(), "D": np.random.normal()}
+        traits = {"A": np.random.normal(), "B": np.random.normal(), "C": np.random.normal(), "D": np.random.normal()}
 
         result = blomberg_k(tree, traits, n_permutations=99)
 
@@ -124,8 +123,7 @@ class TestPagelLambda:
 
         tree = PhyloTree.from_newick("(A:1,B:1,C:1,D:1)Root:1;")
         traits = {f"taxon_{i}": np.random.normal() for i in range(4)}
-        traits = {"A": np.random.normal(), "B": np.random.normal(),
-                  "C": np.random.normal(), "D": np.random.normal()}
+        traits = {"A": np.random.normal(), "B": np.random.normal(), "C": np.random.normal(), "D": np.random.normal()}
 
         result = pagel_lambda(tree, traits)
 
@@ -188,10 +186,12 @@ class TestPhylogeneticSignalCombined:
         np.random.seed(999)
 
         tree = PhyloTree.from_newick("(A:1,B:1,C:1,D:1)Root:1;")
-        traits = {"A": np.random.uniform(0, 1),
-                  "B": np.random.uniform(0, 1),
-                  "C": np.random.uniform(0, 1),
-                  "D": np.random.uniform(0, 1)}
+        traits = {
+            "A": np.random.uniform(0, 1),
+            "B": np.random.uniform(0, 1),
+            "C": np.random.uniform(0, 1),
+            "D": np.random.uniform(0, 1),
+        }
 
         result = phylogenetic_signal(tree, traits, n_permutations=99)
 
@@ -354,7 +354,7 @@ class TestPhylogeneticSignalResult:
             log_likelihood=-10.5,
             AIC=23.0,
             n_taxa=10,
-            trait_name="body_size"
+            trait_name="body_size",
         )
 
         assert result.K == 1.5

@@ -159,12 +159,8 @@ class DataMatrix:
 
         # Initialize metadata
         self._metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
-        self._specimen_metadata: list[dict[str, Any]] = self._init_specimen_metadata(
-            n_samples, specimen_metadata
-        )
-        self._column_metadata: dict[str, dict[str, Any]] = self._init_column_metadata(
-            n_variables, column_metadata
-        )
+        self._specimen_metadata: list[dict[str, Any]] = self._init_specimen_metadata(n_samples, specimen_metadata)
+        self._column_metadata: dict[str, dict[str, Any]] = self._init_column_metadata(n_variables, column_metadata)
 
         # Thread lock for concurrent access
         self._lock = threading.RLock()
@@ -499,9 +495,7 @@ class DataMatrix:
                 except ValueError:
                     raise ValueError(f"Specimen label '{specimen_id}' not found in row labels")
 
-    def set_specimen_metadata(
-        self, specimen_id: Union[int, str], key: str, value: Any
-    ) -> None:
+    def set_specimen_metadata(self, specimen_id: Union[int, str], key: str, value: Any) -> None:
         """
         Set a specific metadata field for a specimen.
 
@@ -703,15 +697,13 @@ class DataMatrix:
             # Original specimen_metadata (per-row) becomes new column_metadata (per-column)
             # Original col_labels[i] becomes new column label, so use specimen_metadata[i]
             new_column_meta: dict[str, dict[str, Any]] = {
-                row_label: dict(self._specimen_metadata[i])
-                for i, row_label in enumerate(self._row_labels)
+                row_label: dict(self._specimen_metadata[i]) for i, row_label in enumerate(self._row_labels)
             }
 
             # Original column_metadata (per-column) becomes new specimen_metadata (per-row)
             # Original col_labels[i] becomes new row label
             new_specimen_meta: list[dict[str, Any]] = [
-                dict(self._column_metadata.get(col_label, {}))
-                for col_label in self._col_labels
+                dict(self._column_metadata.get(col_label, {})) for col_label in self._col_labels
             ]
 
             return DataMatrix(

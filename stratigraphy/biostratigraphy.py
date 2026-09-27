@@ -108,20 +108,14 @@ class BioeventResult:
                     )
                 )
             if len(self.uaz_groups) > 5:
-                lines.append(
-                    _("  ... ({0} more UAZ)").format(len(self.uaz_groups) - 5)
-                )
+                lines.append(_("  ... ({0} more UAZ)").format(len(self.uaz_groups) - 5))
             lines.append("")
 
         if self.endemic_filtered_events:
-            lines.append(
-                _("Endemic species filtered: {0}").format(len(self.endemic_filtered_events))
-            )
+            lines.append(_("Endemic species filtered: {0}").format(len(self.endemic_filtered_events)))
 
         if self.cyclic_contradictions:
-            lines.append(
-                _("Cyclic contradictions detected: {0}").format(len(self.cyclic_contradictions))
-            )
+            lines.append(_("Cyclic contradictions detected: {0}").format(len(self.cyclic_contradictions)))
 
         if self.ranking:
             lines.append(_("Event Ranking (RASC):"))
@@ -231,13 +225,9 @@ class UAAnalyzer:
             # Step 2: Cyclic contradiction detection (opt-in via UI / API)
             # ------------------------------------------------------------------
             if enable_cyclic_check:
-                cyclic_contradictions = self._detect_cyclic_contradictions(
-                    fad=fad, lad=lad, event_names=event_names
-                )
+                cyclic_contradictions = self._detect_cyclic_contradictions(fad=fad, lad=lad, event_names=event_names)
             else:
-                self._logger.info(
-                    _("Cyclic contradiction detection skipped by user request")
-                )
+                self._logger.info(_("Cyclic contradiction detection skipped by user request"))
                 cyclic_contradictions = []
 
             # Build overlap graph
@@ -265,7 +255,8 @@ class UAAnalyzer:
                 # Build a single-pass index instead of recomputing
                 # ``next(...)`` for every zone-to-UAZ link.
                 uaz_by_id: dict[int, dict[str, object]] = {
-                    int(u["uaz_id"]): u for u in uaz_groups  # type: ignore[arg-type]
+                    int(u["uaz_id"]): u
+                    for u in uaz_groups  # type: ignore[arg-type]
                 }
                 zone_lookup: dict[int, list[int]] = {idx: [] for idx in range(len(zones))}
                 for uaz in uaz_groups:
@@ -496,7 +487,11 @@ class UAAnalyzer:
                 )
                 # Defensive fallback: keep the most widespread species
                 counts = [
-                    int(np.sum(np.isfinite(fad_arr[:, c]) & np.isfinite(lad_arr[:, c]) & (fad_arr[:, c] <= lad_arr[:, c])))
+                    int(
+                        np.sum(
+                            np.isfinite(fad_arr[:, c]) & np.isfinite(lad_arr[:, c]) & (fad_arr[:, c] <= lad_arr[:, c])
+                        )
+                    )
                     for c in range(n_events)
                 ]
                 best = int(np.argmax(counts)) if counts else 0
@@ -600,9 +595,7 @@ class UAAnalyzer:
                         )
 
             if not contradictions:
-                self._logger.info(
-                    _("No cyclic FAD contradictions detected across {0} sections").format(n_sections)
-                )
+                self._logger.info(_("No cyclic FAD contradictions detected across {0} sections").format(n_sections))
             else:
                 self._logger.warning(
                     _("Detected {0} cyclic FAD contradiction(s) across {1} sections").format(
@@ -685,9 +678,7 @@ class UAAnalyzer:
             # Initialise the predecessor chain consistently with the
             # current adjacency.
             for k in range(1, len(merged_sets)):
-                dissimilarity_to_prev[k] = _pair_dissimilarity(
-                    merged_sets[k - 1], merged_sets[k]
-                )
+                dissimilarity_to_prev[k] = _pair_dissimilarity(merged_sets[k - 1], merged_sets[k])
 
             # Iterative single-link-style merging: pick the best adjacent
             # similarity, merge it, recompute, repeat until threshold unmet.
@@ -736,15 +727,11 @@ class UAAnalyzer:
                     # former (b+1) entry whose predecessor is now the new
                     # merged group.
                     if a > 0:
-                        dissimilarity_to_prev[a] = _pair_dissimilarity(
-                            merged_sets[a - 1], merged_sets[a]
-                        )
+                        dissimilarity_to_prev[a] = _pair_dissimilarity(merged_sets[a - 1], merged_sets[a])
                     else:
                         dissimilarity_to_prev[a] = 0.0
                     if a + 1 < len(merged_sets):
-                        dissimilarity_to_prev[a + 1] = _pair_dissimilarity(
-                            merged_sets[a], merged_sets[a + 1]
-                        )
+                        dissimilarity_to_prev[a + 1] = _pair_dissimilarity(merged_sets[a], merged_sets[a + 1])
                     progress = True
 
             # Build UAZ groups
@@ -771,11 +758,7 @@ class UAAnalyzer:
                 # implementation conflated the two and reported the
                 # internal-merge value, which is unrelated to the
                 # neighbouring UAZ.
-                pred_d = (
-                    float(dissimilarity_to_prev[chain_idx])
-                    if chain_idx < len(dissimilarity_to_prev)
-                    else 0.0
-                )
+                pred_d = float(dissimilarity_to_prev[chain_idx]) if chain_idx < len(dissimilarity_to_prev) else 0.0
                 if not np.isfinite(pred_d):
                     pred_d = float("inf")
                 chain.append(

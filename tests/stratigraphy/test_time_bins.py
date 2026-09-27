@@ -98,8 +98,14 @@ class TestBinTimeMethods:
     def test_majority_golden(self, edge_occurrences, five_bins_10myr):
         rows = bin_time(edge_occurrences, five_bins_10myr, method="majority")
         expected = {
-            1: (1, 100.0), 2: (2, 100.0), 3: (1, 50.0), 4: (2, 90.0),
-            5: (2, 50.0), 6: (1, 20.0), 7: (1, 100.0), 8: (2, 100.0),
+            1: (1, 100.0),
+            2: (2, 100.0),
+            3: (1, 50.0),
+            4: (2, 90.0),
+            5: (2, 50.0),
+            6: (1, 20.0),
+            7: (1, 100.0),
+            8: (2, 100.0),
         }
         for r in rows:
             exp_bin, exp_pct = expected[r["id"]]
@@ -126,9 +132,7 @@ class TestBinTimeMethods:
         assert {ds[0]["bin_assignment"] for ds in datasets} == {1}
         # deterministic with seed
         again = bin_time(edge_occurrences, five_bins_10myr, method="random", reps=7, seed=3)
-        assert [[r["bin_assignment"] for r in d] for d in datasets] == [
-            [r["bin_assignment"] for r in d] for d in again
-        ]
+        assert [[r["bin_assignment"] for r in d] for d in datasets] == [[r["bin_assignment"] for r in d] for d in again]
 
     def test_point_uniform(self, five_bins_10myr):
         occ = [{"taxon": "p", "min_ma": 15, "max_ma": 15}, {"taxon": "q", "min_ma": 0, "max_ma": 50}]
@@ -145,7 +149,11 @@ class TestBinTimeMethods:
     def test_point_custom_density(self, five_bins_10myr):
         occ = [{"min_ma": 0, "max_ma": 50}]
         datasets = bin_time(
-            occ, five_bins_10myr, method="point", reps=20, seed=2,
+            occ,
+            five_bins_10myr,
+            method="point",
+            reps=20,
+            seed=2,
             fun=lambda x: np.exp(-((x - 0.5) ** 2) / 0.02),
         )
         est = [d[0]["point_estimates"] for d in datasets]

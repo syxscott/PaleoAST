@@ -74,9 +74,7 @@ def test_each_algorithm_is_a_distinct_null_model():
     """'rrs' and 'rcs' used to be silent aliases of 'shuffle'."""
     analyzer = NullModelAnalyzer()
     means = {
-        algorithm: analyzer.analyze(
-            MATRIX, algorithm=algorithm, n_permutations=400, random_seed=3
-        ).mean_simulated
+        algorithm: analyzer.analyze(MATRIX, algorithm=algorithm, n_permutations=400, random_seed=3).mean_simulated
         for algorithm in ("swap", "rrs", "rcs", "shuffle")
     }
     assert len({round(v, 6) for v in means.values()}) == len(means)
@@ -106,9 +104,7 @@ def test_parallel_runs_every_requested_replicate():
     # n_permutations = 997 does not divide by any worker count; the old
     # floor-division chunking silently discarded the tail.
     for n_workers in (2, 3, 4, 8):
-        result = analyzer.analyze(
-            MATRIX, n_permutations=997, n_workers=n_workers, algorithm="swap", random_seed=11
-        )
+        result = analyzer.analyze(MATRIX, n_permutations=997, n_workers=n_workers, algorithm="swap", random_seed=11)
         assert result.n_permutations == 997
         assert result.simulated_scores.size == 997
 
@@ -124,9 +120,7 @@ def test_parallel_matches_sequential_distribution():
 
 def test_p_value_uses_performed_replicates():
     result = NullModelAnalyzer().analyze(MATRIX, n_permutations=101, random_seed=2)
-    expected = (1 + np.sum(result.simulated_scores >= result.observed_score)) / (
-        result.n_permutations + 1
-    )
+    expected = (1 + np.sum(result.simulated_scores >= result.observed_score)) / (result.n_permutations + 1)
     assert result.p_value == pytest.approx(expected)
     assert 0.0 < result.p_value <= 1.0
 

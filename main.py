@@ -28,6 +28,7 @@ from typing import Any
 # 防止与 QThreadPool oversubscription 导致 CPU 利用率下降
 # =============================================================================
 import os
+
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -256,9 +257,7 @@ class ExceptionHandler:
                 QMessageBox.information(None, _("Exported"), _("Log saved to:\n{0}").format(path))
         except Exception as e:
             # Log the failure rather than swallowing it silently.
-            logging.getLogger("PaleoAST.ExceptionHandler").warning(
-                "Failed to export log file: %s", e
-            )
+            logging.getLogger("PaleoAST.ExceptionHandler").warning("Failed to export log file: %s", e)
 
 
 # =============================================================================

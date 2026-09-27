@@ -500,9 +500,7 @@ def _chao1_unseen(f1: float, f2: float) -> float:
     return float(max(0.0, (f1 * (f1 - 1.0)) / 2.0))
 
 
-def _chao_shen_proportions(
-    counts: npt.NDArray, n: float, f1: float
-) -> tuple[npt.NDArray, float]:
+def _chao_shen_proportions(counts: npt.NDArray, n: float, f1: float) -> tuple[npt.NDArray, float]:
     """
     Bias-corrected relative abundances of the observed species.
 
@@ -616,9 +614,7 @@ def _hill_from_index(value: float, q: int) -> float:
     return float(1.0 / lam)
 
 
-def _hill_asymptote(
-    counts: npt.NDArray, n: float, q: int, f1: float, f2: float, s_obs: int
-) -> float:
+def _hill_asymptote(counts: npt.NDArray, n: float, q: int, f1: float, f2: float, s_obs: int) -> float:
     """
     Asymptotic (complete-sample) Hill number of order ``q``.
 
@@ -878,9 +874,7 @@ def coverage_rarefaction_hill(
         sample_names = [f"Sample_{i + 1}" for i in range(n_samples)]
     elif len(sample_names) != n_samples:
         raise ValidationError(
-            _("Number of sample names ({0}) must match matrix rows ({1})").format(
-                len(sample_names), n_samples
-            )
+            _("Number of sample names ({0}) must match matrix rows ({1})").format(len(sample_names), n_samples)
         )
 
     if q not in (0, 1, 2):
@@ -939,14 +933,10 @@ def coverage_rarefaction_hill(
 
             boot_f1, boot_f2 = _frequency_classes(boot_counts)
             boot_coverage = _sample_coverage(boot_counts, boot_N, boot_f1, boot_f2)
-            boot_asymptote = _hill_asymptote(
-                boot_counts, boot_N, q, boot_f1, boot_f2, int(boot_counts.size)
-            )
+            boot_asymptote = _hill_asymptote(boot_counts, boot_N, q, boot_f1, boot_f2, int(boot_counts.size))
             boot_curve = np.array(
                 [
-                    _coverage_curve_point(
-                        boot_counts, boot_N, q, c_level, boot_coverage, boot_asymptote
-                    )
+                    _coverage_curve_point(boot_counts, boot_N, q, c_level, boot_coverage, boot_asymptote)
                     for c_level in coverage_levels
                 ]
             )
@@ -960,9 +950,7 @@ def coverage_rarefaction_hill(
         # only to estimate the standard error / confidence bounds.
         observed_curve = np.array(
             [
-                _coverage_curve_point(
-                    species_counts, total_n, q, c_level, coverage_i, asymptote[i]
-                )
+                _coverage_curve_point(species_counts, total_n, q, c_level, coverage_i, asymptote[i])
                 for c_level in coverage_levels
             ]
         )
@@ -1371,9 +1359,7 @@ class CoverageRarefactionAnalyzer:
         # Whole-number abundances are required by the frequency spectrum;
         # round once (single warning) instead of mixing truncated and
         # float-valued counts, and keep the total consistent with the counts.
-        abundance_matrix = _integerize_abundances(
-            abundance_matrix, context="abundance_matrix"
-        )
+        abundance_matrix = _integerize_abundances(abundance_matrix, context="abundance_matrix")
 
         for i in range(n_samples):
             row = abundance_matrix[i]
@@ -1545,14 +1531,6 @@ class CoverageRarefactionAnalyzer:
 
         # log C(N - K, n) + log C(K, 0) - log C(N, n)
         # C(K, 0) = 1 -> log = 0
-        log_num = (
-            math.lgamma(N - K + 1)
-            - math.lgamma(n + 1)
-            - math.lgamma(N - K - n + 1)
-        )
-        log_den = (
-            math.lgamma(N + 1)
-            - math.lgamma(n + 1)
-            - math.lgamma(N - n + 1)
-        )
+        log_num = math.lgamma(N - K + 1) - math.lgamma(n + 1) - math.lgamma(N - K - n + 1)
+        log_den = math.lgamma(N + 1) - math.lgamma(n + 1) - math.lgamma(N - n + 1)
         return math.exp(log_num - log_den)

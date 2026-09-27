@@ -97,6 +97,7 @@ class PhylogeneticSignalResult:
         n_taxa: 分类单元数量
         trait_name: 性状名称 (如果有)
     """
+
     K: float | None = None
     lambda_: float | None = None
     K_pvalue: float | None = None
@@ -123,7 +124,7 @@ def _compute_vcv_matrix(tree, leaves=None) -> np.ndarray:
     返回:
         V: n × n VCV 矩阵
     """
-    if hasattr(tree, 'root'):
+    if hasattr(tree, "root"):
         root = tree.root
     else:
         root = tree
@@ -168,7 +169,7 @@ def _align_traits_to_tree(tree, traits: dict[str, float], method: str):
     Raises:
         ValueError: 树为空、无 tip、性状字典为空、或有效 tip 少于 3 个。
     """
-    if hasattr(tree, 'root'):
+    if hasattr(tree, "root"):
         root = tree.root
     else:
         root = tree
@@ -196,8 +197,8 @@ def _align_traits_to_tree(tree, traits: dict[str, float], method: str):
             len(dropped),
             ", ".join(str(name) for name in dropped[:10]),
         )
-        if hasattr(tree, 'metadata'):
-            tree.metadata['signal_missing_tips'] = [str(name) for name in dropped]
+        if hasattr(tree, "metadata"):
+            tree.metadata["signal_missing_tips"] = [str(name) for name in dropped]
 
     if len(kept) < 3:
         raise ValueError(
@@ -207,7 +208,6 @@ def _align_traits_to_tree(tree, traits: dict[str, float], method: str):
 
     y = np.array([float(traits[leaf.name]) for leaf in kept], dtype=float)
     return root, kept, y, dropped
-
 
 
 def _blomberg_k_from_vcv(y: np.ndarray, V: np.ndarray) -> float:
@@ -323,9 +323,7 @@ def blomberg_k(
         trait_name=trait_name,
     )
 
-    logger.info(
-        f"Blomberg's K = {K:.4f} (p = {p_value:.4f}) based on {n_permutations} permutations"
-    )
+    logger.info(f"Blomberg's K = {K:.4f} (p = {p_value:.4f}) based on {n_permutations} permutations")
 
     return result
 
@@ -466,12 +464,7 @@ def pagel_lambda(
         return -_pagel_log_likelihood(V_base, trait_values, lambda_)
 
     # 使用bounded优化
-    result = minimize_scalar(
-        neg_log_lik,
-        bounds=(0.0, 1.0),
-        method='bounded',
-        options={'xatol': 1e-8}
-    )
+    result = minimize_scalar(neg_log_lik, bounds=(0.0, 1.0), method="bounded", options={"xatol": 1e-8})
 
     lambda_fitted = result.x
     log_lik_fitted = -result.fun
@@ -510,10 +503,7 @@ def pagel_lambda(
         trait_name=trait_name,
     )
 
-    logger.info(
-        f"Pagel's λ = {lambda_fitted:.4f} (p = {p_value:.4f}), "
-        f"logL = {log_lik_fitted:.4f}"
-    )
+    logger.info(f"Pagel's λ = {lambda_fitted:.4f} (p = {p_value:.4f}), logL = {log_lik_fitted:.4f}")
 
     return signal_result
 
@@ -590,7 +580,7 @@ def simulate_brownian_motion(
     Raises:
         ValueError: 树为空 (无根节点) 或 sigma < 0
     """
-    if hasattr(tree, 'root'):
+    if hasattr(tree, "root"):
         root = tree.root
     else:
         root = tree

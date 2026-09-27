@@ -78,10 +78,7 @@ def sqrt_transform(data: npt.NDArray) -> npt.NDArray:
     valid = ~np.isnan(result)
     if np.any(result[valid] < 0):
         neg_count = int(np.sum(result[valid] < 0))
-        raise ValueError(
-            f"sqrt_transform requires non-negative data; "
-            f"found {neg_count} negative value(s)."
-        )
+        raise ValueError(f"sqrt_transform requires non-negative data; found {neg_count} negative value(s).")
     result[valid] = np.sqrt(result[valid])
     return result
 

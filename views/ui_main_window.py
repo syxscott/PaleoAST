@@ -196,11 +196,9 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             return _("{0}失败：数据为空。\n\n请确保已选中有效的数据区域。").format(operation_hint)
 
         # 通用数据类型错误
-        return _(
-            "{0}失败：数据类型错误。\n\n"
-            "错误信息：{1}\n\n"
-            "请检查选中的数据是否为数值类型，并确保无缺失值。"
-        ).format(operation_hint, error_msg[:100])
+        return _("{0}失败：数据类型错误。\n\n错误信息：{1}\n\n请检查选中的数据是否为数值类型，并确保无缺失值。").format(
+            operation_hint, error_msg[:100]
+        )
 
     # 验证错误
     if "ValidationError" in type(e).__name__ or "验证" in error_msg:
@@ -1550,9 +1548,7 @@ class MainWindow(QMainWindow):
         self._btn_biostrat = bio_group.addButton("stratigraphy", _("Biozone"), _("UA/RASC Biostratigraphy"))
 
         paleo_group = strat_tab.addGroup(_("Paleo-Environment"))
-        self._btn_paleo_env = paleo_group.addButton(
-            "stratigraphy", _("CA Axis"), _("Paleo-Env. CA Reconstruction")
-        )
+        self._btn_paleo_env = paleo_group.addButton("stratigraphy", _("CA Axis"), _("Paleo-Env. CA Reconstruction"))
 
         markov_group = strat_tab.addGroup(_("Facies"))
         self._btn_markov = markov_group.addButton("stratigraphy", _("Markov"), _("Markov Chain Analysis"))
@@ -2044,23 +2040,15 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setWindowTitle(_("Language Changed"))
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setText(
-            _("The language has been changed to {0}.").format(
-                "中文" if lang == "zh" else "English"
-            )
-        )
+        msg.setText(_("The language has been changed to {0}.").format("中文" if lang == "zh" else "English"))
         msg.setInformativeText(_("Restart now to apply the change?"))
-        msg.setStandardButtons(
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.button(QMessageBox.StandardButton.Yes).setText(_("Restart Now"))
         msg.button(QMessageBox.StandardButton.No).setText(_("Apply on Next Start"))
         if msg.exec() != QMessageBox.StandardButton.Yes:
             # 用户选择"下次启动生效": 选择已保存, 无需进一步操作
             self._status_bar.setInfo(
-                _("Language will change to {0} on next start.").format(
-                    "中文" if lang == "zh" else "English"
-                )
+                _("Language will change to {0} on next start.").format("中文" if lang == "zh" else "English")
             )
             return
 
@@ -2296,7 +2284,9 @@ class MainWindow(QMainWindow):
                 # modification: do not flag the project as modified.
                 self._state.set_data_matrix(matrix, mark_modified=False)
 
-                self._spreadsheet.load_data(matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels, update_state=False)
+                self._spreadsheet.load_data(
+                    matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels, update_state=False
+                )
                 self._workspace.setCurrentIndex(self._spreadsheet_index)
 
                 # Update UI state now that we have data
@@ -2381,9 +2371,7 @@ class MainWindow(QMainWindow):
                 try:
                     canvas.draw_idle()
                 except Exception:
-                    self._logger.debug(
-                        "canvas.draw_idle() failed during re-theme", exc_info=True
-                    )
+                    self._logger.debug("canvas.draw_idle() failed during re-theme", exc_info=True)
         except Exception:
             self._logger.debug("_retheme_embedded_figures failed", exc_info=True)
 
@@ -3091,8 +3079,7 @@ class MainWindow(QMainWindow):
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
-    def _run_analysis_async(self, work, on_success, on_error, title: str,
-                            wants_reporter: bool = False) -> None:
+    def _run_analysis_async(self, work, on_success, on_error, title: str, wants_reporter: bool = False) -> None:
         """在后台线程运行分析并接气回调。
 
         信号桥必须是 QObject: pyqtSignal 只有挂在 QObject 实例上才能
@@ -3120,9 +3107,7 @@ class MainWindow(QMainWindow):
         signals = _AnalysisSignals(self)
         signals.result_ready.connect(on_success)
         signals.error_raised.connect(on_error)
-        signals.progress.connect(
-            lambda value, maximum: self._status_bar.setProgress(value, maximum)
-        )
+        signals.progress.connect(lambda value, maximum: self._status_bar.setProgress(value, maximum))
 
         task = _AnalysisTask(work, signals, wants_reporter=wants_reporter)
         self._thread_pool.start(task)
@@ -3321,9 +3306,7 @@ class MainWindow(QMainWindow):
     def _execute_pcoa(self, params: dict, on_done=None, on_fail=None) -> None:
         """Run PCoA (synchronous) and plot; on_done/on_fail for the runlist."""
         try:
-            result = self._statistics_controller.run_pcoa(
-                metric=params["metric"], n_components=params["n_components"]
-            )
+            result = self._statistics_controller.run_pcoa(metric=params["metric"], n_components=params["n_components"])
 
             plot = InteractivePlotCanvas()
             plot.plot_pcoa_scores(result)
@@ -3333,11 +3316,7 @@ class MainWindow(QMainWindow):
 
             ev = result.proportion_explained
             cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
-            self._status_bar.setInfo(
-                _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(
-                    result.n_components, cum2
-                )
-            )
+            self._status_bar.setInfo(_("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(result.n_components, cum2))
 
         except Exception as e:
             self._logger.error(f"PCoA analysis failed: {e}")
@@ -3369,6 +3348,7 @@ class MainWindow(QMainWindow):
         callback only emits ``signals.progress`` (queued to the GUI thread)
         via the reporter handed to ``_run_analysis_async``.
         """
+
         def _work(reporter):
             # 多重启动 SMACOF 是长时间计算, 必须在后台线程执行
             # (旧实现在 GUI 线程同步运行, 大矩阵会冻结界面)
@@ -3760,9 +3740,7 @@ class MainWindow(QMainWindow):
                 plot.plot_summary_statistics(data, col_names, result.columns)
                 idx = self._add_plot_to_workspace(plot, _("Summary Statistics"))
                 self._workspace.setCurrentIndex(idx)
-                self._status_bar.setInfo(
-                    _("Summary: {0} variables, {1} samples").format(data.shape[1], data.shape[0])
-                )
+                self._status_bar.setInfo(_("Summary: {0} variables, {1} samples").format(data.shape[1], data.shape[0]))
 
             elif test_type == 1:  # Normality
                 results = self._statistics_controller.analyze_normality(data, col_names)
@@ -4050,7 +4028,8 @@ class MainWindow(QMainWindow):
                 sample_names = list(self._state.data_matrix.row_labels or [])
                 plot = InteractivePlotCanvas()
                 plot.plot_coniss_dendrogram(
-                    result.linkage_matrix, result.n_zones,
+                    result.linkage_matrix,
+                    result.n_zones,
                     sample_names=sample_names if sample_names else None,
                 )
                 plot_index = self._add_plot_to_workspace(plot, _("CONISS Dendrogram"))
@@ -4079,17 +4058,17 @@ class MainWindow(QMainWindow):
                 # Plot transition probability heatmap
                 plot = InteractivePlotCanvas()
                 plot.plot_markov_heatmap(
-                    result.transition_matrix, result.facies_names,
-                    chi2_stat=result.chi_squared, p_value=result.p_value,
+                    result.transition_matrix,
+                    result.facies_names,
+                    chi2_stat=result.chi_squared,
+                    p_value=result.p_value,
                 )
                 plot_index = self._add_plot_to_workspace(plot, _("Markov Transition Matrix"))
                 self._workspace.setCurrentIndex(plot_index)
 
                 sig = "Markovian" if result.is_markovian else "Random"
                 self._status_bar.setInfo(
-                    _("Markov: χ²={0:.1f}, p={1:.4f} ({2})").format(
-                        result.chi_squared, result.p_value, sig
-                    )
+                    _("Markov: χ²={0:.1f}, p={1:.4f} ({2})").format(result.chi_squared, result.p_value, sig)
                 )
             except Exception as e:
                 QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "马尔可夫链"))
@@ -4199,13 +4178,15 @@ class MainWindow(QMainWindow):
             data = self._state.data_matrix.data
             if data.ndim != 2 or data.shape[1] < 6:
                 QMessageBox.warning(
-                    self, _("Insufficient Data"),
+                    self,
+                    _("Insufficient Data"),
                     _("Need at least 6 columns (x1..xN, y1..yN with N≥3). Got {0} columns.").format(data.shape[1]),
                 )
                 return
             if data.shape[1] % 2 != 0:
                 QMessageBox.warning(
-                    self, _("Invalid Data"),
+                    self,
+                    _("Invalid Data"),
                     _("Column count must be even (equal x and y coordinates). Got {0}.").format(data.shape[1]),
                 )
                 return
@@ -4219,7 +4200,7 @@ class MainWindow(QMainWindow):
             for i in range(data.shape[0]):
                 row = data[i]
                 n_pts = len(row) // 2
-                contour = np.column_stack([row[:n_pts], row[n_pts:2 * n_pts]])
+                contour = np.column_stack([row[:n_pts], row[n_pts : 2 * n_pts]])
                 result_i = efa.analyze(contour, n_harmonics=n_harmonics)
                 coefficients_list.append(result_i.coefficients)
 
@@ -4230,15 +4211,14 @@ class MainWindow(QMainWindow):
             plot = InteractivePlotCanvas()
             labels = list(self._state.data_matrix.row_labels or [])
             plot.plot_eigenshape_scores(
-                es_result.scores, es_result.explained_variance,
+                es_result.scores,
+                es_result.explained_variance,
                 specimen_labels=labels if labels else None,
             )
             plot_index = self._add_plot_to_workspace(plot, _("Eigenshape Scores"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(
-                _("Eigenshape: {0} specimens, {1} components").format(
-                    es_result.n_specimens, es_result.n_components
-                )
+                _("Eigenshape: {0} specimens, {1} components").format(es_result.n_specimens, es_result.n_components)
             )
         except Exception as e:
             QMessageBox.critical(self, _("Eigenshape Error"), format_user_error(e, "Eigenshape"))
@@ -4421,14 +4401,8 @@ class MainWindow(QMainWindow):
                         h = np.asarray(data[:, h_col], dtype=np.float64)
                         t = np.asarray(data[:, t_col], dtype=np.float64)
                         t_diff = np.diff(t)
-                        t_diff = np.append(
-                            t_diff, t_diff[-1] if t_diff.size > 0 else 1.0
-                        )
-                        sec_name = (
-                            col_labels[h_col]
-                            if 0 <= h_col < len(col_labels)
-                            else _("Section {0}").format(i + 1)
-                        )
+                        t_diff = np.append(t_diff, t_diff[-1] if t_diff.size > 0 else 1.0)
+                        sec_name = col_labels[h_col] if 0 <= h_col < len(col_labels) else _("Section {0}").format(i + 1)
                         sections.append(
                             StratigraphicSection(
                                 name=str(sec_name),
@@ -4445,11 +4419,7 @@ class MainWindow(QMainWindow):
                     proxy_cols = [c for c in range(data.shape[1]) if c != height_col]
                     for pc in proxy_cols:
                         signal = np.asarray(data[:, pc], dtype=np.float64)
-                        sec_name = (
-                            col_labels[pc]
-                            if 0 <= pc < len(col_labels)
-                            else _("Section {0}").format(pc + 1)
-                        )
+                        sec_name = col_labels[pc] if 0 <= pc < len(col_labels) else _("Section {0}").format(pc + 1)
                         sections.append(
                             StratigraphicSection(
                                 name=str(sec_name),
@@ -4464,11 +4434,7 @@ class MainWindow(QMainWindow):
                     # refuse the data. The user gets a sim=1.0 trivial
                     # answer and at least sees the column rendered.
                     h = np.asarray(data[:, 0], dtype=np.float64)
-                    only_name = (
-                        col_labels[0]
-                        if 0 < len(col_labels)
-                        else _("Section 1")
-                    )
+                    only_name = col_labels[0] if 0 < len(col_labels) else _("Section 1")
                     sections.append(
                         StratigraphicSection(
                             name=str(only_name),
@@ -4532,9 +4498,7 @@ class MainWindow(QMainWindow):
                     )
                 else:
                     self._status_bar.setInfo(_("Stratigraphic Correlation: complete"))
-                    QMessageBox.information(
-                        self, _("Analysis Complete"), result.summary()
-                    )
+                    QMessageBox.information(self, _("Analysis Complete"), result.summary())
 
             except Exception as e:
                 self._logger.critical(f"Stratigraphic correlation failed: {e}")
@@ -4590,10 +4554,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(
                         self,
                         _("Insufficient Data"),
-                        _(
-                            "Need at least 2 stratigraphic samples to perform "
-                            "correspondence analysis."
-                        ),
+                        _("Need at least 2 stratigraphic samples to perform correspondence analysis."),
                     )
                     return
 
@@ -4607,9 +4568,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(
                         self,
                         _("No Taxa Selected"),
-                        _(
-                            "Please select at least one taxon column in the dialog."
-                        ),
+                        _("Please select at least one taxon column in the dialog."),
                     )
                     return
 
@@ -4622,9 +4581,7 @@ class MainWindow(QMainWindow):
                 taxon_labels: list[str] = []
                 for idx in taxon_indices:
                     if 0 <= idx < len(col_labels):
-                        taxon_labels.append(
-                            "{0}: {1}".format(idx, col_labels[idx])
-                        )
+                        taxon_labels.append("{0}: {1}".format(idx, col_labels[idx]))
                     else:
                         taxon_labels.append("col_{0}".format(idx))
 
@@ -4638,33 +4595,24 @@ class MainWindow(QMainWindow):
                 if not np.all(np.isfinite(heights)):
                     bad_rows = np.where(~np.isfinite(heights))[0].tolist()
                     validation_issues.append(
-                        _(
-                            "Height column contains non-finite values at rows: {0}"
-                        ).format(bad_rows[:10])
+                        _("Height column contains non-finite values at rows: {0}").format(bad_rows[:10])
                     )
                 else:
                     h_diff = np.diff(heights)
                     if not (np.all(h_diff > 0) or np.all(h_diff < 0)):
                         validation_issues.append(
-                            _(
-                                "Heights must be strictly monotonic. Please sort "
-                                "the rows by stratigraphic height first."
-                            )
+                            _("Heights must be strictly monotonic. Please sort the rows by stratigraphic height first.")
                         )
                 if not np.all(np.isfinite(abundance)):
                     validation_issues.append(
-                        _(
-                            "Abundance matrix contains NaN/Inf. Please clean or "
-                            "impute the data before running CA."
-                        )
+                        _("Abundance matrix contains NaN/Inf. Please clean or impute the data before running CA.")
                     )
                 if np.any(abundance < 0):
                     neg_cnt = int(np.sum(abundance < 0))
                     validation_issues.append(
-                        _(
-                            "Abundance matrix contains {0} negative cell(s); "
-                            "CA requires non-negative input."
-                        ).format(neg_cnt)
+                        _("Abundance matrix contains {0} negative cell(s); CA requires non-negative input.").format(
+                            neg_cnt
+                        )
                     )
                 if abundance.size > 0:
                     row_sums = abundance.sum(axis=1)
@@ -4672,8 +4620,7 @@ class MainWindow(QMainWindow):
                     if zero_rows.size > 0:
                         validation_issues.append(
                             _(
-                                "Rows with zero total abundance at indices {0}; "
-                                "drop these rows or pick more taxa."
+                                "Rows with zero total abundance at indices {0}; drop these rows or pick more taxa."
                             ).format(zero_rows[:10].tolist())
                         )
                     col_sums = abundance.sum(axis=0)
@@ -4681,10 +4628,9 @@ class MainWindow(QMainWindow):
                     if zero_cols.size > 0:
                         bad_taxa = [taxon_labels[int(c)] for c in zero_cols.tolist()]
                         validation_issues.append(
-                            _(
-                                "Taxa with zero total abundance: {0}; "
-                                "remove them from the selection."
-                            ).format(bad_taxa[:10])
+                            _("Taxa with zero total abundance: {0}; remove them from the selection.").format(
+                                bad_taxa[:10]
+                            )
                         )
 
                 if validation_issues:
@@ -4748,9 +4694,7 @@ class MainWindow(QMainWindow):
                         fig.tight_layout()
                         rendered_figure = fig
                     except Exception as plot_exc:  # pragma: no cover
-                        self._logger.warning(
-                            "Failed to render paleo-env plot: %s", plot_exc
-                        )
+                        self._logger.warning("Failed to render paleo-env plot: %s", plot_exc)
 
                 if rendered_figure is not None:
                     self._embed_figure_in_workspace(
@@ -4852,9 +4796,7 @@ class MainWindow(QMainWindow):
             tps_result = self._state.get_cached_result("gpa_result")
 
             if tps_result is None:
-                message = _(
-                    "Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation."
-                )
+                message = _("Please run GPA (Generalized Procrustes Analysis) first to compute TPS deformation.")
                 if on_fail is not None:
                     raise RuntimeError(message)
                 QMessageBox.information(self, _("No TPS Result"), message)
@@ -5005,9 +4947,7 @@ class MainWindow(QMainWindow):
                 if len(col_labels_list) >= mid:
                     event_names = col_labels_list[:mid]
                 else:
-                    event_names = col_labels_list + [
-                        f"Event_{i + 1}" for i in range(len(col_labels_list), mid)
-                    ]
+                    event_names = col_labels_list + [f"Event_{i + 1}" for i in range(len(col_labels_list), mid)]
 
                 method = params.get("method", "ua")
 
@@ -5021,9 +4961,7 @@ class MainWindow(QMainWindow):
                         event_names=event_names,
                         min_section_occurrence=params.get("min_section_occurrence", 2),
                         uaz_similarity_threshold=params.get("uaz_similarity_threshold", 0.8),
-                        enable_cyclic_check=bool(
-                            params.get("enable_cyclic_check", True)
-                        ),
+                        enable_cyclic_check=bool(params.get("enable_cyclic_check", True)),
                     )
                     # Surface detected cyclic contradictions prominently.
                     cyclic = result.cyclic_contradictions or []
@@ -5326,11 +5264,10 @@ class MainWindow(QMainWindow):
             return
         self._closing = True
         try:
-            pool.clear()          # drop queued-but-not-started tasks
+            pool.clear()  # drop queued-but-not-started tasks
             if not pool.waitForDone(timeout_ms):
                 self._logger.warning(
-                    "Analysis thread pool still busy after %d ms; "
-                    "abandoning in-flight results on close.", timeout_ms
+                    "Analysis thread pool still busy after %d ms; abandoning in-flight results on close.", timeout_ms
                 )
         except Exception as exc:  # never let teardown raise
             self._logger.warning("Thread pool drain failed: %s", exc)

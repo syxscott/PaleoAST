@@ -270,9 +270,7 @@ class NullModelAnalyzer:
             rng = np.random.default_rng(random_seed)
 
             if n_workers is not None and n_workers > 1:
-                simulated = self._run_parallel(
-                    presence_matrix, n_permutations, algorithm, n_workers, metric, rng
-                )
+                simulated = self._run_parallel(presence_matrix, n_permutations, algorithm, n_workers, metric, rng)
             else:
                 simulated = self._run_sequential(
                     presence_matrix, n_permutations, algorithm, metric, progress_callback, rng
@@ -295,9 +293,10 @@ class NullModelAnalyzer:
                 # "observed equals expected", which is a different claim.
                 ses = float("nan")
                 self._logger.warning(
-                    "Zero variance in the %d simulated %s scores under '%s': "
-                    "standardized effect size is undefined.",
-                    n_simulated, metric, algorithm,
+                    "Zero variance in the %d simulated %s scores under '%s': standardized effect size is undefined.",
+                    n_simulated,
+                    metric,
+                    algorithm,
                 )
             p_value = float((1 + np.sum(simulated >= observed)) / (n_simulated + 1))
 
@@ -380,11 +379,11 @@ class NullModelAnalyzer:
         n_chunks = min(n_workers, -(-int(n_permutations) // chunk_size))
 
         parent_seed = (
-            int(rng.integers(0, 2**31, dtype=np.uint64))
-            if rng is not None
-            else int(np.random.randint(0, 2**31))
+            int(rng.integers(0, 2**31, dtype=np.uint64)) if rng is not None else int(np.random.randint(0, 2**31))
         )
-        seeds = [int(s.generate_state(1, dtype=np.uint32)[0]) for s in np.random.SeedSequence(parent_seed).spawn(n_chunks)]
+        seeds = [
+            int(s.generate_state(1, dtype=np.uint32)[0]) for s in np.random.SeedSequence(parent_seed).spawn(n_chunks)
+        ]
 
         counts = []
         remaining = int(n_permutations)
@@ -397,15 +396,14 @@ class NullModelAnalyzer:
             from multiprocessing import Pool
 
             args_list = [
-                (np.ascontiguousarray(matrix), counts[i], algorithm, metric, seeds[i])
-                for i in range(n_chunks)
+                (np.ascontiguousarray(matrix), counts[i], algorithm, metric, seeds[i]) for i in range(n_chunks)
             ]
 
             with Pool(processes=n_chunks) as pool:
                 results = pool.starmap(_worker_permute, args_list)
 
             simulated = np.concatenate(results)
-            return simulated[: n_permutations]
+            return simulated[:n_permutations]
 
         except ImportError:
             self._logger.warning("Multiprocessing not available, running sequentially")
@@ -430,15 +428,11 @@ class NullModelAnalyzer:
         """
         return _permute_with_algorithm(matrix, algorithm, rng)
 
-    def _shuffle_matrix(
-        self, matrix: npt.NDArray, rng: np.random.Generator | None = None
-    ) -> npt.NDArray:
+    def _shuffle_matrix(self, matrix: npt.NDArray, rng: np.random.Generator | None = None) -> npt.NDArray:
         """Simple random shuffle of matrix elements (grand total fixed)."""
         return _shuffle_matrix_impl(matrix, rng)
 
-    def _swap_matrix(
-        self, matrix: npt.NDArray, rng: np.random.Generator | None = None
-    ) -> npt.NDArray:
+    def _swap_matrix(self, matrix: npt.NDArray, rng: np.random.Generator | None = None) -> npt.NDArray:
         """
         Swap algorithm - preserves row and column sums.
 
@@ -454,15 +448,11 @@ class NullModelAnalyzer:
         """
         return _swap_matrix_impl(matrix, rng)
 
-    def _randomize_rows(
-        self, matrix: npt.NDArray, rng: np.random.Generator | None = None
-    ) -> npt.NDArray:
+    def _randomize_rows(self, matrix: npt.NDArray, rng: np.random.Generator | None = None) -> npt.NDArray:
         """Gotelli "random rows": permute the cells within each row."""
         return _randomize_rows_impl(matrix, rng)
 
-    def _randomize_columns(
-        self, matrix: npt.NDArray, rng: np.random.Generator | None = None
-    ) -> npt.NDArray:
+    def _randomize_columns(self, matrix: npt.NDArray, rng: np.random.Generator | None = None) -> npt.NDArray:
         """Gotelli "random columns": permute the cells within each column."""
         return _randomize_columns_impl(matrix, rng)
 
@@ -633,9 +623,7 @@ def _randomize_columns_impl(matrix: npt.NDArray, rng: np.random.Generator | None
     return result
 
 
-def _permute_with_algorithm(
-    matrix: npt.NDArray, algorithm: str, rng: np.random.Generator | None = None
-) -> npt.NDArray:
+def _permute_with_algorithm(matrix: npt.NDArray, algorithm: str, rng: np.random.Generator | None = None) -> npt.NDArray:
     """Dispatch a randomization to its implementation.
 
     Raises:
@@ -650,9 +638,7 @@ def _permute_with_algorithm(
         return _randomize_columns_impl(matrix, rng)
     if algorithm == "shuffle":
         return _shuffle_matrix_impl(matrix, rng)
-    raise ValidationError(
-        _("Unknown algorithm: {0}. Use 'swap', 'rrs', 'rcs', or 'shuffle'").format(algorithm)
-    )
+    raise ValidationError(_("Unknown algorithm: {0}. Use 'swap', 'rrs', 'rcs', or 'shuffle'").format(algorithm))
 
 
 def _worker_permute(
@@ -682,9 +668,7 @@ def _worker_permute(
     return results
 
 
-def _swap_matrix_worker(
-    matrix: npt.NDArray, rng: np.random.Generator | None = None
-) -> npt.NDArray:
+def _swap_matrix_worker(matrix: npt.NDArray, rng: np.random.Generator | None = None) -> npt.NDArray:
     """Swap algorithm in worker function (same code as the sequential path)."""
     return _swap_matrix_impl(matrix, rng)
 

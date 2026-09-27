@@ -231,9 +231,7 @@ class DistanceMatrix:
         lengths = {taxon: len(sequences[taxon]) for taxon in taxa}
         empty_taxa = [taxon for taxon, length in lengths.items() if length == 0]
         if empty_taxa:
-            raise ValidationError(
-                f"Empty sequence(s) prevent distance computation: {', '.join(empty_taxa[:5])}"
-            )
+            raise ValidationError(f"Empty sequence(s) prevent distance computation: {', '.join(empty_taxa[:5])}")
         if len(set(lengths.values())) != 1:
             detail = ", ".join(f"{taxon}={lengths[taxon]}" for taxon in taxa[:5])
             raise ValidationError(f"Sequences must all have the same length, got: {detail}")

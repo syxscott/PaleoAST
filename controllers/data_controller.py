@@ -264,15 +264,11 @@ class DataLoadTask:
                     first_col_is_numeric = True
                 except (ValueError, TypeError):
                     first_col_is_numeric = False
-                if not first_col_is_numeric or (
-                    first_col.dtype == object and first_col.nunique() == len(first_col)
-                ):
+                if not first_col_is_numeric or (first_col.dtype == object and first_col.nunique() == len(first_col)):
                     row_labels = first_col.astype(str).tolist()
                     df = df.iloc[:, 1:]
                     if df.shape[1] == 0:
-                        raise FileOperationError(
-                            "CSV contains only a label column; no numeric variables to load"
-                        )
+                        raise FileOperationError("CSV contains only a label column; no numeric variables to load")
 
             # Check cancellation before returning a result
             if self._task.is_cancelled:
@@ -399,9 +395,7 @@ class DataController:
                 try:
                     import pandas as pd
                 except ImportError:
-                    raise FileOperationError(
-                        "pandas is required for CSV import. Install with: pip install pandas"
-                    )
+                    raise FileOperationError("pandas is required for CSV import. Install with: pip install pandas")
 
                 # Build na_values set for missing-value replacement
                 na_values = {""} if missing_value else set()
@@ -450,13 +444,13 @@ class DataController:
                     except (ValueError, TypeError):
                         first_col_is_numeric = False
                     # Also check: if first column has all unique string-like values
-                    if not first_col_is_numeric or (first_col.dtype == object and first_col.nunique() == len(first_col)):
+                    if not first_col_is_numeric or (
+                        first_col.dtype == object and first_col.nunique() == len(first_col)
+                    ):
                         row_labels = first_col.astype(str).tolist()
                         df = df.iloc[:, 1:]
                         if df.shape[1] == 0:
-                            raise FileOperationError(
-                                "CSV contains only a label column; no numeric variables to load"
-                            )
+                            raise FileOperationError("CSV contains only a label column; no numeric variables to load")
 
                 # Extract column labels (header row already consumed by pandas)
                 if has_header:
@@ -481,7 +475,8 @@ class DataController:
                 numeric = df.apply(pd.to_numeric, errors="coerce")
                 data = numeric.to_numpy(dtype=float)
                 fully_text = [
-                    col_labels[i] for i in range(numeric.shape[1])
+                    col_labels[i]
+                    for i in range(numeric.shape[1])
                     if numeric.shape[0] > 0 and numeric.iloc[:, i].isna().all()
                 ]
                 if fully_text:
@@ -489,7 +484,8 @@ class DataController:
                         "Loaded %d column(s) that contain no numbers and are now empty: %s. "
                         "They were most likely text labels; pass has_row_labels=False and "
                         "drop them, or re-import with the correct delimiter.",
-                        len(fully_text), ", ".join(fully_text),
+                        len(fully_text),
+                        ", ".join(fully_text),
                     )
 
                 # Create DataMatrix

@@ -86,15 +86,9 @@ class PaleoEnvironmentResult:
             "=" * 60,
             _("Samples: {0}").format(self.n_samples),
             _("Taxa: {0}").format(self.n_taxa),
-            _("Axis 1 inertia explained: {0:.4f} ({1:.2%})").format(
-                self.explained_inertia, self.explained_inertia
-            ),
-            _("Pearson r(axis 1, height): {0:.4f}").format(
-                self.pearson_corr_axis_vs_height
-            ),
-            _("Polarity auto-calibrated: {0}").format(
-                _("yes") if self.was_flipped else _("no")
-            ),
+            _("Axis 1 inertia explained: {0:.4f} ({1:.2%})").format(self.explained_inertia, self.explained_inertia),
+            _("Pearson r(axis 1, height): {0:.4f}").format(self.pearson_corr_axis_vs_height),
+            _("Polarity auto-calibrated: {0}").format(_("yes") if self.was_flipped else _("no")),
             "",
         ]
         return "\n".join(lines)
@@ -235,20 +229,14 @@ class PaleoEnvironmentReconstructor:
                 taxon_names = [f"Taxon_{j + 1}" for j in range(n_taxa)]
             if len(taxon_names) != n_taxa:
                 raise DataValidationError(
-                    _("taxon_names length ({0}) does not match n_taxa ({1})").format(
-                        len(taxon_names), n_taxa
-                    ),
+                    _("taxon_names length ({0}) does not match n_taxa ({1})").format(len(taxon_names), n_taxa),
                 )
             if sample_names is not None and len(sample_names) != n_samples:
                 raise DataValidationError(
-                    _("sample_names length ({0}) does not match n_samples ({1})").format(
-                        len(sample_names), n_samples
-                    )
+                    _("sample_names length ({0}) does not match n_samples ({1})").format(len(sample_names), n_samples)
                 )
 
-            self._logger.info(
-                _("CA reconstruction: {0} samples x {1} taxa").format(n_samples, n_taxa)
-            )
+            self._logger.info(_("CA reconstruction: {0} samples x {1} taxa").format(n_samples, n_taxa))
             total = float(mat.sum())
             if total <= 0.0:
                 raise ComputationError(_("Total abundance is zero; cannot normalise"))
@@ -259,9 +247,7 @@ class PaleoEnvironmentReconstructor:
 
             denom = np.sqrt(np.outer(r_masses, c_masses))
             if np.any(denom == 0.0):
-                raise ComputationError(
-                    _("Zero mass detected after normalisation; CA cannot proceed")
-                )
+                raise ComputationError(_("Zero mass detected after normalisation; CA cannot proceed"))
             residuals = (prob - np.outer(r_masses, c_masses)) / denom
 
             try:
@@ -273,9 +259,7 @@ class PaleoEnvironmentReconstructor:
                 ) from exc
 
             if s_vals.size == 0 or float(s_vals[0]) < 1e-12:
-                raise ComputationError(
-                    _("Leading singular value is non-positive; axis extraction failed")
-                )
+                raise ComputationError(_("Leading singular value is non-positive; axis extraction failed"))
 
             # Canonical CA principal coordinates (Greenacre 1984; Legendre &
             # Legendre 1998): row scores F_k = U[:,k]*sigma_k/sqrt(row mass),
@@ -300,11 +284,9 @@ class PaleoEnvironmentReconstructor:
                 row_axis = -row_axis_raw
                 col_axis = -col_axis_raw
                 was_flipped = True
-                self._logger.info(
-                    _("Polarity auto-calibrated: sign of axis 1 flipped to match height monotonicity")
-                )
+                self._logger.info(_("Polarity auto-calibrated: sign of axis 1 flipped to match height monotonicity"))
 
-            total_inertia = float(np.sum(s_vals ** 2))
+            total_inertia = float(np.sum(s_vals**2))
             axis_inertia = float(s_vals[0] ** 2)
             explained = axis_inertia / total_inertia if total_inertia > 0 else 0.0
 
@@ -332,9 +314,9 @@ class PaleoEnvironmentReconstructor:
             )
             self._last_result = result
             self._logger.info(
-                _(
-                    "CA axis 1 extracted: inertia={0:.4f}, r(height)={1:.4f}, flipped={2}"
-                ).format(explained, corr, was_flipped)
+                _("CA axis 1 extracted: inertia={0:.4f}, r(height)={1:.4f}, flipped={2}").format(
+                    explained, corr, was_flipped
+                )
             )
             return result
 
@@ -378,9 +360,7 @@ class PaleoEnvironmentReconstructor:
             )
 
         if taxon_columns is None:
-            taxon_columns = [
-                c for c in df.select_dtypes(include=[np.number]).columns if c != height_column
-            ]
+            taxon_columns = [c for c in df.select_dtypes(include=[np.number]).columns if c != height_column]
         if not taxon_columns:
             raise DataValidationError(
                 _("No numeric taxon columns found in DataFrame"),

@@ -490,7 +490,7 @@ class IsotopeAnalyzer:
             古温度 (°C)
         """
         delta_diff = delta18O_c - delta18O_sw
-        T = 17.0 - 4.52 * delta_diff + 0.03 * (delta_diff ** 2)
+        T = 17.0 - 4.52 * delta_diff + 0.03 * (delta_diff**2)
         return float(T)
 
     @staticmethod

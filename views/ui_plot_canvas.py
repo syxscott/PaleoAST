@@ -986,9 +986,23 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot original grid (reference) - light gray dashed
         for i in range(grid_shape[0]):
-            self._ax.plot(xx_orig[i, :], yy_orig[i, :], color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
+            self._ax.plot(
+                xx_orig[i, :],
+                yy_orig[i, :],
+                color=self.theme_colors()["reference"],
+                linestyle="--",
+                linewidth=0.5,
+                alpha=0.5,
+            )
         for j in range(grid_shape[1]):
-            self._ax.plot(xx_orig[:, j], yy_orig[:, j], color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
+            self._ax.plot(
+                xx_orig[:, j],
+                yy_orig[:, j],
+                color=self.theme_colors()["reference"],
+                linestyle="--",
+                linewidth=0.5,
+                alpha=0.5,
+            )
 
         # Plot warped grid - colored lines
         for i in range(grid_shape[0]):
@@ -1042,7 +1056,12 @@ class InteractivePlotCanvas(QWidget):
         self._apply_axis_style()
 
         # Legend
-        self._ax.legend(loc="upper right", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"])
+        self._ax.legend(
+            loc="upper right",
+            framealpha=0.95,
+            facecolor=self.theme_colors()["figure_bg"],
+            edgecolor=self.theme_colors()["border"],
+        )
 
         # Aspect ratio
         self._ax.set_aspect("equal", adjustable="box")
@@ -1184,8 +1203,11 @@ class InteractivePlotCanvas(QWidget):
                 values.append(float(val) if np.isscalar(val) or isinstance(val, (int, float)) else np.nan)
         elif isinstance(raw, (list, tuple, np.ndarray)):
             values = [float(v) for v in raw]
-            labels = [str(getattr(result, "labels", None)[i]) for i in range(len(values))] \
-                if getattr(result, "labels", None) is not None else [str(i + 1) for i in range(len(values))]
+            labels = (
+                [str(getattr(result, "labels", None)[i]) for i in range(len(values))]
+                if getattr(result, "labels", None) is not None
+                else [str(i + 1) for i in range(len(values))]
+            )
         else:
             raise ValueError(
                 f"plot_diversity_summary expects a DiversityResult (or a result "
@@ -1193,8 +1215,9 @@ class InteractivePlotCanvas(QWidget):
             )
 
         if not values:
-            self._ax.text(0.5, 0.5, _("No diversity indices available"),
-                          ha="center", va="center", transform=self._ax.transAxes)
+            self._ax.text(
+                0.5, 0.5, _("No diversity indices available"), ha="center", va="center", transform=self._ax.transAxes
+            )
             self._figure.tight_layout()
             self._canvas.draw()
             return
@@ -1275,7 +1298,11 @@ class InteractivePlotCanvas(QWidget):
 
         # Legend
         self._ax.legend(
-            loc="lower right", framealpha=0.9, facecolor=self.theme_colors()["text"], edgecolor="#34495E", labelcolor="#ECF0F1"
+            loc="lower right",
+            framealpha=0.9,
+            facecolor=self.theme_colors()["text"],
+            edgecolor="#34495E",
+            labelcolor="#ECF0F1",
         )
 
         # Style
@@ -1660,9 +1687,7 @@ class InteractivePlotCanvas(QWidget):
             if data.ndim == 1:
                 data = data.reshape(-1, 1)
             if data.ndim != 2:
-                raise ValueError(
-                    f"plot_anova_boxplot expects a 2-D (samples x variables) array, got {data.ndim}-D"
-                )
+                raise ValueError(f"plot_anova_boxplot expects a 2-D (samples x variables) array, got {data.ndim}-D")
 
         # Resolve which column to plot. ``variable_name`` is a *name* only
         # for a structured array; for a plain (n, p) matrix it is taken as a
@@ -1789,7 +1814,11 @@ class InteractivePlotCanvas(QWidget):
 
         if len(unique_groups) > 1:
             self._ax.legend(
-                loc="upper right", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"], labelcolor=self.theme_colors()["text"]
+                loc="upper right",
+                framealpha=0.95,
+                facecolor=self.theme_colors()["figure_bg"],
+                edgecolor=self.theme_colors()["border"],
+                labelcolor=self.theme_colors()["text"],
             )
 
         self._figure.tight_layout()
@@ -1826,8 +1855,7 @@ class InteractivePlotCanvas(QWidget):
         n_bins = len(counts)
         if n_bins == 0:
             # Previously ``2 * np.pi / 0`` raised ZeroDivisionError.
-            self._ax.text(0.5, 0.5, _("No directional data"), ha="center",
-                          va="center", transform=self._ax.transAxes)
+            self._ax.text(0.5, 0.5, _("No directional data"), ha="center", va="center", transform=self._ax.transAxes)
             self._ax.set_title(_("Rose Diagram"), pad=20)
             self._canvas.draw()
             return
@@ -1840,8 +1868,7 @@ class InteractivePlotCanvas(QWidget):
             # that hands over bin *edges* (n+1) gets a clear error instead of a
             # numpy broadcast ValueError from deep inside matplotlib.
             raise ValueError(
-                f"plot_rose_diagram needs one centre per count; got "
-                f"{len(centers)} centres for {n_bins} counts."
+                f"plot_rose_diagram needs one centre per count; got {len(centers)} centres for {n_bins} counts."
             )
 
         self._ax.bar(centers, counts, width=bin_width * 0.8, color=self.COLORS[0], alpha=0.7, edgecolor="white")
@@ -2008,7 +2035,12 @@ class InteractivePlotCanvas(QWidget):
         self._ax.set_title(_("Ripley's K Spatial Point Pattern Analysis"))
 
         # Legend
-        self._ax.legend(loc="upper left", framealpha=0.95, facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"])
+        self._ax.legend(
+            loc="upper left",
+            framealpha=0.95,
+            facecolor=self.theme_colors()["figure_bg"],
+            edgecolor=self.theme_colors()["border"],
+        )
 
         # Style
         self._apply_axis_style()
@@ -2024,7 +2056,12 @@ class InteractivePlotCanvas(QWidget):
             fontsize=9,
             verticalalignment="bottom",
             horizontalalignment="right",
-            bbox=dict(boxstyle="round", facecolor=self.theme_colors()["figure_bg"], edgecolor=self.theme_colors()["border"], alpha=0.9),
+            bbox=dict(
+                boxstyle="round",
+                facecolor=self.theme_colors()["figure_bg"],
+                edgecolor=self.theme_colors()["border"],
+                alpha=0.9,
+            ),
         )
 
         self._canvas.draw()
@@ -2042,7 +2079,9 @@ class InteractivePlotCanvas(QWidget):
             ranks = np.arange(1, n + 1)
 
             if i == 0:
-                self._ax.scatter(ranks, obs, s=20, color=self.theme_colors()["text"], alpha=0.6, label=_("Observed"), zorder=5)
+                self._ax.scatter(
+                    ranks, obs, s=20, color=self.theme_colors()["text"], alpha=0.6, label=_("Observed"), zorder=5
+                )
 
             self._ax.plot(
                 ranks,
@@ -2171,10 +2210,10 @@ class InteractivePlotCanvas(QWidget):
         x_margin = (x_range[1] - x_range[0]) * 0.05
         y_margin = (y_range[1] - y_range[0]) * 0.05
         candidates_mask = (
-            (self._scores[:, d1] >= x_range[0] - x_margin) &
-            (self._scores[:, d1] <= x_range[1] + x_margin) &
-            (self._scores[:, d2] >= y_range[0] - y_margin) &
-            (self._scores[:, d2] <= y_range[1] + y_margin)
+            (self._scores[:, d1] >= x_range[0] - x_margin)
+            & (self._scores[:, d1] <= x_range[1] + x_margin)
+            & (self._scores[:, d2] >= y_range[0] - y_margin)
+            & (self._scores[:, d2] <= y_range[1] + y_margin)
         )
         candidate_indices = np.where(candidates_mask)[0]
 
@@ -2760,9 +2799,7 @@ class InteractivePlotCanvas(QWidget):
             from plot_export import PlotExportOptions, export_figure
 
             if not isinstance(options, PlotExportOptions):
-                raise TypeError(
-                    "export_plot(options=...) expects a PlotExportOptions"
-                )
+                raise TypeError("export_plot(options=...) expects a PlotExportOptions")
             path = options.metadata.pop("_target_path", None) if options.metadata else None
             if not path:
                 # Fall back to asking the user when no path was threaded
@@ -2830,7 +2867,9 @@ class InteractivePlotCanvas(QWidget):
     # Univariate Statistics Plots (P0: text → visualization)
     # =========================================================================
 
-    def plot_summary_statistics(self, data: np.ndarray, col_names: list[str], stats_list: list[Any] | None = None) -> None:
+    def plot_summary_statistics(
+        self, data: np.ndarray, col_names: list[str], stats_list: list[Any] | None = None
+    ) -> None:
         """Plot summary statistics as a panel of histograms + boxplots.
 
         Parameters:
@@ -2852,19 +2891,27 @@ class InteractivePlotCanvas(QWidget):
             valid = col_data[~np.isnan(col_data)]
             if len(valid) == 0:
                 ax.text(0.5, 0.5, "All NaN", transform=ax.transAxes, ha="center", fontsize=8)
-                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i+1}", fontsize=9)
+                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i + 1}", fontsize=9)
                 continue
 
             ax.hist(valid, bins=min(30, max(5, len(valid) // 3)), color="#3498DB", alpha=0.7, edgecolor="white")
-            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            name = col_names[i] if i < len(col_names) else f"Var {i + 1}"
             ax.set_title(name, fontsize=9, fontweight="bold")
 
             if stats_list and i < len(stats_list):
                 s = stats_list[i]
                 info = f"μ={s.mean:.2f} σ={s.std:.2f}\nmed={s.median:.2f}"
-                ax.text(0.97, 0.95, info, transform=ax.transAxes, fontsize=7,
-                        va="top", ha="right", style="italic",
-                        bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5))
+                ax.text(
+                    0.97,
+                    0.95,
+                    info,
+                    transform=ax.transAxes,
+                    fontsize=7,
+                    va="top",
+                    ha="right",
+                    style="italic",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
+                )
 
             ax.tick_params(labelsize=7)
             ax.grid(True, axis="y", linestyle="--", alpha=0.3)
@@ -2874,7 +2921,9 @@ class InteractivePlotCanvas(QWidget):
         self._finalise_grid_plot()
         self._canvas.draw()
 
-    def plot_normality_qq(self, data: np.ndarray, col_names: list[str], normality_results: list[Any] | None = None) -> None:
+    def plot_normality_qq(
+        self, data: np.ndarray, col_names: list[str], normality_results: list[Any] | None = None
+    ) -> None:
         """Plot Q-Q plots for normality assessment.
 
         Parameters:
@@ -2898,7 +2947,7 @@ class InteractivePlotCanvas(QWidget):
             valid = col_data[~np.isnan(col_data)]
             if len(valid) < 3:
                 ax.text(0.5, 0.5, "n < 3", transform=ax.transAxes, ha="center", fontsize=8)
-                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i+1}", fontsize=9)
+                ax.set_title(col_names[i] if i < len(col_names) else f"Var {i + 1}", fontsize=9)
                 continue
 
             sp_stats.probplot(valid, dist="norm", plot=ax)
@@ -2907,7 +2956,7 @@ class InteractivePlotCanvas(QWidget):
             ax.get_lines()[0].set_markersize(4)
             ax.get_lines()[1].set_color("#E74C3C")
 
-            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            name = col_names[i] if i < len(col_names) else f"Var {i + 1}"
             title = name
             if normality_results and i < len(normality_results):
                 nr = normality_results[i]
@@ -2922,9 +2971,14 @@ class InteractivePlotCanvas(QWidget):
         self._finalise_grid_plot()
         self._canvas.draw()
 
-    def plot_group_comparison(self, data: np.ndarray, groups: list[int] | np.ndarray,
-                              col_names: list[str], test_name: str = "t-test",
-                              p_values: list[float] | None = None) -> None:
+    def plot_group_comparison(
+        self,
+        data: np.ndarray,
+        groups: list[int] | np.ndarray,
+        col_names: list[str],
+        test_name: str = "t-test",
+        p_values: list[float] | None = None,
+    ) -> None:
         """Plot boxplots comparing groups across variables.
 
         Parameters:
@@ -2968,7 +3022,7 @@ class InteractivePlotCanvas(QWidget):
                 patch.set_facecolor(colors[j % len(colors)])
                 patch.set_alpha(0.7)
 
-            name = col_names[i] if i < len(col_names) else f"Var {i+1}"
+            name = col_names[i] if i < len(col_names) else f"Var {i + 1}"
             title = name
             if p_values and i < len(p_values):
                 pv = p_values[i]
@@ -2989,9 +3043,13 @@ class InteractivePlotCanvas(QWidget):
         self._finalise_grid_plot()
         self._canvas.draw()
 
-    def plot_coniss_dendrogram(self, linkage_matrix: np.ndarray, n_zones: int,
-                                sample_names: list[str] | None = None,
-                                zone_boundaries: list[int] | None = None) -> None:
+    def plot_coniss_dendrogram(
+        self,
+        linkage_matrix: np.ndarray,
+        n_zones: int,
+        sample_names: list[str] | None = None,
+        zone_boundaries: list[int] | None = None,
+    ) -> None:
         """Plot CONISS dendrogram with zone boundaries.
 
         Parameters:
@@ -3033,8 +3091,9 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_scree(self, eigenvalues: np.ndarray, explained_var: np.ndarray,
-                   cumulative_var: np.ndarray, method: str = "PCA") -> None:
+    def plot_scree(
+        self, eigenvalues: np.ndarray, explained_var: np.ndarray, cumulative_var: np.ndarray, method: str = "PCA"
+    ) -> None:
         """Plot scree diagram with individual and cumulative variance.
 
         Parameters:
@@ -3065,8 +3124,9 @@ class InteractivePlotCanvas(QWidget):
         ax2.set_ylim(0, 105)
 
         # Kaiser criterion line (eigenvalue > 1 for correlation PCA)
-        ax1.axhline(y=100.0 / n, color="gray", linestyle=":", linewidth=1, alpha=0.5,
-                     label=f"Kaiser ({100.0/n:.1f}%)")
+        ax1.axhline(
+            y=100.0 / n, color="gray", linestyle=":", linewidth=1, alpha=0.5, label=f"Kaiser ({100.0 / n:.1f}%)"
+        )
 
         # Combined legend
         lines1, labels1 = ax1.get_legend_handles_labels()
@@ -3079,8 +3139,9 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_phylo_tree(self, tree: Any, trait_values: dict[str, float] | None = None,
-                        title: str = "Phylogenetic Tree") -> None:
+    def plot_phylo_tree(
+        self, tree: Any, trait_values: dict[str, float] | None = None, title: str = "Phylogenetic Tree"
+    ) -> None:
         """Plot a phylogenetic tree with optional trait values.
 
         Parameters:
@@ -3172,8 +3233,9 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_eigenshape_scores(self, scores: np.ndarray, explained_var: np.ndarray,
-                               specimen_labels: list[str] | None = None) -> None:
+    def plot_eigenshape_scores(
+        self, scores: np.ndarray, explained_var: np.ndarray, specimen_labels: list[str] | None = None
+    ) -> None:
         """Plot Eigenshape score scatter plot (ES1 vs ES2).
 
         Parameters:
@@ -3206,8 +3268,9 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_markov_heatmap(self, transition_matrix: np.ndarray, facies_names: list[str],
-                            chi2_stat: float = 0.0, p_value: float = 1.0) -> None:
+    def plot_markov_heatmap(
+        self, transition_matrix: np.ndarray, facies_names: list[str], chi2_stat: float = 0.0, p_value: float = 1.0
+    ) -> None:
         """Plot Markov chain transition probability matrix as heatmap.
 
         Parameters:
@@ -3246,7 +3309,8 @@ class InteractivePlotCanvas(QWidget):
         sig = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else "ns"
         ax.set_title(
             _("Markov Transition Probabilities\nχ²={0:.1f}, p={1:.4f} {2}").format(chi2_stat, p_value, sig),
-            fontsize=12, fontweight="bold",
+            fontsize=12,
+            fontweight="bold",
         )
 
         self._figure.colorbar(im, ax=ax, shrink=0.8, label=_("Probability"))
@@ -3323,20 +3387,24 @@ class InteractivePlotCanvas(QWidget):
             labels.append(f"{iv.t_start:.1f}-{iv.t_end:.1f}")
 
         survival = np.asarray(result.survival_rates, dtype=float)
-        self._ax.plot(centers, survival, "o-", color=self.COLORS[0],
-                       label=_("Survival probability"))
+        self._ax.plot(centers, survival, "o-", color=self.COLORS[0], label=_("Survival probability"))
         if result.confidence_intervals:
             lo = np.array([c[0] for c in result.confidence_intervals], dtype=float)
             hi = np.array([c[1] for c in result.confidence_intervals], dtype=float)
             if lo.size == len(centers):
-                self._ax.fill_between(centers, lo, hi, color=self.COLORS[0],
-                                      alpha=0.18, label=_("Confidence interval"))
+                self._ax.fill_between(centers, lo, hi, color=self.COLORS[0], alpha=0.18, label=_("Confidence interval"))
 
         for x, y in zip(centers, survival):
             if np.isfinite(y):
-                self._ax.annotate(f"{y:.2f}", (x, y), textcoords="offset points",
-                                  xytext=(0, 7), ha="center", fontsize=7,
-                                  color=self.theme_colors()["text"])
+                self._ax.annotate(
+                    f"{y:.2f}",
+                    (x, y),
+                    textcoords="offset points",
+                    xytext=(0, 7),
+                    ha="center",
+                    fontsize=7,
+                    color=self.theme_colors()["text"],
+                )
 
         self._ax.set_xticks(centers)
         self._ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
@@ -3407,20 +3475,25 @@ class InteractivePlotCanvas(QWidget):
             lo = np.asarray(result.lower_ci, dtype=float)
             hi = np.asarray(result.upper_ci, dtype=float)
             if lo.size == t.size:
-                self._ax.fill_between(t, lo, hi, step="post", color=self.COLORS[0],
-                                      alpha=0.18, label=_("Confidence interval"))
+                self._ax.fill_between(
+                    t, lo, hi, step="post", color=self.COLORS[0], alpha=0.18, label=_("Confidence interval")
+                )
 
         if result.median_survival is not None and np.isfinite(result.median_survival):
-            self._ax.axvline(result.median_survival, color=self.COLORS[3], linestyle="--",
-                             linewidth=1, label=f"{_('Median')} = {result.median_survival:.2f}")
+            self._ax.axvline(
+                result.median_survival,
+                color=self.COLORS[3],
+                linestyle="--",
+                linewidth=1,
+                label=f"{_('Median')} = {result.median_survival:.2f}",
+            )
 
         if result.n_at_risk is not None:
             risk = np.asarray(result.n_at_risk, dtype=float)
             if risk.size == t.size:
                 ax2 = self._ax.twinx()
                 ax2.patch.set_visible(False)
-                ax2.step(t, risk, where="post", color=self.COLORS[7], linewidth=1,
-                          linestyle=":", label=_("At risk"))
+                ax2.step(t, risk, where="post", color=self.COLORS[7], linewidth=1, linestyle=":", label=_("At risk"))
                 ax2.set_ylabel(_("Number at risk"), color=self.COLORS[7])
                 ax2.tick_params(axis="y", labelcolor=self.COLORS[7])
                 ax2.set_ylim(0, max(1.0, float(np.nanmax(risk)) * 1.15))
@@ -3454,8 +3527,13 @@ class InteractivePlotCanvas(QWidget):
             if arr.ndim != 1 or arr.size < 2:
                 continue
             xs = np.linspace(0.0, 1.0, arr.size)
-            self._ax.plot(xs, arr, color=self.COLORS[k % len(self.COLORS)],
-                          alpha=0.8 if len(replicates) < 6 else 0.5, linewidth=1.2)
+            self._ax.plot(
+                xs,
+                arr,
+                color=self.COLORS[k % len(self.COLORS)],
+                alpha=0.8 if len(replicates) < 6 else 0.5,
+                linewidth=1.2,
+            )
             drew += 1
 
         self._ax.set_xlabel(_("Time (normalised)"))
@@ -3469,9 +3547,9 @@ class InteractivePlotCanvas(QWidget):
     # 3-D morphometrics plots
     # ------------------------------------------------------------------
 
-    def plot_gpa3d_aligned(self, aligned: np.ndarray, consensus: np.ndarray,
-                           specimen_labels: list[str] | None = None,
-                           title: str = "") -> None:
+    def plot_gpa3d_aligned(
+        self, aligned: np.ndarray, consensus: np.ndarray, specimen_labels: list[str] | None = None, title: str = ""
+    ) -> None:
         """GPA alignment of 3-D landmark configurations.
 
         A 2-D canvas cannot show a 3-D scatter honestly, so the first two
@@ -3501,17 +3579,18 @@ class InteractivePlotCanvas(QWidget):
         for i in range(arr.shape[0]):
             frac = (arr[i, 0, 2] - lo3) / span
             xy = arr[i, :, :2]
-            self._ax.plot(xy[:, 0], xy[:, 1], "o-", markersize=3, linewidth=0.8,
-                          color=cmap(frac), alpha=0.85)
+            self._ax.plot(xy[:, 0], xy[:, 1], "o-", markersize=3, linewidth=0.8, color=cmap(frac), alpha=0.85)
             if specimen_labels and i < len(specimen_labels):
-                self._ax.annotate(specimen_labels[i], (xy[0, 0], xy[0, 1]),
-                                  fontsize=6, color=self.theme_colors()["text"])
+                self._ax.annotate(
+                    specimen_labels[i], (xy[0, 0], xy[0, 1]), fontsize=6, color=self.theme_colors()["text"]
+                )
 
         cons = np.asarray(consensus, dtype=float)
         have_cons = cons.ndim == 2 and cons.shape == (arr.shape[1], arr.shape[2])
         if have_cons:
-            self._ax.plot(cons[:, 0], cons[:, 1], "s--", color="#E74C3C",
-                          markersize=4, linewidth=1.6, label=_("Consensus"))
+            self._ax.plot(
+                cons[:, 0], cons[:, 1], "s--", color="#E74C3C", markersize=4, linewidth=1.6, label=_("Consensus")
+            )
 
         self._ax.set_aspect("equal", adjustable="datalim")
         self._ax.set_xlabel(_("Dim 1"))

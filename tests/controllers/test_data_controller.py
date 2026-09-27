@@ -194,6 +194,7 @@ def _get_qapp():
     returning None for the rest of the session).
     """
     from PyQt6.QtWidgets import QApplication
+
     app = QApplication.instance()
     if app is None:
         app = QApplication(["paleoast-tests"])
@@ -253,9 +254,7 @@ def test_load_csv_async_does_not_block_main_thread(large_csv):
     task.start()
 
     assert spy_result.wait(60000), "result signal was never emitted"
-    assert len(spy_progress) >= 2, (
-        f"Expected >= 2 progress signals during load, got {len(spy_progress)}"
-    )
+    assert len(spy_progress) >= 2, f"Expected >= 2 progress signals during load, got {len(spy_progress)}"
 
     # First signal should be indeterminate (0, -1)
     first = spy_progress[0]

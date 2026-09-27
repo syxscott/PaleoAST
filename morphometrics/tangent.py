@@ -48,9 +48,7 @@ def orp(configurations: npt.NDArray | list[npt.NDArray]) -> npt.NDArray:
     """
     X = np.asarray(configurations, dtype=float)
     if X.ndim != 3:
-        raise MorphometricsError(
-            _("orp expects a (n_specimens, n_landmarks, n_dims) array, got {0}D").format(X.ndim)
-        )
+        raise MorphometricsError(_("orp expects a (n_specimens, n_landmarks, n_dims) array, got {0}D").format(X.ndim))
     if X.shape[0] == 0:
         raise MorphometricsError(_("orp requires at least one configuration"))
 

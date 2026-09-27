@@ -61,8 +61,7 @@ def test_block_bootstrap_white_noise_vs_standard():
 
     # Should be similar for white noise
     assert 0.5 * width_standard <= width_block <= 2.0 * width_standard, (
-        f"Block bootstrap CI width {width_block} should be similar to "
-        f"standard {width_standard} for white noise"
+        f"Block bootstrap CI width {width_block} should be similar to standard {width_standard} for white noise"
     )
 
 
@@ -114,9 +113,7 @@ def test_block_bootstrap_coverage_simulation():
         # Generate AR(1) data with known mean
         data = true_mean + _generate_ar1(n, phi)
 
-        ci_lower, ci_upper = block_bootstrap_ci(
-            data, stat_func, block_size=block_size, n_bootstrap=200, alpha=0.05
-        )
+        ci_lower, ci_upper = block_bootstrap_ci(data, stat_func, block_size=block_size, n_bootstrap=200, alpha=0.05)
 
         if ci_lower <= true_mean <= ci_upper:
             covered += 1
@@ -125,9 +122,7 @@ def test_block_bootstrap_coverage_simulation():
 
     # Coverage should be approximately 95% (allow some Monte Carlo variation)
     # For highly autocorrelated data with small n_bootstrap, it may be less precise
-    assert 0.70 <= coverage <= 1.0, (
-        f"Coverage {coverage:.2%} is outside reasonable range for 95% CI"
-    )
+    assert 0.70 <= coverage <= 1.0, f"Coverage {coverage:.2%} is outside reasonable range for 95% CI"
 
 
 def test_block_bootstrap_nan_handling():

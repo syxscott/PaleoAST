@@ -249,32 +249,16 @@ class StateManager:
                 # the managers are replaced and passed explicitly —
                 # otherwise indices would be resolved against the new
                 # labels and metadata would be silently misaligned.
-                preserved_col = (
-                    self._column_metadata.to_dict() if self._column_metadata else {}
-                )
-                preserved_row = (
-                    self._row_metadata.to_dict() if self._row_metadata else {}
-                )
-                old_col_labels = (
-                    list(self._column_metadata._column_labels)
-                    if self._column_metadata
-                    else None
-                )
-                old_row_labels = (
-                    list(self._row_metadata._row_labels) if self._row_metadata else None
-                )
+                preserved_col = self._column_metadata.to_dict() if self._column_metadata else {}
+                preserved_row = self._row_metadata.to_dict() if self._row_metadata else {}
+                old_col_labels = list(self._column_metadata._column_labels) if self._column_metadata else None
+                old_row_labels = list(self._row_metadata._row_labels) if self._row_metadata else None
                 self._column_metadata = ColumnMetadataManager(
                     n_columns=matrix.n_variables, column_labels=matrix.col_labels
                 )
-                self._column_metadata.from_dict_by_label(
-                    preserved_col, matrix.col_labels, old_labels=old_col_labels
-                )
-                self._row_metadata = RowMetadataManager(
-                    n_rows=matrix.n_samples, row_labels=matrix.row_labels
-                )
-                self._row_metadata.from_dict_by_label(
-                    preserved_row, matrix.row_labels, old_labels=old_row_labels
-                )
+                self._column_metadata.from_dict_by_label(preserved_col, matrix.col_labels, old_labels=old_col_labels)
+                self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
+                self._row_metadata.from_dict_by_label(preserved_row, matrix.row_labels, old_labels=old_row_labels)
             self._analysis_cache.clear()
             if mark_modified is not None:
                 self._modified = mark_modified
@@ -337,8 +321,7 @@ class StateManager:
                 return
             if not (0 <= col_index < self._data_matrix.n_variables):
                 raise IndexError(
-                    f"set_col_metadata: col_index {col_index} out of range "
-                    f"[0, {self._data_matrix.n_variables})"
+                    f"set_col_metadata: col_index {col_index} out of range [0, {self._data_matrix.n_variables})"
                 )
             if "data_type" in metadata_dict:
                 self._column_metadata.set_data_type(col_index, metadata_dict["data_type"])
@@ -368,8 +351,7 @@ class StateManager:
                 return
             if not (0 <= row_index < self._data_matrix.n_samples):
                 raise IndexError(
-                    f"set_row_metadata: row_index {row_index} out of range "
-                    f"[0, {self._data_matrix.n_samples})"
+                    f"set_row_metadata: row_index {row_index} out of range [0, {self._data_matrix.n_samples})"
                 )
             if "group" in metadata_dict:
                 self._row_metadata.set_group(row_index, metadata_dict["group"])
@@ -497,14 +479,10 @@ class StateManager:
             self._column_metadata = None
             self._row_metadata = None
             return
-        self._column_metadata = ColumnMetadataManager(
-            n_columns=matrix.n_variables, column_labels=matrix.col_labels
-        )
+        self._column_metadata = ColumnMetadataManager(n_columns=matrix.n_variables, column_labels=matrix.col_labels)
         if state["column_metadata"] is not None:
             self._column_metadata.from_dict(state["column_metadata"])
-        self._row_metadata = RowMetadataManager(
-            n_rows=matrix.n_samples, row_labels=matrix.row_labels
-        )
+        self._row_metadata = RowMetadataManager(n_rows=matrix.n_samples, row_labels=matrix.row_labels)
         if state["row_metadata"] is not None:
             self._row_metadata.from_dict(state["row_metadata"])
 

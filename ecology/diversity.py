@@ -80,7 +80,9 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
     if S == 1:
         simpson_interpretation = "monospecific assemblage (S=1), Simpson=1 by definition - diversity indices are not meaningful for single-taxon samples"
     else:
-        simpson_interpretation = f"Simpson index of {simpson:.4f} indicates {'high diversity' if simpson > 0.7 else 'moderate diversity'}"
+        simpson_interpretation = (
+            f"Simpson index of {simpson:.4f} indicates {'high diversity' if simpson > 0.7 else 'moderate diversity'}"
+        )
     indices["simpson"] = DiversityIndexResult(
         index_name="Simpson Index (1-D)",
         value=float(simpson),
@@ -285,10 +287,7 @@ def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float =
         alpha = (2 * f2) / ((n - 1) * f1 + 2 * f2)
         ratio = f1 / f2
         var_chao1 = f2 * (
-            (alpha / 4) * ratio**4
-            + (alpha**2 / 2) * ratio**3
-            + (alpha**2 / 2) * ratio**2
-            + (alpha**2 / 4) * ratio
+            (alpha / 4) * ratio**4 + (alpha**2 / 2) * ratio**3 + (alpha**2 / 2) * ratio**2 + (alpha**2 / 4) * ratio
         )
     elif f1 > 1:
         # When f2 == 0 but f1 > 1: use approximate variance

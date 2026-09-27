@@ -35,6 +35,7 @@ from utils.exceptions import MorphometricsError
 # Preshape / distances
 # =============================================================================
 
+
 def kendall_preshape(configurations: npt.NDArray) -> npt.NDArray:
     """
     Map (n, p, k) landmark configurations onto the Kendall preshape sphere.
@@ -47,9 +48,7 @@ def kendall_preshape(configurations: npt.NDArray) -> npt.NDArray:
     """
     X = np.asarray(configurations, dtype=float)
     if X.ndim != 3:
-        raise MorphometricsError(
-            _("kendall_preshape expects (n, p, k); got shape {0}").format(X.shape)
-        )
+        raise MorphometricsError(_("kendall_preshape expects (n, p, k); got shape {0}").format(X.shape))
     centered = X - X.mean(axis=1, keepdims=True)
     norms = np.sqrt(np.sum(centered**2, axis=(1, 2)))
     if np.any(norms <= np.finfo(float).eps):
@@ -94,6 +93,7 @@ def _procrustes_align_to(source: npt.NDArray, target: npt.NDArray) -> npt.NDArra
 # =============================================================================
 # Geometric medians
 # =============================================================================
+
 
 def geometric_median(vectors: npt.NDArray, tol: float = 1e-10, max_iter: int = 500) -> npt.NDArray:
     """Euclidean geometric median of row vectors (Weiszfeld with the
@@ -176,6 +176,7 @@ def procrustes_median(
 # Goodall's F and permutation test
 # =============================================================================
 
+
 def _group_procrustes_ss(configs: npt.NDArray) -> float:
     """Within-group Procrustes SS: sum over specimens of squared residual
     distance to the group mean (configs already share a frame)."""
@@ -236,9 +237,7 @@ def goodall_test(
     X = np.asarray(configurations, dtype=float)
     labels = np.asarray(group_labels)
     if X.ndim != 3 or labels.ndim != 1 or len(labels) != X.shape[0]:
-        raise MorphometricsError(
-            _("goodall_test expects (n, p, k) configurations and n group labels")
-        )
+        raise MorphometricsError(_("goodall_test expects (n, p, k) configurations and n group labels"))
     f_obs, between, within = goodall_f(X, labels)
     rng = np.random.default_rng(seed)
     count = 0
@@ -263,6 +262,7 @@ def goodall_test(
 # =============================================================================
 # Hotelling T²
 # =============================================================================
+
 
 @dataclass
 class HotellingT2Result:
@@ -296,18 +296,15 @@ def hotelling_t2(sample1: npt.NDArray, sample2: npt.NDArray) -> HotellingT2Resul
     if X2.shape[1] != d:
         raise MorphometricsError(_("Hotelling T² samples must have equal dimensions"))
     if n1 < 2 or n2 < 2 or n1 + n2 - d - 1 <= 0:
-        raise MorphometricsError(
-            _("Hotelling T² needs n1+n2 > d+1 (got n1={0}, n2={1}, d={2})").format(n1, n2, d)
-        )
+        raise MorphometricsError(_("Hotelling T² needs n1+n2 > d+1 (got n1={0}, n2={1}, d={2})").format(n1, n2, d))
     diff = X1.mean(axis=0) - X2.mean(axis=0)
-    S = (((X1 - X1.mean(axis=0)).T @ (X1 - X1.mean(axis=0)))
-         + ((X2 - X2.mean(axis=0)).T @ (X2 - X2.mean(axis=0)))) / (n1 + n2 - 2)
+    S = (((X1 - X1.mean(axis=0)).T @ (X1 - X1.mean(axis=0))) + ((X2 - X2.mean(axis=0)).T @ (X2 - X2.mean(axis=0)))) / (
+        n1 + n2 - 2
+    )
     sol = np.linalg.lstsq(S, diff, rcond=None)[0]
     t2 = float(n1 * n2 / (n1 + n2) * (diff @ sol))
     df1 = d
     df2 = n1 + n2 - d - 1
     f_stat = df2 / (df1 * (n1 + n2 - 2)) * t2
     p = float(_stats.f.sf(f_stat, df1, df2))
-    return HotellingT2Result(
-        t2=t2, f_statistic=f_stat, p_value=p, df1=df1, df2=df2, mean_difference=diff
-    )
+    return HotellingT2Result(t2=t2, f_statistic=f_stat, p_value=p, df1=df1, df2=df2, mean_difference=diff)

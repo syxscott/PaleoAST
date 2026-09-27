@@ -41,7 +41,6 @@ class SpectralPlotter:
         self._dpi = 300
         self._font_size = 10
 
-
     def plot_periodogram(
         self, result: SpectralResult, show_peaks: bool = True, peak_threshold: float = 0.5, title: str | None = None
     ) -> Figure:

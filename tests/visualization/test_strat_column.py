@@ -56,11 +56,7 @@ def _texts(ax) -> list[str]:
 
 
 def _strip_rects(ax, x_max: float = 0.0) -> list[Rectangle]:
-    return [
-        p
-        for p in ax.patches
-        if isinstance(p, Rectangle) and p.get_x() < x_max and p.get_facecolor()[3] > 0
-    ]
+    return [p for p in ax.patches if isinstance(p, Rectangle) and p.get_x() < x_max and p.get_facecolor()[3] > 0]
 
 
 class TestStyleResolution:
@@ -156,9 +152,7 @@ class TestStripLabels:
         assert mcolors.to_hex(txt.get_color()) == "#ffffff"
 
     def test_light_fill_gets_black_text(self, plotter: StratigraphicColumnPlotter):
-        fig = plotter.plot_column(
-            [5], ["chalk"], layer_bound_ages=[66.0, 100.0], geo_ranks=("period",)
-        )
+        fig = plotter.plot_column([5], ["chalk"], layer_bound_ages=[66.0, 100.0], geo_ranks=("period",))
         txt = next(t for t in fig.axes[0].texts if t.get_text() == "Cretaceous")
         assert mcolors.to_hex(txt.get_color()) == "#000000"
 
@@ -174,8 +168,11 @@ class TestStripLabels:
         import math
 
         fig = plotter.plot_column(
-            [34, 40], ["shale", "sandstone"], layer_bound_ages=[66.0, 100.0, 145.0],
-            geo_ranks=("period",), log_scale=True,
+            [34, 40],
+            ["shale", "sandstone"],
+            layer_bound_ages=[66.0, 100.0, 145.0],
+            geo_ranks=("period",),
+            log_scale=True,
         )
         ax = fig.axes[0]
         assert ax.get_yscale() == "log"
@@ -206,9 +203,7 @@ class TestCorrelatedColumns:
 
     def test_shape_mismatch_raises(self, plotter: StratigraphicColumnPlotter):
         with pytest.raises(ValueError, match="bound_ages must be"):
-            plotter.plot_correlated_columns(
-                [{"name": "A", "bound_ages": [0.0, 1.0], "lithologies": ["a", "b"]}]
-            )
+            plotter.plot_correlated_columns([{"name": "A", "bound_ages": [0.0, 1.0], "lithologies": ["a", "b"]}])
 
     def test_no_log_no_strips_works(self, plotter: StratigraphicColumnPlotter):
         fig = plotter.plot_correlated_columns(

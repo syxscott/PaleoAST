@@ -383,8 +383,7 @@ class ARMAAnalyzer:
             # undifferenced length): fall back to the caller's series so the
             # residual computation stays well-defined.
             self._logger.warning(
-                "Cannot back-transform %d predictions against %d observations (d=%d); "
-                "returning predictions unchanged",
+                "Cannot back-transform %d predictions against %d observations (d=%d); returning predictions unchanged",
                 result.shape[0],
                 original.shape[0],
                 d,

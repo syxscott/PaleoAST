@@ -183,9 +183,7 @@ class StrictConsensusTree:
         frequencies = {clade: count / n_trees for clade, count in clade_counts.items()}
         strict_clades = [clade for clade, freq in frequencies.items() if abs(freq - 1.0) < 1e-10]
 
-        self._logger.info(
-            f"Extracted {len(frequencies)} unique clades, {len(strict_clades)} are strict consensus"
-        )
+        self._logger.info(f"Extracted {len(frequencies)} unique clades, {len(strict_clades)} are strict consensus")
 
         consensus_tree = self._build_tree_from_clades(strict_clades, all_taxa)
         consensus_tree.metadata["consensus_clades"] = len(strict_clades)

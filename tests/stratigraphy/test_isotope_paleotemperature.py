@@ -39,7 +39,9 @@ class TestPaleotemperatureEquations:
             for delta_w in np.linspace(-2, 1, 10):
                 T = analyzer.compute_paleotemperature_erez_luz(delta18O_sw=delta_w, delta18O_c=delta_c)
                 # Temperature should be physically reasonable
-                assert -10 < T < 40, f"Temperature {T} outside reasonable range for delta_c={delta_c}, delta_w={delta_w}"
+                assert -10 < T < 40, (
+                    f"Temperature {T} outside reasonable range for delta_c={delta_c}, delta_w={delta_w}"
+                )
 
     def test_bemis_generic(self):
         """Test Bemis et al. (1998) equation with generic calibration."""
@@ -136,7 +138,9 @@ class TestPaleotemperatureEquations:
         # Both are for the same conditions, should be reasonably close
         # Allow for some difference since they are different calibrations
         diff = abs(T_kim - T_erez)
-        assert diff < 5, f"Temperature difference {diff} C between Kim-O'Neil ({T_kim}) and Erez-Luz ({T_erez}) too large"
+        assert diff < 5, (
+            f"Temperature difference {diff} C between Kim-O'Neil ({T_kim}) and Erez-Luz ({T_erez}) too large"
+        )
 
     def test_three_equation_consistency(self):
         """Test all three equations give similar temperatures for typical conditions."""

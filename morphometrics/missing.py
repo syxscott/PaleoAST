@@ -87,9 +87,7 @@ def _similarity_fit(source: npt.NDArray, target: npt.NDArray):
     try:
         U, S, Vt = np.linalg.svd(H)
     except np.linalg.LinAlgError as e:
-        raise MorphometricsError(
-            _("SVD failed during partial Procrustes fit: {0}").format(e)
-        )
+        raise MorphometricsError(_("SVD failed during partial Procrustes fit: {0}").format(e))
     d = np.sign(np.linalg.det(Vt.T @ U.T))
     D = np.diag([1.0] * (A.shape[1] - 1) + [d])
     R = Vt.T @ D @ U.T
@@ -125,9 +123,7 @@ def estimate_missing(
 
     X = np.asarray(configurations, dtype=float)
     if X.ndim != 3 or X.shape[1] < 2 or X.shape[2] not in (2, 3):
-        raise MorphometricsError(
-            _("estimate_missing expects (n, p>=2, k in 2|3); got {0}").format(X.shape)
-        )
+        raise MorphometricsError(_("estimate_missing expects (n, p>=2, k in 2|3); got {0}").format(X.shape))
 
     n, p, k = X.shape
     lm_missing = np.isnan(X).any(axis=2)  # (n, p)
@@ -165,8 +161,9 @@ def estimate_missing(
         miss = np.where(lm_missing[i])[0]
         if obs.sum() < k + 1:
             raise MorphometricsError(
-                _("Specimen {0}: only {1} observed landmarks; need at least {2} "
-                  "for a partial Procrustes fit").format(i, int(obs.sum()), k + 1)
+                _("Specimen {0}: only {1} observed landmarks; need at least {2} for a partial Procrustes fit").format(
+                    i, int(obs.sum()), k + 1
+                )
             )
         c, s, R = _similarity_fit(X[i][obs], ref[obs])
 
@@ -185,9 +182,7 @@ def estimate_missing(
             key = tuple(bool(v) for v in obs)
             if key not in reg_cache:
                 Ymat = aligned_complete[:, miss, :].reshape(n_complete, -1)
-                Xmat = np.column_stack(
-                    [aligned_complete[:, obs, :].reshape(n_complete, -1), np.ones(n_complete)]
-                )
+                Xmat = np.column_stack([aligned_complete[:, obs, :].reshape(n_complete, -1), np.ones(n_complete)])
                 beta, _residuals, _rank, _sv = np.linalg.lstsq(Xmat, Ymat, rcond=None)
                 reg_cache[key] = (miss, beta)
             miss_cached, beta = reg_cache[key]

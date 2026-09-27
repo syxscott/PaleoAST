@@ -397,11 +397,7 @@ class RowMetadataManager:
                     continue
                 label = meta_dict.get("label")
                 if label is None:
-                    label = (
-                        self._row_labels[idx]
-                        if idx < len(self._row_labels)
-                        else f"Sample_{idx + 1}"
-                    )
+                    label = self._row_labels[idx] if idx < len(self._row_labels) else f"Sample_{idx + 1}"
                 self._metadata[idx] = RowMetadata(
                     row_index=idx,
                     label=label,

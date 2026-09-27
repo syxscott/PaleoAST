@@ -505,7 +505,15 @@ class SpectralAnalyzer:
         # Convert scales to Fourier frequencies (cycles per unit time),
         # following Torrence & Compo (1998) per-wavelet Fourier factors.
         sampling_rate = 1.0 / dt if dt > 0 else 1.0
-        frequencies = np.array([_wavelet_fourier_frequency(s, wavelet.lower() if wavelet in ("morlet", "mexican_hat") else "morlet") for s in scales]) * sampling_rate
+        frequencies = (
+            np.array(
+                [
+                    _wavelet_fourier_frequency(s, wavelet.lower() if wavelet in ("morlet", "mexican_hat") else "morlet")
+                    for s in scales
+                ]
+            )
+            * sampling_rate
+        )
 
         # Find peak
         peak_idx = np.unravel_index(np.argmax(power), power.shape)

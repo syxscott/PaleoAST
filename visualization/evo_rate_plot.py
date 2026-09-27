@@ -47,7 +47,6 @@ class EvolutionRatePlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-
     def plot_phenogram(
         self,
         trait_series: npt.NDArray[np.float64],

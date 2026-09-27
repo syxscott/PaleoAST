@@ -122,9 +122,7 @@ class NEXUSWriter:
         # Characters that require quoting in NEXUS taxa names. Tab and
         # newline are whitespace like space: an unquoted name containing
         # them would silently split into multiple tokens / rows.
-        special_chars = {
-            " ", "\t", "\n", ",", '"', "'", "(", ")", "[", "]", "{", "}", "=", ";", ":"
-        }
+        special_chars = {" ", "\t", "\n", ",", '"', "'", "(", ")", "[", "]", "{", "}", "=", ";", ":"}
         if not any(c in name for c in special_chars):
             return name
         # Escape internal single quotes by doubling them
@@ -162,9 +160,7 @@ class NEXUSWriter:
             char_statlabels: 字符状态标签字典 {char_index: "label states"}
         """
         if len(data) != len(self._taxa):
-            raise ValueError(
-                f"Data row count ({len(data)}) must match taxa count ({len(self._taxa)})"
-            )
+            raise ValueError(f"Data row count ({len(data)}) must match taxa count ({len(self._taxa)})")
         # Only the ROW count was checked. A ragged matrix produced a corrupt
         # file: write_nexus(["A","B"], [[0,1,0],[1,0]]) emitted NCHAR=3 with
         # the rows "A 010" / "B 10" -- a MATRIX block no NEXUS reader accepts.
@@ -179,9 +175,7 @@ class NEXUSWriter:
         else:
             n_chars = 0
         if char_labels is not None and len(char_labels) != n_chars:
-            raise ValueError(
-                f"char_labels has {len(char_labels)} entries but the matrix has {n_chars} columns"
-            )
+            raise ValueError(f"char_labels has {len(char_labels)} entries but the matrix has {n_chars} columns")
         self._data = [list(row) for row in data]
         if char_labels is not None:
             self._char_labels = list(char_labels)
@@ -287,7 +281,6 @@ class NEXUSWriter:
         if self._char_labels:
             lines.append("    CHARLABELS")
             lines.append("        " + " ".join(self._char_labels) + ";")
-
 
         # CHARSTATELABELS (如果提供)
         if self._char_statlabels:

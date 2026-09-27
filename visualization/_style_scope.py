@@ -37,8 +37,9 @@ def resolve_style_params(style: str) -> dict[str, Any]:
     """
     for candidate in (style, style.replace("v0_8-", "")):
         try:
-            return dict(plt.style.library[candidate] if candidate in plt.style.library
-                        else plt.style.get_style(candidate))
+            return dict(
+                plt.style.library[candidate] if candidate in plt.style.library else plt.style.get_style(candidate)
+            )
         except (OSError, ValueError, KeyError):
             continue
     logger.debug("Could not resolve matplotlib style %r; using current rcParams", style)

@@ -95,23 +95,17 @@ class TestINEXTBootstrapResampling:
 
         abundance = np.array([[25, 10, 5, 3, 2]])
 
-        result1 = coverage_rarefaction_hill(
-            abundance, q=0, n_points=10, n_bootstrap=20, seed=999
-        )
-        result2 = coverage_rarefaction_hill(
-            abundance, q=0, n_points=10, n_bootstrap=20, seed=999
-        )
+        result1 = coverage_rarefaction_hill(abundance, q=0, n_points=10, n_bootstrap=20, seed=999)
+        result2 = coverage_rarefaction_hill(abundance, q=0, n_points=10, n_bootstrap=20, seed=999)
 
         np.testing.assert_allclose(
-            result1.expected_richness, result2.expected_richness, rtol=1e-10,
-            err_msg="Bootstrap results not reproducible with same seed"
+            result1.expected_richness,
+            result2.expected_richness,
+            rtol=1e-10,
+            err_msg="Bootstrap results not reproducible with same seed",
         )
-        np.testing.assert_allclose(
-            result1.confidence_lower, result2.confidence_lower, rtol=1e-10
-        )
-        np.testing.assert_allclose(
-            result1.confidence_upper, result2.confidence_upper, rtol=1e-10
-        )
+        np.testing.assert_allclose(result1.confidence_lower, result2.confidence_lower, rtol=1e-10)
+        np.testing.assert_allclose(result1.confidence_upper, result2.confidence_upper, rtol=1e-10)
 
     def test_different_seeds_different_results(self):
         """
@@ -121,23 +115,17 @@ class TestINEXTBootstrapResampling:
 
         abundance = np.array([[25, 10, 5, 3, 2]])
 
-        result1 = coverage_rarefaction_hill(
-            abundance, q=0, n_points=10, n_bootstrap=30, seed=111
-        )
-        result2 = coverage_rarefaction_hill(
-            abundance, q=0, n_points=10, n_bootstrap=30, seed=222
-        )
+        result1 = coverage_rarefaction_hill(abundance, q=0, n_points=10, n_bootstrap=30, seed=111)
+        result2 = coverage_rarefaction_hill(abundance, q=0, n_points=10, n_bootstrap=30, seed=222)
 
         # 点估计来自观测数据 (Chao et al. 2014), 必须与种子完全无关;
         # bootstrap 只用于置信区间, 因此不同种子的 CI 端点应当不同。
         # (旧断言期望点估计随种子变化——那正是"点估计取 bootstrap
         # 中位数"这一缺陷的症状, 2026-09 修复后语义反转。)
-        assert np.allclose(
-            result1.expected_richness, result2.expected_richness, rtol=1e-12
-        ), "Point estimate must be seed-independent (derived from observed data)"
-        assert not np.allclose(
-            result1.confidence_lower, result2.confidence_lower, rtol=1e-3
-        ) or not np.allclose(
+        assert np.allclose(result1.expected_richness, result2.expected_richness, rtol=1e-12), (
+            "Point estimate must be seed-independent (derived from observed data)"
+        )
+        assert not np.allclose(result1.confidence_lower, result2.confidence_lower, rtol=1e-3) or not np.allclose(
             result1.confidence_upper, result2.confidence_upper, rtol=1e-3
         ), "Different seeds should produce different bootstrap CI bounds"
 
@@ -154,9 +142,7 @@ class TestINEXTBootstrapCoverageLevels:
 
         abundance = np.array([[50, 30, 15, 5]])
 
-        result = coverage_rarefaction_hill(
-            abundance, q=0, n_points=20, n_bootstrap=50, seed=42
-        )
+        result = coverage_rarefaction_hill(abundance, q=0, n_points=20, n_bootstrap=50, seed=42)
 
         ci_widths = result.confidence_upper - result.confidence_lower
 
@@ -206,9 +192,7 @@ class TestINEXTBootstrapHillNumbers:
 
         abundance = np.array([[100, 50, 30, 15, 5]])
 
-        result = coverage_rarefaction_hill(
-            abundance, q=0, n_points=15, n_bootstrap=30, seed=333
-        )
+        result = coverage_rarefaction_hill(abundance, q=0, n_points=15, n_bootstrap=30, seed=333)
 
         assert result.method == "coverage_rarefaction_hill_q0"
         assert all(result.expected_richness >= 0)
@@ -221,9 +205,7 @@ class TestINEXTBootstrapHillNumbers:
 
         abundance = np.array([[100, 50, 30, 15, 5]])
 
-        result = coverage_rarefaction_hill(
-            abundance, q=1, n_points=15, n_bootstrap=30, seed=333
-        )
+        result = coverage_rarefaction_hill(abundance, q=1, n_points=15, n_bootstrap=30, seed=333)
 
         assert result.method == "coverage_rarefaction_hill_q1"
         # Shannon diversity (exp(H)) should be positive
@@ -235,9 +217,7 @@ class TestINEXTBootstrapHillNumbers:
 
         abundance = np.array([[100, 50, 30, 15, 5]])
 
-        result = coverage_rarefaction_hill(
-            abundance, q=2, n_points=15, n_bootstrap=30, seed=333
-        )
+        result = coverage_rarefaction_hill(abundance, q=2, n_points=15, n_bootstrap=30, seed=333)
 
         assert result.method == "coverage_rarefaction_hill_q2"
         # Hill-number scale: 1 <= ^2D = 1/lambda <= S (effective species)

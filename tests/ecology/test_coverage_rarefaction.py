@@ -17,8 +17,7 @@ class TestCoverageRarefactionHill:
         # Single sample: 25, 10, 5
         abundance = np.array([[25, 10, 5]])
         result = coverage_rarefaction_hill(
-            abundance, sample_names=["Sample1"],
-            q=0, n_points=10, n_bootstrap=50, seed=42
+            abundance, sample_names=["Sample1"], q=0, n_points=10, n_bootstrap=50, seed=42
         )
 
         assert result.method == "coverage_rarefaction_hill_q0"
@@ -32,8 +31,7 @@ class TestCoverageRarefactionHill:
 
         abundance = np.array([[25, 10, 5]])
         result = coverage_rarefaction_hill(
-            abundance, sample_names=["Sample1"],
-            q=1, n_points=10, n_bootstrap=50, seed=42
+            abundance, sample_names=["Sample1"], q=1, n_points=10, n_bootstrap=50, seed=42
         )
 
         assert result.method == "coverage_rarefaction_hill_q1"
@@ -46,8 +44,7 @@ class TestCoverageRarefactionHill:
 
         abundance = np.array([[25, 10, 5]])
         result = coverage_rarefaction_hill(
-            abundance, sample_names=["Sample1"],
-            q=2, n_points=10, n_bootstrap=50, seed=42
+            abundance, sample_names=["Sample1"], q=2, n_points=10, n_bootstrap=50, seed=42
         )
 
         assert result.method == "coverage_rarefaction_hill_q2"
@@ -84,15 +81,15 @@ class TestCoverageRarefactionHill:
         """Test with multiple samples."""
         from ecology.beta_diversity import coverage_rarefaction_hill
 
-        abundance = np.array([
-            [25, 10, 5],
-            [15, 20, 8],
-            [5, 5, 10],
-        ])
+        abundance = np.array(
+            [
+                [25, 10, 5],
+                [15, 20, 8],
+                [5, 5, 10],
+            ]
+        )
         result = coverage_rarefaction_hill(
-            abundance,
-            sample_names=["SiteA", "SiteB", "SiteC"],
-            q=0, n_points=20, n_bootstrap=30, seed=42
+            abundance, sample_names=["SiteA", "SiteB", "SiteC"], q=0, n_points=20, n_bootstrap=30, seed=42
         )
 
         assert len(result.sample_names) == 3
@@ -104,9 +101,7 @@ class TestCoverageRarefactionHill:
         from ecology.beta_diversity import coverage_rarefaction_hill
 
         abundance = np.array([[25, 10, 5]])
-        result = coverage_rarefaction_hill(
-            abundance, q=0, n_points=10, n_bootstrap=50, seed=42
-        )
+        result = coverage_rarefaction_hill(abundance, q=0, n_points=10, n_bootstrap=50, seed=42)
 
         ci_widths = result.confidence_upper - result.confidence_lower
         # CI should generally be wider at higher coverage levels (extrapolation)
@@ -142,9 +137,7 @@ class TestCoverageRarefactionAnalyzer:
         abundance = np.array([[25, 10, 5], [15, 20, 8]])
         analyzer = CoverageRarefactionAnalyzer()
 
-        result = analyzer.coverage_rarefaction_hill(
-            abundance, q=0, n_points=5, n_bootstrap=20, seed=42
-        )
+        result = analyzer.coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=42)
 
         assert result.method == "coverage_rarefaction_hill_q0"
         assert analyzer.last_result is not None
@@ -163,9 +156,7 @@ class TestSpiderDataset:
 
         # Spider-like data: 6 species with varying abundances
         abundance = np.array([[12, 9, 6, 3, 3, 1]])
-        result = coverage_rarefaction_hill(
-            abundance, q=0, n_points=20, n_bootstrap=50, seed=42
-        )
+        result = coverage_rarefaction_hill(abundance, q=0, n_points=20, n_bootstrap=50, seed=42)
 
         # Observed richness is 6
         # Asymptotic estimate should be >= 6
@@ -181,9 +172,7 @@ class TestSpiderDataset:
 
         # Typical spider dataset
         abundance = np.array([[12, 9, 6, 3, 3, 1]])
-        result = coverage_rarefaction_hill(
-            abundance, q=0, n_points=50, n_bootstrap=100, seed=42
-        )
+        result = coverage_rarefaction_hill(abundance, q=0, n_points=50, n_bootstrap=100, seed=42)
 
         # Basic sanity checks
         assert result.asymptote_estimate[0] > 0

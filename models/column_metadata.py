@@ -463,11 +463,7 @@ class ColumnMetadataManager:
                     continue
                 name = meta_dict.get("name")
                 if name is None:
-                    name = (
-                        self._column_labels[idx]
-                        if idx < len(self._column_labels)
-                        else f"Var_{idx + 1}"
-                    )
+                    name = self._column_labels[idx] if idx < len(self._column_labels) else f"Var_{idx + 1}"
                 self._metadata[idx] = ColumnMetadata(
                     column_index=idx,
                     name=name,

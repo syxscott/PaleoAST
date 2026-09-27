@@ -56,15 +56,9 @@ class TestKabschRotation(unittest.TestCase):
 
         for i, R in enumerate(result.rotations):
             det = np.linalg.det(R)
-            self.assertAlmostEqual(
-                det, 1.0, places=10,
-                msg=f"Rotation matrix {i} has det={det}, expected det=+1"
-            )
+            self.assertAlmostEqual(det, 1.0, places=10, msg=f"Rotation matrix {i} has det={det}, expected det=+1")
             # Also verify orthogonality: R^T R = I
-            np.testing.assert_array_almost_equal(
-                R @ R.T, np.eye(2),
-                err_msg=f"Rotation matrix {i} is not orthogonal"
-            )
+            np.testing.assert_array_almost_equal(R @ R.T, np.eye(2), err_msg=f"Rotation matrix {i} is not orthogonal")
 
     def test_pure_rotation_preserves_determinant(self):
         """
@@ -74,18 +68,11 @@ class TestKabschRotation(unittest.TestCase):
         by a known angle, then verifies the recovered rotation has det = +1.
         """
         # Create a simple shape (triangle)
-        reference = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [0.5, 1.0]
-        ])
+        reference = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]])
 
         # Rotate by 45 degrees
         angle = np.pi / 4
-        R_true = np.array([
-            [np.cos(angle), -np.sin(angle)],
-            [np.sin(angle), np.cos(angle)]
-        ])
+        R_true = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         target = reference @ R_true.T
 
         # The _find_rotation method expects (reference, target) where
@@ -101,10 +88,7 @@ class TestKabschRotation(unittest.TestCase):
         R = Vt.T @ U.T
 
         # det(R) should be +1 for a pure rotation
-        self.assertGreater(
-            np.linalg.det(R), 0,
-            msg=f"Pure rotation should have det > 0, got det={np.linalg.det(R)}"
-        )
+        self.assertGreater(np.linalg.det(R), 0, msg=f"Pure rotation should have det > 0, got det={np.linalg.det(R)}")
 
     def test_reflection_case_flipped_to_rotation(self):
         """
@@ -115,19 +99,11 @@ class TestKabschRotation(unittest.TestCase):
         """
         # Create a configuration that triggers reflection
         # This typically happens with certain symmetric configurations
-        reference = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0]
-        ])
+        reference = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
         # Create target with a reflection (determinant = -1)
         # Reflection matrix (mirror across x-y plane)
-        reflection = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, -1.0]
-        ])
+        reflection = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]])
         target = reference @ reflection.T
 
         # The Kabsch algorithm should detect and correct the reflection
@@ -148,8 +124,10 @@ class TestKabschRotation(unittest.TestCase):
 
         # Fixed R should have det = +1
         self.assertAlmostEqual(
-            np.linalg.det(R_fixed), 1.0, places=10,
-            msg=f"After correction, det should be +1, got {np.linalg.det(R_fixed)}"
+            np.linalg.det(R_fixed),
+            1.0,
+            places=10,
+            msg=f"After correction, det should be +1, got {np.linalg.det(R_fixed)}",
         )
 
     def test_rotation_with_scaling(self):
@@ -176,10 +154,7 @@ class TestKabschRotation(unittest.TestCase):
         # Create target: scaled and rotated
         scale = 2.5
         angle = np.pi / 6
-        R_true = np.array([
-            [np.cos(angle), -np.sin(angle)],
-            [np.sin(angle), np.cos(angle)]
-        ])
+        R_true = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         target = (reference * scale) @ R_true
 
         # GPA analyzer handles scaling separately; here we just test rotation
@@ -207,8 +182,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # Verify det = +1
         self.assertAlmostEqual(
-            np.linalg.det(R), 1.0, places=10,
-            msg=f"Rotation with scaling should have det=+1, got {np.linalg.det(R)}"
+            np.linalg.det(R), 1.0, places=10, msg=f"Rotation with scaling should have det=+1, got {np.linalg.det(R)}"
         )
 
         # Verify the recovered R composes correctly with R_true. With the
@@ -218,10 +192,7 @@ class TestKabschRotation(unittest.TestCase):
         # arccos(trace(M) / 2) where M is the 2x2 rotation; the original test
         # used a buggy (trace - 1) / 2 variant.
         angle_diff = np.arccos(np.clip(np.trace(R_true @ R) / 2, -1, 1))
-        self.assertLess(
-            abs(angle_diff), 0.01,
-            msg=f"Recovered angle differs by {angle_diff:.4f} rad"
-        )
+        self.assertLess(abs(angle_diff), 0.01, msg=f"Recovered angle differs by {angle_diff:.4f} rad")
 
     def test_symmetric_matrix_case(self):
         """
@@ -231,19 +202,11 @@ class TestKabschRotation(unittest.TestCase):
         making them prone to reflection issues.
         """
         # Create a symmetric shape (butterfly-like)
-        reference = np.array([
-            [-1.0, 0.0],
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [0.0, -1.0]
-        ])
+        reference = np.array([[-1.0, 0.0], [1.0, 0.0], [0.0, 1.0], [0.0, -1.0]])
 
         # Rotate by 90 degrees
         angle = np.pi / 2
-        R_true = np.array([
-            [np.cos(angle), -np.sin(angle)],
-            [np.sin(angle), np.cos(angle)]
-        ])
+        R_true = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         target = reference @ R_true.T
 
         # Kabsch
@@ -258,8 +221,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # Verify det = +1
         self.assertAlmostEqual(
-            np.linalg.det(R), 1.0, places=10,
-            msg=f"Symmetric case should have det=+1, got {np.linalg.det(R)}"
+            np.linalg.det(R), 1.0, places=10, msg=f"Symmetric case should have det=+1, got {np.linalg.det(R)}"
         )
 
     def test_3d_rotation_determinant(self):
@@ -272,14 +234,10 @@ class TestKabschRotation(unittest.TestCase):
 
         for i, R in enumerate(result.rotations):
             det = np.linalg.det(R)
-            self.assertAlmostEqual(
-                det, 1.0, places=10,
-                msg=f"3D rotation matrix {i} has det={det}, expected det=+1"
-            )
+            self.assertAlmostEqual(det, 1.0, places=10, msg=f"3D rotation matrix {i} has det={det}, expected det=+1")
             # Verify orthogonality
             np.testing.assert_array_almost_equal(
-                R @ R.T, np.eye(3),
-                err_msg=f"3D rotation matrix {i} is not orthogonal"
+                R @ R.T, np.eye(3), err_msg=f"3D rotation matrix {i} is not orthogonal"
             )
 
     def test_gpa_convergence_with_reflection_fix(self):
@@ -299,10 +257,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # All rotation matrices should have det = +1
         for i, R in enumerate(result.rotations):
-            self.assertAlmostEqual(
-                np.linalg.det(R), 1.0, places=10,
-                msg=f"Rotation {i} has det={np.linalg.det(R)}"
-            )
+            self.assertAlmostEqual(np.linalg.det(R), 1.0, places=10, msg=f"Rotation {i} has det={np.linalg.det(R)}")
 
 
 class TestBendingEnergyComputation(unittest.TestCase):
@@ -338,10 +293,7 @@ class TestBendingEnergyComputation(unittest.TestCase):
         )
 
         for i, be in enumerate(result.bending_energies):
-            self.assertGreaterEqual(
-                be, 0.0,
-                msg=f"Bending energy {i} is negative: {be}"
-            )
+            self.assertGreaterEqual(be, 0.0, msg=f"Bending energy {i} is negative: {be}")
 
     def test_bending_energy_zero_for_identical_configs(self):
         """
@@ -353,12 +305,7 @@ class TestBendingEnergyComputation(unittest.TestCase):
         from morphometrics.gpa import _compute_bending_energy
 
         # Create a simple configuration
-        consensus = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0]
-        ])
+        consensus = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
 
         # Specimen identical to consensus
         specimen = consensus.copy()
@@ -366,10 +313,7 @@ class TestBendingEnergyComputation(unittest.TestCase):
 
         be = _compute_bending_energy(specimen, consensus, fixed, 2)
 
-        self.assertAlmostEqual(
-            be, 0.0, places=10,
-            msg=f"Bending energy should be 0 for identical configs, got {be}"
-        )
+        self.assertAlmostEqual(be, 0.0, places=10, msg=f"Bending energy should be 0 for identical configs, got {be}")
 
     def test_bending_energy_increases_with_deformation(self):
         """
@@ -379,37 +323,21 @@ class TestBendingEnergyComputation(unittest.TestCase):
         """
         from morphometrics.gpa import _compute_bending_energy
 
-        consensus = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.0, 1.0],
-            [0.0, 1.0]
-        ])
+        consensus = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
 
         fixed = np.array([0, 1, 2, 3])
 
         # Small deformation
-        small_deform = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.05, 1.0],
-            [0.0, 1.0]
-        ])
+        small_deform = np.array([[0.0, 0.0], [1.0, 0.0], [1.05, 1.0], [0.0, 1.0]])
 
         # Large deformation
-        large_deform = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [1.2, 1.0],
-            [0.0, 1.0]
-        ])
+        large_deform = np.array([[0.0, 0.0], [1.0, 0.0], [1.2, 1.0], [0.0, 1.0]])
 
         be_small = _compute_bending_energy(small_deform, consensus, fixed, 2)
         be_large = _compute_bending_energy(large_deform, consensus, fixed, 2)
 
         self.assertLess(
-            be_small, be_large,
-            msg=f"Large deformation should have higher BE: small={be_small}, large={be_large}"
+            be_small, be_large, msg=f"Large deformation should have higher BE: small={be_small}, large={be_large}"
         )
 
 

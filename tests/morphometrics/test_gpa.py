@@ -159,8 +159,9 @@ class TestGPABasics(unittest.TestCase):
         # After GPA, each aligned configuration should have centroid at origin
         for i in range(len(configs)):
             centroid = np.mean(result.aligned_configurations[i], axis=0)
-            np.testing.assert_array_almost_equal(centroid, np.zeros(2), decimal=10,
-                err_msg=f"Specimen {i} centroid not at origin")
+            np.testing.assert_array_almost_equal(
+                centroid, np.zeros(2), decimal=10, err_msg=f"Specimen {i} centroid not at origin"
+            )
 
     def test_gpa_removes_scaling(self):
         """Test GPA normalizes to unit centroid size."""

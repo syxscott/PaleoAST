@@ -492,6 +492,7 @@ class ReportBuilder:
             return f"{name} = {value:.4f}, df = {df}"
         return f"{name} = {value:.4f}"
 
+
 class LatexCompiler:
     """
     LaTeX编译器封装

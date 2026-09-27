@@ -58,23 +58,20 @@ def validate_curves(
         try:
             idx = [int(x) for x in curve]
         except (TypeError, ValueError):
-            raise MorphometricsError(
-                _("Curve {0} of {1} must contain integer landmark indices").format(c_i, name)
-            )
+            raise MorphometricsError(_("Curve {0} of {1} must contain integer landmark indices").format(c_i, name))
         if len(idx) < 3:
             raise MorphometricsError(
-                _("Curve {0} of {1} has {2} points; a curve needs at least 3 "
-                  "(two fixed endpoints plus one semilandmark)").format(c_i, name, len(idx))
+                _(
+                    "Curve {0} of {1} has {2} points; a curve needs at least 3 "
+                    "(two fixed endpoints plus one semilandmark)"
+                ).format(c_i, name, len(idx))
             )
         if len(set(idx)) != len(idx):
-            raise MorphometricsError(
-                _("Curve {0} of {1} contains duplicate landmark indices").format(c_i, name)
-            )
+            raise MorphometricsError(_("Curve {0} of {1} contains duplicate landmark indices").format(c_i, name))
         for x in idx:
             if not 0 <= x < n_landmarks:
                 raise MorphometricsError(
-                    _("Curve {0} of {1} references landmark {2} outside "
-                      "[0, {3})").format(c_i, name, x, n_landmarks)
+                    _("Curve {0} of {1} references landmark {2} outside [0, {3})").format(c_i, name, x, n_landmarks)
                 )
         cleaned.append(idx)
     return cleaned

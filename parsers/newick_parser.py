@@ -215,7 +215,10 @@ class TreeNode:
 
             def copy_subtree(node: TreeNode, parent: TreeNode | None) -> TreeNode:
                 new_node = TreeNode(
-                    name=node.name, branch_length=node.branch_length, parent=parent, support=node.support,
+                    name=node.name,
+                    branch_length=node.branch_length,
+                    parent=parent,
+                    support=node.support,
                     metadata=dict(node.metadata),
                 )
                 for child in node.children:
@@ -269,9 +272,7 @@ class TreeNode:
                     if i > 0 and child is path[i - 1]:
                         # 路径上的前一个节点，已处理
                         if prev_node is not None:
-                            prev_node.branch_length = (
-                                child.branch_length if child.branch_length is not None else None
-                            )
+                            prev_node.branch_length = child.branch_length if child.branch_length is not None else None
                             rerooted.children.append(prev_node)
                             prev_node.parent = rerooted
                     else:
@@ -288,9 +289,7 @@ class TreeNode:
                     elif i > 0 and child is path[i - 1]:
                         # 路径上的前一个节点
                         if prev_node is not None:
-                            prev_node.branch_length = (
-                                child.branch_length if child.branch_length is not None else None
-                            )
+                            prev_node.branch_length = child.branch_length if child.branch_length is not None else None
                             new_node.children.append(prev_node)
                             prev_node.parent = new_node
                     else:
@@ -303,7 +302,10 @@ class TreeNode:
     def _copy_subtree_full(self, node: TreeNode, parent: TreeNode | None) -> TreeNode:
         """完整复制子树"""
         new_node = TreeNode(
-            name=node.name, branch_length=node.branch_length, parent=parent, support=node.support,
+            name=node.name,
+            branch_length=node.branch_length,
+            parent=parent,
+            support=node.support,
             metadata=dict(node.metadata),
         )
         for child in node.children:

@@ -160,11 +160,7 @@ class PlotExportDialog(QDialog):
             # Restore the user's selection since setItemText does not
             # change currentIndex but may change currentText.
             idx = next(
-                (
-                    j
-                    for j in range(self._format_combo.count())
-                    if self._format_combo.itemData(j) == current_fmt
-                ),
+                (j for j in range(self._format_combo.count()) if self._format_combo.itemData(j) == current_fmt),
                 0,
             )
             self._format_combo.setCurrentIndex(idx)
@@ -173,18 +169,14 @@ class PlotExportDialog(QDialog):
             current_bg = self._bg_value(self._bg_combo.currentText())
             self._bg_combo.blockSignals(True)
             self._bg_combo.clear()
-            self._bg_combo.addItems(
-                [self._bg_label(b) for b in ("white", "transparent", "theme")]
-            )
+            self._bg_combo.addItems([self._bg_label(b) for b in ("white", "transparent", "theme")])
             self._bg_combo.setCurrentText(self._bg_label(current_bg))
             self._bg_combo.blockSignals(False)
         if hasattr(self, "_color_mode_combo"):
             current_cm = self._color_value(self._color_mode_combo.currentText())
             self._color_mode_combo.blockSignals(True)
             self._color_mode_combo.clear()
-            self._color_mode_combo.addItems(
-                [self._color_label(c) for c in ("color", "grayscale")]
-            )
+            self._color_mode_combo.addItems([self._color_label(c) for c in ("color", "grayscale")])
             self._color_mode_combo.setCurrentText(self._color_label(current_cm))
             self._color_mode_combo.blockSignals(False)
         # Save dialog title (used by the Browse button).
@@ -232,11 +224,7 @@ class PlotExportDialog(QDialog):
         if default_fmt not in self.FORMAT_LABELS:
             default_fmt = "png"
         idx = next(
-            (
-                i
-                for i, fmt in enumerate(("svg", "pdf", "png", "jpg"))
-                if fmt == default_fmt
-            ),
+            (i for i, fmt in enumerate(("svg", "pdf", "png", "jpg")) if fmt == default_fmt),
             3,
         )
         self._format_combo.setCurrentIndex(idx)
@@ -322,9 +310,7 @@ class PlotExportDialog(QDialog):
         layout.addWidget(self._presets_group)
 
         # ---- Bottom: OK / Cancel ----------------------------------------
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -343,9 +329,7 @@ class PlotExportDialog(QDialog):
     def _on_browse_clicked(self) -> None:
         """Show a native Save dialog with a filter matching the format."""
         fmt = self._current_format()
-        filter_str = (
-            f"{self.FORMAT_LABELS[fmt]} (*.{fmt});;All files (*)"
-        )
+        filter_str = f"{self.FORMAT_LABELS[fmt]} (*.{fmt});;All files (*)"
         path, _selected_filter = QFileDialog.getSaveFileName(self, _("Export Plot"), self._path_edit.text(), filter_str)
         if path:
             self._path_edit.setText(path)
@@ -404,11 +388,7 @@ class PlotExportDialog(QDialog):
         """Push ``options`` back into the dialog widgets."""
         # Format combo (find by data).
         idx = next(
-            (
-                i
-                for i in range(self._format_combo.count())
-                if self._format_combo.itemData(i) == options.format
-            ),
+            (i for i in range(self._format_combo.count()) if self._format_combo.itemData(i) == options.format),
             0,
         )
         self._format_combo.setCurrentIndex(idx)
@@ -477,9 +457,7 @@ class PlotExportDialog(QDialog):
         # would so the UI can show it inline.
         p = Path(path)
         if p.suffix.lower().lstrip(".") != fmt:
-            raise ValueError(
-                _("File extension does not match format {0}. Expected .{0}.").format(fmt)
-            )
+            raise ValueError(_("File extension does not match format {0}. Expected .{0}.").format(fmt))
 
         bg_label = self._bg_combo.currentText()
         background = self._bg_value(bg_label)

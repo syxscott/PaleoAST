@@ -181,8 +181,7 @@ class MarkovAnalyzer:
 
         if n_states < 2:
             raise ValueError(
-                "Markov chain analysis needs at least 2 distinct facies "
-                "codes; the sequence is a single facies."
+                "Markov chain analysis needs at least 2 distinct facies codes; the sequence is a single facies."
             )
 
         # Build transition count matrix
@@ -262,9 +261,7 @@ class MarkovAnalyzer:
         return E, chi2, (T.shape[0] - 1) ** 2
 
     @staticmethod
-    def _quasi_independence_expectation(
-        T: npt.NDArray, n_states: int
-    ) -> tuple[npt.NDArray, float, int]:
+    def _quasi_independence_expectation(T: npt.NDArray, n_states: int) -> tuple[npt.NDArray, float, int]:
         """Powers & Easterling (1982) quasi-independence test.
 
         Applied to embedded chains, whose diagonal is a structural zero:
@@ -286,8 +283,7 @@ class MarkovAnalyzer:
         off_total = float(T_deg.sum())
         if off_total <= 0:
             raise ValueError(
-                "No transition found between different facies: the sequence "
-                "cannot be tested for Markov dependence."
+                "No transition found between different facies: the sequence cannot be tested for Markov dependence."
             )
         row_sums = T_deg.sum(axis=1)
         col_sums = T_deg.sum(axis=0)
@@ -297,17 +293,16 @@ class MarkovAnalyzer:
         mask = E > 0
         if not mask.any():
             raise ValueError(
-                "No admissible expected transition count: quasi-independence "
-                "is unidentifiable for this sequence."
+                "No admissible expected transition count: quasi-independence is unidentifiable for this sequence."
             )
         n_cells = int(np.count_nonzero(mask))
-        if n_cells < n_states ** 2 - n_states:
+        if n_cells < n_states**2 - n_states:
             logger.warning(
                 "%d of %d off-diagonal cells have no expected count (empty "
                 "row/column margin); chi-squared is summed over the admissible "
                 "cells only, so the p-value is conservative.",
-                n_states ** 2 - n_states - n_cells,
-                n_states ** 2 - n_states,
+                n_states**2 - n_states - n_cells,
+                n_states**2 - n_states,
             )
         chi2 = float(np.sum((T_deg[mask] - E[mask]) ** 2 / E[mask]))
         return E, chi2, (n_states - 1) * (n_states - 2)

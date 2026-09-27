@@ -93,6 +93,4 @@ class PresetManager:
     def iter_files(self) -> list[str]:
         if not os.path.isdir(self.directory):
             return []
-        return [
-            os.path.join(self.directory, e) for e in sorted(os.listdir(self.directory)) if e.endswith(".json")
-        ]
+        return [os.path.join(self.directory, e) for e in sorted(os.listdir(self.directory)) if e.endswith(".json")]

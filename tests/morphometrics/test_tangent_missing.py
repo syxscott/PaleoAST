@@ -106,9 +106,7 @@ class TestEstimateMissing:
     def test_recovers_missing_landmarks_2d_tps(self):
         configs, truth, missing_rows = _raw_fixture(k=2)
         res = estimate_missing(configs, method="tps")
-        assert res.estimated_mask[0].tolist() == [
-            i in missing_rows for i in range(configs.shape[1])
-        ]
+        assert res.estimated_mask[0].tolist() == [i in missing_rows for i in range(configs.shape[1])]
         err = np.linalg.norm(res.filled_configurations[0, missing_rows] - truth[0, missing_rows])
         assert np.isfinite(err)
         # jitter scale is 0.01 per coord; consensus+TPS should be far below
@@ -168,9 +166,7 @@ class TestEstimateMissing:
         # observed landmarks of the incomplete specimen, once mapped into
         # the reference frame, must sit near the consensus
         obs0 = ~np.isnan(configs[0]).any(axis=1)
-        d = np.linalg.norm(
-            res.aligned_filled[0][obs0] - res.reference[obs0], axis=1
-        )
+        d = np.linalg.norm(res.aligned_filled[0][obs0] - res.reference[obs0], axis=1)
         assert d.mean() < 0.1
 
 

@@ -133,9 +133,7 @@ class TestPagelLambda:
             lams.append(pagel_lambda(tree, traits).lambda_)
 
         median_lambda = float(np.median(lams))
-        assert 0.4 < median_lambda <= 1.0, (
-            f"median λ={median_lambda} is outside reasonable range for BM data"
-        )
+        assert 0.4 < median_lambda <= 1.0, f"median λ={median_lambda} is outside reasonable range for BM data"
 
     @staticmethod
     def _simulate_bm(node, val, rng, out):
@@ -210,7 +208,9 @@ class TestPhylogeneticSignalCombined:
             out[node.name] = val
             return
         for ch in node.children:
-            TestPhylogeneticSignalCombined._simulate_bm(ch, val + rng.normal(0, np.sqrt(ch.branch_length or 0.0)), rng, out)
+            TestPhylogeneticSignalCombined._simulate_bm(
+                ch, val + rng.normal(0, np.sqrt(ch.branch_length or 0.0)), rng, out
+            )
 
     def test_bm_signal_consistency(self):
         """

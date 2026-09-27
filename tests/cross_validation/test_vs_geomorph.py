@@ -31,6 +31,7 @@ class TestGPAVsGeomorph:
         np.random.seed(42)
         configs = np.random.rand(5, 10, 2) + np.array([100, 200])
         from morphometrics.gpa import GPAAnalyzer
+
         analyzer = GPAAnalyzer()
         result = analyzer.analyze(configs)
         # Consensus should have centroid near zero
@@ -42,6 +43,7 @@ class TestGPAVsGeomorph:
         np.random.seed(42)
         configs = np.random.rand(5, 10, 2) * 10
         from morphometrics.gpa import GPAAnalyzer
+
         analyzer = GPAAnalyzer()
         result = analyzer.analyze(configs)
         # After GPA, centroid size should be 1 for each specimen
@@ -56,6 +58,7 @@ class TestGPAVsGeomorph:
         np.random.seed(99)
         configs = np.random.rand(4, 8, 2)
         from morphometrics.gpa import GPAAnalyzer
+
         analyzer = GPAAnalyzer()
         result = analyzer.analyze(configs)
         # After GPA, rotations should be close to identity (no net rotation)
@@ -70,6 +73,7 @@ class TestGPAVsGeomorph:
         np.random.seed(42)
         configs = np.random.rand(6, 12, 2)
         from morphometrics.gpa import GPAAnalyzer
+
         analyzer = GPAAnalyzer()
         result = analyzer.analyze(configs)
         assert result.converged or result.n_iterations > 0
@@ -87,6 +91,7 @@ class TestEFAVsMomocs:
         y = 2 * np.sin(t) + 0.3 * np.cos(t) + np.random.rand(100) * 0.1
         contour = np.column_stack([x, y])
         from morphometrics.efa import EFAAnalyzer
+
         analyzer = EFAAnalyzer()
         result = analyzer.analyze(contour, n_harmonics=5)
         assert result.n_harmonics == 5
@@ -103,6 +108,7 @@ class TestEFAVsMomocs:
         y = 2 * np.sin(t)
         contour = np.column_stack([x, y])
         from morphometrics.efa import EFAAnalyzer
+
         analyzer = EFAAnalyzer()
         result = analyzer.analyze(contour, n_harmonics=10)
         # With 10 harmonics, reconstruction should be very close
@@ -115,6 +121,7 @@ class TestEFAVsMomocs:
         t = np.linspace(0, 2 * np.pi, 100)
         contour = np.column_stack([3 * np.cos(t), 2 * np.sin(t)])
         from morphometrics.efa import EFAAnalyzer
+
         analyzer = EFAAnalyzer()
         result = analyzer.analyze(contour, n_harmonics=5)
         assert result.coefficients.shape == (5, 4)

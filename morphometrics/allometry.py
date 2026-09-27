@@ -216,9 +216,7 @@ class PLSResult:
         if self.rv_coefficient is not None:
             lines.append(f"{_('Escoufier RV coefficient: {0:.4f}').format(self.rv_coefficient)}\n")
         if self.pls1_pvalue is not None:
-            lines.append(
-                f"{_('Permutation test of r1: p={0:.4f}, Z={1:.2f}').format(self.pls1_pvalue, self.pls1_z)}\n"
-            )
+            lines.append(f"{_('Permutation test of r1: p={0:.4f}, Z={1:.2f}').format(self.pls1_pvalue, self.pls1_z)}\n")
         lines.append("")
         lines.append(f"{_('PLS score correlations by component:')}\n")
         for i, r in enumerate(self.pls_correlations):
@@ -468,7 +466,7 @@ class AllometryAnalyzer:
         for i in range(n_specimens):
             centroid = configurations[i].mean(axis=0)
             diff = configurations[i] - centroid
-            centroid_sizes[i] = np.sqrt(np.sum(diff ** 2))
+            centroid_sizes[i] = np.sqrt(np.sum(diff**2))
 
         return centroid_sizes
 

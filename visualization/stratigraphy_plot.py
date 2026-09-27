@@ -53,7 +53,6 @@ class StratigraphyPlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-
     def plot_extinction_ranges(
         self,
         lad_positions: npt.NDArray[np.float64],
@@ -449,11 +448,13 @@ class StratigraphyPlotter:
         # Resolve colour palette (prefer design system, fall back to config.colors)
         try:
             from config.design_system import colors as ds_colors
+
             primary_color = ds_colors.primary
             text_color = ds_colors.text_primary
             border_color = ds_colors.border_medium
         except Exception:
             from config.colors import PRIMARY_COLOR, CELL_HEADER_TEXT, DEFAULT_EDGE_COLOR
+
             primary_color = PRIMARY_COLOR
             text_color = CELL_HEADER_TEXT
             border_color = DEFAULT_EDGE_COLOR
@@ -559,8 +560,7 @@ class StratigraphyPlotter:
         heights = np.asarray(section.heights, dtype=np.float64)
         thicknesses = (
             np.asarray(section.thicknesses, dtype=np.float64)
-            if section.thicknesses is not None
-            and len(section.thicknesses) == len(heights)
+            if section.thicknesses is not None and len(section.thicknesses) == len(heights)
             else np.ones_like(heights)
         )
         lithologies = section.lithologies or [f"L{i + 1}" for i in range(len(heights))]
@@ -668,8 +668,7 @@ class StratigraphyPlotter:
         ax.set_xticks([])
         ax.grid(True, axis="y", linestyle=":", alpha=0.3, color=border_color)
         ax.set_title(
-            f"{getattr(section_a, 'name', 'A')} - {getattr(section_b, 'name', 'B')}\n"
-            f"sim={similarity:.2f}",
+            f"{getattr(section_a, 'name', 'A')} - {getattr(section_b, 'name', 'B')}\nsim={similarity:.2f}",
             fontsize=max(6, self._font_size - 1),
         )
 
@@ -710,9 +709,7 @@ class StratigraphyPlotter:
         # Row-wise DP. Inner loop is in NumPy via cumulative ``minimum``.
         for i in range(1, n_a + 1):
             for j in range(1, n_b + 1):
-                cost[i, j] = local[i - 1, j - 1] + min(
-                    cost[i - 1, j], cost[i, j - 1], cost[i - 1, j - 1]
-                )
+                cost[i, j] = local[i - 1, j - 1] + min(cost[i - 1, j], cost[i, j - 1], cost[i - 1, j - 1])
 
         # Backtrack the optimal path
         path: list[tuple[int, int]] = []

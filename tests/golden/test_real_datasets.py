@@ -144,8 +144,7 @@ class TestHummingbirdsGPA:
         assert np.all(result.bending_energies >= 0.0)
         assert result.sliding_iterations >= 1
         # On real data the sliders genuinely move off their digitised spots.
-        moved = np.abs(result.aligned_configurations[:, sliders, :]
-                       - plain.aligned_configurations[:, sliders, :]).max()
+        moved = np.abs(result.aligned_configurations[:, sliders, :] - plain.aligned_configurations[:, sliders, :]).max()
         assert moved > 1e-6
 
 

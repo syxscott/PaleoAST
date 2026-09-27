@@ -779,7 +779,9 @@ def _cox_ph_scipy(
                 beta_p[i] += eps
                 beta_m = beta.copy()
                 beta_m[i] -= eps
-                hessian[i, i] = (neg_partial_log_likelihood(beta_p) - 2 * f0 + neg_partial_log_likelihood(beta_m)) / eps**2
+                hessian[i, i] = (
+                    neg_partial_log_likelihood(beta_p) - 2 * f0 + neg_partial_log_likelihood(beta_m)
+                ) / eps**2
             else:
                 beta_pp = beta.copy()
                 beta_pp[i] += eps

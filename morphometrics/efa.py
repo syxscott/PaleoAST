@@ -274,7 +274,7 @@ class EFAAnalyzer:
             # piecewise-linear contour. Use the canonical K&G form.
             cos_t = np.cos(omega * t)
             sin_t = np.sin(omega * t)
-            dcos = cos_t[1:] - cos_t[:-1]   # cos(ω t_k) − cos(ω t_{k-1})
+            dcos = cos_t[1:] - cos_t[:-1]  # cos(ω t_k) − cos(ω t_{k-1})
             dsin = sin_t[1:] - sin_t[:-1]
             # Per-segment slopes (guard against zero-length segments).
             seg_len = np.diff(t)

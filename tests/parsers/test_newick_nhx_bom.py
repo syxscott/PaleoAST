@@ -106,9 +106,7 @@ class TestNewickParserEnhancements:
     def test_bom_stripping(self):
         """UTF-8 BOM in file should be stripped on parse_file."""
         parser = NewickParser()
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".nwk", delete=False, encoding="utf-8-sig"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".nwk", delete=False, encoding="utf-8-sig") as f:
             # Write content (the utf-8-sig codec itself adds the BOM)
             f.write("(A:0.1,B:0.2);")
             tmp_path = f.name

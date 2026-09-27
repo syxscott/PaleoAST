@@ -49,7 +49,6 @@ class AllometryPlotter:
         self._font_size = 10
         self._title_font_size = 12
 
-
     def plot_allometry_scatter(
         self,
         centroid_sizes: npt.NDArray[np.float64],

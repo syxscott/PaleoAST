@@ -231,9 +231,7 @@ class AbundanceModelFitter:
         try:
             x = optimize.brentq(equation, 0.001, 0.999)
         except ValueError:
-            self._logger.warning(
-                f"Log-series brentq solver failed for S={S}, N={N}, using fallback x=0.5"
-            )
+            self._logger.warning(f"Log-series brentq solver failed for S={S}, N={N}, using fallback x=0.5")
             x = 0.5
 
         # S = alpha * (-ln(1-x))  =>  alpha = S / (-ln(1-x))
@@ -312,10 +310,7 @@ class SHEResult:
 
     def summary(self) -> str:
         if self.s_values.size == 0:
-            return (
-                f"SHE Analysis: {_('no data points')}\n"
-                f"{_('Supply at least one non-empty sample.')}"
-            )
+            return f"SHE Analysis: {_('no data points')}\n{_('Supply at least one non-empty sample.')}"
         return (
             f"SHE Analysis: {len(self.sample_sizes)} data points\n"
             f"S range: [{self.s_values.min():.0f}, {self.s_values.max():.0f}]\n"

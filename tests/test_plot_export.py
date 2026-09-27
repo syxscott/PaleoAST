@@ -47,9 +47,7 @@ def test_export_pdf_writes_pdf_file(tmp_path: Path, tiny_figure) -> None:
 
 def test_export_png_writes_png_with_dpi(tmp_path: Path, tiny_figure) -> None:
     out = tmp_path / "plot.png"
-    export_figure(
-        tiny_figure, str(out), PlotExportOptions(format="png", dpi=144)
-    )
+    export_figure(tiny_figure, str(out), PlotExportOptions(format="png", dpi=144))
     data = _read(out)
     assert data.startswith(b"\x89PNG\r\n\x1a\n")
     # Width and height in pixels are stored as 4-byte big-endian ints at
@@ -334,9 +332,7 @@ def test_export_dialog_retranslates_on_language_change(qapp_export, tmp_path):
     i18n.set_language("zh")
     dialog.retranslate()
 
-    assert dialog.windowTitle() != title_en, (
-        f"Window title stayed {title_en!r} after language change"
-    )
+    assert dialog.windowTitle() != title_en, f"Window title stayed {title_en!r} after language change"
     assert dialog._file_group.title() != file_group_en
     assert dialog._browse_btn.text() != browse_en
 

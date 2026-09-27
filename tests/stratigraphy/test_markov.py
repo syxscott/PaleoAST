@@ -37,12 +37,7 @@ def test_iid_sequences_are_not_declared_markovian():
 def test_true_markov_chain_is_detected():
     analyzer = MarkovAnalyzer()
     rng = np.random.default_rng(7)
-    transition = np.array(
-        [[0.0, 0.7, 0.2, 0.1],
-         [0.1, 0.0, 0.8, 0.1],
-         [0.5, 0.1, 0.0, 0.4],
-         [0.2, 0.6, 0.2, 0.0]]
-    )
+    transition = np.array([[0.0, 0.7, 0.2, 0.1], [0.1, 0.0, 0.8, 0.1], [0.5, 0.1, 0.0, 0.4], [0.2, 0.6, 0.2, 0.0]])
     hits = 0
     for _ in range(20):
         state = int(rng.integers(4))
@@ -96,8 +91,7 @@ def test_accepts_column_shaped_sequence():
 
 
 def test_non_contiguous_codes_are_remapped():
-    result = MarkovAnalyzer().analyze([0, 2, 5, 2, 0, 5],
-                                      facies_names=["F0", "F2", "F5"])
+    result = MarkovAnalyzer().analyze([0, 2, 5, 2, 0, 5], facies_names=["F0", "F2", "F5"])
     assert result.transition_matrix.shape == (3, 3)
     assert result.facies_names == ["F0", "F2", "F5"]
     assert result.n_transitions == 5
@@ -108,9 +102,9 @@ def test_short_and_degenerate_sequences_raise():
     with pytest.raises(ValueError):
         analyzer.analyze([1])
     with pytest.raises(ValueError):
-        analyzer.analyze([2, 2, 2, 2])          # a single facies
+        analyzer.analyze([2, 2, 2, 2])  # a single facies
     with pytest.raises(ValueError):
-        analyzer.analyze([0, 1, 0, 1])          # embedded chain, s = 2
+        analyzer.analyze([0, 1, 0, 1])  # embedded chain, s = 2
     with pytest.raises(ValueError):
         analyzer.analyze([0, 1, 2, 0], facies_names=["only-two"])
 

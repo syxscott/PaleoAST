@@ -41,7 +41,6 @@ class DiversityPlotter:
         self._dpi = 300
         self._font_size = 10
 
-
     def plot_rarefaction(self, result: RarefactionResult, show_ci: bool = False, title: str | None = None) -> Figure:
         """
         Create rarefaction curve plot.
@@ -151,7 +150,13 @@ class DiversityPlotter:
 
         colors = get_color_scheme("default")
 
-        bars = ax.bar(range(len(results)), values, color=[colors[i % len(colors)] for i in range(len(results))], edgecolor="white", linewidth=1.5)
+        bars = ax.bar(
+            range(len(results)),
+            values,
+            color=[colors[i % len(colors)] for i in range(len(results))],
+            edgecolor="white",
+            linewidth=1.5,
+        )
 
         ax.set_xticks(range(len(results)))
         ax.set_xticklabels(samples, rotation=45, ha="right")
@@ -235,8 +240,15 @@ class DiversityPlotter:
                 ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
             else:
                 ax1.axis("off")
-                ax1.text(0.5, 0.5, "Shannon/Simpson not available",
-                         transform=ax1.transAxes, ha="center", va="center", fontsize=10)
+                ax1.text(
+                    0.5,
+                    0.5,
+                    "Shannon/Simpson not available",
+                    transform=ax1.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                )
 
         # 2. Diversity indices radar chart (simplified as bar)
         ax2 = axes[0, 1]
@@ -255,7 +267,12 @@ class DiversityPlotter:
                     values_to_show.append(value)
 
         colors = get_color_scheme("default")
-        ax2.bar(indices_to_show, values_to_show, color=[colors[i % len(colors)] for i in range(len(indices_to_show))], edgecolor="white")
+        ax2.bar(
+            indices_to_show,
+            values_to_show,
+            color=[colors[i % len(colors)] for i in range(len(indices_to_show))],
+            edgecolor="white",
+        )
 
         ax2.set_ylabel("Value", fontsize=9)
         ax2.set_title("Diversity Indices", fontsize=11, fontweight="bold")

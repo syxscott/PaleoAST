@@ -108,7 +108,7 @@ def _normalize_path(path: str, fmt: str) -> str:
     if suffix != _FORMAT_EXTENSIONS[fmt]:
         raise ValueError(
             f"File extension {p.suffix!r} does not match export format {fmt!r}. "
-            f"Use .{ _FORMAT_EXTENSIONS[fmt] } or omit the extension."
+            f"Use .{_FORMAT_EXTENSIONS[fmt]} or omit the extension."
         )
     return str(p)
 
@@ -132,18 +132,13 @@ def _is_positive_finite(value: Any) -> bool:
 def _validate_options(options: PlotExportOptions) -> None:
     """Raise ``ValueError`` for combinations matplotlib cannot honour."""
     if options.format not in _FORMAT_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported export format: {options.format!r}. "
-            f"Use one of {sorted(_FORMAT_EXTENSIONS)}."
-        )
+        raise ValueError(f"Unsupported export format: {options.format!r}. Use one of {sorted(_FORMAT_EXTENSIONS)}.")
     if options.format in {"pdf", "jpg"} and options.transparent:
         # Matplotlib explicitly refuses ``transparent=True`` for PDF
         # (no alpha channel), and JPEG cannot represent transparency
         # at all. We surface this as a clean error rather than letting
         # matplotlib raise a confusing backend exception.
-        raise ValueError(
-            f"Format {options.format!r} does not support transparent backgrounds."
-        )
+        raise ValueError(f"Format {options.format!r} does not support transparent backgrounds.")
     if not _is_positive_finite(options.dpi):
         raise ValueError("dpi must be a positive finite number")
     if options.width_inches is not None and not _is_positive_finite(options.width_inches):
@@ -345,9 +340,7 @@ def apply_preset(options: PlotExportOptions, preset: str) -> PlotExportOptions:
     not silently fall back to defaults.
     """
     if preset not in _PRESETS:
-        raise ValueError(
-            f"Unknown export preset {preset!r}; available: {sorted(_PRESETS)}."
-        )
+        raise ValueError(f"Unknown export preset {preset!r}; available: {sorted(_PRESETS)}.")
     return replace(options, **_PRESETS[preset])
 
 
@@ -359,12 +352,7 @@ def parse_options_from_path(path: str, format: str | None = None) -> PlotExportO
     """
     fmt = format or Path(path).suffix.lower().lstrip(".")
     if not fmt:
-        raise ValueError(
-            f"Cannot infer export format from path {path!r}: no extension."
-        )
+        raise ValueError(f"Cannot infer export format from path {path!r}: no extension.")
     if fmt not in _FORMAT_EXTENSIONS:
-        raise ValueError(
-            f"Path {path!r} has unsupported extension {fmt!r}. "
-            f"Use one of {sorted(_FORMAT_EXTENSIONS)}."
-        )
+        raise ValueError(f"Path {path!r} has unsupported extension {fmt!r}. Use one of {sorted(_FORMAT_EXTENSIONS)}.")
     return PlotExportOptions(format=fmt)  # type: ignore[arg-type]

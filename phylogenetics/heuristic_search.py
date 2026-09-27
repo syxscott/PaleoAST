@@ -601,9 +601,7 @@ class HeuristicSearch:
         start_time = time.time()
 
         if initial_tree is None and len(leaf_names) < 2:
-            raise ValueError(
-                f"Tree search needs at least 2 taxa to build a starting tree, got {len(leaf_names)}"
-            )
+            raise ValueError(f"Tree search needs at least 2 taxa to build a starting tree, got {len(leaf_names)}")
 
         # 每次 search() 都从初始状态开始：温度若不在开头重置，第二次调用会
         # 直接以已冷却的温度运行（迭代在第 1 步就被 < 0.001 的收敛判据中断），

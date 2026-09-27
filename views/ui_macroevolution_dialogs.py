@@ -108,8 +108,10 @@ class MacroevolutionDialog(QDialog):
         layout.addWidget(title)
         layout.addWidget(
             QLabel(
-                _("Taxon ranges and durations are read from the columns of the loaded "
-                  "matrix. Ages are in Ma (older = larger).")
+                _(
+                    "Taxon ranges and durations are read from the columns of the loaded "
+                    "matrix. Ages are in Ma (older = larger)."
+                )
             )
         )
 
@@ -372,9 +374,11 @@ class Morpho3DDialog(QDialog):
         layout.addWidget(title)
 
         note = QLabel(
-            _("The loaded matrix is reshaped to (specimens x landmarks x 3), so the "
-              "number of landmarks per specimen is the total cell count divided by "
-              "three times the number of specimens.")
+            _(
+                "The loaded matrix is reshaped to (specimens x landmarks x 3), so the "
+                "number of landmarks per specimen is the total cell count divided by "
+                "three times the number of specimens."
+            )
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -410,8 +414,9 @@ class Morpho3DDialog(QDialog):
             QMessageBox.warning(
                 self,
                 _("Shape Mismatch"),
-                _("{0} specimens x {1} landmarks x 3 = {2} cells, but the matrix has {3}. "
-                  "Adjust the landmark count.").format(n_spec, n_land, n_spec * n_land * 3, data.size),
+                _(
+                    "{0} specimens x {1} landmarks x 3 = {2} cells, but the matrix has {3}. Adjust the landmark count."
+                ).format(n_spec, n_land, n_spec * n_land * 3, data.size),
             )
             return
 

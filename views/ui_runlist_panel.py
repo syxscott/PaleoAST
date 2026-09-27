@@ -91,9 +91,7 @@ class AddRunDialog(QDialog):
         self._analysis_combo.currentIndexChanged.connect(self._reload_presets)
         self._reload_presets()
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -140,9 +138,7 @@ class RunListPanel(QDockWidget):
         layout.setContentsMargins(8, 8, 8, 8)
 
         self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(
-            [_("Analysis"), _("Preset"), _("Parameters"), _("Status")]
-        )
+        self._table.setHorizontalHeaderLabels([_("Analysis"), _("Preset"), _("Parameters"), _("Status")])
         header = self._table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -197,7 +193,8 @@ class RunListPanel(QDockWidget):
             if item.error:
                 status = f"{status}: {item.error}"
             cells = (
-                ANALYSIS_REGISTRY[item.analysis_id].label if item.analysis_id in ANALYSIS_REGISTRY
+                ANALYSIS_REGISTRY[item.analysis_id].label
+                if item.analysis_id in ANALYSIS_REGISTRY
                 else item.analysis_id,
                 item.preset_name or "-",
                 _params_summary(item),
@@ -241,9 +238,7 @@ class RunListPanel(QDockWidget):
         row = self._table.currentRow()
         items = self._queue.items
         if row < 0 or row >= len(items):
-            QMessageBox.information(
-                self, _("Save Preset"), _("Select a queued run first to save its parameters.")
-            )
+            QMessageBox.information(self, _("Save Preset"), _("Select a queued run first to save its parameters."))
             return
         item = items[row]
         name, ok = QInputDialog.getText(self, _("Save Preset"), _("Preset name:"))

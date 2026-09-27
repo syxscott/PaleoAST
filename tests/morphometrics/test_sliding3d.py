@@ -25,9 +25,7 @@ def _arc_configs(n_specimens=5, n_lm=8):
     configs = []
     for _ in range(n_specimens):
         cfg = base + rng.normal(0.0, 0.01, size=(n_lm, 3))
-        cfg = np.concatenate(
-            [cfg, extra + rng.normal(0.0, 0.01, size=(1, 3))], axis=0
-        )
+        cfg = np.concatenate([cfg, extra + rng.normal(0.0, 0.01, size=(1, 3))], axis=0)
         configs.append(cfg)
     return configs
 

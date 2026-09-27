@@ -337,9 +337,16 @@ class CohortSurvivorshipAnalysis:
 
             interval_data_list.append(
                 IntervalData(
-                    t_start=t_start, t_end=t_end,
-                    n_fb=n_fb, n_lb=n_lb, n_surv=n_surv, n_total=n_total,
-                    n_bt=n_bt, n_bl=n_bl, n_ft=n_ft, n_fl=n_fl
+                    t_start=t_start,
+                    t_end=t_end,
+                    n_fb=n_fb,
+                    n_lb=n_lb,
+                    n_surv=n_surv,
+                    n_total=n_total,
+                    n_bt=n_bt,
+                    n_bl=n_bl,
+                    n_ft=n_ft,
+                    n_fl=n_fl,
                 )
             )
 

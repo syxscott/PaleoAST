@@ -1764,9 +1764,7 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
         ua_adv_layout.addWidget(self._uaz_similarity_spin)
 
         # Enable advanced UA preprocessing
-        self._enable_cyclic_check = QCheckBox(
-            _("Detect cyclic FAD/LAD contradictions (recommended)")
-        )
+        self._enable_cyclic_check = QCheckBox(_("Detect cyclic FAD/LAD contradictions (recommended)"))
         self._enable_cyclic_check.setChecked(True)
         self._enable_cyclic_check.setToolTip(
             _(
@@ -2113,9 +2111,7 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
         # Height column selector
         data_group = self.add_parameter_group(_("Height Column"))
         data_layout = QVBoxLayout(data_group)
-        data_layout.addWidget(
-            QLabel(_("Column used as stratigraphic height for each sample:"))
-        )
+        data_layout.addWidget(QLabel(_("Column used as stratigraphic height for each sample:")))
         self._height_combo = QComboBox()
         self._height_combo.addItem(_("(first numeric column)"), 0)
         data_layout.addWidget(self._height_combo)
@@ -2227,13 +2223,9 @@ class PaleoEnvironmentDialog(BaseAnalysisDialog):
             return
         previously_selected = set(self.get_selected_taxon_indices())
         height_idx = self._current_height_column()
-        candidate_indices = [
-            idx for idx in range(len(self._cached_labels)) if idx != height_idx
-        ]
+        candidate_indices = [idx for idx in range(len(self._cached_labels)) if idx != height_idx]
         # Filter the prior selection down to indices that still exist.
-        surviving_selection = {
-            idx for idx in previously_selected if idx in candidate_indices
-        }
+        surviving_selection = {idx for idx in previously_selected if idx in candidate_indices}
         # If nothing of the user's selection survived, fall back to
         # selecting all remaining columns so the dialog stays usable.
         if not surviving_selection:
@@ -2302,9 +2294,7 @@ class PaleoEnvironmentDialog(BaseAnalysisDialog):
         # CA settings
         ca_group = self.add_parameter_group(_("CA Options"))
         ca_layout = QVBoxLayout(ca_group)
-        self._calibrate_check = QCheckBox(
-            _("Auto-calibrate polarity (recommended)")
-        )
+        self._calibrate_check = QCheckBox(_("Auto-calibrate polarity (recommended)"))
         self._calibrate_check.setChecked(True)
         self._calibrate_check.setToolTip(
             _(
@@ -2316,9 +2306,7 @@ class PaleoEnvironmentDialog(BaseAnalysisDialog):
         )
         ca_layout.addWidget(self._calibrate_check)
 
-        self._render_plot_check = QCheckBox(
-            _("Render paleo-environmental axis plot (vs. height)")
-        )
+        self._render_plot_check = QCheckBox(_("Render paleo-environmental axis plot (vs. height)"))
         self._render_plot_check.setChecked(True)
         ca_layout.addWidget(self._render_plot_check)
 
