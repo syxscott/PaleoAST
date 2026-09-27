@@ -141,7 +141,28 @@ jobs:
           R --version | head -1
           # The runner user cannot write to site-library, so this must run under
           # sudo (an earlier version of this step failed here).
-          sudo R -e "install.packages(c('vegan','geomorph','ape','phytools','iNEXT'), repos='https://cloud.r-project.org', Ncpus=4)"
+          #
+          # geomorph is installed separately, from the CRAN archive, newest
+          # archived release first. The current CRAN version (4.1.0) declares a
+          # newer R than ubuntu-24.04 provides, and R declines it with
+          #   package 'geomorph' is not available for this version of R
+          # without failing the step -- so the run continued and importr later
+          # reported the package missing. The loop below picks the newest
+          # archived version this R can actually build, and prints which.
+          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT'), repos='https://cloud.r-project.org', Ncpus=4)"
+          sudo R --slave -e '
+            ok <- FALSE
+            for (v in c("4.0.10", "4.0.9", "4.0.8", "4.0.7")) {
+              url <- sprintf("https://cran.r-project.org/src/contrib/Archive/geomorph/geomorph_%s.tar.gz", v)
+              try(install.packages(url, repos = NULL, type = "source"), silent = TRUE)
+              if (requireNamespace("geomorph", quietly = TRUE)) {
+                cat("geomorph", as.character(utils::packageVersion("geomorph")), "installed\n")
+                ok <- TRUE
+                break
+              }
+            }
+            if (!ok) quit(status = 1)
+          '
           # `sudo R` installs into /usr/local/lib/R/site-library, but rpy2
           # resolves its library from R_LIBS*, which on Ubuntu does not include
           # that directory. Without this, importr() reports
