@@ -466,7 +466,31 @@ class DataController:
                     col_labels = [str(c) for c in df.columns.tolist()]
 
                 # Convert remaining columns to float (coerce errors to NaN)
-                data = df.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+                #
+                # A text column in a data position is coerced to NaN silently,
+                # so the user sees a blank column and only finds out when an
+                # analysis fails for an unrelated-looking reason. This happens
+                # with the project's own example file: community_abundance.csv
+                # has `site` and `group` as the first two comma-separated
+                # columns, and loading it with has_row_labels=True drops only
+                # `site`, leaving the `group` text column as a variable. It
+                # became an all-NaN column, which then made PCA abort with an
+                # opaque "SVD did not converge".
+                #
+                # Report what was lost instead of dropping it silently.
+                numeric = df.apply(pd.to_numeric, errors="coerce")
+                data = numeric.to_numpy(dtype=float)
+                fully_text = [
+                    col_labels[i] for i in range(numeric.shape[1])
+                    if numeric.shape[0] > 0 and numeric.iloc[:, i].isna().all()
+                ]
+                if fully_text:
+                    self._logger.warning(
+                        "Loaded %d column(s) that contain no numbers and are now empty: %s. "
+                        "They were most likely text labels; pass has_row_labels=False and "
+                        "drop them, or re-import with the correct delimiter.",
+                        len(fully_text), ", ".join(fully_text),
+                    )
 
                 # Create DataMatrix
                 matrix = DataMatrix(data=data, row_labels=row_labels, col_labels=col_labels)

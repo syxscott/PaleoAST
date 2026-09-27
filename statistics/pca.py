@@ -40,6 +40,7 @@ import numpy.typing as npt
 from config.i18n import _
 from utils.exceptions import (
     ComputationError,
+    DataValidationError,
     MatrixDimensionError,
 )
 from utils.validators import validate_data_array
@@ -230,6 +231,43 @@ class PCAAnalyzer:
 
             # Handle missing values (vectorized). Use .copy() above so this
             # in-place write does not modify the caller's data.
+            #
+            # An ALL-NaN column cannot be rescued by mean imputation:
+            # np.nanmean of an all-NaN column is NaN, the column survives the
+            # fill untouched, and the SVD then fails with the opaque
+            # "SVD did not converge". This is a real case: importing a file
+            # that carries a text column (e.g. a `group` label) as a data
+            # column turns it into an all-NaN column, after which
+            # impute_missing=True and impute_missing=False fail identically.
+            # Drop such columns with a warning that names them, and only fail
+            # when that would leave nothing to analyse.
+            if np.any(np.isnan(X)):
+                empty_cols = np.flatnonzero(np.all(np.isnan(X), axis=0))
+                if empty_cols.size:
+                    names = [f"Var_{i + 1}" for i in empty_cols]
+                    self._logger.warning(
+                        "Dropping %d all-missing column(s) that mean-imputation cannot "
+                        "fill: %s", empty_cols.size, ", ".join(names))
+                    keep = np.setdiff1d(np.arange(n_variables), empty_cols)
+                    if keep.size == 0:
+                        raise DataValidationError(
+                            "Cannot perform PCA: every variable is entirely missing",
+                            details={"n_samples": n_samples, "n_variables": n_variables,
+                                     "all_missing_columns": names},
+                        )
+                    X = X[:, keep]
+                    n_variables = X.shape[1]
+                    max_components = min(n_samples - 1, n_variables)
+                    if n_components is None:
+                        n_components = max_components
+                    else:
+                        n_components = min(n_components, max_components)
+                    if n_components < 1:
+                        raise MatrixDimensionError(
+                            "Cannot perform PCA: insufficient dimensions",
+                            details={"n_samples": n_samples, "n_variables": n_variables},
+                        )
+
             if impute_missing and np.any(np.isnan(X)):
                 col_means = np.nanmean(X, axis=0)
                 nan_mask = np.isnan(X)
