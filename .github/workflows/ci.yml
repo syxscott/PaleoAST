@@ -131,20 +131,61 @@ jobs:
           # exist in the R 4.3.3 that ubuntu-latest ships, and dies at import
           # with `ffi.error: symbol 'R_getVar' not found`. If the R version here
           # is ever raised, revisit the rpy2 pin in the same change.
-          echo "R version on this runner:"
-          R --version | head -1
+          echo "R version rpy2 will bind to:"
+          R --version | head -1 || true
           sudo apt-get install -y r-base r-base-dev build-essential \
             libcurl4-openssl-dev libssl-dev libxml2-dev
+          # Reported after the install, so it is the R rpy2 will actually load
+          # rather than whatever the image happened to ship.
+          echo "R version after install:"
+          R --version | head -1
           # The runner user cannot write to site-library, so this must run under
           # sudo (an earlier version of this step failed here).
           sudo R -e "install.packages(c('vegan','geomorph','ape','phytools','iNEXT'), repos='https://cloud.r-project.org', Ncpus=4)"
-      - name: Install dependencies
+          # `sudo R` installs into /usr/local/lib/R/site-library, but rpy2
+          # resolves its library from R_LIBS*, which on Ubuntu does not include
+          # that directory. Without this, importr() reports
+          #   library '/usr/lib/R/site-library' contains no packages
+          # and every cross-validation module skips -- a green-looking run that
+          # compared nothing. The path is read back from R itself rather than
+          # hardcoded, so it keeps working if the runner image moves.
+          echo "R .libPaths():"
+          R -q -s -e '.libPaths()' || true
+          LIBPATH="$(R --slave --no-save -e 'cat(paste(.libPaths(), collapse=":"))' | tr -d "'\r\n")"
+          echo "R library path exported to rpy2: ${LIBPATH}"
+          echo "R_LIBS_SITE=${LIBPATH}" >> "$GITHUB_ENV"
+
+      - name: Install Python deps and verify R is reachable
+        # Installs rpy2 here, then proves the four reference packages load
+        # through it. Fails the job rather than letting the suite skip: an
+        # all-skipped cross-validation run is indistinguishable from a passing
+        # one in the job summary, which is exactly how the previous suite hid
+        # for so long.
         run: |
           python -m pip install --upgrade pip
           # `crossval` is the extra that carries rpy2. It used to sit in `dev`,
           # where it broke the install step of every job that had no use for R
           # -- see the comment in pyproject.toml.
           pip install -e ".[dev,full,crossval]"
+          python - <<'PY'
+          import sys
+          from rpy2.robjects.packages import importr
+
+          missing = []
+          for package in ("vegan", "ape", "geomorph", "iNEXT"):
+              try:
+                  importr(package)
+              except Exception as exc:
+                  missing.append(f"{package}: {exc}")
+
+          if missing:
+              print("reference R packages NOT reachable from rpy2:", file=sys.stderr)
+              for item in missing:
+                  print("  -", item, file=sys.stderr)
+              sys.exit(1)
+          print("all four reference R packages import through rpy2")
+          PY
+
       - name: Run cross-validation tests
         # These compare PaleoAST against values the R packages compute *during*
         # this run -- there are no precomputed expectations in the suite, which
