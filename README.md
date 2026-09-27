@@ -515,8 +515,19 @@ PaleoAST 自动配置中文字体（微软雅黑/黑体）。如果中文仍不�
 ### Run tests / 运行测试
 
 ```bash
-python test_regression.py
+python -m pytest tests/ tests_morpho3d_macroevolution/
 ```
+
+### Smoke check (manual, not part of the pytest run) / 冒烟检查（手动运行，不属于 pytest 套件）
+
+```bash
+python scripts/smoke_check.py
+```
+
+> This script used to live at the repository root as `test_regression.py`,
+> where `pytest` imported it (running ~27 assertions and switching the global
+> matplotlib backend as a side effect) without ever collecting a single test
+> from it. It is now run explicitly.
 
 ### Run with pytest / 使用 pytest
 

@@ -94,9 +94,10 @@ hiddenimports = [
     "utils.exceptions",
     "utils.event_bus",
 
-    # App infrastructure
-    "app_infrastructure",
-    "app_infrastructure.exception_handler",
+    # NOTE: the `app_infrastructure` entries that used to sit here were
+    # removed with the package -- nothing imported it, and its
+    # exception_handler hard-imports `psutil`, which is only in the `full`
+    # extra, so listing it could only ever fail on a minimal build.
 
     # scipy / numpy 扩展
     "scipy",

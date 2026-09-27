@@ -78,8 +78,11 @@ py-modules = ["main", "plot_export"]
 "data" = ["examples/*", "golden/*"]
 
 [tool.setuptools.packages.find]
+# NOTE: `_core`, `rthooks` and `app_infrastructure` were removed in
+# cf1471e's successor -- see the commit that deletes them. They had zero
+# import sites anywhere (including tests); `rthooks/` was additionally dead
+# because ``PaleoAST.spec`` ships ``runtime_hooks=[]``.
 include = [
-    "_core*",
     "config*",
     "controllers*",
     "data*",
@@ -94,14 +97,12 @@ include = [
     "plugins*",
     "presets*",
     "reporting*",
-    "rthooks*",
     "state_machine*",
     "statistics*",
     "stratigraphy*",
     "utils*",
     "views*",
     "visualization*",
-    "app_infrastructure*",
 ]
 exclude = [
     "tests*",
@@ -152,14 +153,14 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests_morpho3d_macroevolution/**/*.py" = ["E", "W", "F", "B008", "N"]
-"test_regression.py" = ["E", "W", "F"]
+"scripts/smoke_check.py" = ["E", "W", "F"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
     "config", "controllers", "data", "ecology", "models", "views",
     "statistics", "morphometrics", "morpho3d", "stratigraphy",
     "visualization", "utils", "phylogenetics", "macroevolution",
-    "parsers", "hpc", "reporting", "state_machine", "app_infrastructure",
+    "parsers", "hpc", "reporting", "state_machine",
 ]
 
 # =============================================================================
@@ -221,7 +222,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
     "views.*",
-    "app_infrastructure.*",
     "main",
 ]
 ignore_errors = true
@@ -230,7 +230,14 @@ ignore_errors = true
 # Pytest - Testing Configuration
 # =============================================================================
 [tool.pytest.ini_options]
-testpaths = ["tests", "tests_morpho3d_macroevolution", "."]
+# NOTE: "." used to be listed here so that the root-level ``test_regression.py``
+# got picked up. It never actually contributed a test: its 31 functions are
+# named ``t_*``/``test`` and match neither ``python_functions`` nor
+# ``python_classes``, so pytest collected zero items from it -- while still
+# IMPORTING the module, which executed ~27 top-level ``test(...)`` calls, ran
+# ``matplotlib.use("Agg")`` over the whole session and printed to stdout. That
+# file now lives at ``scripts/smoke_check.py`` and is run manually.
+testpaths = ["tests", "tests_morpho3d_macroevolution"]
 pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -270,8 +277,7 @@ source = [
 omit = [
     "tests*",
     "tests_morpho3d_macroevolution*",
-    "app_infrastructure*",
-    "test_regression.py",
+    "scripts*",
 ]
 
 [tool.coverage.report]
