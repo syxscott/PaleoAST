@@ -362,22 +362,27 @@ class BinaryCache:
             crc_data = matrix_bytes + row_labels_bytes + col_labels_bytes + metadata_bytes
             header.crc32 = zlib.crc32(crc_data) & 0xFFFFFFFF
 
-            # 写入文件
-            with open(filepath, "wb") as f:
-                # 写入头部
-                f.write(header.to_bytes())
-
-                # 写入矩阵数据
-                f.write(matrix_bytes)
-
-                # 写入行标签
-                f.write(row_labels_bytes)
-
-                # 写入列标签
-                f.write(col_labels_bytes)
-
-                # 写入元数据
-                f.write(metadata_bytes)
+            # 原子写: 先写同目录临时文件, fsync, 再 os.replace 覆盖。
+            # 旧的 open(filepath, "wb") 会**先截断**目标, 中途失败(磁盘满、
+            # 权限、异常)就留下一半文件, 并且把原来那份完好的缓存一起毁掉,
+            # 而 save() 只是返回 False。同目录保证 replace 是同卷原子操作。
+            tmp_path = f"{filepath}.tmp.{os.getpid()}"
+            try:
+                with open(tmp_path, "wb") as f:
+                    f.write(header.to_bytes())
+                    f.write(matrix_bytes)
+                    f.write(row_labels_bytes)
+                    f.write(col_labels_bytes)
+                    f.write(metadata_bytes)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, filepath)
+            except BaseException:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+                raise
 
             self._logger.info(f"Saved matrix {nrow}x{ncol} to {filepath} ({os.path.getsize(filepath)} bytes)")
             return True
@@ -525,7 +530,12 @@ class BinaryCache:
             filepath: 文件路径
 
         返回:
-            (NumPy数组, mmap对象) 或 None
+            (NumPy数组, mmap对象) 或 None。
+
+            返回的 mmap **是打开的**，调用方负责 ``mm.close()``；数组本身已经
+            ``.copy()``，与 mmap 解耦，所以关闭 mmap 不会影响数据。
+            （此前这里先 ``mm.close()`` 再把它返回，调用方一用就得到
+            ``ValueError: mmap closed or invalid``。）
         """
         import numpy as np
 
@@ -570,13 +580,10 @@ class BinaryCache:
                 .copy()
             )  # 复制以断开mmap
 
-            # 数组已 .copy(), mmap 不再需要: 立即释放, 否则在 Windows 上
-            # 未关闭的 fd/mmap 会阻止文件被删除。
-            # 注: mmap.close() 幂等, 调用方再次 close() 是安全的 no-op。
-            mm.close()
-            os.close(fd)
-            fd = None
-
+            # 数组已 .copy(), 与 mmap 解耦。这里**不要**关闭 mmap: 它是
+            # 返回值的一部分, 关闭后调用方一用就报
+            # "ValueError: mmap closed or invalid"。由调用方 close()。
+            # 文件句柄 fd 同样保持打开, 因为 mmap 依赖它。
             return matrix, mm
 
         except Exception as e:

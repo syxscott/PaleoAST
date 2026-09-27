@@ -235,23 +235,49 @@ class TaskScheduler:
 
                     self._logger.debug(f"Task {task_id} completed")
 
-                    # 触发依赖此任务的其他任务
-                    self._unblock_dependents(task_id)
-
                 except Exception as e:
                     with self._lock:
                         task.error = str(e)
                         task.state = TaskState.FAILED
                         self._failed.add(task_id)
+                        # Tasks that depend on a failed task can never run.
+                        # Mark them now instead of leaving them PENDING for
+                        # ever -- see the _fail_dependents note below.
+                        self._fail_dependents(task_id, str(e))
 
                     self._logger.error(f"Task {task_id} failed: {e}")
 
-                self._ready_queue.task_done()
+                finally:
+                    # Dependents must be unblocked on the failure path too.
+                    # This call used to sit in the success branch only, so a
+                    # single failed task left its dependants PENDING forever
+                    # and ``wait_all()`` (default timeout=None) never returned.
+                    self._unblock_dependents(task_id)
+                    self._ready_queue.task_done()
 
             except queue.Empty:
                 continue
             except Exception as e:
                 self._logger.error(f"Worker error: {e}")
+
+    def _fail_dependents(self, failed_id: str, reason: str) -> None:
+        """Propagate a failure to every task that (transitively) depends on it.
+
+        Called with `self._lock` held.
+        """
+        changed = True
+        seen = {failed_id}
+        while changed:
+            changed = False
+            for task_id, dep in self._tasks.items():
+                if task_id in seen or dep.state not in (TaskState.CREATED, TaskState.WAITING, TaskState.READY):
+                    continue
+                if any(d in seen for d in dep.dependencies):
+                    dep.state = TaskState.FAILED
+                    dep.error = f"dependency {failed_id} failed: {reason}"
+                    self._failed.add(task_id)
+                    seen.add(task_id)
+                    changed = True
 
     def _unblock_dependents(self, completed_id: str) -> None:
         """解除依赖任务的阻塞"""

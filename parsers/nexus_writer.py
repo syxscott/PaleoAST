@@ -165,12 +165,34 @@ class NEXUSWriter:
             raise ValueError(
                 f"Data row count ({len(data)}) must match taxa count ({len(self._taxa)})"
             )
+        # Only the ROW count was checked. A ragged matrix produced a corrupt
+        # file: write_nexus(["A","B"], [[0,1,0],[1,0]]) emitted NCHAR=3 with
+        # the rows "A 010" / "B 10" -- a MATRIX block no NEXUS reader accepts.
+        if data:
+            widths = {len(row) for row in data}
+            if len(widths) > 1:
+                detail = ", ".join(f"row {i} has {len(r)}" for i, r in enumerate(data) if len(r) != len(data[0]))
+                raise ValueError(
+                    f"Every data row must have the same number of characters; got {sorted(widths)} ({detail})"
+                )
+            n_chars = len(data[0])
+        else:
+            n_chars = 0
+        if char_labels is not None and len(char_labels) != n_chars:
+            raise ValueError(
+                f"char_labels has {len(char_labels)} entries but the matrix has {n_chars} columns"
+            )
         self._data = [list(row) for row in data]
         if char_labels is not None:
             self._char_labels = list(char_labels)
         if char_statlabels is not None:
+            bad = [k for k in char_statlabels if not 0 <= k < n_chars]
+            if bad:
+                raise ValueError(
+                    f"char_statlabels references character indices outside 0..{n_chars - 1}: {sorted(bad)}"
+                )
             self._char_statlabels = dict(char_statlabels)
-        self._logger.debug(f"Set data matrix: {len(data)} taxa x {len(data[0]) if data else 0} chars")
+        self._logger.debug(f"Set data matrix: {len(data)} taxa x {n_chars} chars")
 
     def add_tree(self, name: str, newick: str) -> None:
         """
@@ -257,6 +279,15 @@ class NEXUSWriter:
             f"MISSING={self._missing_char}",
         ]
         lines.append(f"    FORMAT {' '.join(format_parts)};")
+
+        # CHARLABELS (if provided).
+        # char_labels used to be stored in self._char_labels and never emitted,
+        # so a caller that supplied character labels got a NEXUS file with none
+        # of them -- silent data loss on export.
+        if self._char_labels:
+            lines.append("    CHARLABELS")
+            lines.append("        " + " ".join(self._char_labels) + ";")
+
 
         # CHARSTATELABELS (如果提供)
         if self._char_statlabels:

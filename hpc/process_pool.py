@@ -356,10 +356,16 @@ class ProcessPool:
 
         返回:
             Bootstrap统计量列表
+
+        Notes:
+            ``statistic_func`` is honoured. It used to be accepted, documented
+            and then ignored: every replicate went through ``_bootstrap_single``,
+            which is hard-wired to ``np.mean``, so a caller asking for a median
+            or a percentile interval silently got means.
         """
         results = self.map(
-            func=_bootstrap_single,
-            items=[data] * n_bootstraps,
+            func=_bootstrap_with_statistic,
+            items=[(data, statistic_func)] * n_bootstraps,
             chunk_size=max(1, n_bootstraps // self._n_workers),
             callback=None,
         )
@@ -412,8 +418,24 @@ def _compute_pair_distance(pair_and_matrix: tuple) -> float:
 
 
 def _bootstrap_single(data: np.ndarray) -> float:
-    """单次Bootstrap采样"""
+    """单次Bootstrap采样(均值)"""
     n = data.shape[0]
     indices = np.random.randint(0, n, size=n)
     sample = data[indices]
     return float(np.mean(sample))
+
+
+def _bootstrap_with_statistic(payload: tuple[np.ndarray, Callable[[np.ndarray], float]]) -> float:
+    """One bootstrap replicate evaluated with the caller's statistic.
+
+    Takes a single ``(data, statistic_func)`` tuple because ``ProcessPool.map``
+    forwards each item as one positional argument; it does not unpack
+    sequences.
+
+    ``statistic_func`` must be importable (a module-level function, or a
+    functools.partial of one) so it survives pickling into the worker.
+    """
+    data, statistic_func = payload
+    n = data.shape[0]
+    indices = np.random.randint(0, n, size=n)
+    return float(statistic_func(data[indices]))

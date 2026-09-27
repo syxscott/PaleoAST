@@ -474,12 +474,25 @@ class StateManager:
             "data_matrix": (self._data_matrix.copy() if self._data_matrix is not None else None),
             "column_metadata": (self._column_metadata.to_dict() if self._column_metadata else None),
             "row_metadata": (self._row_metadata.to_dict() if self._row_metadata else None),
+            # The dirty flag and the current file path belong to the snapshot:
+            # restoring a state taken right after a load must also restore
+            # "not modified" and that file, otherwise undoing back to the
+            # on-disk state still reports unsaved changes and the close
+            # handler nags about a file the user never touched.
+            "modified": self._modified,
+            "current_file": self._current_file,
         }
 
     def _restore_state(self, state: dict[str, Any]) -> None:
         """Install a snapshot produced by :meth:`_snapshot_state`."""
         matrix = state["data_matrix"]
         self._data_matrix = matrix
+        # Snapshots taken before this change carry no dirty flag / path; only
+        # overwrite when the keys are actually present.
+        if "modified" in state:
+            self._modified = bool(state["modified"])
+        if "current_file" in state:
+            self._current_file = state["current_file"]
         if matrix is None:
             self._column_metadata = None
             self._row_metadata = None

@@ -1198,15 +1198,22 @@ class ScientificSpreadsheet(QWidget):
         try:
             value = float(item.text())
         except ValueError:
-            # Revert to old value. Use blockSignals to prevent this
+            # Revert to the stored value. Use blockSignals to prevent this
             # setText from re-triggering _on_item_changed and creating
             # a recursion loop.
-            if not np.isnan(self._data[row, col]):
-                self._table.blockSignals(True)
-                try:
-                    item.setText(str(self._data[row, col]))
-                finally:
-                    self._table.blockSignals(False)
+            #
+            # The old code skipped the revert whenever the stored value was
+            # NaN, leaving the literal text the user typed sitting in the cell
+            # while self._data[row, col] stayed NaN. _make_display_item
+            # renders NaN as "", so the view and the model disagreed, and
+            # every consumer (get_data, analyze_*, export) kept seeing NaN
+            # while the user believed their text had been stored.
+            self._table.blockSignals(True)
+            try:
+                old = self._data[row, col]
+                item.setText("" if np.isnan(old) else str(old))
+            finally:
+                self._table.blockSignals(False)
             return
 
         old_value = self._data[row, col]
@@ -1235,10 +1242,14 @@ class ScientificSpreadsheet(QWidget):
         if selected_data is None:
             return
 
-        # Format as tab-separated text
+        # Format as tab-separated text.
+        # repr(), not "%g": the old f"{v:.6g}" silently truncated to 6
+        # significant digits, so copying 1234567.89 gave "1.23457e+06" and
+        # pasting it back through import_from_clipboard stored 1234570.0 --
+        # a lossy round trip with no warning. repr(round-trip) is exact.
         rows_str = []
         for i in range(selected_data.shape[0]):
-            row = [f"{v:.6g}" if not np.isnan(v) else "" for v in selected_data[i, :]]
+            row = ["" if np.isnan(v) else repr(float(v)) for v in selected_data[i, :]]
             rows_str.append("\t".join(row))
 
         text = "\n".join(rows_str)

@@ -105,13 +105,29 @@ class TPSFile:
     file_path: str | None = None
 
     def to_matrix(self) -> np.ndarray:
-        """Convert landmarks to a 2D matrix (n_specimens, n_landmarks * n_dimensions)."""
+        """Convert landmarks to a 2D matrix (n_specimens, n_landmarks * n_dimensions).
+
+        Every specimen must contribute the same number of values. The parser
+        already rejects ragged files, but this method is public, so a file
+        assembled by hand could still reach it -- and ``np.array`` over
+        unequal-length rows raises a bare
+        "ValueError: setting an array element with a sequence" that says
+        nothing about which specimen is wrong.
+        """
         if len(self.specimens) == 0:
             return np.array([])
 
-        flattened = []
-        for spec in self.specimens:
-            flattened.append(spec.landmarks.flatten())
+        widths = {int(np.asarray(spec.landmarks).size) for spec in self.specimens}
+        if len(widths) > 1:
+            detail = ", ".join(
+                f"{spec.id}={np.asarray(spec.landmarks).size}" for spec in self.specimens
+            )
+            raise TPSParseError(
+                f"Cannot build a landmark matrix from specimens with different "
+                f"landmark counts ({sorted(widths)}): {detail}"
+            )
+
+        flattened = [np.asarray(spec.landmarks).flatten() for spec in self.specimens]
         return np.array(flattened)
 
     def summary(self) -> str:
