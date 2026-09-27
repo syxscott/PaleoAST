@@ -113,6 +113,22 @@ def _normalize_path(path: str, fmt: str) -> str:
     return str(p)
 
 
+def _is_positive_finite(value: Any) -> bool:
+    """True only for real, finite, strictly positive numbers.
+
+    ``float("nan") <= 0`` is ``False`` and ``float("inf") <= 0`` is ``False``,
+    so a plain ``value <= 0`` guard used to accept NaN/Inf. A NaN canvas size
+    then reached ``figure.set_size_inches`` and raised *after* the rcParams
+    had already been mutated, leaking ``svg.fonttype``/``pdf.fonttype`` into
+    the rest of the session.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return False
+    return f > 0.0 and f == f and f != float("inf")
+
+
 def _validate_options(options: PlotExportOptions) -> None:
     """Raise ``ValueError`` for combinations matplotlib cannot honour."""
     if options.format not in _FORMAT_EXTENSIONS:
@@ -128,12 +144,12 @@ def _validate_options(options: PlotExportOptions) -> None:
         raise ValueError(
             f"Format {options.format!r} does not support transparent backgrounds."
         )
-    if options.dpi <= 0:
-        raise ValueError("dpi must be positive")
-    if options.width_inches is not None and options.width_inches <= 0:
-        raise ValueError("width_inches must be positive")
-    if options.height_inches is not None and options.height_inches <= 0:
-        raise ValueError("height_inches must be positive")
+    if not _is_positive_finite(options.dpi):
+        raise ValueError("dpi must be a positive finite number")
+    if options.width_inches is not None and not _is_positive_finite(options.width_inches):
+        raise ValueError("width_inches must be a positive finite number")
+    if options.height_inches is not None and not _is_positive_finite(options.height_inches):
+        raise ValueError("height_inches must be a positive finite number")
     if not (1 <= options.jpeg_quality <= 100):
         raise ValueError("jpeg_quality must be in [1, 100]")
 
@@ -261,14 +277,19 @@ def export_figure(figure: Figure, path: str, options: PlotExportOptions) -> str:
         matplotlib.rcParams["pdf.fonttype"] = 42
         matplotlib.rcParams["svg.fonttype"] = "none" if not options.embed_fonts else "path"
 
-    # Resize figure if the user wants a custom canvas size.
-    if options.width_inches is not None or options.height_inches is not None:
-        w = options.width_inches or figure.get_figwidth()
-        h = options.height_inches or figure.get_figheight()
-        figure.set_size_inches(w, h)
-
     restore_colors: Callable[[], None] | None = None
     try:
+        # Resize the figure if the user wants a custom canvas size. This MUST
+        # stay inside the ``try`` so the ``finally`` below always restores the
+        # rcParams we just mutated — previously a failure here (e.g. a NaN
+        # canvas size reaching set_size_inches) skipped the ``finally``
+        # entirely and left ``svg.fonttype='path'``/``pdf.fonttype=42`` set
+        # for the rest of the session.
+        if options.width_inches is not None or options.height_inches is not None:
+            w = options.width_inches or figure.get_figwidth()
+            h = options.height_inches or figure.get_figheight()
+            figure.set_size_inches(w, h)
+
         if options.color_mode == "grayscale":
             restore_colors = _apply_grayscale(figure)
 

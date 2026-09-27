@@ -231,6 +231,17 @@ class _Scanner:
                         self.error("Unexpected end of input: expected ',' or ')'")
                     self.error(f"Expected ',' or ')', got {sep!r}")
                 self.skip_ws()
+                # A comment may legally sit between ')' and the node label,
+                # e.g. the NHX/NEXUS form "(A,B)[&&NHX:S=human]Homo;".
+                # The old code simply declined to read a name when the cursor
+                # was on '['; _finish_fields then swallowed the comment and
+                # returned with the label still unread, so the leftover label
+                # re-entered the top-level tree loop and produced a phantom
+                # second root ("(A,B)[&x]C;" -> 2 trees) or a hard parse error
+                # in the nested case. Skip the comments first, then read.
+                while self.current() == "[":
+                    self.collect_comments(spec.comments)
+                    self.skip_ws()
                 if self.current() not in ("", ",", ")", ";", ":", "["):
                     spec.name = self.parse_name()
                 spec.name = spec.name or ""

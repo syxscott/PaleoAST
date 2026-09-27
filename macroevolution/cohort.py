@@ -288,11 +288,14 @@ class CohortSurvivorshipAnalysis:
             n_fl = 0  # forward extinction
 
             for o, L in records:
-                # Check temporal relationships
-                # 半开区间 [t_start, t_end): 恰在共享边界上的年龄只计入
-                # 一侧, 避免相邻 bin 重复计数 (此前双端闭合会重复计入)。
-                # 灭绝恰在年轻边界 (含 L=0 的现生存哨兵) 记为"存活过"
-                # —— 否则现生存类群会被误判为区间内灭绝 (p 归零)。
+                # 半开区间 [t_start, t_end) 的三分类。
+                #
+                # 约定（tests_morpho3d_macroevolution/tests/test_macroevolution.py
+                # ::test_all_survive 明确记录）：FAD 恰等于 t_end 的类群属于
+                # **下一个更老的 bin**，不属于本 bin；LAD 恰等于 t_start 记为
+                # "已越过年轻边界仍存活"（含 L=0 现生哨兵）。因此
+                # o == t_end 时下面六个谓词可以同时为假——这是约定的结果，
+                # 不是缺陷，该 bin 的 n_total 应为 0。
                 started_before = o > t_end
                 started_in = t_start <= o < t_end
                 started_after = o < t_start

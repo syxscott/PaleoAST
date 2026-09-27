@@ -1194,8 +1194,19 @@ class _AnalysisTask(QRunnable):
             else:
                 result = self._work()
             self._signals.result_ready.emit(result)
+        except RuntimeError as e:
+            # The parent window was destroyed while this task was still
+            # running (closeEvent's drain gave up after its timeout), so the
+            # QObject bridge is gone and emitting raises. There is nothing to
+            # report to any more: swallow it instead of letting the exception
+            # escape the worker thread, which Qt turns into
+            # "QThread: Destroyed while thread is still running" -> abort.
+            logging.getLogger(__name__).debug("Discarding analysis result after teardown: %s", e)
         except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
-            self._signals.error_raised.emit(e)
+            try:
+                self._signals.error_raised.emit(e)
+            except RuntimeError:
+                logging.getLogger(__name__).debug("Discarding analysis error after teardown: %s", e)
 
 
 class MainWindow(QMainWindow):
@@ -1278,6 +1289,10 @@ class MainWindow(QMainWindow):
         if self._thread_pool is None:
             self._thread_pool = QThreadPool()
         self._thread_pool.setMaxThreadCount(min(4, os.cpu_count() or 4))
+
+        # Set in closeEvent: once the window starts tearing down, late worker
+        # callbacks must not touch destroyed widgets.
+        self._closing = False
 
     def _setup_drag_drop(self) -> None:
         """Setup drag and drop for file loading."""
@@ -3088,6 +3103,10 @@ class MainWindow(QMainWindow):
         self._status_bar.setProgress(0, 0)  # indeterminate
         self._status_bar.setInfo(_("Running {0}...").format(title))
 
+        if self._closing:
+            self._logger.info("Ignoring analysis request for '%s': window is closing.", title)
+            return
+
         signals = _AnalysisSignals(self)
         signals.result_ready.connect(on_success)
         signals.error_raised.connect(on_error)
@@ -3574,32 +3593,47 @@ class MainWindow(QMainWindow):
         self._execute_anosim({})
 
     def _execute_anosim(self, params: dict, on_done=None, on_fail=None) -> None:
-        """Run ANOSIM (synchronous) and plot; on_done/on_fail for the runlist."""
+        """Run ANOSIM in the thread pool and plot the result.
+
+        This used to run synchronously on the GUI thread. ANOSIM performs
+        ``n_permutations`` O(n^2) rank-and-compare passes and the ribbon action
+        passed an empty params dict, so the count was always the 9999 default
+        with no dialog to lower it. Measured wall time for the same code:
+        n=100 -> 39 s, n=200 -> 205 s, n=400 -> 813 s of a completely frozen
+        window (no repaint, no cancel, no progress).
+        """
         groups = self._get_groups()
-        try:
-            self._status_bar.setProgress(0, 0)
-            result = self._statistics_controller.analyze_anosim(
-                data=self._state.data_matrix.data,
+        data = self._state.data_matrix.data
+        metric = params.get("metric", "bray_curtis")
+        n_permutations = params.get("n_permutations", 9999)
+
+        def _work():
+            return self._statistics_controller.analyze_anosim(
+                data=data,
                 groups=groups,
-                metric=params.get("metric", "bray_curtis"),
-                n_permutations=params.get("n_permutations", 9999),
+                metric=metric,
+                n_permutations=n_permutations,
             )
+
+        def _done(result):
             plot = InteractivePlotCanvas()
             plot.plot_anosim_results(result)
             plot_index = self._add_plot_to_workspace(plot, _("ANOSIM Results"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("ANOSIM analysis completed"))
-        except Exception as e:
-            self._logger.error(f"ANOSIM analysis failed: {e}")
-            if on_fail is not None:
-                on_fail(e)
-            else:
-                QMessageBox.critical(self, _("ANOSIM Error"), format_user_error(e, "ANOSIM"))
-        else:
+            self._status_bar.setProgress(100, 100)
             if on_done is not None:
                 on_done(result)
-        finally:
+
+        def _fail(exc):
+            self._logger.error(f"ANOSIM analysis failed: {exc}")
             self._status_bar.setProgress(100, 100)
+            if on_fail is not None:
+                on_fail(exc)
+            else:
+                QMessageBox.critical(self, _("ANOSIM Error"), format_user_error(exc, "ANOSIM"))
+
+        self._run_analysis_async(_work, _done, _fail, _("ANOSIM"))
 
     def _on_run_permanova(self) -> None:
         """Run Permutational Multivariate Analysis of Variance (PERMANOVA) test."""
@@ -5256,7 +5290,40 @@ class MainWindow(QMainWindow):
         # Stop status timer
         self._status_timer.stop()
 
+        # Drain the analysis thread pool BEFORE the window is destroyed.
+        # self._thread_pool is QThreadPool.globalInstance(), which outlives
+        # this window. Without an explicit drain, an in-flight run (a long
+        # NMDS, or the now-async ANOSIM) later emits result_ready on an
+        # _AnalysisSignals QObject whose parent window has already been
+        # destroyed, raising
+        # "RuntimeError: wrapped C/C++ object of type _AnalysisSignals has
+        # been deleted" and typically surfacing as
+        # "QThread: Destroyed while thread is still running" -> process abort.
+        self._drain_thread_pool()
+
         event.accept()
+
+    def _drain_thread_pool(self, timeout_ms: int = 5000) -> None:
+        """Stop accepting new analysis tasks and wait for running ones.
+
+        Tasks that do not finish within ``timeout_ms`` are abandoned: at that
+        point the alternative is hanging the close on a multi-minute
+        computation, and the ``_closing`` flag keeps their late callbacks
+        from touching destroyed widgets.
+        """
+        pool = getattr(self, "_thread_pool", None)
+        if pool is None:
+            return
+        self._closing = True
+        try:
+            pool.clear()          # drop queued-but-not-started tasks
+            if not pool.waitForDone(timeout_ms):
+                self._logger.warning(
+                    "Analysis thread pool still busy after %d ms; "
+                    "abandoning in-flight results on close.", timeout_ms
+                )
+        except Exception as exc:  # never let teardown raise
+            self._logger.warning("Thread pool drain failed: %s", exc)
 
     # =========================================================================
     # New Analysis Handlers

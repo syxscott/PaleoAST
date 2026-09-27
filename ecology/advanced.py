@@ -203,6 +203,10 @@ class AbundanceModelFitter:
         abundances = np.asarray(abundances, dtype=float)
         abundances = abundances[~np.isnan(abundances)]
         abundances = abundances[abundances > 0]
+        # 与其余三个 fitter 一致地按丰度降序排列：predicted_freq 是按 n 升序
+        # 构造后再降序排序的，若 observed 未排序，r_squared/AIC 会把未排序的观测
+        # 与降序预测逐位相减（实测 r^2 = -0.57）。
+        abundances = np.sort(abundances)[::-1]
         S = len(abundances)
         N = np.sum(abundances)
 
@@ -213,6 +217,17 @@ class AbundanceModelFitter:
                 return 1e10
             return N / S - x / ((1 - x) * (-np.log(1 - x)))
 
+        lower_bound = equation(0.001)
+        if N / S <= lower_bound:
+            # N/S 的下界就是 g(0) = 1（等所有个体都是单只时 N/S = 1）。
+            # 此时不存在 [0.001, 0.999] 内的根：真解是 x -> 0、alpha -> inf。
+            # 静默回退到 x=0.5 会给出一个毫无依据的拟合值。
+            raise ValueError(
+                f"Log-series fit requires N/S > {lower_bound:.4f} "
+                f"(got N/S={N / S:.4f} for S={S}, N={N:.0f}). "
+                f"Abundances this uniform are not identifiable under a log-series model."
+            )
+
         try:
             x = optimize.brentq(equation, 0.001, 0.999)
         except ValueError:
@@ -221,7 +236,12 @@ class AbundanceModelFitter:
             )
             x = 0.5
 
-        alpha = S * (1 - x) / (-np.log(1 - x)) if abs(1 - x) > 1e-10 else S
+        # S = alpha * (-ln(1-x))  =>  alpha = S / (-ln(1-x))
+        # (等价于 N = alpha*x/(1-x) => alpha = N*(1-x)/x；两者由上面的
+        #  equation() 保证一致。旧实现多乘了一个 (1-x)，使 alpha 偏小因子
+        #  x/(1-x)，与同文件 equation() 及 ecology/diversity.py 的
+        #  _compute_fisher_alpha 自相矛盾。)
+        alpha = S / (-np.log(1 - x)) if abs(1 - x) > 1e-10 else S
 
         # Predicted abundances
         max_n = int(np.max(abundances))

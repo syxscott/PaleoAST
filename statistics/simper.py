@@ -134,10 +134,23 @@ class SimperAnalyzer:
             data: Data matrix (n_samples x n_variables)
             groups: Group assignment for each sample
             variable_names: Names for each variable column
-            metric: Distance metric (default: Bray-Curtis)
+            metric: Dissimilarity metric. ``'bray_curtis'`` (default, the
+                original Clarke 1993 definition) or ``'euclidean'``, which
+                uses the additively-decomposable squared distance so the
+                cumulative-% table stays valid. Aliases ``'bray'`` and
+                ``'euclidian'`` are accepted. Any other value raises
+                ``ComputationError`` rather than being silently ignored.
 
         Returns:
             SimperResult
+
+        Raises:
+            ComputationError: If the requested ``metric`` has no valid
+                additive per-variable decomposition. Clarke's cumulative-%
+                contribution table is only defined when the per-variable
+                contributions sum to the pairwise dissimilarity, which holds
+                for Bray-Curtis (sum of |differences| / sum of sums) and for
+                the squared-Euclidean distance (sum of squared differences).
         """
         with self._lock:
             data = validate_data_array(data, allow_nan=False, name="data")
@@ -145,6 +158,24 @@ class SimperAnalyzer:
 
             if len(groups) != n_samples:
                 raise ComputationError(f"Group length ({len(groups)}) must match number of samples ({n_samples})")
+
+            metric_key = str(metric).strip().lower().replace("-", "_")
+            if metric_key in ("bray", "bray_curtis", "braycurtis"):
+                metric_key = "bray_curtis"
+            elif metric_key in ("euclidean", "euclidian"):
+                metric_key = "euclidean"
+            else:
+                # Previously any metric string was accepted and silently
+                # ignored: analyze(X, g, metric="euclidean") returned numbers
+                # bit-identical to bray_curtis while SimperResult.metric
+                # reported "euclidean". Jaccard has no additive per-variable
+                # decomposition, so a Clarke cumulative-% table built on it
+                # would be meaningless.
+                raise ComputationError(
+                    f"SIMPER supports only 'bray_curtis' and 'euclidean'; got {metric!r}. "
+                    f"Jaccard and other metrics have no additive per-variable "
+                    f"decomposition, so a Clarke contribution table is undefined for them."
+                )
 
             if variable_names is None:
                 variable_names = [f"Var_{i + 1}" for i in range(n_vars)]
@@ -155,7 +186,7 @@ class SimperAnalyzer:
             if n_groups < 2:
                 raise ComputationError("SIMPER requires at least 2 groups")
 
-            self._logger.info(f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups")
+            self._logger.info(f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups, metric={metric_key}")
 
             # Build group pair list
             group_pairs = []
@@ -163,10 +194,22 @@ class SimperAnalyzer:
                 for gj in range(gi + 1, n_groups):
                     group_pairs.append((unique_groups[gi], unique_groups[gj]))
 
-            # Single pass over all cross-group pairs:
-            # per-pair Bray-Curtis (for overall δ̄) and per-variable
-            # contributions δ_k(ij) = |x_ik - x_jk| / Σ_l (x_il + x_jl).
-            # Per Clarke 1993 the δ_k(ij) over variables sum to δ_ij.
+            def _pair_terms(vec_a: npt.NDArray, vec_b: npt.NDArray) -> tuple[float, npt.NDArray] | None:
+                """Per-variable terms and the pairwise dissimilarity they sum to."""
+                if metric_key == "bray_curtis":
+                    den = np.sum(vec_a + vec_b)
+                    if den <= 0:
+                        return None
+                    terms = np.abs(vec_a - vec_b) / den
+                    return float(np.sum(terms)), terms
+                # squared Euclidean: sum_k (a_k - b_k)^2 == d^2
+                diff_sq = (vec_a - vec_b) ** 2
+                total = float(np.sum(diff_sq))
+                return (total, diff_sq) if total > 0 else None
+
+            # Single pass over all cross-group pairs. Per Clarke 1993 the
+            # per-variable contributions over k sum to the pairwise
+            # dissimilarity, which is what makes the cumulative-% table valid.
             delta_rows: list[npt.NDArray] = []
             pairwise_dissimilarities: list[float] = []
             for gi in range(n_groups):
@@ -179,13 +222,12 @@ class SimperAnalyzer:
 
                     for i in range(len(idx_a)):
                         for j in range(len(idx_b)):
-                            den = np.sum(data_a[i] + data_b[j])
-                            if den <= 0:
+                            pair = _pair_terms(data_a[i], data_b[j])
+                            if pair is None:
                                 continue
-                            pairwise_dissimilarities.append(
-                                np.sum(np.abs(data_a[i] - data_b[j])) / den
-                            )
-                            delta_rows.append(np.abs(data_a[i] - data_b[j]) / den)
+                            dissimilarity, terms = pair
+                            pairwise_dissimilarities.append(dissimilarity)
+                            delta_rows.append(terms)
 
             overall_dissimilarity = float(np.mean(pairwise_dissimilarities)) if pairwise_dissimilarities else 0.0
 
@@ -253,7 +295,7 @@ class SimperAnalyzer:
                 group_pairs=group_pairs,
                 n_groups=n_groups,
                 n_variables=n_vars,
-                metric=metric,
+                metric=metric_key,
             )
 
             self._last_result = result

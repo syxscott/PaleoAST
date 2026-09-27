@@ -649,10 +649,24 @@ class PaleoASTApplication:
                 from views.ui_main_window import MainWindow
 
                 self._main_window = MainWindow()
-            except ImportError:
-                # 使用默认主窗口
+            except ImportError as exc:
+                # 曾经这里只有一个裸 `except ImportError` + 一个"Welcome"
+                # 占位窗口：非 editable 安装时 `presets` 等包缺失 → ImportError
+                # 被吞掉 → 用户只看到一个空白窗口，没有报错、没有日志线索、
+                # 连文件都打不开。现在必须明确告知失败原因。
+                self._logger.critical(
+                    "Failed to import the main window (%s: %s). "
+                    "This usually means an incomplete installation - the "
+                    "'presets', 'plugins', 'views' and 'plot_export' modules "
+                    "must all be importable. Falling back to a diagnostic "
+                    "window.",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+
                 self._main_window = QMainWindow()
-                self._main_window.setWindowTitle(f"{self.APP_NAME} v{self.VERSION}")
+                self._main_window.setWindowTitle(f"{self.APP_NAME} v{self.VERSION} - STARTUP FAILED")
                 self._main_window.resize(1200, 800)
 
                 # 中心部件
@@ -661,14 +675,19 @@ class PaleoASTApplication:
 
                 # 欢迎标签
                 welcome = QLabel(
-                    f"<h1>Welcome to {self.APP_NAME}</h1>"
+                    f"<h1>{self.APP_NAME} could not start</h1>"
                     f"<p>Version {self.VERSION}</p>"
-                    f"<p>Professional Paleontology Analysis Platform</p>"
+                    f"<p><b>{type(exc).__name__}: {exc}</b></p>"
+                    f"<p>The main window module failed to import. This is "
+                    f"almost always a broken or partial installation.</p>"
+                    f"<p>Reinstall with <code>pip install --force-reinstall .</code> "
+                    f"or run from the source tree.</p>"
                 )
                 welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                welcome.setWordWrap(True)
                 welcome.setStyleSheet("""
                     QLabel {
-                        color: #3498DB;
+                        color: #E74C3C;
                         padding: 50px;
                     }
                 """)
@@ -678,7 +697,7 @@ class PaleoASTApplication:
 
                 # 状态栏
                 status = QStatusBar()
-                status.showMessage("Ready")
+                status.showMessage(f"Startup failed: {type(exc).__name__}: {exc}")
                 self._main_window.setStatusBar(status)
 
             self._logger.info("Main window created")

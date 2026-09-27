@@ -580,18 +580,31 @@ class InteractivePlotCanvas(QWidget):
         else:
             groups = np.zeros(scores.shape[0], dtype=int)
 
-        # Store data
+        # Store data. NOTE: use the clamped dimensions for the actual
+        # drawing below, not the raw arguments. ``_clamp_dims`` exists
+        # precisely because a re-plot can be handed stale indices (5-PC PCA
+        # tab -> 1-D NMDS result, say), but the property setters only clamp
+        # the stored copy -- the old code went on to index ``scores[:, pc1]``
+        # and ``eigenvalues[pc1]`` with the *unclamped* argument, so the guard
+        # did nothing and the call raised IndexError.
         self._scores = scores
         self._eigenvalues = eigenvalues
         self._labels = labels
         self._group_labels = groups
         self._current_dim1 = pc1
         self._current_dim2 = pc2
+        pc1 = self._current_dim1
+        pc2 = self._current_dim2
 
-        # Calculate variance explained
-        total_var = np.sum(eigenvalues)
-        var_pc1 = eigenvalues[pc1] / total_var * 100
-        var_pc2 = eigenvalues[pc2] / total_var * 100
+        # Calculate variance explained. A zero-variance input (every column
+        # constant) makes every eigenvalue 0, so the ratio is 0/0: guard it
+        # instead of emitting a RuntimeWarning and "nan%" in the title.
+        total_var = float(np.sum(eigenvalues))
+        if total_var > 0:
+            var_pc1 = eigenvalues[pc1] / total_var * 100
+            var_pc2 = eigenvalues[pc2] / total_var * 100
+        else:
+            var_pc1 = var_pc2 = 0.0
 
         # Set up groups
         unique_groups = np.unique(groups)
@@ -1134,30 +1147,61 @@ class InteractivePlotCanvas(QWidget):
                 - Shannon: H' = -Σ p_i ln(p_i)
                 - Simpson: D = 1 - Σ p_i²
                 - Fisher's α: N = α ln(1 + N/α)
+
+        The result is a ``models.diversity_result.DiversityResult`` whose
+        ``indices`` attribute is a ``dict[str, DiversityIndexResult]`` (each
+        carrying ``index_name`` / ``value``). The old implementation looked for
+        ``.values`` and ``.labels`` attributes that this object does not have,
+        silently fell back to the hard-coded placeholder list
+        ``[1.5, 0.8, 2.5]``, and then crashed anyway because the bar positions
+        were sized from the 6-entry ``indices`` dict while the placeholder had 3
+        entries::
+
+            ValueError: shape mismatch: ... arg 0 with shape (6,) and arg 1 with shape (3,)
+
+        So running Diversity from the ribbon always failed. Note the indices
+        have deliberately different units (H' ~ 3, 1-D ~ 0.94, Chao-1 ~ S),
+        so Chao-1 dominates the axis; every bar is annotated with its exact
+        value so the small ones stay readable.
         """
         self._record_plot_call("plot_diversity_summary", result)
         self._ax.clear()
         self._current_plot_type = "diversity"
 
-        # Extract data
-        if hasattr(result, "indices"):
-            indices = result.indices
-        else:
-            indices = ["Shannon", "Simpson", "Fisher"]
+        # Extract data. Accept either the real DiversityResult
+        # (.indices -> dict of DiversityIndexResult) or a plain mapping of
+        # name -> number, and fall back to explicit scalars.
+        raw = getattr(result, "indices", None)
+        if raw is None:
+            raw = getattr(result, "values", None)
 
-        if hasattr(result, "values"):
-            values = result.values
+        labels: list[str] = []
+        values: list[float] = []
+        if isinstance(raw, dict):
+            for key, item in raw.items():
+                labels.append(str(getattr(item, "index_name", key)))
+                val = getattr(item, "value", item)
+                values.append(float(val) if np.isscalar(val) or isinstance(val, (int, float)) else np.nan)
+        elif isinstance(raw, (list, tuple, np.ndarray)):
+            values = [float(v) for v in raw]
+            labels = [str(getattr(result, "labels", None)[i]) for i in range(len(values))] \
+                if getattr(result, "labels", None) is not None else [str(i + 1) for i in range(len(values))]
         else:
-            values = [1.5, 0.8, 2.5]
+            raise ValueError(
+                f"plot_diversity_summary expects a DiversityResult (or a result "
+                f"with .indices/.values); got {type(result).__name__}."
+            )
 
-        if hasattr(result, "labels"):
-            labels = result.labels
-        else:
-            labels = indices
+        if not values:
+            self._ax.text(0.5, 0.5, _("No diversity indices available"),
+                          ha="center", va="center", transform=self._ax.transAxes)
+            self._figure.tight_layout()
+            self._canvas.draw()
+            return
 
         # Bar chart
-        x_pos = np.arange(len(indices))
-        bars = self._ax.bar(x_pos, values, color=self.COLORS[: len(indices)], alpha=0.7, edgecolor="white", linewidth=1)
+        x_pos = np.arange(len(values))
+        bars = self._ax.bar(x_pos, values, color=self.COLORS[: len(values)], alpha=0.7, edgecolor="white", linewidth=1)
 
         # Add value labels
         for bar, val in zip(bars, values, strict=False):
@@ -1583,23 +1627,93 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     def plot_anova_boxplot(
-        self, data: np.ndarray, groups: list[int], variable_name: str = "", group_names: list[str] | None = None
+        self, data: np.ndarray, groups: list[Any], variable_name: str = "", group_names: list[str] | None = None
     ) -> None:
-        """Plot boxplot comparing groups for a variable."""
+        """Plot boxplot comparing groups for ONE variable.
+
+        ``data`` is the full (n_samples, n_variables) matrix, so the column
+        to display must be selected: pass a 0-based column index as
+        ``variable_name`` for a plain array, or a field name for a structured
+        array. The old body ignored ``variable_name`` except for the axis
+        label and built ``plot_data`` as a list of 2-D row-blocks::
+
+            plot_data.append(data[mask])          # (n_in_group, n_vars)!
+
+        matplotlib then rejected the list outright::
+
+            ValueError: X must have 2 or fewer dimensions
+
+        so this method could not run for any multi-variable matrix — the only
+        shape it survived was a single-column input, and even then string group
+        labels crashed on ``f"Group {g + 1}"``.
+        """
         self._record_plot_call("plot_anova_boxplot", data, groups, variable_name=variable_name, group_names=group_names)
         self._current_plot_type = "anova_boxplot"
         self._ax = self._reset_axes()
 
+        data = np.asarray(data)
+        # Structured arrays keep their field structure, so they must NOT be
+        # reshaped to (n, 1) below -- doing so silently drops ``dtype.names``
+        # and the name lookup then fails.
+        is_structured = data.dtype.names is not None
+        if not is_structured:
+            if data.ndim == 1:
+                data = data.reshape(-1, 1)
+            if data.ndim != 2:
+                raise ValueError(
+                    f"plot_anova_boxplot expects a 2-D (samples x variables) array, got {data.ndim}-D"
+                )
+
+        # Resolve which column to plot. ``variable_name`` is a *name* only
+        # for a structured array; for a plain (n, p) matrix it is taken as a
+        # 0-based column index. Anything else used to fall back to column 0
+        # silently, so asking for "v1" drew the "v0" boxplot.
+        n_vars = data.shape[1] if data.ndim > 1 else 1
+        names = [str(c) for c in data.dtype.names] if is_structured else None
+        if names:
+            if not variable_name:
+                raise ValueError(f"plot_anova_boxplot needs a variable name; available: {names}")
+            if variable_name not in names:
+                raise ValueError(f"Unknown variable {variable_name!r}; available: {names}")
+            # Structured arrays are indexed by field name, not by position.
+            values_all = np.asarray(data[variable_name], dtype=float)
+        else:
+            if data.ndim == 1:
+                values_all = data
+            else:
+                col = 0
+                if variable_name:
+                    try:
+                        col = int(variable_name)
+                    except (TypeError, ValueError):
+                        raise ValueError(
+                            f"plot_anova_boxplot got variable_name={variable_name!r} for a plain "
+                            f"(samples x variables) array with {n_vars} column(s). Pass a 0-based "
+                            f"column index, or a structured array to use names."
+                        ) from None
+                    if not 0 <= col < n_vars:
+                        raise ValueError(f"column {col} out of range for {n_vars} column(s)")
+                values_all = data[:, col]
+
         unique_groups = sorted(set(groups))
+        if not unique_groups:
+            raise ValueError("plot_anova_boxplot needs at least one group")
         if group_names is None:
-            group_names = [f"Group {g + 1}" for g in unique_groups]
+            # Works for both int and str labels (the old f"Group {g + 1}" raised
+            # TypeError on any string group name).
+            group_names = [str(g) for g in unique_groups]
 
         plot_data = []
         for g in unique_groups:
-            mask = np.array(groups) == g
-            plot_data.append(data[mask])
+            mask = np.array([gr == g for gr in groups])
+            plot_data.append(values_all[mask])
 
-        bp = self._ax.boxplot(plot_data, labels=group_names[: len(unique_groups)], patch_artist=True)
+        # matplotlib renamed the boxplot ``labels`` kwarg to ``tick_labels``
+        # in 3.9 (the project supports >=3.7), so try the new name first.
+        try:
+            bp = self._ax.boxplot(plot_data, tick_labels=group_names[: len(unique_groups)], patch_artist=True)
+        except TypeError:
+            bp = self._ax.boxplot(plot_data, labels=group_names[: len(unique_groups)], patch_artist=True)
         for i, patch in enumerate(bp["boxes"]):
             patch.set_facecolor(self.COLORS[i % len(self.COLORS)])
             patch.set_alpha(0.7)
@@ -1710,9 +1824,25 @@ class InteractivePlotCanvas(QWidget):
         self._ax = self._reset_axes(projection="polar")
 
         n_bins = len(counts)
+        if n_bins == 0:
+            # Previously ``2 * np.pi / 0`` raised ZeroDivisionError.
+            self._ax.text(0.5, 0.5, _("No directional data"), ha="center",
+                          va="center", transform=self._ax.transAxes)
+            self._ax.set_title(_("Rose Diagram"), pad=20)
+            self._canvas.draw()
+            return
         bin_width = 2 * np.pi / n_bins
         # Convert degree centers to radians if values > 2*pi
         centers = np.deg2rad(bin_centers) if np.max(bin_centers) > 2 * np.pi else bin_centers
+        if len(centers) != n_bins:
+            # The production caller passes ``bin_rose_diagram``'s centres, which
+            # already match ``counts`` one-for-one. Guard anyway so a caller
+            # that hands over bin *edges* (n+1) gets a clear error instead of a
+            # numpy broadcast ValueError from deep inside matplotlib.
+            raise ValueError(
+                f"plot_rose_diagram needs one centre per count; got "
+                f"{len(centers)} centres for {n_bins} counts."
+            )
 
         self._ax.bar(centers, counts, width=bin_width * 0.8, color=self.COLORS[0], alpha=0.7, edgecolor="white")
 

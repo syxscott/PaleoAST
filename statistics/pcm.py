@@ -93,7 +93,15 @@ class ContrastResult:
 
     def summary(self) -> str:
         """Generate summary text."""
-        sig_contrasts = int(np.sum(np.abs(self.contrasts) > 1.96 * self.se))
+        # ``self.contrasts`` are already standardised z-scores
+        # (IC = dx / sqrt(v1 + v2), see ``_standardise_contrast``), so the
+        # two-sided 1.96 test is applied to them directly. The previous code
+        # compared ``|contrast| > 1.96 * self.se`` with ``se = sqrt(v1+v2)``,
+        # which turns the test into ``|dx| > 1.96*(v1+v2)`` and makes the
+        # reported count drift with the branch-length scale: rescaling every
+        # branch of a tree by 100x changed the count from 0 to 4 even though
+        # the standardised contrasts are unchanged.
+        sig_contrasts = int(np.sum(np.abs(self.contrasts) > 1.96))
         return (
             f"{_('Phylogenetic Independent Contrasts')}\n"
             f"{'=' * 50}\n"
@@ -1030,7 +1038,14 @@ class PCMAnalyzer:
             perm_F, _, _, _, _ = _one_way_f(perm_ic, perm_labels)
             perm_Fs.append(perm_F)
 
-        p_value = float(np.mean(np.array(perm_Fs) >= F)) if perm_Fs else 1.0
+        # 加一校正 (1 + #{F_perm >= F_obs}) / (1 + n_perm)：与本文件
+        # Blomberg's K (:798)、anosim.py:193、permanova.py:186 保持一致。
+        # 原来的 mean(perm >= F) 可以恰好为 0.0，无法表达"比任何一次置换都显著"。
+        if perm_Fs:
+            n_ge = int(np.sum(np.array(perm_Fs) >= F))
+            p_value = float((1.0 + n_ge) / (1.0 + len(perm_Fs)))
+        else:
+            p_value = 1.0
 
         result = PhyloANOVAResult(
             f_statistic=F,

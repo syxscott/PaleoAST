@@ -823,11 +823,31 @@ class StatisticsController:
         n_zones: int = 4,
         depths: npt.NDArray | None = None,
     ) -> CONISSResult:
-        """Run CONISS constrained clustering."""
+        """Run CONISS constrained clustering.
+
+        ``CONISSAnalyzer.analyze`` returns the legacy 2-tuple
+        ``(CONISSResult, broken_stick_dict | None)`` — that shape is locked in
+        by ``tests/stratigraphy/test_coniss_broken_stick.py::test_analyze_return_type``,
+        so it is unpacked here rather than changed at the source.
+
+        This controller previously passed the tuple straight through, so
+        ``views/ui_main_window.py`` calling ``result.linkage_matrix`` raised
+        ``AttributeError: 'tuple' object has no attribute 'linkage_matrix'``
+        every time CONISS was run from the ribbon. The broken-stick payload is
+        cached separately so it stays reachable.
+        """
         with self._lock:
             data = self._ensure_data(data)
-            result = self._coniss_analyzer.analyze(data, n_zones=n_zones, depths=depths)
+            outcome = self._coniss_analyzer.analyze(data, n_zones=n_zones, depths=depths)
+
+            if isinstance(outcome, tuple):
+                result, broken_stick = outcome[0], outcome[1] if len(outcome) > 1 else None
+            else:
+                result, broken_stick = outcome, None
+
             self._state.cache_result("coniss_result", result)
+            if broken_stick is not None:
+                self._state.cache_result("coniss_broken_stick", broken_stick)
             return result
 
     # =========================================================================

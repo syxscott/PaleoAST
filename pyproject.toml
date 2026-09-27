@@ -48,6 +48,14 @@ dev = [
     "pytest-cov>=4.1.0",
     "mypy>=1.4.0",
     "ruff>=0.4.0",
+    # tests/property/* imports hypothesis unconditionally, and the
+    # ``addopts`` below passes ``--hypothesis-show-statistics``. Without this
+    # entry a fresh ``pip install -e .[dev]`` makes ``pytest`` fail at
+    # collection with "unrecognized arguments: --hypothesis-show-statistics".
+    "hypothesis>=6.0.0",
+    # Optional R bridge for tests/cross_validation/; without it that
+    # directory is skipped by tests/conftest.py, it is not required to run.
+    "rpy2>=5.0.0; platform_system != 'Windows'",
 ]
 docs = [
     "sphinx>=7.0.0",
@@ -57,8 +65,21 @@ docs = [
 [project.scripts]
 paleoast = "main:main"
 
+[tool.setuptools]
+# ``main.py`` and ``plot_export.py`` are top-level modules, not packages.
+# ``packages.find`` alone does not ship them, so the ``paleoast`` console
+# script and ``views/ui_plot_export_dialog.py``'s ``from plot_export import
+# ...`` both failed on a non-editable install.
+py-modules = ["main", "plot_export"]
+
+[tool.setuptools.package-data]
+# ``data/loader.py`` resolves these through ``importlib.resources.files("data")``,
+# so a wheel without them makes every ``load_*()`` raise FileNotFoundError.
+"data" = ["examples/*", "golden/*"]
+
 [tool.setuptools.packages.find]
 include = [
+    "_core*",
     "config*",
     "controllers*",
     "data*",
@@ -70,7 +91,10 @@ include = [
     "morphometrics*",
     "parsers*",
     "phylogenetics*",
+    "plugins*",
+    "presets*",
     "reporting*",
+    "rthooks*",
     "state_machine*",
     "statistics*",
     "stratigraphy*",

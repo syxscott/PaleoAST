@@ -255,16 +255,23 @@ class PlotExportDialog(QDialog):
         form.addRow(self._dpi_label_widget, self._dpi_spin)
 
         self._width_spin = QDoubleSpinBox()
-        self._width_spin.setRange(0.5, 60.0)
+        # The minimum must be 0.0 so that `setValue(0.0)` really stores 0.0 and
+        # `setSpecialValueText` renders it as "auto". With a minimum of 0.5 Qt
+        # clamps 0.0 up to 0.5, the box still *reads* "auto", and the
+        # `value() or None` idiom in `_set_options` then yields 0.5 — so every
+        # export was silently resized to 0.5 x 0.5 inches.
+        self._width_spin.setRange(0.0, 60.0)
         self._width_spin.setSingleStep(0.5)
+        self._width_spin.setDecimals(1)
         self._width_spin.setSpecialValueText(_("auto"))
         self._width_spin.setValue(0.0)
         self._width_label_widget = QLabel(_("Width (in):"))
         form.addRow(self._width_label_widget, self._width_spin)
 
         self._height_spin = QDoubleSpinBox()
-        self._height_spin.setRange(0.5, 60.0)
+        self._height_spin.setRange(0.0, 60.0)
         self._height_spin.setSingleStep(0.5)
+        self._height_spin.setDecimals(1)
         self._height_spin.setSpecialValueText(_("auto"))
         self._height_spin.setValue(0.0)
         self._height_label_widget = QLabel(_("Height (in):"))
