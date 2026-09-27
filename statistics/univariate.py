@@ -148,6 +148,25 @@ class KruskalResult:
     significant: bool
 
 
+def _check_group_length(groups: list, n_rows: int) -> None:
+    """Validate that one group label was supplied per data row.
+
+    The four group tests index the data with `[i for i, gr in enumerate(groups)
+    if gr == g]`. A short `groups` list therefore silently drops the tail of
+    the data set (measured: 20 rows with 15 labels gave Kruskal p=0.0022 where
+    scipy on all 20 rows gave 0.000157), and a long list raises a bare
+    IndexError from inside the comprehension. Matches the check already used in
+    permanova.py and simper.py.
+    """
+    if groups is None:
+        raise ValidationError("Group labels are required")
+    if len(groups) != n_rows:
+        raise ValidationError(
+            f"Number of group labels ({len(groups)}) must match the number of "
+            f"data rows ({n_rows})",
+            details={"n_groups": len(groups), "n_rows": n_rows},
+        )
+
 class UnivariateAnalyzer:
     """Engine for univariate statistics and hypothesis testing."""
 
@@ -333,6 +352,7 @@ class UnivariateAnalyzer:
         with self._lock:
             if groups is None:
                 raise ComputationError("Groups required for t-test")
+            _check_group_length(groups, data.shape[0])
 
             unique_groups = sorted(set(groups))
             if len(unique_groups) != 2:
@@ -406,6 +426,9 @@ class UnivariateAnalyzer:
                 values = data[:, column]
             else:
                 values = data
+            # 分组标签必须逐行对应: 少给会静默截断样本 (实测 20 行配 15 个
+            # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
+            _check_group_length(groups, values.shape[0])
 
             unique_groups = sorted(set(groups))
             n_groups = len(unique_groups)
@@ -480,6 +503,9 @@ class UnivariateAnalyzer:
                 values = data[:, column]
             else:
                 values = data
+            # 分组标签必须逐行对应: 少给会静默截断样本 (实测 20 行配 15 个
+            # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
+            _check_group_length(groups, values.shape[0])
 
             unique_groups = sorted(set(groups))
             group_data = []
@@ -520,6 +546,9 @@ class UnivariateAnalyzer:
                 values = data[:, column]
             else:
                 values = data
+            # 分组标签必须逐行对应: 少给会静默截断样本 (实测 20 行配 15 个
+            # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
+            _check_group_length(groups, values.shape[0])
 
             unique_groups = sorted(set(groups))
             if len(unique_groups) != 2:

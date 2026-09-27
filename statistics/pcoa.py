@@ -183,11 +183,16 @@ class PCoAAnalyzer:
                 D = D.copy()
                 np.fill_diagonal(D, 0.0)
 
-            # Determine number of components
+            # Determine number of components.
+            # n_components must be at least 1: previously only the upper bound
+            # was clamped, so analyze(D, n_components=-1) returned
+            # n_components == -1 while still producing n-1 coordinate columns
+            # and an empty summary(). pca.py:246 and cca.py:184 already clamp
+            # the lower bound.
             if n_components is None:
                 n_components = min(n - 1, 20)
             else:
-                n_components = min(n_components, n - 1)
+                n_components = max(1, min(n_components, n - 1))
 
             # Step 1: Square the distances
             D_sq = D**2

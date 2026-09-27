@@ -151,16 +151,28 @@ class LDAAnalyzer:
             data_clean = data[valid_mask]
             groups_clean = groups[valid_mask]
 
-            # Filter out ungrouped samples (if any sentinel value like -1)
-            grouped_mask = groups_clean >= 0
+            # Sentinel values like -1 only make sense for numeric labels.
+            # Applying ``groups_clean >= 0`` to string labels raised a raw
+            # numpy _UFuncNoLoopError, so the controller's error formatting
+            # never saw a ComputationError.
+            if np.issubdtype(np.asarray(groups_clean).dtype, np.number):
+                grouped_mask = groups_clean >= 0
+            else:
+                grouped_mask = np.ones(groups_clean.shape[0], dtype=bool)
             data_grouped = data_clean[grouped_mask]
             groups_grouped = groups_clean[grouped_mask]
 
+            # Relabel to 0..k-1. np.bincount() assumes contiguous 0-based
+            # integers, so groups=[2,4,5,7] produced
+            # [0,0,1,0,1,1,1,1] whose min is 0, which drove the CV-fold count
+            # to 0 and made the code report RESUBSTITUTION accuracy that
+            # summary() then printed as "cross-validated accuracy".
             unique_classes = sorted(set(groups_grouped))
             n_classes = len(unique_classes)
-
             if n_classes < 2:
                 raise ComputationError("LDA requires at least 2 classes")
+            index_of = {c: i for i, c in enumerate(unique_classes)}
+            groups_codes = np.array([index_of[g] for g in groups_grouped], dtype=int)
 
             if n_components is None:
                 n_components = min(n_classes - 1, n_vars)
@@ -195,7 +207,7 @@ class LDAAnalyzer:
 
             # Confusion matrix via cross-validation
             lda_full = LinearDiscriminantAnalysis(solver="svd")
-            cv_folds_actual = min(cv_folds, min(np.bincount(groups_grouped.astype(int))))
+            cv_folds_actual = min(cv_folds, int(np.bincount(groups_codes).min()))
             if cv_folds_actual >= 2:
                 try:
                     cv_scores = cross_val_score(lda_full, data_grouped, groups_grouped, cv=cv_folds_actual)

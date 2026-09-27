@@ -356,6 +356,46 @@ class FitchAlgorithm:
 
         return node_states
 
+    @staticmethod
+    def _leaf_support(node: PhyloNode, wanted: set[Any], missing_char: str = "?") -> dict[Any, int]:
+        """Count, per state, how many descendant leaves show that state.
+
+        Used to break ties deterministically AND sanely when a multifurcation
+        forces a change. ``next(iter(set))`` used to pick an arbitrary
+        element, whose order depends on string-hash randomisation, so the same
+        tree + same data gave different parsimony scores in different
+        processes.
+        """
+        counts: dict[Any, int] = {}
+        stack = [node]
+        while stack:
+            n = stack.pop()
+            if n.is_leaf:
+                seq = n.data
+                if isinstance(seq, (list, tuple)):
+                    st = seq[0] if seq else missing_char
+                else:
+                    st = seq
+                if st in wanted:
+                    counts[st] = counts.get(st, 0) + 1
+            else:
+                stack.extend(n.children)
+        return counts
+
+    @classmethod
+    def _pick_state(cls, node: PhyloNode, states: set[Any], missing_char: str = "?") -> Any:
+        """Choose one state from ``states`` deterministically.
+
+        Highest leaf support wins; ties are broken by ``sorted()`` so the result
+        never depends on set iteration order.
+        """
+        if not states:
+            return None
+        if len(states) == 1:
+            return next(iter(states))
+        counts = cls._leaf_support(node, states, missing_char)
+        return sorted(states, key=lambda s: (-counts.get(s, 0), str(s)))[0]
+
     def _fitch_up(
         self, node: PhyloNode, node_states: dict[PhyloNode, set[Any]], site_idx: int = -1
     ) -> list[tuple[PhyloNode, PhyloNode, int, Any, Any]]:
@@ -366,14 +406,15 @@ class FitchAlgorithm:
 
         算法:
             For root:
-                选择 S(root) 中的任意状态 (通常选第一个)
+                选择 S(root) 中支持度最高的状态（并列时按 sorted 取最小，
+                保证跨进程可复现）
 
             For each child:
                 如果 child_state ⊆ parent_state:
                     选择 parent_state
                     变化数 += 0
                 否则:
-                    选择 child_state ∪ parent_state 的任意元素
+                    选择 child_state 中支持度最高的状态
                     变化数 += 1
 
         Parameters:
@@ -385,6 +426,7 @@ class FitchAlgorithm:
         """
         changes: list[tuple[PhyloNode, PhyloNode, int, Any, Any]] = []
         # site_idx passed from caller
+        pick = self._pick_state
 
         def _up_from(node: PhyloNode, parent_state: Any | None) -> Any | None:
             nonlocal changes
@@ -396,7 +438,7 @@ class FitchAlgorithm:
             if parent_state is not None and parent_state in current_states:
                 current_state = parent_state
             else:
-                current_state = next(iter(current_states))
+                current_state = pick(node, current_states)
                 if parent_state is not None and current_state != parent_state:
                     changes.append((node.parent if node.parent else node, node, site_idx, parent_state, current_state))
 
@@ -406,7 +448,7 @@ class FitchAlgorithm:
             return current_state
 
         root_states = node_states.get(node, set())
-        root_state = next(iter(root_states)) if root_states else None
+        root_state = pick(node, root_states) if root_states else None
 
         for child in node.children:
             _up_from(child, root_state)
@@ -433,9 +475,9 @@ class FitchAlgorithm:
             if not states:
                 return None
 
-            # 选择第一个状态 (简化处理)
-            # 实际应用中可以使用投票、加权等方法
-            ancestral[n] = next(iter(states))
+            # 选择支持度最高的状态（并列时按 sorted 取最小）——旧实现用
+            # next(iter(set))，结果随字符串 hash 随机化而变，跨进程不可复现。
+            ancestral[n] = self._pick_state(n, states)
             return ancestral[n]
 
         # 后序遍历

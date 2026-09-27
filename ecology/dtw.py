@@ -276,8 +276,11 @@ class DTWAnalyzer:
                     # result.warped_seq1 is sequence 0 warped to seq j,
                     # result.warped_seq2 is sequence j warped to seq 0.
                     warped[j] = result.warped_seq2
-                    # Keep warped[0] as the reference's own warp.
-                    warped[0] = result.warped_seq1
+                    # warped[0] must stay the reference's own warp and is
+                    # assigned ONCE above. Re-assigning it here on every j
+                    # meant the last comparison won, so with 3+ sequences
+                    # warped[0] ended up holding "sequence 0 aligned to the
+                    # LAST sequence" instead of its own trivial warp.
 
         # Any sequence that was never compared against the reference
         # (shouldn't happen when n >= 2, but guard anyway) falls back to

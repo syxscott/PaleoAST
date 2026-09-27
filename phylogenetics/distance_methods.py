@@ -322,7 +322,10 @@ class UPGMA:
             min_dist = float("inf")
             closest_pair = None
 
-            active_list = list(active_taxa)
+            # 排序而非直接 list(set)：set[str] 的迭代顺序随字符串 hash 随机化
+            # 变化，会让并列最小距离的 tie-break 每次不同，同一距离矩阵在不同
+            # 进程里可能长出不同的树。
+            active_list = sorted(active_taxa)
             for i in range(len(active_list)):
                 for j in range(i + 1, len(active_list)):
                     t1, t2 = active_list[i], active_list[j]
@@ -481,7 +484,9 @@ class NeighborJoining:
             m = len(active)
 
             # 计算Q矩阵并找到最小值
-            active_list = list(active)
+            # 排序而非直接 list(set)：见 UPGMA 中同样的说明——保证 Q 矩阵
+            # tie-break 的确定性。
+            active_list = sorted(active)
             min_q = float("inf")
             min_pair = None
 
@@ -569,7 +574,11 @@ class NeighborJoining:
                 dist[(k, u_name)] = new_dist
 
         # 处理最后3个节点
-        final_nodes = list(active)
+        # 排序而非 list(set)：最后三叉树的子节点顺序、以及由该顺序计算的
+        # bl0/bl1/bl2 赋值目标，都取决于这里的顺序。set[str] 的迭代顺序随
+        # 字符串 hash 随机化变化，导致同一距离矩阵在不同进程里导出不同的
+        # Newick（枝长其实正确，只是挂在了不同名字上）。
+        final_nodes = sorted(active)
         if len(final_nodes) == 3:
             # 形成三叉树
             root = PhyloNode(name="root", node_type=NodeType.INTERNAL)

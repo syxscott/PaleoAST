@@ -311,6 +311,11 @@ class SHEResult:
     e_values: npt.NDArray  # Evenness (Pielou's J)
 
     def summary(self) -> str:
+        if self.s_values.size == 0:
+            return (
+                f"SHE Analysis: {_('no data points')}\n"
+                f"{_('Supply at least one non-empty sample.')}"
+            )
         return (
             f"SHE Analysis: {len(self.sample_sizes)} data points\n"
             f"S range: [{self.s_values.min():.0f}, {self.s_values.max():.0f}]\n"
@@ -353,7 +358,11 @@ class SHEAnalyzer:
         h_vals = []
         e_vals = []
 
-        for k in range(2, n_samples + 1):
+        # 从 k=1 开始: 单个样本也是一个合法的累积点, 且它是整条 SHE 曲线的
+        # 起点。旧实现从 k=2 起, 于是 n_samples == 1 时循环体一次都不执行,
+        # 四个数组全空, 随后的 summary() 在 s_values.min() 上抛
+        # "zero-size array to reduction operation minimum"。
+        for k in range(1, n_samples + 1):
             subset = data[:k]
             pooled = np.nansum(subset, axis=0)
             pooled = pooled[pooled > 0]

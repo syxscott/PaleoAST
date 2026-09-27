@@ -204,8 +204,12 @@ class GillespieSimulator:
         self._mu = extinction_rate
         self._psi = fossilization_rate
 
-        if random_seed is not None:
-            np.random.seed(random_seed)
+        # 本地 RNG：旧实现调用 np.random.seed() 重置全局 legacy 流，会改写
+        # 同进程内所有其它随机分析的结果（实测：构造 simulator 后外部
+        # np.random.poisson 的取值随 seed 变化）。本项目其余模块
+        # （ecology/null_models.py、phylogenetics/signal.py）都已改用
+        # default_rng，这里是对齐同一约定。
+        self._rng = np.random.default_rng(random_seed)
 
         self._logger = logging.getLogger(f"{__name__}.GillespieSimulator")
 
@@ -278,7 +282,7 @@ class GillespieSimulator:
                 break
 
             # 生成事件时间
-            tau = np.random.exponential(1.0 / total_rate)
+            tau = self._rng.exponential(1.0 / total_rate)
 
             # 检查是否超过结束时间
             if self._current_time + tau > end_time:
@@ -292,12 +296,12 @@ class GillespieSimulator:
             rates = np.array([self._lambda, self._mu, self._psi])
             probs = rates / rates.sum()
 
-            event_type_idx = np.random.choice(3, p=probs)
+            event_type_idx = self._rng.choice(3, p=probs)
             event_types = [FBDEventType.BIRTH, FBDEventType.DEATH, FBDEventType.FOSSILIZATION]
             event_type = event_types[event_type_idx]
 
             # 选择活跃谱系
-            lineage_idx = np.random.randint(0, n_alive)
+            lineage_idx = self._rng.integers(0, n_alive)
             parent_lineage = alive_lineages[lineage_idx]
 
             # 创建事件
@@ -738,9 +742,8 @@ def simulate_fbd_process(
     返回:
         FBDSimulationResult列表
     """
-    if random_seed is not None:
-        np.random.seed(random_seed)
-
+    # 不再在这里 np.random.seed()：GillespieSimulator 现在用自己的
+    # default_rng，外层重置全局流既多余又会污染同进程的其他分析。
     results = []
 
     for i in range(n_replicates):

@@ -194,6 +194,17 @@ def procD_lm(
     prev_rss = float(np.sum(_proc_ss(X, np.zeros_like(X))))  # null: fit = 0
     total_ss = prev_rss
     col_iter = 0
+    # Per term, the model columns that are present BEFORE it is added, plus
+    # the term's own column count. The permutation test needs these so its
+    # null statistic is the same sequential contrast the table reports --
+    # previously it used a delete-one reduced model, so F and p in the same
+    # row came from different hypotheses (measured: X1 F=7122.7 with p=0.66).
+    # NOTE: the current design gives every term exactly one column
+    # (``cols = range(col_iter, col_iter + 1)``), so ``len(cols)`` is 1 and
+    # the df below is the same 1 as before; it is written in terms of the
+    # column count so it stays correct if a term is ever given several.
+    term_prior_cols: dict[int, list[int]] = {}
+    term_df: dict[int, int] = {}
     for j, tname in enumerate(term_names):
         is_intercept = tname == "Intercept" and j == 0
         if is_intercept:
@@ -216,8 +227,11 @@ def procD_lm(
         if not is_intercept:
             full_rss = rss_of(prev_cols + cols)[0]
             term_ss = prev_rss - full_rss
+            term_prior_cols[j] = list(prev_cols)
+            term_df[j] = len(cols)
             terms.append(
-                ProcDLMTerm(term=tname, ss=term_ss, df=1, ms=term_ss, f_value=None, p_value=None)
+                ProcDLMTerm(term=tname, ss=term_ss, df=term_df[j], ms=term_ss / term_df[j],
+                            f_value=None, p_value=None)
             )
             prev_rss = full_rss
         prev_cols = prev_cols + cols
@@ -243,13 +257,18 @@ def procD_lm(
         for term_idx, tname in enumerate(term_names):
             if term_idx == 0 and tname == "Intercept":
                 continue
-            red_cols = [c for c in all_cols if c != term_idx]
+            # Reduced model = the columns that are present BEFORE this term in
+            # the sequential build-up. That makes the permuted null statistic
+            # the same sequential contrast the table reports, instead of a
+            # delete-one partial SS measuring a different hypothesis.
+            red_cols = term_prior_cols.get(term_idx, [])
             if red_cols:
                 fit_red = _fit_flat(y, D[:, red_cols]).reshape(n, p, k)
             else:
                 fit_red = np.zeros_like(X)
             rss_red = float(np.sum(_proc_ss(X, fit_red)))
-            f_obs = ((rss_red - residual_ss) / resid_ms) if resid_ms > 0 else 0.0
+            df_j = max(1, term_df.get(term_idx, 1))
+            f_obs = ((rss_red - residual_ss) / (df_j * resid_ms)) if resid_ms > 0 else 0.0
             test_stat[term_idx] = (fit_red, X - fit_red, f_obs)
         counts = {term_names[j]: 0 for j in test_stat}
         for _step in range(n_permutations):

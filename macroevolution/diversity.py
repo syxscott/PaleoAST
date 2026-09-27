@@ -94,13 +94,18 @@ class DiversityDynamics:
                 t_start, t_end = t_end, t_start
             norm_intervals.append((t_start, t_end))
 
-        # 存在性 = 寿命区间 [L, o] 与时间区间 [t_start, t_end] 有重叠:
-        #   o >= t_start (起源不晚于年老侧) 且 L <= t_end (灭绝不早于年轻侧)。
-        # 此前条件 o <= t_start 且 L >= t_end 在 Ma 约定下几何上几乎
-        # 不可满足, 导致 richness 恒为 0 (2026-09 复审)。
+        # 存在性 = 寿命区间 [L, o] 与时间区间 [t_start, t_end] 严格重叠:
+        #   L < t_end 且 o > t_start
+        # 用严格不等号, 与本文件 range_through_diversity() 的谓词完全一致
+        # (lad < b_hi and fad > b_lo)。此前这里用的是闭区间
+        # (o >= t_s and L <= t_e), 两个 bin 共享边界时每个类群被两边各算一次,
+        # 且一个在 2 Ma 就灭绝的类群会被算进 5-10 Ma 的 bin:
+        #   estimate_diversity([(5.0, 2.0)], [(0,5),(5,10)]) -> richness [1, 1]
+        #   range_through_diversity(同一输入)                   -> richness [1, 0]
+        # 二者本该一致。
         def _present(idx: int) -> set[int]:
             t_s, t_e = norm_intervals[idx]
-            return {k for k, (o, L) in enumerate(records) if o >= t_s and L <= t_e}
+            return {k for k, (o, L) in enumerate(records) if L < t_e and o > t_s}
 
         present = [_present(i) for i in range(len(norm_intervals))]
 
@@ -197,7 +202,13 @@ class DiversityDynamics:
             raise ValueError(f"Logistic model fitting failed: {e}") from e
 
     def simulate_neutral(
-        self, n_taxa: int, duration: float, speciation_rate: float = 0.1, extinction_rate: float = 0.05, dt: float = 0.1
+        self,
+        n_taxa: int,
+        duration: float,
+        speciation_rate: float = 0.1,
+        extinction_rate: float = 0.05,
+        dt: float = 0.1,
+        random_seed: int | None = None,
     ) -> DiversityCurve:
         """
         模拟中性随机过程
@@ -219,18 +230,24 @@ class DiversityDynamics:
         times[0] = 0
         richness[0] = N
 
+        # 本地 RNG：旧实现直接用 np.random.poisson（全局流），既无法复现
+        # 也会改写同进程其它随机分析的结果。
+        rng = np.random.default_rng(random_seed)
+
         for i in range(1, n_steps):
             times[i] = i * dt
 
-            # 随机出生-死亡
-            births = np.random.poisson(speciation_rate * N * dt)
-            deaths = min(N, np.random.poisson(extinction_rate * N * dt))
+            # 随机出生-死亡。率的估计必须用步前的 N：E[births] = lambda*N_old*dt
+            # 是按步前的丰度取的，旧实现先更新 N 再算率，结果被 N_old/N_new 缩放。
+            n_before = N
+            births = rng.poisson(speciation_rate * n_before * dt)
+            deaths = min(n_before, rng.poisson(extinction_rate * n_before * dt))
 
-            N = max(0, N + births - deaths)
+            N = max(0, n_before + births - deaths)
             richness[i] = N
 
-            orig_rates[i] = births / (N * dt + 1e-10)
-            ext_rates[i] = deaths / (N * dt + 1e-10)
+            orig_rates[i] = births / (n_before * dt + 1e-10)
+            ext_rates[i] = deaths / (n_before * dt + 1e-10)
 
         turnover = ext_rates / (orig_rates + ext_rates + 1e-10)
 

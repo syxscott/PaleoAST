@@ -208,7 +208,7 @@ class CONISSAnalyzer:
         return linkage
 
 
-def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict:
+def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999, seed: int | None = None) -> dict:
     """
     Broken-stick model significance test for CONISS zone selection.
 
@@ -228,6 +228,10 @@ def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict
         of linkage matrix).
     n_permutations : int, default 999
         Number of Monte Carlo permutations for significance testing.
+    seed : int or None, optional
+        Seed for the Monte Carlo. Supplying it makes ``p_values`` and
+        ``significant_zones`` reproducible; leaving it None means every run
+        reports different numbers.
 
     Returns
     -------
@@ -295,7 +299,9 @@ def broken_stick_test(bd_values: npt.NDArray, n_permutations: int = 999) -> dict
     # 估计每个秩次的 p 值。Bennett (1996) 的判据是"自最大带起,
     # 观测 > 期望 的连续前缀长度"为显著带数。
     n_permutations = max(int(n_permutations), 99)
-    rng = np.random.default_rng()
+    # 可复现：旧实现用 default_rng() 无种子，significant_zones 由 p 值推出，
+    # 于是同一数据两次运行给出不同的分带数。
+    rng = np.random.default_rng(seed)
     perm_sorted = np.sort(rng.dirichlet(np.ones(n), size=n_permutations), axis=1)[:, ::-1]
     # p_k = P(随机分割的第 k 大段 >= 观测第 k 大段) (add-one)
     exceed = perm_sorted >= normalized_bd[np.newaxis, :]

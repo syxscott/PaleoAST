@@ -364,16 +364,21 @@ class SpectralAnalyzer:
             sum_sin2 = np.sum(sin_wt**2)
             sum_cos2 = np.sum(cos_wt**2)
 
-            # Lomb-Scargle power
+            # Lomb-Scargle power, Horne & Baliunas (1986) eq. 2.4:
+            #     P(w) = (1/(2 sigma^2)) * { [Sum y_i sin w(t_i - tau)]^2 / Sum sin^2
+            #                            + [Sum y_i cos w(t_i - tau)]^2 / Sum cos^2 }
+            # Note there is NO extra factor 1/2 here. The previous code
+            # multiplied by 0.5 *and* divided by 2*sigma^2, which is half the
+            # Scargle convention: measured on evenly-sampled white noise the
+            # mean power came out 0.5001 instead of 1.0, so every Horner &
+            # Baliunas FAE/FAP threshold and every absolute peak-power reading
+            # was off by a factor of two.
             if sum_sin2 > 0 and sum_cos2 > 0:
-                power[i] = 0.5 * ((sum_sin**2) / sum_sin2 + (sum_cos**2) / sum_cos2)
+                power[i] = (sum_sin**2) / sum_sin2 + (sum_cos**2) / sum_cos2
             else:
                 power[i] = 0
 
-        # Normalise per Scargle (1982): P = (1/(2σ²))·{...}, giving the
-        # standard dimensionless periodogram with a noise background
-        # level of ≈ 1. The previous division by 2·n·σ² suppressed the
-        # spectrum by a factor n and broke absolute significance levels.
+        # P = R / (2 sigma^2): dimensionless, noise background ~ 1.
         if variance > 0:
             power = power / (2.0 * variance)
 

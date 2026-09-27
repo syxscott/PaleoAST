@@ -11,6 +11,7 @@ version: 1.0.1
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -564,10 +565,11 @@ class IsotopeAnalyzer:
 
 def block_bootstrap_ci(
     data: np.ndarray,
-    statistic_func: callable,
+    statistic_func: Callable,
     block_size: int | None = None,
     n_bootstrap: int = 1000,
     alpha: float = 0.05,
+    seed: int | None = None,
 ) -> tuple[float, float]:
     """
     Block Bootstrap 置信区间（适用于自相关时间序列）。
@@ -631,14 +633,16 @@ def block_bootstrap_ci(
 
     # 2. Block bootstrap 重采样
     bootstrap_stats = np.empty(n_bootstrap)
+    # 本地 RNG：旧实现用 np.random.randint 的全局流，CI 无法复现，且会改写
+    # 同进程其它随机分析的结果。
+    rng = np.random.default_rng(seed)
 
     for i in range(n_bootstrap):
         # 随机选择 blocks 并拼接为长度为 n 的伪序列
         resampled = np.empty(n)
         pos = 0
         while pos < n:
-            # 随机选择 block 起始位置（使用 np.random 的全局状态）
-            start = np.random.randint(0, n - block_size + 1)
+            start = rng.integers(0, n - block_size + 1)
             block = data[start : start + block_size]
             copy_len = min(len(block), n - pos)
             resampled[pos : pos + copy_len] = block[:copy_len]

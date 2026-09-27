@@ -814,12 +814,26 @@ class DataMatrix:
             DataMatrix: Matrix without constant columns
         """
         with self._lock:
-            # Compute variance for each column
-            variances = np.var(self._data, axis=0, ddof=1)
+            # Variance per column, ignoring NaN. Declaring a column "constant"
+            # needs at least two observations: with a single observation the
+            # variance is 0 by construction, which says nothing about whether
+            # the column varies -- it is simply unmeasurable. The old code used
+            # ``np.var(..., ddof=1)``, whose NaN for under-determined columns
+            # compared False against the tolerance and so silently deleted
+            # them; a 1-row matrix lost ALL of its columns.
+            variances = np.full(self._data.shape[1], np.nan, dtype=float)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                for j in range(self._data.shape[1]):
+                    col = self._data[:, j]
+                    col = col[~np.isnan(col)]
+                    if col.size >= 2:
+                        variances[j] = float(np.var(col))
+            n_observed = np.sum(~np.isnan(self._data), axis=0)
             tolerance = 1e-10
 
-            # Find non-constant columns
-            non_constant_mask = variances > tolerance
+            # Drop only columns we can actually measure as constant.
+            measurable = n_observed >= 2
+            non_constant_mask = ~measurable | ~np.isfinite(variances) | (variances > tolerance)
             non_constant_indices = np.where(non_constant_mask)[0]
 
             if len(non_constant_indices) == self.n_variables:
