@@ -1,8 +1,8 @@
 # =============================================================================
-# FILE: tests/statistics/test_univariate.py
+# FILE: tests/stats/test_univariate.py
 # =============================================================================
 """
-Tests for statistics/univariate.py AICc and effect size functions.
+Tests for stats/univariate.py AICc and effect size functions.
 
 References
 ----------
@@ -18,7 +18,7 @@ Lakens, D. (2013). Calculating and reporting effect sizes. Frontiers in
 import numpy as np
 import pytest
 
-from statistics.univariate import (
+from stats.univariate import (
     cohens_d,
     compare_models,
     compute_aicc,

@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/pca.py
+# FILE: stats/pca.py
 # =============================================================================
 """
 Principal Component Analysis (PCA) Module for PaleoAST
@@ -246,14 +246,15 @@ class PCAAnalyzer:
                 if empty_cols.size:
                     names = [f"Var_{i + 1}" for i in empty_cols]
                     self._logger.warning(
-                        "Dropping %d all-missing column(s) that mean-imputation cannot "
-                        "fill: %s", empty_cols.size, ", ".join(names))
+                        "Dropping %d all-missing column(s) that mean-imputation cannot fill: %s",
+                        empty_cols.size,
+                        ", ".join(names),
+                    )
                     keep = np.setdiff1d(np.arange(n_variables), empty_cols)
                     if keep.size == 0:
                         raise DataValidationError(
                             "Cannot perform PCA: every variable is entirely missing",
-                            details={"n_samples": n_samples, "n_variables": n_variables,
-                                     "all_missing_columns": names},
+                            details={"n_samples": n_samples, "n_variables": n_variables, "all_missing_columns": names},
                         )
                     X = X[:, keep]
                     n_variables = X.shape[1]
@@ -398,8 +399,7 @@ class PCAAnalyzer:
         zero_var_idx = np.where(std_vector == 0)[0]
         if zero_var_idx.size > 0:
             warnings.warn(
-                f"Column(s) {zero_var_idx.tolist()} have zero variance; "
-                f"results may be misleading",
+                f"Column(s) {zero_var_idx.tolist()} have zero variance; results may be misleading",
                 RuntimeWarning,
                 stacklevel=2,
             )

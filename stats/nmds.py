@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/nmds.py
+# FILE: stats/nmds.py
 # =============================================================================
 """
 Non-metric Multidimensional Scaling (NMDS) Module for PaleoAST
@@ -255,9 +255,7 @@ class NMDSAnalyzer:
                 self._logger.debug(f"NMDS restart {restart + 1}/{n_restarts} started")
 
                 # Run SMACOF optimization
-                result = self._smacof(
-                    D, X, max_iterations, restart, method=method, tolerance=tolerance_value
-                )
+                result = self._smacof(D, X, max_iterations, restart, method=method, tolerance=tolerance_value)
                 self._logger.debug(
                     f"NMDS restart {restart + 1}/{n_restarts} finished: "
                     f"stress={result['stress']:.6f}, iterations={result['n_iterations']}"
@@ -397,10 +395,7 @@ class NMDSAnalyzer:
             # legacy normalisation kept so that v1.0.0 results and the
             # reference test fixtures remain reproducible.
             if method not in ("raw_stress", "stress_1"):
-                raise ValueError(
-                    f"Unknown NMDS stress method '{method}'. "
-                    "Use 'raw_stress' (default) or 'stress_1'."
-                )
+                raise ValueError(f"Unknown NMDS stress method '{method}'. Use 'raw_stress' (default) or 'stress_1'.")
             diff = d_hat - d_tilde
             numerator = float(np.dot(diff, diff))
             denom_hat = float(np.dot(d_hat, d_hat))

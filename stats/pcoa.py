@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/pcoa.py
+# FILE: stats/pcoa.py
 # =============================================================================
 """
 Principal Coordinate Analysis (PCoA) Module for PaleoAST
@@ -105,8 +105,9 @@ class PCoAResult:
         if self.negative_eigenvalue_sum < 0:
             lines.append("")
             lines.append(
-                _("Sum of negative eigenvalues (non-Euclidean variation, "
-                  "excluded from coordinates): {0:.4f}").format(self.negative_eigenvalue_sum)
+                _("Sum of negative eigenvalues (non-Euclidean variation, excluded from coordinates): {0:.4f}").format(
+                    self.negative_eigenvalue_sum
+                )
             )
         return "\n".join(lines)
 
@@ -221,6 +222,7 @@ class PCoAAnalyzer:
             negative_sum = float(np.sum(eigenvalues[negative_mask])) if negative_count > 0 else 0.0
             if negative_count > 0:
                 import warnings
+
                 warnings.warn(
                     f"PCoA: {negative_count} negative eigenvalue(s) detected "
                     f"(metric='{metric}'). Negative eigenvalues indicate non-Euclidean "

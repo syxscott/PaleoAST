@@ -25,25 +25,25 @@ from models.diversity_result import DiversityResult, RarefactionResult
 from models.state_manager import get_state_manager
 from morphometrics.efa import EFAAnalyzer, EFAResult, EigenshapeAnalyzer, EigenshapeResult
 from morphometrics.gpa import GPAAnalyzer, GPAResult
-from statistics.anosim import ANOSIMAnalyzer, ANOSIMResult
-from statistics.cca import CCAAnalyzer, CCAResult
-from statistics.clustering import ClusteringAnalyzer, ClusteringResult
-from statistics.distance_metrics import DistanceMatrixResult, compute_distance_matrix
-from statistics.lda import LDAAnalyzer, LDAResult
-from statistics.nmds import NMDSAnalyzer, NMDSResult
-from statistics.pca import PCAAnalyzer, PCAResult
-from statistics.pcm import (
+from stats.anosim import ANOSIMAnalyzer, ANOSIMResult
+from stats.cca import CCAAnalyzer, CCAResult
+from stats.clustering import ClusteringAnalyzer, ClusteringResult
+from stats.distance_metrics import DistanceMatrixResult, compute_distance_matrix
+from stats.lda import LDAAnalyzer, LDAResult
+from stats.nmds import NMDSAnalyzer, NMDSResult
+from stats.pca import PCAAnalyzer, PCAResult
+from stats.pcm import (
     AncestralStateResult,
     ContrastResult,
     PCMAnalyzer,
     PhyloANOVAResult,
     PhylogeneticSignalResult,
 )
-from statistics.pcoa import PCoAAnalyzer, PCoAResult
-from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
-from statistics.simper import SimperAnalyzer, SimperResult
-from statistics.spatial import RipleyKAnalyzer, SpatialResult
-from statistics.univariate import (
+from stats.pcoa import PCoAAnalyzer, PCoAResult
+from stats.permanova import PERMANOVAAnalyzer, PERMANOVAResult
+from stats.simper import SimperAnalyzer, SimperResult
+from stats.spatial import RipleyKAnalyzer, SpatialResult
+from stats.univariate import (
     ANOVAResult,
     KruskalResult,
     NormalityResult,
@@ -1132,9 +1132,7 @@ class StatisticsController:
         n_vars = data.shape[1]
         for col, name in ((fad_col, "FAD"), (lad_col, "LAD")):
             if not 0 <= col < n_vars:
-                raise ValidationError(
-                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
-                )
+                raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
         return [(float(r[fad_col]), float(r[lad_col])) for r in data]
 
     def analyze_cohort_survivorship(
@@ -1162,9 +1160,7 @@ class StatisticsController:
         ages = np.array([r for rec in records for r in rec], dtype=float)
         lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
         if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-            raise ValidationError(
-                "Taxon ranges have no usable age span; check the FAD/LAD columns"
-            )
+            raise ValidationError("Taxon ranges have no usable age span; check the FAD/LAD columns")
         edges = np.linspace(hi, lo, int(n_intervals) + 1)  # oldest first
         intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
 
@@ -1214,9 +1210,7 @@ class StatisticsController:
         n_vars = matrix.shape[1]
         for col, name in ((time_column, "duration"), (event_column, "event")):
             if not 0 <= col < n_vars:
-                raise ValidationError(
-                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
-                )
+                raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
         times = np.asarray(matrix[:, time_column], dtype=float)
         events = np.asarray(matrix[:, event_column], dtype=float)
         keep = np.isfinite(times) & np.isfinite(events)
@@ -1243,12 +1237,9 @@ class StatisticsController:
             self._state.set_data_matrix(data)
         matrix = self._ensure_data(None)
         n_vars = matrix.shape[1]
-        for col, name in ((time_a, "A duration"), (event_a, "A event"),
-                          (time_b, "B duration"), (event_b, "B event")):
+        for col, name in ((time_a, "A duration"), (event_a, "A event"), (time_b, "B duration"), (event_b, "B event")):
             if not 0 <= col < n_vars:
-                raise ValidationError(
-                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
-                )
+                raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
 
         def _pair(t_col: int, e_col: int) -> tuple[np.ndarray, np.ndarray]:
             t = np.asarray(matrix[:, t_col], dtype=float)
@@ -1340,9 +1331,9 @@ class StatisticsController:
             if method_name.startswith("_"):
                 continue
             if method_name.startswith("run_"):
-                base = method_name[len("run_"):]
+                base = method_name[len("run_") :]
             elif method_name.startswith("analyze_"):
-                base = method_name[len("analyze_"):]
+                base = method_name[len("analyze_") :]
             else:
                 continue
             if not base or base in seen:

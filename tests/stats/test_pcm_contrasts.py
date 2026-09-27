@@ -1,8 +1,8 @@
 # =============================================================================
-# FILE: tests/statistics/test_pcm_contrasts.py
+# FILE: tests/stats/test_pcm_contrasts.py
 # =============================================================================
 """
-Regression tests for statistics/pcm.py - independent-contrast bookkeeping.
+Regression tests for stats/pcm.py - independent-contrast bookkeeping.
 
 Covered bugs
 ------------
@@ -27,7 +27,7 @@ import pytest
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 from phylogenetics.tree import PhyloTree  # noqa: E402
-from statistics.pcm import (  # noqa: E402
+from stats.pcm import (  # noqa: E402
     PCMAnalyzer,
     _check_positive_branch_lengths,
     _compute_contrasts_recursive,
@@ -89,14 +89,10 @@ class TestPhylogeneticAnovaPolytomy:
     def test_perfect_separation_gives_larger_f_than_noise(self, analyzer):
         separated = dict(TRAITS)
         tree = PhyloTree.from_newick(POLYTOMOUS_NEWICK)
-        far = analyzer.phylogenetic_anova(
-            tree, separated, GROUPS, n_permutations=99, random_seed=7
-        )
+        far = analyzer.phylogenetic_anova(tree, separated, GROUPS, n_permutations=99, random_seed=7)
         # Same grouping, but the trait no longer follows the groups.
         scrambled = {"A": 1.0, "B": 5.0, "C": 9.0, "D": 2.0, "E": 6.0, "F": 10.0}
-        noisy = analyzer.phylogenetic_anova(
-            tree, scrambled, GROUPS, n_permutations=99, random_seed=7
-        )
+        noisy = analyzer.phylogenetic_anova(tree, scrambled, GROUPS, n_permutations=99, random_seed=7)
         assert far.f_statistic > noisy.f_statistic
 
 

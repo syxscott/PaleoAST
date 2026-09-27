@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/clustering.py
+# FILE: stats/clustering.py
 # =============================================================================
 """
 Hierarchical Clustering Module for PaleoAST

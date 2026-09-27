@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/univariate.py
+# FILE: stats/univariate.py
 # =============================================================================
 """
 Univariate Statistics & Hypothesis Testing Module for PaleoAST
@@ -132,9 +132,7 @@ class ANOVAResult:
                 # never raises KeyError here.
                 p_adj = float(r["p_adj"]) if "p_adj" in r else float(r["p_value"])
                 sig_mark = "**" if p_adj < 0.01 else ("*" if p_adj < 0.05 else "ns")
-                lines.append(
-                    f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} {p_adj:>10.4f} {sig_mark:>5}"
-                )
+                lines.append(f"{r['group_a']:<10} {r['group_b']:<10} {r['diff']:>10.4f} {p_adj:>10.4f} {sig_mark:>5}")
         return "\n".join(lines)
 
 
@@ -162,10 +160,10 @@ def _check_group_length(groups: list, n_rows: int) -> None:
         raise ValidationError("Group labels are required")
     if len(groups) != n_rows:
         raise ValidationError(
-            f"Number of group labels ({len(groups)}) must match the number of "
-            f"data rows ({n_rows})",
+            f"Number of group labels ({len(groups)}) must match the number of data rows ({n_rows})",
             details={"n_groups": len(groups), "n_rows": n_rows},
         )
+
 
 class UnivariateAnalyzer:
     """Engine for univariate statistics and hypothesis testing."""
@@ -209,11 +207,7 @@ class UnivariateAnalyzer:
             if columns is None:
                 columns = list(range(n_cols))
             else:
-                out_of_range = [
-                    idx
-                    for idx in columns
-                    if not (-n_cols <= int(idx) < n_cols)
-                ]
+                out_of_range = [idx for idx in columns if not (-n_cols <= int(idx) < n_cols)]
                 if out_of_range:
                     raise ValidationError(
                         "columns contains indices outside the data matrix",
@@ -452,9 +446,7 @@ class UnivariateAnalyzer:
             # group has fewer than 2 observations (it cannot estimate the
             # within-group variance). Validate up front and give the user
             # an actionable message.
-            single_sample_groups = [
-                group_labels[i] for i, g in enumerate(group_data) if len(g) < 2
-            ]
+            single_sample_groups = [group_labels[i] for i, g in enumerate(group_data) if len(g) < 2]
             if single_sample_groups:
                 raise ComputationError(
                     "One-way ANOVA requires at least 2 observations per group; "
@@ -718,14 +710,9 @@ def compute_aicc(log_likelihood: float, n_params: int, n_obs: int) -> float:
     if n_obs <= 0:
         raise ValueError("n_obs must be a positive integer")
     if n_params >= n_obs:
-        raise ValueError(
-            f"n_params ({n_params}) must be less than n_obs ({n_obs}) "
-            "for AICc computation"
-        )
+        raise ValueError(f"n_params ({n_params}) must be less than n_obs ({n_obs}) for AICc computation")
     if n_obs - n_params - 1 <= 0:
-        raise ValueError(
-            f"Insufficient data for AICc correction: n ({n_obs}) - k ({n_params}) - 1 must be > 0"
-        )
+        raise ValueError(f"Insufficient data for AICc correction: n ({n_obs}) - k ({n_params}) - 1 must be > 0")
 
     k = n_params
     n = n_obs
@@ -783,10 +770,7 @@ def compare_models(models: list[tuple[str, float, int, int]]) -> dict:
         try:
             aicc = compute_aicc(ll, k, n)
         except ValueError:
-            raise ValueError(
-                f"Model '{name}' has insufficient data for AICc "
-                f"(n_params={k}, n_obs={n})"
-            )
+            raise ValueError(f"Model '{name}' has insufficient data for AICc (n_params={k}, n_obs={n})")
         results.append({"name": name, "aicc": aicc, "log_likelihood": ll, "n_params": k, "n_obs": n})
 
     # Sort by AICc

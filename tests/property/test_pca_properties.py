@@ -25,22 +25,26 @@ import numpy as np
 import pytest
 from hypothesis import given, settings, strategies as st, HealthCheck
 
-from statistics.pca import PCAAnalyzer
+from stats.pca import PCAAnalyzer
 
 _2d_finite_data = st.lists(
     st.lists(
         st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False),
-        min_size=2, max_size=20,
+        min_size=2,
+        max_size=20,
     ),
-    min_size=3, max_size=100,
+    min_size=3,
+    max_size=100,
 )
 
 _2d_small_data = st.lists(
     st.lists(
         st.floats(min_value=-1e3, max_value=1e3, allow_nan=False, allow_infinity=False),
-        min_size=2, max_size=5,
+        min_size=2,
+        max_size=5,
     ),
-    min_size=3, max_size=20,
+    min_size=3,
+    max_size=20,
 )
 
 
@@ -65,9 +69,7 @@ def test_pca_explained_variance_sums_to_100(data):
         return  # Skip if any column has zero variance
     result = PCAAnalyzer().analyze(X, method="covariance")
     total_explained = np.sum(result.explained_variance)
-    assert abs(total_explained - 100.0) < 0.1, (
-        f"Explained variance sum = {total_explained:.6f}%, expected 100%"
-    )
+    assert abs(total_explained - 100.0) < 0.1, f"Explained variance sum = {total_explained:.6f}%, expected 100%"
 
 
 @given(data=_2d_finite_data)
@@ -146,9 +148,7 @@ def test_pca_covariance_reconstruction(data):
     if denom < 1e-12:
         return
     relative_error = np.linalg.norm(S_original - S_reconstructed, "fro") / denom
-    assert relative_error < 1e-8, (
-        f"Full-component covariance reconstruction failed: relative_error={relative_error}"
-    )
+    assert relative_error < 1e-8, f"Full-component covariance reconstruction failed: relative_error={relative_error}"
 
 
 @given(data=_2d_small_data)
@@ -176,8 +176,7 @@ def test_pca_rotation_invariance(data, angle):
     skip_angles = [0, 1.570796327, 3.141592654, 4.71238898, 6.283185307]
     if any(abs(angle - a) < 1e-6 for a in skip_angles):
         return
-    R = np.array([[np.cos(angle), -np.sin(angle)],
-                  [np.sin(angle),  np.cos(angle)]])
+    R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     X_rotated = X.copy()
     X_rotated[:, :2] = X[:, :2] @ R.T
     r_orig = PCAAnalyzer().analyze(X, method="covariance")
@@ -211,6 +210,6 @@ def test_pca_singular_values_eigenvalue_relationship(data):
     result = PCAAnalyzer().analyze(X, method="covariance")
     n = X.shape[0]
     expected_ev = (result.singular_values**2) / (n - 1)
-    ev_sorted = np.sort(result.eigenvalues_raw[:result.n_components])
-    sv_sorted = np.sort(expected_ev[:result.n_components])
+    ev_sorted = np.sort(result.eigenvalues_raw[: result.n_components])
+    sv_sorted = np.sort(expected_ev[: result.n_components])
     assert np.allclose(ev_sorted, sv_sorted, rtol=1e-8)

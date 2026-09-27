@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/procD_lm.py
+# FILE: stats/procD_lm.py
 # =============================================================================
 """
 Procrustes ANOVA linear models (geomorph ``procD.lm`` port).
@@ -140,9 +140,7 @@ def procD_lm(
     """
     X = np.asarray(configurations, dtype=float)
     if X.ndim != 3:
-        raise DataValidationError(
-            _("procD_lm expects (n, p, k) aligned configurations; got {0}D").format(X.ndim)
-        )
+        raise DataValidationError(_("procD_lm expects (n, p, k) aligned configurations; got {0}D").format(X.ndim))
     n, p, k = X.shape
     if isinstance(design, dict):
         term_names = list(design.keys())
@@ -182,9 +180,7 @@ def procD_lm(
     residual_df = n - rank_full - p + 1
     if residual_df <= 0:
         raise DataValidationError(
-            _("procD_lm residual df <= 0 (n={0}, rank={1}, p={2}); need more specimens").format(
-                n, rank_full, p
-            )
+            _("procD_lm residual df <= 0 (n={0}, rank={1}, p={2}); need more specimens").format(n, rank_full, p)
         )
     resid_ms = residual_ss / residual_df
 
@@ -230,8 +226,7 @@ def procD_lm(
             term_prior_cols[j] = list(prev_cols)
             term_df[j] = len(cols)
             terms.append(
-                ProcDLMTerm(term=tname, ss=term_ss, df=term_df[j], ms=term_ss / term_df[j],
-                            f_value=None, p_value=None)
+                ProcDLMTerm(term=tname, ss=term_ss, df=term_df[j], ms=term_ss / term_df[j], f_value=None, p_value=None)
             )
             prev_rss = full_rss
         prev_cols = prev_cols + cols

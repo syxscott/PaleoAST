@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from statistics.simper import SimperAnalyzer
+from stats.simper import SimperAnalyzer
 
 
 class TestSimperGoldenValues:
@@ -36,33 +36,37 @@ class TestSimperGoldenValues:
         - Sp2: |1-3|/12 = 2/12
         - Total: 4/12 = BC (contributions sum to the dissimilarity)
         """
-        data = np.array([
-            [3.0, 2.0, 1.0],  # Group A
-            [1.0, 2.0, 3.0],  # Group B
-        ])
+        data = np.array(
+            [
+                [3.0, 2.0, 1.0],  # Group A
+                [1.0, 2.0, 3.0],  # Group B
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
         result = analyzer.analyze(data, groups, variable_names=["Sp0", "Sp1", "Sp2"])
 
         # Overall dissimilarity should be Bray-Curtis
-        assert_allclose(result.overall_dissimilarity, 4.0/12.0, atol=1e-6)
+        assert_allclose(result.overall_dissimilarity, 4.0 / 12.0, atol=1e-6)
 
         # Species contributions sum to the overall dissimilarity
         total_contrib = sum(c.average for c in result.contributions)
-        assert_allclose(total_contrib, 4.0/12.0, atol=1e-6)
+        assert_allclose(total_contrib, 4.0 / 12.0, atol=1e-6)
 
         contribs = {c.name: c.average for c in result.contributions}
-        assert_allclose(contribs["Sp0"], 2.0/12.0, atol=1e-6)
+        assert_allclose(contribs["Sp0"], 2.0 / 12.0, atol=1e-6)
         assert_allclose(contribs["Sp1"], 0.0, atol=1e-6)
-        assert_allclose(contribs["Sp2"], 2.0/12.0, atol=1e-6)
+        assert_allclose(contribs["Sp2"], 2.0 / 12.0, atol=1e-6)
 
     def test_simper_identical_samples(self):
         """Identical samples should have zero dissimilarity."""
-        data = np.array([
-            [5.0, 3.0, 2.0],
-            [5.0, 3.0, 2.0],
-        ])
+        data = np.array(
+            [
+                [5.0, 3.0, 2.0],
+                [5.0, 3.0, 2.0],
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
@@ -76,10 +80,12 @@ class TestSimperGoldenValues:
 
         Bray-Curtis = 1.0 (no overlap)
         """
-        data = np.array([
-            [1.0, 0.0],
-            [0.0, 1.0],
-        ])
+        data = np.array(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
@@ -102,18 +108,20 @@ class TestSimperGoldenValues:
 
         Overall = mean(0.667, 0.833, 0.500, 0.667) = 2.667/4 = 0.667
         """
-        data = np.array([
-            [5.0, 1.0, 0.0],  # Group A
-            [4.0, 2.0, 0.0],  # Group A
-            [1.0, 5.0, 0.0],  # Group B
-            [0.0, 4.0, 2.0],  # Group B
-        ])
+        data = np.array(
+            [
+                [5.0, 1.0, 0.0],  # Group A
+                [4.0, 2.0, 0.0],  # Group A
+                [1.0, 5.0, 0.0],  # Group B
+                [0.0, 4.0, 2.0],  # Group B
+            ]
+        )
         groups = [0, 0, 1, 1]
 
         analyzer = SimperAnalyzer()
         result = analyzer.analyze(data, groups)
 
-        expected_overall = (8/12 + 10/12 + 6/12 + 8/12) / 4
+        expected_overall = (8 / 12 + 10 / 12 + 6 / 12 + 8 / 12) / 4
         assert_allclose(result.overall_dissimilarity, expected_overall, atol=1e-4)
 
 
@@ -130,10 +138,12 @@ class TestSimperSpeciesContributionFormula:
           of the dissimilarity (a 2*min implementation would wrongly
           report 0 contribution from each).
         """
-        data = np.array([
-            [3.0, 0.0],
-            [0.0, 3.0],
-        ])
+        data = np.array(
+            [
+                [3.0, 0.0],
+                [0.0, 3.0],
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
@@ -151,10 +161,12 @@ class TestSimperSpeciesContributionFormula:
 
         BC = 0 and every species contribution = 0.
         """
-        data = np.array([
-            [2.0, 3.0],
-            [2.0, 3.0],
-        ])
+        data = np.array(
+            [
+                [2.0, 3.0],
+                [2.0, 3.0],
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
@@ -171,12 +183,14 @@ class TestSimperCumulativeContributions:
 
     def test_cumulative_sums_to_one(self):
         """Cumulative contributions should sum to 1.0 (100%)."""
-        data = np.array([
-            [5.0, 3.0, 2.0, 1.0],
-            [4.0, 2.0, 3.0, 1.0],
-            [1.0, 5.0, 2.0, 3.0],
-            [2.0, 4.0, 1.0, 3.0],
-        ])
+        data = np.array(
+            [
+                [5.0, 3.0, 2.0, 1.0],
+                [4.0, 2.0, 3.0, 1.0],
+                [1.0, 5.0, 2.0, 3.0],
+                [2.0, 4.0, 1.0, 3.0],
+            ]
+        )
         groups = [0, 0, 1, 1]
 
         analyzer = SimperAnalyzer()
@@ -188,12 +202,14 @@ class TestSimperCumulativeContributions:
 
     def test_contributions_sorted_by_average(self):
         """Contributions should be sorted by average descending."""
-        data = np.array([
-            [5.0, 1.0, 2.0],
-            [3.0, 2.0, 1.0],
-            [1.0, 5.0, 2.0],
-            [2.0, 3.0, 3.0],
-        ])
+        data = np.array(
+            [
+                [5.0, 1.0, 2.0],
+                [3.0, 2.0, 1.0],
+                [1.0, 5.0, 2.0],
+                [2.0, 3.0, 3.0],
+            ]
+        )
         groups = [0, 0, 1, 1]
 
         analyzer = SimperAnalyzer()
@@ -201,7 +217,7 @@ class TestSimperCumulativeContributions:
 
         # Check sorted order
         for i in range(len(result.contributions) - 1):
-            assert result.contributions[i].average >= result.contributions[i+1].average
+            assert result.contributions[i].average >= result.contributions[i + 1].average
 
 
 class TestSimperEdgeCases:
@@ -209,10 +225,12 @@ class TestSimperEdgeCases:
 
     def test_single_sample_per_group(self):
         """Test with single sample per group."""
-        data = np.array([
-            [5.0, 2.0],
-            [2.0, 5.0],
-        ])
+        data = np.array(
+            [
+                [5.0, 2.0],
+                [2.0, 5.0],
+            ]
+        )
         groups = [0, 1]
 
         analyzer = SimperAnalyzer()
@@ -224,14 +242,16 @@ class TestSimperEdgeCases:
 
     def test_three_groups(self):
         """Test with three groups (three pairs)."""
-        data = np.array([
-            [5.0, 2.0],
-            [4.0, 3.0],
-            [1.0, 5.0],
-            [2.0, 4.0],
-            [3.0, 3.0],
-            [3.0, 3.0],
-        ])
+        data = np.array(
+            [
+                [5.0, 2.0],
+                [4.0, 3.0],
+                [1.0, 5.0],
+                [2.0, 4.0],
+                [3.0, 3.0],
+                [3.0, 3.0],
+            ]
+        )
         groups = [0, 0, 1, 1, 2, 2]
 
         analyzer = SimperAnalyzer()

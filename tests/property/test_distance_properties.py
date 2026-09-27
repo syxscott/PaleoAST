@@ -25,22 +25,26 @@ import numpy as np
 import pytest
 from hypothesis import given, settings, strategies as st, HealthCheck
 
-from statistics.distance_metrics import compute_distance_matrix
+from stats.distance_metrics import compute_distance_matrix
 
 _abundance_data = st.lists(
     st.lists(
         st.floats(min_value=0.0, max_value=1e4, allow_nan=False, allow_infinity=False),
-        min_size=2, max_size=8,
+        min_size=2,
+        max_size=8,
     ),
-    min_size=2, max_size=30,
+    min_size=2,
+    max_size=30,
 )
 
 _general_data = st.lists(
     st.lists(
         st.floats(min_value=-1e3, max_value=1e3, allow_nan=False, allow_infinity=False),
-        min_size=2, max_size=8,
+        min_size=2,
+        max_size=8,
     ),
-    min_size=2, max_size=30,
+    min_size=2,
+    max_size=30,
 )
 
 METRICS = ["euclidean", "manhattan", "canberra", "chebychev"]
@@ -144,5 +148,5 @@ def test_euclidean_agrees_with_manual(data):
         for j in range(i + 1, n):
             manual = np.sqrt(np.sum((X[i] - X[j]) ** 2))
             assert np.isclose(D[i, j], manual, atol=1e-10), (
-                f"Euclidean mismatch at ({i},{j}): {D[i,j]:.6f} vs {manual:.6f}"
+                f"Euclidean mismatch at ({i},{j}): {D[i, j]:.6f} vs {manual:.6f}"
             )

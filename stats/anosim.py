@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/anosim.py
+# FILE: stats/anosim.py
 # =============================================================================
 """
 Analysis of Similarities (ANOSIM) Module for PaleoAST
@@ -224,9 +224,7 @@ class ANOSIMAnalyzer:
         """
         n = D.shape[0]
         if n < 2:
-            raise ValidationError(
-                "ANOSIM requires at least 2 samples", details={"n_samples": n}
-            )
+            raise ValidationError("ANOSIM requires at least 2 samples", details={"n_samples": n})
 
         # Compute all pairwise similarities (1 - distance)
         S = 1 - D
@@ -279,14 +277,12 @@ class ANOSIMAnalyzer:
 
         if not r_B_list:
             raise ValidationError(
-                "ANOSIM needs at least one between-group pair: every sample "
-                "belongs to the same group",
+                "ANOSIM needs at least one between-group pair: every sample belongs to the same group",
                 details={"n_samples": n},
             )
         if not r_W_list:
             raise ValidationError(
-                "ANOSIM needs at least one within-group pair: at least one "
-                "group must contain 2 or more samples",
+                "ANOSIM needs at least one within-group pair: at least one group must contain 2 or more samples",
                 details={"n_samples": n, "n_groups": len(set(groups))},
             )
         r_B = float(np.mean(r_B_list))

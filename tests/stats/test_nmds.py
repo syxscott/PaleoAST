@@ -1,4 +1,4 @@
-"""Tests for statistics/nmds.py — NMDS SMACOF performance and correctness."""
+"""Tests for stats/nmds.py — NMDS SMACOF performance and correctness."""
 
 import time
 
@@ -29,7 +29,7 @@ def small_distance_matrix() -> np.ndarray:
 
 def test_nmds_stress_below_converged_threshold(small_distance_matrix):
     """NMDS must converge (stress < 0.05) on a trivially-embeddable distance matrix."""
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     analyzer = NMDSAnalyzer()
     result = analyzer.analyze(
@@ -47,7 +47,7 @@ def test_nmds_stress_below_converged_threshold(small_distance_matrix):
 
 def test_nmds_stress_history_is_monotone_decreasing(small_distance_matrix):
     """Stress history should generally decrease (allowing minor fluctuations)."""
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     analyzer = NMDSAnalyzer()
     result = analyzer.analyze(
@@ -79,7 +79,7 @@ def test_nmds_stress_matches_reference_formula(small_distance_matrix):
     """
     from scipy.spatial.distance import cdist
 
-    from statistics.nmds import NMDSAnalyzer, _pava_increasing
+    from stats.nmds import NMDSAnalyzer, _pava_increasing
 
     # Get NMDS result
     analyzer = NMDSAnalyzer()
@@ -125,7 +125,7 @@ def test_nmds_different_restarts_give_different_results():
     """Multiple restarts must not all return identical coordinates."""
     from scipy.spatial.distance import cdist
 
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     # A more challenging matrix that is unlikely to converge to the same
     # minimum from different random initialisations
@@ -133,19 +133,16 @@ def test_nmds_different_restarts_give_different_results():
     D = cdist(np.random.rand(8, 4), np.random.rand(8, 4), metric="euclidean")
 
     analyzer = NMDSAnalyzer()
-    results = [
-        analyzer.analyze(D, n_dimensions=2, n_restarts=1, max_iterations=100, random_seed=i)
-        for i in range(3)
-    ]
+    results = [analyzer.analyze(D, n_dimensions=2, n_restarts=1, max_iterations=100, random_seed=i) for i in range(3)]
 
     # At least two of the three coordinate matrices should differ
     norms = [np.linalg.norm(r.coordinates) for r in results]
     # If all norms are identical within tolerance, the random restarts
     # may have collapsed to the same minimum — check they at least have
     # the same stress order
-    assert len(set(round(n, 4) for n in norms)) >= 2 or all(
-        results[0].stress <= r.stress for r in results[1:]
-    ), "Restarts should produce distinct configurations or best stress is kept"
+    assert len(set(round(n, 4) for n in norms)) >= 2 or all(results[0].stress <= r.stress for r in results[1:]), (
+        "Restarts should produce distinct configurations or best stress is kept"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -162,12 +159,11 @@ def test_smacof_uses_builtin_pava_not_sklearn():
     """
     import inspect
 
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     source = inspect.getsource(NMDSAnalyzer._smacof)
 
-    assert "from sklearn" not in source and "import sklearn" not in source, \
-        "_smacof must not import sklearn"
+    assert "from sklearn" not in source and "import sklearn" not in source, "_smacof must not import sklearn"
     assert "IsotonicRegression(" not in source, "_smacof must not use sklearn's isotonic regression"
     assert "_pava_increasing(" in source, "_smacof must call the built-in PAVA helper"
 
@@ -179,7 +175,7 @@ def test_smacof_uses_builtin_pava_not_sklearn():
 
 def test_analyze_accepts_progress_callback():
     """The analyze method should accept an optional progress callback."""
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     analyzer = NMDSAnalyzer()
     np.random.seed(0)
@@ -201,9 +197,7 @@ def test_analyze_accepts_progress_callback():
     )
 
     # At minimum, we should have recorded each restart's final stress
-    assert len(progress_calls) >= 3, (
-        f"Expected >= 3 progress calls (one per restart), got {len(progress_calls)}"
-    )
+    assert len(progress_calls) >= 3, f"Expected >= 3 progress calls (one per restart), got {len(progress_calls)}"
     for restart_idx, total, stress in progress_calls:
         assert 0 <= restart_idx < 3
         assert 0.0 <= float(stress) <= 1.0
@@ -216,7 +210,7 @@ def test_analyze_accepts_progress_callback():
 
 def test_pava_increasing_matches_known_isotonic_fits():
     """_pava_increasing must equal the least-squares isotonic fit."""
-    from statistics.nmds import _pava_increasing
+    from stats.nmds import _pava_increasing
 
     # Already increasing: identity
     y = np.array([1.0, 2.0, 3.0, 4.0])
@@ -232,9 +226,7 @@ def test_pava_increasing_matches_known_isotonic_fits():
 
     # Multiple blocks
     y = np.array([10.0, 1.0, 2.0, 9.0, 3.0])
-    np.testing.assert_allclose(
-        _pava_increasing(y), [13.0 / 3.0, 13.0 / 3.0, 13.0 / 3.0, 6.0, 6.0]
-    )
+    np.testing.assert_allclose(_pava_increasing(y), [13.0 / 3.0, 13.0 / 3.0, 13.0 / 3.0, 6.0, 6.0])
 
 
 @pytest.mark.slow
@@ -247,7 +239,7 @@ def test_smacof_runs_without_sklearn():
     """
     from scipy.spatial.distance import cdist
 
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     np.random.seed(42)
     data = np.random.rand(50, 10)

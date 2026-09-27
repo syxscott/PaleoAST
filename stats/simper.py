@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/simper.py
+# FILE: stats/simper.py
 # =============================================================================
 """
 SIMPER (Similarity Percentages) Analysis Module for PaleoAST
@@ -186,7 +186,9 @@ class SimperAnalyzer:
             if n_groups < 2:
                 raise ComputationError("SIMPER requires at least 2 groups")
 
-            self._logger.info(f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups, metric={metric_key}")
+            self._logger.info(
+                f"SIMPER: {n_samples} samples, {n_vars} variables, {n_groups} groups, metric={metric_key}"
+            )
 
             # Build group pair list
             group_pairs = []

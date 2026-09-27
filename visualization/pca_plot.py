@@ -21,7 +21,7 @@ import numpy.typing as npt
 from matplotlib.figure import Figure
 
 from config.colors import get_color_scheme
-from statistics.pca import PCAResult
+from stats.pca import PCAResult
 
 from ._style_scope import scoped_plot_methods
 
@@ -43,7 +43,6 @@ class PCAPlotter:
         self._dpi = 300
         self._font_size = 10
         self._title_font_size = 12
-
 
     def plot_scores(
         self,

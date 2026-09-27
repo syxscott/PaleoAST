@@ -392,15 +392,11 @@ class GillespieSimulator:
         # Initial lineages: those created during initialize() (parent_id is None).
         # Their birth_time equals the start_time passed to initialize().
         start_time = self._lineages[0].birth_time
-        initial_lineages = sum(
-            1 for l in self._lineages if l.parent_id is None and l.birth_time == start_time
-        )
+        initial_lineages = sum(1 for l in self._lineages if l.parent_id is None and l.birth_time == start_time)
 
         # Build time axis: include start_time so the curve begins at the
         # simulation start, not at the first event.
-        all_times = sorted(set(
-            [start_time] + [e.time for e in self._events] + [self._current_time]
-        ))
+        all_times = sorted(set([start_time] + [e.time for e in self._events] + [self._current_time]))
 
         diversity = []
         current_n = initial_lineages
@@ -415,7 +411,7 @@ class FossilizedBirthDeathProcess:
     """
     化石生灭过程
 
-    提供FBD分布的解析计算和MCMC采样。
+    提供FBD分布的解析计算（存活概率、期望多样性、化石数分布）与对数似然。
 
     使用示例:
         >>> fbd = FossilizedBirthDeathProcess(

@@ -32,8 +32,9 @@ class TestUPGMAVsApe:
         """UPGMA should preserve ultrametric distances."""
         np.random.seed(42)
         X = np.random.rand(6, 4)
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
         from phylogenetics.distance_methods import upgma
+
         D = compute_distance_matrix(X, metric="euclidean").matrix
         tree = upgma(D)
         assert tree is not None
@@ -45,8 +46,9 @@ class TestUPGMAVsApe:
         """UPGMA input distance matrix must be symmetric."""
         np.random.seed(42)
         X = np.random.rand(5, 3)
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
         from phylogenetics.distance_methods import upgma
+
         D = compute_distance_matrix(X, metric="euclidean").matrix
         assert np.allclose(D, D.T)
 
@@ -61,6 +63,7 @@ class TestPICVsApe:
         tree_nodes = ["t1", "t2", "t3", "t4"]
         traits = np.array([1.0, 2.0, 1.5, 2.5])
         from phylogenetics.fitch import PhylogeneticInference
+
         infer = PhylogeneticInference()
         # PIC would require a tree - test Fitch parsimony instead
         result = infer.fitch_width(traits, tree_nodes)
@@ -88,26 +91,32 @@ class TestDistanceMethodsVsApe:
         """Neighbor Joining should produce a valid tree."""
         np.random.seed(42)
         X = np.random.rand(5, 4)
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
         from phylogenetics.distance_methods import neighbor_joining
+
         D = compute_distance_matrix(X, metric="euclidean").matrix
         tree = neighbor_joining(D)
         assert tree is not None
 
     def test_q_matrix_computation(self):
         """Q-matrix computation in NJ should be correct."""
-        D = np.array([
-            [0.0, 5.0, 9.0],
-            [5.0, 0.0, 6.0],
-            [9.0, 6.0, 0.0],
-        ])
+        D = np.array(
+            [
+                [0.0, 5.0, 9.0],
+                [5.0, 0.0, 6.0],
+                [9.0, 6.0, 0.0],
+            ]
+        )
         from phylogenetics.distance_methods import _compute_q_matrix
+
         Q = _compute_q_matrix(D)
         # Q_ij = (n-2)*d_ij - sum_k(d_ik) - sum_k(d_jk)
         n = 3
-        expected_Q = np.array([
-            [0.0, -22.0, -28.0],
-            [-22.0, 0.0, -24.0],
-            [-28.0, -24.0, 0.0],
-        ])
+        expected_Q = np.array(
+            [
+                [0.0, -22.0, -28.0],
+                [-22.0, 0.0, -24.0],
+                [-28.0, -24.0, 0.0],
+            ]
+        )
         assert_allclose(Q, expected_Q, atol=1e-10)

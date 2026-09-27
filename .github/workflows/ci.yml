@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install mypy numpy scipy pandas matplotlib PyQt6
-      - run: mypy --config-file pyproject.toml config/ models/ controllers/ statistics/ ecology/ utils/ views/
+      - run: mypy --config-file pyproject.toml config/ models/ controllers/ stats/ ecology/ utils/ views/
 
   # =========================================================================
   # Unit & Property Tests (full matrix)
@@ -133,6 +133,86 @@ jobs:
           pytest tests/cross_validation/ -v --tb=short
 
   # =========================================================================
+  # Package Build & Import Smoke Test (NON-editable install)
+  # =========================================================================
+  # Every other job in this file installs with ``pip install -e .``, which puts
+  # the repository root on sys.path. That makes real packaging bugs invisible:
+  # a package missing from the wheel still imports because the checkout happens
+  # to sit right there, ``py-modules`` omissions are masked, and
+  # ``package-data`` omissions only surface at runtime inside load_*().
+  #
+  # This job is the only one that installs a built wheel into a clean venv and
+  # imports it from OUTSIDE the source tree, so it is the only job that can
+  # catch those. It intentionally does not depend on ``test``.
+  package:
+    name: Wheel Build & Import Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system libraries for PyQt6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist/
+
+      - name: Install the wheel into a clean venv
+        run: |
+          python -m venv smoke-venv
+          # deps come from the project metadata, the wheel under test does not
+          smoke-venv/bin/python -m pip install --upgrade pip
+          smoke-venv/bin/python -m pip install dist/*.whl
+
+      - name: Import smoke test (from outside the source tree)
+        env:
+          # Importing views/controllers pulls in PyQt6.QtWidgets, which needs a
+          # platform plugin even when nothing is shown. Same reason the test
+          # job sets this.
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          # Run from $RUNNER_TEMP, not the checkout: running the script by path
+          # adds only scripts/ to sys.path, but staying out of the checkout
+          # removes any doubt that the wheel is what got imported.
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/smoke-venv/bin/python" \
+            "$GITHUB_WORKSPACE/scripts/import_smoke.py" --verbose
+
+      - name: Console script resolves to a callable entry point
+        run: |
+          # A generated wrapper that raises ModuleNotFoundError on first run is
+          # a packaging bug the import smoke test cannot see: it only checks
+          # the entry point is *declared*, not that it *loads*.
+          smoke-venv/bin/python -c "from importlib.metadata import entry_points; \
+            ep = next(e for e in entry_points(group='console_scripts') if e.name == 'paleoast'); \
+            print(ep.module + ':' + ep.attr, '->', ep.load()); \
+            assert callable(ep.load())"
+
+      - name: Package data is present in the wheel
+        run: |
+          python - <<'PY'
+          import zipfile, glob, sys
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          missing = [p for p in ("data/examples/", "data/golden/") if not any(n.startswith(p) for n in names)]
+          if missing:
+              sys.exit(f"wheel is missing package data: {missing}")
+          print("wheel contains", len(names), "entries, package data OK")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  # =========================================================================
   # Coverage Report
   # =========================================================================
   coverage:
@@ -154,6 +234,10 @@ jobs:
         with:
           name: coverage-report
       - name: Generate coverage report
+        # No --fail-under here on purpose: the gate lives in
+        # [tool.coverage.report] fail_under (pyproject.toml) so this job and a
+        # local `pytest --cov` enforce the same number. It previously passed an
+        # explicit --fail-under=10, roughly 4x below the measured 39.84%.
         run: |
           pip install coverage
-          coverage report --fail-under=10
+          coverage report

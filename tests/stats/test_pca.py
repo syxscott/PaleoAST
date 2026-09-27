@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: tests/statistics/test_pca.py
+# FILE: tests/stats/test_pca.py
 # =============================================================================
 """
 Unit tests for PCA module - focusing on Bug 1: n_samples=1 dtype=int crash.
@@ -15,7 +15,7 @@ Bug 1 Description:
 import numpy as np
 import pytest
 
-from statistics.pca import PCAAnalyzer, PCAResult
+from stats.pca import PCAAnalyzer, PCAResult
 
 
 class TestPCADtypeFix:
@@ -93,13 +93,15 @@ class TestPCANormalOperation:
     def test_covariance_vs_correlation_methods(self):
         """Test both covariance and correlation PCA methods work."""
         analyzer = PCAAnalyzer()
-        data = np.array([
-            [1.0, 2.0, 3.0],
-            [4.0, 5.0, 6.0],
-            [7.0, 8.0, 9.0],
-        ])
-        cov_result = analyzer.analyze(data, method='covariance')
-        cor_result = analyzer.analyze(data, method='correlation')
+        data = np.array(
+            [
+                [1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0],
+            ]
+        )
+        cov_result = analyzer.analyze(data, method="covariance")
+        cor_result = analyzer.analyze(data, method="correlation")
         assert cov_result.scores.shape == cor_result.scores.shape
 
     def test_eigenvalue_properties(self):

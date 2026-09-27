@@ -25,6 +25,7 @@ from numpy.testing import assert_allclose
 
 try:
     import rpy2
+
     RPY2_AVAILABLE = True
 except ImportError:
     RPY2_AVAILABLE = False
@@ -35,39 +36,47 @@ class TestBrayCurtisVsVegan:
 
     def test_bray_curtis_simple(self):
         X = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
+
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
         upper = D[np.triu_indices(3, k=1)]
         assert_allclose(upper, [1.0, 1.0, 1.0], atol=1e-3)
 
     def test_bray_curtis_identical(self):
         X = np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]])
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
+
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
         assert_allclose(D[0, 1], 0.0, atol=1e-10)
 
     def test_bray_curtis_partial(self):
         X = np.array([[10.0, 5.0, 2.0], [10.0, 3.0, 0.0]])
-        from statistics.distance_metrics import compute_distance_matrix
+        from stats.distance_metrics import compute_distance_matrix
+
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
         expected = 4.0 / 30.0
         assert_allclose(D[0, 1], expected, atol=1e-3)
 
     def test_bray_curtis_larger(self):
-        X = np.array([
-            [10.0, 5.0, 2.0, 0.0],
-            [8.0, 6.0, 3.0, 1.0],
-            [0.0, 2.0, 4.0, 6.0],
-            [1.0, 1.0, 1.0, 1.0],
-        ])
-        from statistics.distance_metrics import compute_distance_matrix
+        X = np.array(
+            [
+                [10.0, 5.0, 2.0, 0.0],
+                [8.0, 6.0, 3.0, 1.0],
+                [0.0, 2.0, 4.0, 6.0],
+                [1.0, 1.0, 1.0, 1.0],
+            ]
+        )
+        from stats.distance_metrics import compute_distance_matrix
+
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
-        expected = np.array([
-            [0.0000, 0.2785, 0.8700, 0.8378],
-            [0.2785, 0.0000, 0.6400, 0.7353],
-            [0.8700, 0.6400, 0.0000, 0.5556],
-            [0.8378, 0.7353, 0.5556, 0.0000],
-        ])
+        expected = np.array(
+            [
+                [0.0000, 0.2785, 0.8700, 0.8378],
+                [0.2785, 0.0000, 0.6400, 0.7353],
+                [0.8700, 0.6400, 0.0000, 0.5556],
+                [0.8378, 0.7353, 0.5556, 0.0000],
+            ]
+        )
         assert_allclose(D, expected, atol=1e-3)
 
 
@@ -77,8 +86,9 @@ class TestNMDSVsVegan:
     def test_nmds_stress_valid_range(self):
         np.random.seed(42)
         X = np.random.rand(8, 4)
-        from statistics.distance_metrics import compute_distance_matrix
-        from statistics.nmds import NMDSAnalyzer
+        from stats.distance_metrics import compute_distance_matrix
+        from stats.nmds import NMDSAnalyzer
+
         D = compute_distance_matrix(X, metric="euclidean").matrix
         result = NMDSAnalyzer().analyze(D, n_dimensions=2, n_restarts=1, random_seed=42)
         assert 0.0 <= result.stress <= 1.0
@@ -87,8 +97,9 @@ class TestNMDSVsVegan:
     def test_nmds_low_stress_2d_data(self):
         np.random.seed(42)
         X = np.random.rand(5, 2) * 10
-        from statistics.distance_metrics import compute_distance_matrix
-        from statistics.nmds import NMDSAnalyzer
+        from stats.distance_metrics import compute_distance_matrix
+        from stats.nmds import NMDSAnalyzer
+
         D = compute_distance_matrix(X, metric="euclidean").matrix
         result = NMDSAnalyzer().analyze(D, n_dimensions=2, n_restarts=3, random_seed=42)
         assert result.stress < 0.05
@@ -102,12 +113,14 @@ class TestShannonVsVegan:
         p = abundances[abundances > 0] / abundances.sum()
         expected = -np.sum(p * np.log(p))
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         assert_allclose(result.indices["shannon"].value, expected, atol=1e-6)
 
     def test_shannon_vegan_value(self):
         abundances = np.array([10.0, 5.0, 2.0, 0.0, 0.0])
         from ecology.diversity import compute_diversity_indices
+
         result = compute_diversity_indices(abundances)
         assert_allclose(result.indices["shannon"].value, 0.9746, atol=1e-3)
 
@@ -120,8 +133,9 @@ class TestPERMANOVAVsVegan:
         group_a = np.random.rand(10, 4)
         group_b = np.random.rand(10, 4) + 3.0
         data = np.vstack([group_a, group_b])
-        from statistics.distance_metrics import compute_distance_matrix
-        from statistics.permanova import PERMANOVAAnalyzer
+        from stats.distance_metrics import compute_distance_matrix
+        from stats.permanova import PERMANOVAAnalyzer
+
         D = compute_distance_matrix(data, metric="euclidean").matrix
         groups = ["A"] * 10 + ["B"] * 10
         result = PERMANOVAAnalyzer().analyze(D, groups, n_permutations=999, random_seed=42)
@@ -133,8 +147,9 @@ class TestPERMANOVAVsVegan:
     def test_permanova_ss_decomposition(self):
         np.random.seed(789)
         data = np.random.rand(15, 5)
-        from statistics.distance_metrics import compute_distance_matrix
-        from statistics.permanova import PERMANOVAAnalyzer
+        from stats.distance_metrics import compute_distance_matrix
+        from stats.permanova import PERMANOVAAnalyzer
+
         D = compute_distance_matrix(data, metric="euclidean").matrix
         groups = ["A"] * 5 + ["B"] * 5 + ["C"] * 5
         result = PERMANOVAAnalyzer().analyze(D, groups, n_permutations=99, random_seed=42)

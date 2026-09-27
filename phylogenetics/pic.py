@@ -74,6 +74,7 @@ class PICNodeData:
         contrast: 本节点的独立对比值
         trait: 性状值 (用于叶节点或未计算的节点)
     """
+
     variance: float = 0.0
     contrast: float = 0.0
     trait: float = 0.0
@@ -219,7 +220,7 @@ def _pic_core(root, traits: dict[str, float]) -> tuple[list[float], list[tuple[s
         """
         递归计算 (重建值, 子树累积方差)。
 
-        约定与 statistics/pcm.py 的单一参考实现一致 (Felsenstein 1985):
+        约定与 stats/pcm.py 的单一参考实现一致 (Felsenstein 1985):
         - 叶节点返回 (trait, 0.0); 父节点把子节点枝长加到子树方差上;
         - 对比 IC = (x_A - x_B) / sqrt(v_A + v_B);
         - 向上传递的是逆方差加权重建值 (而非标准化对比——旧实现把
@@ -321,8 +322,8 @@ def _compute_variances(node, parent_variance: float) -> None:
     node_variance = parent_variance + branch_len
 
     # 存储在 metadata 中供后续使用
-    node.metadata['_variance'] = node_variance
-    node.metadata['_parent_variance'] = parent_variance
+    node.metadata["_variance"] = node_variance
+    node.metadata["_parent_variance"] = parent_variance
 
 
 def compute_pic_with_ancestral_states(
@@ -400,7 +401,7 @@ def validate_pic_assumptions(tree) -> dict[str, Any]:
         2. 所有枝长非负
         3. 进化遵循 Brown 运动模型
     """
-    if hasattr(tree, 'root'):
+    if hasattr(tree, "root"):
         root = tree.root
     else:
         root = tree
@@ -428,20 +429,17 @@ def validate_pic_assumptions(tree) -> dict[str, Any]:
     is_rooted = root.parent is None
 
     results = {
-        'is_rooted': is_rooted,
-        'has_branch_lengths': has_branch_lengths,
-        'polytomy_count': polytomy_count,
-        'leaf_count': leaf_count,
-        'warnings': warnings,
-        'assumptions_satisfied': is_rooted and has_branch_lengths and polytomy_count == 0
+        "is_rooted": is_rooted,
+        "has_branch_lengths": has_branch_lengths,
+        "polytomy_count": polytomy_count,
+        "leaf_count": leaf_count,
+        "warnings": warnings,
+        "assumptions_satisfied": is_rooted and has_branch_lengths and polytomy_count == 0,
     }
 
     if polytomy_count > 0:
         # Polytomy violates standard PIC binary-tree assumptions
-        results['assumptions_satisfied'] = False
-        warnings.append(
-            f"Tree has {polytomy_count} polytomy(ies). "
-            "Using Pagel (1992) iterative combination method."
-        )
+        results["assumptions_satisfied"] = False
+        warnings.append(f"Tree has {polytomy_count} polytomy(ies). Using Pagel (1992) iterative combination method.")
 
     return results

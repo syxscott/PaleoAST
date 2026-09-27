@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: tests/statistics/test_permanova.py
+# FILE: tests/stats/test_permanova.py
 # =============================================================================
 """
 Unit tests for PERMANOVA analyzer.
@@ -20,11 +20,12 @@ from numpy.testing import assert_allclose
 
 # Set BLAS threads to 1 before importing modules under test
 import os
+
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
-from statistics.permanova import PERMANOVAAnalyzer, PERMANOVAResult
+from stats.permanova import PERMANOVAAnalyzer, PERMANOVAResult
 from utils.exceptions import ComputationError
 
 
@@ -193,12 +194,14 @@ class TestPERMANOVA(unittest.TestCase):
 
     def test_small_matrix(self) -> None:
         """Minimal 4-sample case."""
-        D = np.array([
-            [0.0, 1.0, 1.414, 1.414],
-            [1.0, 0.0, 1.414, 1.414],
-            [1.414, 1.414, 0.0, 1.0],
-            [1.414, 1.414, 1.0, 0.0],
-        ])
+        D = np.array(
+            [
+                [0.0, 1.0, 1.414, 1.414],
+                [1.0, 0.0, 1.414, 1.414],
+                [1.414, 1.414, 0.0, 1.0],
+                [1.414, 1.414, 1.0, 0.0],
+            ]
+        )
         groups = ["A", "A", "B", "B"]
 
         result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)

@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/distance_metrics.py
+# FILE: stats/distance_metrics.py
 # =============================================================================
 """
 Distance Metrics Module for PaleoAST

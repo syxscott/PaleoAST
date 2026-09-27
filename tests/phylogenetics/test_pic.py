@@ -140,7 +140,7 @@ class TestPICPolytomy:
 
         根据 Pagel 1992 / Felsenstein 2008，k=3 个子节点应产生 k-1 = 2 个独立对比
 
-        规范处理 (Felsenstein 1985; 与 ape::pic 及 statistics/pcm.py
+        规范处理 (Felsenstein 1985; 与 ape::pic 及 stats/pcm.py
         的单一参考实现一致): 向上传递的是逆方差加权重建值, 而非
         标准化对比值。
 
@@ -208,10 +208,10 @@ class TestPICValidation:
         tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
         result = validate_pic_assumptions(tree)
 
-        assert result['is_rooted'] is True
-        assert result['has_branch_lengths'] is True
-        assert result['polytomy_count'] == 0
-        assert result['assumptions_satisfied'] is True
+        assert result["is_rooted"] is True
+        assert result["has_branch_lengths"] is True
+        assert result["polytomy_count"] == 0
+        assert result["assumptions_satisfied"] is True
 
     def test_validate_assumptions_polytomy(self):
         """Polytomy 树应有警告但仍可计算"""
@@ -220,14 +220,14 @@ class TestPICValidation:
         tree = PhyloTree.from_newick("(A:1,B:1,C:1)Root:1;")
         result = validate_pic_assumptions(tree)
 
-        assert result['is_rooted'] is True
-        assert result['has_branch_lengths'] is True
-        assert result['polytomy_count'] == 1
-        assert len(result['warnings']) > 0
+        assert result["is_rooted"] is True
+        assert result["has_branch_lengths"] is True
+        assert result["polytomy_count"] == 1
+        assert len(result["warnings"]) > 0
         # Poltomy 违反 PIC 的严格二叉假设: 不满足假设 (仍可用迭代组合
         # 法计算, 见 test_trichotomy_3_children)。与
         # TestPICVariancePolytomy::test_polytomy_detected 的断言一致。
-        assert result['assumptions_satisfied'] is False
+        assert result["assumptions_satisfied"] is False
 
 
 class TestPICEdgeCases:
@@ -345,7 +345,7 @@ class TestPICAncestralStates:
         contrasts, pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
 
         # Root 的祖先状态应为 A 和 B 的平均
-        assert 'Root' in ancestral or '_internal_' in str(list(ancestral.keys()))
+        assert "Root" in ancestral or "_internal_" in str(list(ancestral.keys()))
         # 等方差两支 => 逆方差加权重建退化为简单平均 3.0
         np.testing.assert_almost_equal(ancestral["Root"], 3.0, decimal=10)
 

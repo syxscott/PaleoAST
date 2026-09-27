@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/pcm.py
+# FILE: stats/pcm.py
 # =============================================================================
 """
 Phylogenetic Comparative Methods (PCM) for PaleoAST
@@ -338,10 +338,11 @@ def _check_positive_branch_lengths(root: PhyloNode, context: str = "PIC") -> Non
     if offenders:
         shown = offenders[:10]
         raise ValidationError(
-            _("{0} requires strictly positive branch lengths: {1} edge(s) have "
-              "a zero or missing length ({2}). Rescale the tree or give the "
-              "affected branches a small positive length.").format(
-                context, len(offenders), ", ".join(shown)),
+            _(
+                "{0} requires strictly positive branch lengths: {1} edge(s) have "
+                "a zero or missing length ({2}). Rescale the tree or give the "
+                "affected branches a small positive length."
+            ).format(context, len(offenders), ", ".join(shown)),
             details={"n_offending_edges": len(offenders), "examples": shown},
         )
 
@@ -467,8 +468,7 @@ def _compute_contrasts_recursive(
     # branch_length is the edge from the child up to *this* node and must
     # be added to the descendant variance before computing the contrast.
     active: list[tuple[float, float, float, PhyloNode]] = [
-        (val, cvar, (child.branch_length or 0.0), child)
-        for child, val, cvar in child_results
+        (val, cvar, (child.branch_length or 0.0), child) for child, val, cvar in child_results
     ]
 
     while len(active) > 1:
@@ -510,7 +510,9 @@ def _compute_contrasts_recursive(
     # mean of the child reconstructions = 1/Σ(1/v_i) where
     # v_i = descendant_var + branch_length. Excludes this node's own
     # branch_length (the parent adds that when this node is a child).
-    inv_sum = sum(1.0 / v for v in (cvar + (child.branch_length or 0.0) for child, _val, cvar in child_results) if v > 0)
+    inv_sum = sum(
+        1.0 / v for v in (cvar + (child.branch_length or 0.0) for child, _val, cvar in child_results) if v > 0
+    )
     cum_var = 1.0 / inv_sum if inv_sum > 0 else 0.0
     return recon, cum_var, all_contrasts, all_names
 
@@ -759,9 +761,7 @@ class PCMAnalyzer:
             PhylogeneticSignalResult with K, Z-score, and p-value
         """
         n_r = n_randomizations or self._n_randomizations
-        self._logger.info(
-            f"Computing Blomberg's K (n_perm={n_r}, random_seed={random_seed})"
-        )
+        self._logger.info(f"Computing Blomberg's K (n_perm={n_r}, random_seed={random_seed})")
 
         if tree.root is None:
             raise ValidationError(_("Tree has no root node"))
@@ -861,9 +861,7 @@ class PCMAnalyzer:
                 into one of the groups.
         """
         n_p = n_permutations or self._n_randomizations
-        self._logger.info(
-            f"Phylogenetic ANOVA (n_perm={n_p}, random_seed={random_seed})"
-        )
+        self._logger.info(f"Phylogenetic ANOVA (n_perm={n_p}, random_seed={random_seed})")
 
         if tree.root is None:
             raise ValidationError(_("Tree has no root node"))

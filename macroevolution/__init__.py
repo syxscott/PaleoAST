@@ -11,7 +11,7 @@ PaleoAST Macroevolution - Module Initialization
 数学基础:
     - 生灭过程: dN/dt = (λ - μ)N
     - Foote公式: p = (1 - q)/(1 - q^(n+1))
-    - MCMC采样
+    - FBD 解析解与 Gillespie 随机模拟
 
 作者: PaleoAST Development Team
 版本: 4.0.0

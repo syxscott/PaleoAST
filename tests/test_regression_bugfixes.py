@@ -60,7 +60,7 @@ def test_null_model_swap_preserves_both_margins(monkeypatch):
 
 
 def test_pcoa_rejects_singleton_distance_matrix_with_clear_error():
-    from statistics.pcoa import PCoAAnalyzer
+    from stats.pcoa import PCoAAnalyzer
     from utils.exceptions import MatrixDimensionError
 
     with pytest.raises(MatrixDimensionError):
@@ -115,8 +115,8 @@ def test_quaternion_nearly_aligned_slerp_depends_on_t():
 
 
 def test_permutation_p_values_use_plus_one_correction():
-    from statistics.anosim import ANOSIMAnalyzer
-    from statistics.permanova import PERMANOVAAnalyzer
+    from stats.anosim import ANOSIMAnalyzer
+    from stats.permanova import PERMANOVAAnalyzer
 
     distance = np.array(
         [
@@ -201,8 +201,8 @@ def qapp():
 
 @pytest.mark.skip(
     reason="顺序依赖: 独立运行通过; 全量套件中因 tests/models 无头 "
-          "event-bus mock 与全局单例的隔离缺陷而失败 (HEAD 同样复现)。"
-          "需要测试隔离重构: 每测试重建 StateManager/EventBus。"
+    "event-bus mock 与全局单例的隔离缺陷而失败 (HEAD 同样复现)。"
+    "需要测试隔离重构: 每测试重建 StateManager/EventBus。"
 )
 def test_spreadsheet_transform_pushes_into_state_manager_undo_stack(qapp):
     """Regression: Spreadsheet undo was decoupled from StateManager undo.
@@ -258,6 +258,7 @@ def test_pca_scree_added_via_helper_switches_to_it():
     both add the widget and set the current index so the user actually
     sees it.
     """
+
     # This is a pure logic test using fake objects so it does not
     # require a full PyQt workspace to run.
     class FakeStack:
@@ -299,9 +300,7 @@ def test_pca_scree_added_via_helper_switches_to_it():
     import types
 
     fake = FakeMainWindow()
-    fake._evict_excess_result_tabs = types.MethodType(
-        lambda self: None, fake
-    )
+    fake._evict_excess_result_tabs = types.MethodType(lambda self: None, fake)
 
     # Re-bind _add_tab_to_workspace to the local copy of the logic.
     def add_tab(self, widget, name):
@@ -399,6 +398,7 @@ def test_diversity_resolve_sample_index_prefers_label():
     should surface the miss instead of always returning 0. Numeric
     strings (1-based row indices) are still accepted for ergonomics.
     """
+
     # Replicate the resolver's contract so we don't need a full PyQt
     # MainWindow. The logic mirrors the implementation.
     def resolve(name, labels):

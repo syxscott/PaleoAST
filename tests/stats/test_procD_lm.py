@@ -1,10 +1,10 @@
-"""Tests for statistics/procD_lm.py (geomorph procD.lm port: Procrustes ANOVA + permutation)."""
+"""Tests for stats/procD_lm.py (geomorph procD.lm port: Procrustes ANOVA + permutation)."""
 
 import numpy as np
 import pytest
 
 from utils.exceptions import DataValidationError
-from statistics.procD_lm import ProcDLMResult, procD_lm
+from stats.procD_lm import ProcDLMResult, procD_lm
 
 
 @pytest.fixture

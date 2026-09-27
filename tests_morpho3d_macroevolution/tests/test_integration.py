@@ -17,8 +17,8 @@ import numpy as np
 
 from macroevolution.cohort import CohortSurvivorshipAnalysis
 from morpho3d.gpa3d import GPA3D
-from statistics.distance_metrics import DistanceMatrixResult, compute_distance_matrix
-from statistics.pca import PCAAnalyzer, PCAResult
+from stats.distance_metrics import DistanceMatrixResult, compute_distance_matrix
+from stats.pca import PCAAnalyzer, PCAResult
 
 
 class TestPCAIntegration(unittest.TestCase):

@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/cca.py
+# FILE: stats/cca.py
 # =============================================================================
 """
 Canonical Correspondence Analysis (CCA) and Redundancy Analysis (RDA) Module
@@ -229,6 +229,7 @@ class CCAAnalyzer:
         cond = np.linalg.cond(XtX)
         if cond > cond_threshold:
             import warnings as _warnings
+
             _warnings.warn(
                 f"{method.upper()}: X'X condition number = {cond:.2e} > {cond_threshold:.0e}. "
                 f"Environmental matrix is ill-conditioned (collinear variables?). "
@@ -252,8 +253,7 @@ class CCAAnalyzer:
             except np.linalg.LinAlgError:
                 # Fallback to ridge-regularized lstsq if inv fails
                 self._logger.warning(
-                    f"{method.upper()}: np.linalg.inv(XtX) failed. "
-                    f"Falling back to ridge-regularized lstsq."
+                    f"{method.upper()}: np.linalg.inv(XtX) failed. Falling back to ridge-regularized lstsq."
                 )
                 XtX_ridge = XtX + ridge_lambda * np.eye(XtX.shape[0])
                 identity = np.eye(XtX.shape[0])
@@ -313,6 +313,7 @@ class CCAAnalyzer:
         if np.any(clipped):
             n_clipped = int(np.sum(clipped))
             import warnings as _warnings
+
             _warnings.warn(
                 f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — near-singular environmental matrix; check for collinear variables.",
                 stacklevel=2,
@@ -474,6 +475,7 @@ class CCAAnalyzer:
         n_dropped_cols = int(np.sum(~keep_cols))
         if n_dropped_rows or n_dropped_cols:
             import warnings as _warnings
+
             msg = (
                 f"CCA: dropped {n_dropped_rows} sample row(s) and "
                 f"{n_dropped_cols} species column(s) with zero totals "
@@ -539,6 +541,7 @@ class CCAAnalyzer:
         if np.any(clipped):
             n_clipped = int(np.sum(clipped))
             import warnings as _warnings
+
             _warnings.warn(
                 f"CCA: {n_clipped} eigenvalue(s) clipped to 1e-10 — "
                 "near-singular environmental matrix; check for collinear variables.",

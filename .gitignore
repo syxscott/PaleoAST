@@ -25,7 +25,12 @@ env/
 .coverage
 htmlcov/
 coverage.xml
+# Local coverage artifacts -- same data as coverage.xml, different
+# serializers (`pytest --cov-report=json:cov.json`). Never worth committing.
+cov*.json
 .mypy_cache/
+.ruff_cache/
+.hypothesis/
 
 # OS
 .DS_Store

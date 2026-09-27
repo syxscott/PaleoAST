@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from statistics.nmds import NMDSAnalyzer
+from stats.nmds import NMDSAnalyzer
 
 
 class TestNMDSStressFormula:
@@ -40,9 +40,7 @@ class TestNMDSStressFormula:
 
         analyzer = NMDSAnalyzer()
         # Stress-1 must be opt-in (raw_stress is the v1.0.0-compatible default).
-        result = analyzer.analyze(
-            D, n_dimensions=2, n_restarts=3, random_seed=42, method="stress_1"
-        )
+        result = analyzer.analyze(D, n_dimensions=2, n_restarts=3, random_seed=42, method="stress_1")
 
         assert result.stress_formula == "stress_1"
         assert 0 <= result.stress <= 1.0
@@ -89,20 +87,14 @@ class TestNMDSStressFormula:
         )
 
         analyzer = NMDSAnalyzer()
-        r_stress1 = analyzer.analyze(
-            D, n_dimensions=2, n_restarts=1, random_seed=42, method="stress_1"
-        )
-        r_raw = analyzer.analyze(
-            D, n_dimensions=2, n_restarts=1, random_seed=42, method="raw_stress"
-        )
+        r_stress1 = analyzer.analyze(D, n_dimensions=2, n_restarts=1, random_seed=42, method="stress_1")
+        r_raw = analyzer.analyze(D, n_dimensions=2, n_restarts=1, random_seed=42, method="raw_stress")
 
         # Sanity: stress values should both be finite and non-negative.
         assert np.isfinite(r_stress1.stress) and r_stress1.stress >= 0
         assert np.isfinite(r_raw.stress) and r_raw.stress >= 0
         # The two formulas should give different stress values (the whole point).
-        assert r_stress1.stress != r_raw.stress, (
-            f"Expected different stress values, both got {r_stress1.stress}"
-        )
+        assert r_stress1.stress != r_raw.stress, f"Expected different stress values, both got {r_stress1.stress}"
         # Formula label must reflect the choice.
         assert r_stress1.stress_formula == "stress_1"
         assert r_raw.stress_formula == "raw_stress"
@@ -131,9 +123,7 @@ class TestNMDSStressFormula:
         D = squareform(pdist(points))
 
         analyzer = NMDSAnalyzer()
-        result = analyzer.analyze(
-            D, n_dimensions=2, n_restarts=10, random_seed=42, max_iterations=500
-        )
+        result = analyzer.analyze(D, n_dimensions=2, n_restarts=10, random_seed=42, max_iterations=500)
 
         # 2D embedding of 2D data should yield very low stress
         assert result.stress < 0.1, f"Expected low stress, got {result.stress}"

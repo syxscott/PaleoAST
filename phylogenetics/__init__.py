@@ -12,7 +12,6 @@ PaleoAST Phase 3 - Phylogenetic Inference Engine
 - 距离法 (UPGMA, NJ)
 - 系统发育独立对比 (PIC, Felsenstein 1985)
 - 系统发育信号 (Blomberg's K, Pagel's λ)
-- Bootstrap分析
 
 作者: PaleoAST Development Team
 版本: 3.0.0

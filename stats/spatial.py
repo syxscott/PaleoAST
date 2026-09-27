@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/spatial.py
+# FILE: stats/spatial.py
 # =============================================================================
 """
 Spatial Point Pattern Analysis Module for PaleoAST

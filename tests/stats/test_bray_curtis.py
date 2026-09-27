@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: tests/statistics/test_bray_curtis.py
+# FILE: tests/stats/test_bray_curtis.py
 # =============================================================================
 """
 Unit tests for Bray-Curtis distance implementation.
@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from statistics.distance_metrics import compute_distance_matrix, _bray_curtis_distance_matrix
+from stats.distance_metrics import compute_distance_matrix, _bray_curtis_distance_matrix
 
 
 class TestBrayCurtisGoldenValues:
@@ -31,21 +31,26 @@ class TestBrayCurtisGoldenValues:
         where rows are samples and columns are species.  Verified against
         hand-computed exact fractions below.
         """
-        X = np.array([
-            [10.0, 5.0, 2.0, 0.0],
-            [8.0, 6.0, 3.0, 1.0],
-            [0.0, 2.0, 4.0, 6.0],
-            [1.0, 1.0, 1.0, 1.0],
-        ])
+        X = np.array(
+            [
+                [10.0, 5.0, 2.0, 0.0],
+                [8.0, 6.0, 3.0, 1.0],
+                [0.0, 2.0, 4.0, 6.0],
+                [1.0, 1.0, 1.0, 1.0],
+            ]
+        )
         D = compute_distance_matrix(X, metric="bray_curtis").matrix
         # Exact fractions:  [0,1]=1/7, [0,2]=21/29, [0,3]=5/7,
         #                    [1,2]=3/5,  [1,3]=7/11,  [2,3]=5/8
-        expected = np.array([
-            [0.0,            1.0/7,   21.0/29, 5.0/7  ],
-            [1.0/7,          0.0,      3.0/5,   7.0/11 ],
-            [21.0/29,        3.0/5,    0.0,      5.0/8  ],
-            [5.0/7,          7.0/11,   5.0/8,    0.0    ],
-        ], dtype=float)
+        expected = np.array(
+            [
+                [0.0, 1.0 / 7, 21.0 / 29, 5.0 / 7],
+                [1.0 / 7, 0.0, 3.0 / 5, 7.0 / 11],
+                [21.0 / 29, 3.0 / 5, 0.0, 5.0 / 8],
+                [5.0 / 7, 7.0 / 11, 5.0 / 8, 0.0],
+            ],
+            dtype=float,
+        )
         assert_allclose(D, expected, atol=1e-10)
 
     def test_bray_curtis_identical_samples(self):
@@ -90,7 +95,7 @@ class TestBrayCurtisEdgeCases:
         # |1-3| + |2-2| + |3-1| = 2 + 0 + 2 = 4
         # (1+3) + (2+2) + (3+1) = 4 + 4 + 4 = 12
         # d = 4/12 = 0.333
-        assert_allclose(D[0, 1], 4.0/12.0, atol=1e-6)
+        assert_allclose(D[0, 1], 4.0 / 12.0, atol=1e-6)
 
     def test_zero_abundances(self):
         """All zeros should give zero distance (no information)."""

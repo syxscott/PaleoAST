@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/permanova.py
+# FILE: stats/permanova.py
 # =============================================================================
 """
 Permutational Multivariate Analysis of Variance (PERMANOVA) Module
@@ -162,9 +162,7 @@ class PERMANOVAAnalyzer:
             # dispersion) instead of returning F = inf and a meaningless
             # p-value; the permutation draws below stay non-strict so a single
             # degenerate resampling cannot abort the test.
-            F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(
-                D, groups_array, g, n, strict=True
-            )
+            F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(D, groups_array, g, n, strict=True)
 
             # Permutation test. Use a dedicated Generator when a seed is
             # supplied so the test is fully reproducible; fall back to
@@ -286,10 +284,7 @@ class PERMANOVAAnalyzer:
             MS_between = ss_between / df_g
             MS_within = ss_within / df_res if df_res > 0 else 0.0
             if df_res <= 0:
-                undefined_reason = (
-                    f"no residual degrees of freedom (n = {n} samples, g = {g} groups, "
-                    f"n - g = {df_res})"
-                )
+                undefined_reason = f"no residual degrees of freedom (n = {n} samples, g = {g} groups, n - g = {df_res})"
                 F = float("inf")
             elif MS_within <= 0:
                 undefined_reason = (

@@ -277,7 +277,7 @@ PaleoAST/
 │   ├── stratigraphy_controller.py   # 地层分析控制器
 │   └── plot_controller.py           # 绘图控制器
 │
-├── statistics/                       # 统计分析引擎
+├── stats/                              # 统计分析引擎
 │   ├── __init__.py
 │   ├── pca.py                       # 主成分分析
 │   ├── pcoa.py                      # 主坐标分析
@@ -285,9 +285,19 @@ PaleoAST/
 │   ├── anosim.py                    # ANOSIM分析
 │   ├── permanova.py                 # PERMANOVA分析
 │   ├── distance_metrics.py          # 距离度量计算
-│   ├── factor_analysis.py           # 因子分析
-│   ├── cluster_analysis.py          # 聚类分析
-│   └── manova.py                    # 多元方差分析
+│   ├── cca.py                       # 典型相关分析
+│   ├── clustering.py                # 聚类分析
+│   ├── geometry.py                  # 几何运算
+│   ├── lda.py                       # 线性判别分析
+│   ├── pcm.py                       # 系统发育比较方法
+│   ├── procD_lm.py                  # 基于距离的 ProcD
+│   ├── simper.py                    # SIMPER 物种贡献分解
+│   ├── spatial.py                   # 空间统计
+│   └── univariate.py                # 单变量统计检验
+│
+│   # 原名 statistics/，因与标准库 statistics 模块撞名而更名。
+│   # 标准库在 sys.path 中先于 site-packages，wheel 安装后
+│   # `import statistics` 解析到标准库，导致整个应用无法启动。
 │
 ├── morphometrics/                    # 几何形态测量学引擎
 │   ├── __init__.py

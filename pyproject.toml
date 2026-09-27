@@ -98,7 +98,14 @@ include = [
     "presets*",
     "reporting*",
     "state_machine*",
-    "statistics*",
+    # NOT "statistics*": a top-level package named `statistics` is permanently
+    # shadowed by the standard library's `statistics` module, because the
+    # stdlib precedes site-packages on sys.path. A wheel install therefore
+    # resolved `import statistics` to the stdlib and every `from
+    # statistics.pca import ...` failed, leaving the app unable to start.
+    # Found by scripts/import_smoke.py, which imports a built wheel from
+    # outside the source tree. Renamed to `stats/` -- keep it that way.
+    "stats*",
     "stratigraphy*",
     "utils*",
     "views*",
@@ -158,7 +165,7 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = [
     "config", "controllers", "data", "ecology", "models", "views",
-    "statistics", "morphometrics", "morpho3d", "stratigraphy",
+    "stats", "morphometrics", "morpho3d", "stratigraphy",
     "visualization", "utils", "phylogenetics", "macroevolution",
     "parsers", "hpc", "reporting", "state_machine",
 ]
@@ -260,15 +267,29 @@ markers = [
 # Coverage
 # =============================================================================
 [tool.coverage.run]
+# Measured over every package the wheel actually ships -- the same set as
+# [tool.setuptools.packages.find] include below. This list used to name only 13
+# of the 22 packages, so hpc/, macroevolution/, parsers/, phylogenetics/,
+# plugins/, presets/, reporting/, state_machine/ and stats/ were invisible to
+# coverage and could regress with no effect on the number. Keep the two lists
+# in sync; the gap is exactly the kind of thing that makes a gate meaningless.
 source = [
     "config",
     "controllers",
     "data",
     "ecology",
+    "hpc",
+    "macroevolution",
     "models",
-    "statistics",
-    "morphometrics",
     "morpho3d",
+    "morphometrics",
+    "parsers",
+    "phylogenetics",
+    "plugins",
+    "presets",
+    "reporting",
+    "state_machine",
+    "stats",
     "stratigraphy",
     "utils",
     "views",
@@ -281,6 +302,31 @@ omit = [
 ]
 
 [tool.coverage.report]
+# Measured 44.68% (12477/27925 statements) on Python 3.10 / Windows with
+# `pytest tests/ tests_morpho3d_macroevolution/ -m "not cross_validation"`,
+# over every package the wheel ships (see the [tool.coverage.run] source list
+# above). The gate sits ~1.7 points below that -- about 470 statements of
+# headroom -- so ordinary platform and dependency drift does not flip CI red,
+# while a real regression still fails the build: dropped tests, a module
+# removed from testpaths, a dependency bump that starts skipping.
+#
+# This replaced a hardcoded `--fail-under=10` in .github/workflows/ci.yml, which
+# sat 4.5x below the real number and so could not fail for any realistic
+# regression. The threshold lives here, in one place, so the CI job and a local
+# `pytest --cov` cannot disagree.
+#
+# What keeps the number where it is, roughly in order of cost:
+#   UI and plotting, which needs a live Qt event loop --
+#     views/ui_main_window.py 7.9% (2782 statements, the largest file in the
+#     repo), views/ui_plot_canvas.py 13.6%, visualization/* mostly 9-14%
+#   completely untested but shipped --
+#     config/imputation.py 0/170, plugins/ 0/124, reporting/matrix_converter.py
+#     0/23, reporting/table_generator.py 0/28
+#   lightly tested -- hpc/ 31.7%, phylogenetics/ 46.5%, state_machine/ 55.8%
+# Raising this gate means testing those, not lowering the gate here. The
+# well-covered engines (stats 65.4%, parsers 73.7%, macroevolution 77.1%,
+# presets 98.3%) are what pull the average up over the UI floor.
+fail_under = 43
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.",

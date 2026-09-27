@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: statistics/lda.py
+# FILE: stats/lda.py
 # =============================================================================
 """
 Linear Discriminant Analysis / Canonical Variate Analysis (LDA/CVA)

@@ -92,7 +92,7 @@ print("=== Statistics Module ===")
 
 
 def t_pca():
-    from statistics.pca import PCAAnalyzer
+    from stats.pca import PCAAnalyzer
 
     data = np.random.randn(30, 8) * 10 + 50
     result = PCAAnalyzer().analyze(data, n_components=3)
@@ -103,7 +103,7 @@ test("PCA", t_pca)
 
 
 def t_pcoa():
-    from statistics.pcoa import PCoAAnalyzer
+    from stats.pcoa import PCoAAnalyzer
 
     data = np.random.randn(20, 5)
     dm = squareform(pdist(data))
@@ -115,7 +115,7 @@ test("PCoA", t_pcoa)
 
 
 def t_nmds():
-    from statistics.nmds import NMDSAnalyzer
+    from stats.nmds import NMDSAnalyzer
 
     data = np.random.randn(15, 4)
     dm = squareform(pdist(data))
@@ -128,7 +128,7 @@ test("NMDS", t_nmds)
 
 
 def t_anosim():
-    from statistics.anosim import ANOSIMAnalyzer
+    from stats.anosim import ANOSIMAnalyzer
 
     data = np.random.randn(20, 5)
     dm = squareform(pdist(data))
@@ -141,7 +141,7 @@ test("ANOSIM", t_anosim)
 
 
 def t_permanova():
-    from statistics.permanova import PERMANOVAAnalyzer
+    from stats.permanova import PERMANOVAAnalyzer
 
     g1 = np.random.randn(10, 5) + 5
     g2 = np.random.randn(10, 5) - 5
@@ -157,7 +157,7 @@ test("PERMANOVA", t_permanova)
 
 
 def t_dist():
-    from statistics.distance_metrics import compute_distance_matrix
+    from stats.distance_metrics import compute_distance_matrix
 
     data = np.random.randint(0, 10, (10, 5)).astype(float)
     result = compute_distance_matrix(data, metric="euclidean")
@@ -386,9 +386,7 @@ def t_tps3d():
     result = tps.analyze(source, target)
     # thin_plate 3D 核 U(r)=r 是条件正定核 (拉普拉斯方程基本解),
     # wᵀKw 不保证非负 — 只断言有限且已计算
-    assert np.isfinite(result.bending_energy), (
-        f"Bending energy={result.bending_energy} should be finite"
-    )
+    assert np.isfinite(result.bending_energy), f"Bending energy={result.bending_energy} should be finite"
 
 
 test("TPS3D", t_tps3d)
@@ -401,7 +399,7 @@ print("=== Visualization Module ===")
 
 
 def t_pca_plot():
-    from statistics.pca import PCAAnalyzer
+    from stats.pca import PCAAnalyzer
     from visualization.pca_plot import PCAPlotter
 
     data = np.random.randn(20, 5)

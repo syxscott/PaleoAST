@@ -53,22 +53,6 @@
 | **ANOSIM** | 组间相似性分析 — 基于秩的置换检验 |
 | **PERMANOVA** | 多元方差分析 — 基于距离的置换检验 |
 
-### Ecology / 生态分析
-
-| Feature | Description |
-|---------|-------------|
-| **Diversity Indices** | 多样性指数 — Shannon, Simpson, Chao1, Fisher's Alpha |
-| **Rarefaction** | 稀疏化分析 — 标准化采样努力量 |
-| **Spectral Analysis** | 频谱分析 — Lomb-Scargle 周期图 |
-
-### Morphometrics / 形态测量
-
-| Feature | Description |
-|---------|-------------|
-| **2D/3D GPA** | 普氏分析 — 形状对齐与叠加 |
-| **TPS** (Thin-Plate Spline) | 薄板样条 — 形变可视化与弯曲能量 |
-| **RWA** (Relative Warps Analysis) | 相对扭曲分析 — 局部与整体形状变化 |
-
 ### Phylogenetics / 系统发育
 
 | Feature | Description |
@@ -76,36 +60,42 @@
 | **UPGMA / NJ** | 距离法建树 — 基于距离矩阵 |
 | **Fitch Parsimony** | 最简约法 — 祖先状态重建 |
 | **Consensus Trees** | 共识树 — 严格共识拓扑 |
+| **Tree Distances** | 树间距离 — Robinson-Foulds (加/未加权)、bipartition bitmask、MCCT |
+| **Heuristic Search** | 启发式树搜索 — NNI、TBR |
 | **PCM** | 系统发育比较方法 — PIC、ASR、Blomberg's K、Phylo-ANOVA |
 
 ### Macroevolution / 宏观进化
 
 | Feature | Description |
 |---------|-------------|
-| **FBD Process** | 化石生灭过程 — Gillespie 随机模拟 |
-| **Cohort Survivorship** | 群组存活曲线 — 灭绝动态建模 |
+| **FBD Process** | 化石生灭过程 — Gillespie 随机模拟 + 解析存活概率 |
+| **Cohort Survivorship** | 群组存活曲线 — Foote 边界交叉法 |
+| **Survival Analysis** | 存活分析 — Kaplan-Meier 曲线 + log-rank 检验 |
 | **Diversity Dynamics** | 多样性动态 — 指数/逻辑斯蒂增长模型 |
 | **Extinction Intervals** | 灭绝置信区间 — Marshall & Strauss-Sadler 方法 |
 | **Evolution Rate** | 演化速率分析 — BM/Directional/OU 模型与 AIC 选择 |
 
-### Ecology / 生态分析 (Extended)
+### Ecology / 生态分析
 
 | Feature | Description |
 |---------|-------------|
 | **Diversity Indices** | 多样性指数 — Shannon, Simpson, Chao1, Fisher's Alpha |
 | **Rarefaction** | 稀疏化分析 — 标准化采样努力量 |
-| **Spectral Analysis** | 频谱分析 — Lomb-Scargle 周期图 |
 | **Coverage Rarefaction** | 覆盖度稀疏化 — iNEXT 样本覆盖度估计 |
 | **Beta Diversity** | Beta 多样性分解 — Jaccard/Sørensen 拆分为 turnover 与 nestedness |
 | **Null Models** | 零模型共现分析 — C-score 与 Swap 算法 |
+| **Spectral Analysis** | 频谱分析 — Lomb-Scargle 周期图 |
 
-### Morphometrics / 形态测量 (Extended)
+### Morphometrics / 形态测量
 
 | Feature | Description |
 |---------|-------------|
-| **2D/3D GPA** | 普氏分析 — 形状对齐与叠加 |
-| **TPS** (Thin-Plate Spline) | 薄板样条 — 形变可视化与弯曲能量 |
-| **RWA** (Relative Warps Analysis) | 相对扭曲分析 — 局部与整体形状变化 |
+| **2D GPA** | 二维普氏分析 — 形状对齐与叠加 |
+| **3D GPA** | 三维普氏分析 — Quaternion 旋转对齐，伴半标志点滑动与网格变形 |
+| **TPS** | 薄板样条 — 形变可视化与弯曲能量（2D/3D） |
+| **RWA** | 相对扭曲分析 — 局部与整体形状变化 |
+| **EFA** | 位置与形状协变量分析 |
+| **Eigenshape** | 特征形状分析 |
 | **Allometry** | 异速生长分析 — 尺寸-形状多元回归 |
 | **2B-PLS** | 形态整合分析 — 两块偏最小二乘法 |
 
@@ -147,8 +137,14 @@ pip install -r requirements.txt
 ```
 
 > **What gets installed / 安装内容:**
-> `numpy`, `scipy`, `pandas`, `matplotlib`, `scikit-learn`, `PyQt6`, `psutil`
-
+> Runtime: `numpy`, `scipy`, `pandas`, `matplotlib`, `scikit-learn`, `PyQt6`, `psutil`
+> 运行时依赖如上；该文件同时包含开发与文档依赖（`pytest`, `pytest-cov`, `mypy`, `sphinx`），
+> which you can skip with `pip install -r requirements.txt` plus only what you need.
+>
+> This installs PaleoAST's *dependencies*. The application is then run from
+> the cloned checkout with `python main.py` — see the note in
+> [Development](#development--开发指南) before running `pip install .` instead.
+>
 ### Step 4: Launch / 启动应用
 
 ```bash
@@ -430,15 +426,19 @@ PaleoAST/
 │   ├── ui_plot_canvas.py   # Matplotlib plots / 图表画布
 │   ├── ui_navigation.py    # Left nav tree / 左侧导航树
 │   └── ui_spreadsheet.py   # Data spreadsheet / 数据表格
-├── statistics/             # Statistical engines / 统计引擎
+├── stats/                  # Statistical engines / 统计引擎
 ├── ecology/                # Ecology algorithms / 生态算法
 ├── morphometrics/          # 2D morphometrics / 二维形态测量
 ├── morpho3d/               # 3D morphometrics / 三维形态测量
 ├── phylogenetics/          # Phylogenetic trees / 系统发育树
 ├── macroevolution/         # Macroevolution models / 宏观进化模型
 ├── stratigraphy/           # Spectral & strat analysis / 频谱与地层分析
+├── data/                   # Dataset loaders & bundled corpora / 数据加载与内置数据集
+├── parsers/                # File format parsers (NEXUS, Newick, ...) / 格式解析
 ├── visualization/          # Plotting utilities / 绘图工具
 ├── utils/                  # Shared utilities / 通用工具
+├── scripts/                # Manual scripts (smoke check, import smoke) / 手动脚本
+├── tests/                  # Pytest suite / 测试套件
 ├── main.py                 # Application entry / 应用入口
 ├── requirements.txt        # Dependencies / 依赖列表
 └── pyproject.toml          # Project config / 项目配置

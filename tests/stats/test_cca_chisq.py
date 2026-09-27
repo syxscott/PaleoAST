@@ -1,5 +1,5 @@
 # =============================================================================
-# FILE: tests/statistics/test_cca_chisq.py
+# FILE: tests/stats/test_cca_chisq.py
 # =============================================================================
 """
 Tests for CCA chi-square distance weighting (ter Braak 1986).
@@ -26,19 +26,25 @@ class TestCCAChiSquareWeight:
 
     def test_cca_basic_functionality(self):
         """Basic CCA should still work with correct weights."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -53,19 +59,25 @@ class TestCCAChiSquareWeight:
 
     def test_cca_inertia_non_negative(self):
         """CCA inertia should always be non-negative."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -74,21 +86,27 @@ class TestCCAChiSquareWeight:
 
     def test_cca_eigenvalues_non_negative(self):
         """CCA eigenvalues should be non-negative."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3, 2],
-            [8, 6, 2, 1],
-            [12, 4, 1, 3],
-            [7, 8, 4, 5],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3, 2],
+                [8, 6, 2, 1],
+                [12, 4, 1, 3],
+                [7, 8, 4, 5],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-            [2.5, 3.5],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+                [2.5, 3.5],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -99,20 +117,26 @@ class TestCCAChiSquareWeight:
         """
         CCA with zero expected values should not produce spurious structure.
         """
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
         # Species 4 has zero total abundance
-        Y = np.array([
-            [10, 5, 3, 0],
-            [8, 6, 2, 0],
-            [12, 4, 1, 0],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3, 0],
+                [8, 6, 2, 0],
+                [12, 4, 1, 0],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -123,21 +147,27 @@ class TestCCAChiSquareWeight:
 
     def test_cca_proportion_explained_sums_to_constrained_variance(self):
         """Proportion explained should sum to constrained variance."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3, 2],
-            [8, 6, 2, 1],
-            [12, 4, 1, 3],
-            [7, 8, 4, 5],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3, 2],
+                [8, 6, 2, 1],
+                [12, 4, 1, 3],
+                [7, 8, 4, 5],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0, 3.0],
-            [1.5, 2.5, 3.5],
-            [2.0, 3.0, 4.0],
-            [2.5, 3.5, 4.5],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0, 3.0],
+                [1.5, 2.5, 3.5],
+                [2.0, 3.0, 4.0],
+                [2.5, 3.5, 4.5],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=3, method="cca")
@@ -146,24 +176,30 @@ class TestCCAChiSquareWeight:
             result.constrained_variance,
             result.proportion_explained.sum(),
             decimal=10,
-            err_msg="Constrained variance should equal sum of proportions"
+            err_msg="Constrained variance should equal sum of proportions",
         )
 
     def test_cca_confidence_bounds_order(self):
         """Lower CI <= expected <= upper CI for all points."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -178,19 +214,25 @@ class TestCCAChiSquareVsRDA:
 
     def test_cca_and_rda_produce_different_results(self):
         """CCA and RDA should produce different results due to different metrics."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
 
@@ -210,19 +252,25 @@ class TestCCAChiSquareVsRDA:
         CCA chi-square inertia is typically larger than RDA variance
         because chi-square gives more weight to rare species.
         """
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
 
@@ -240,19 +288,25 @@ class TestCCAEdgeCases:
 
     def test_single_environmental_variable(self):
         """Test with single environmental variable."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5, 3],
-            [8, 6, 2],
-            [12, 4, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5, 3],
+                [8, 6, 2],
+                [12, 4, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0],
-            [2.0],
-            [3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0],
+                [2.0],
+                [3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=1, method="cca")
@@ -262,19 +316,25 @@ class TestCCAEdgeCases:
 
     def test_minimal_dimensions(self):
         """Test with minimal dimensions (n_samples = n_env + 1)."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
-        Y = np.array([
-            [10, 5],
-            [8, 6],
-            [12, 4],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [10, 5],
+                [8, 6],
+                [12, 4],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
@@ -285,20 +345,26 @@ class TestCCAEdgeCases:
 
     def test_unbalanced_abundances(self):
         """Test with highly unbalanced species abundances."""
-        from statistics.cca import CCAAnalyzer
+        from stats.cca import CCAAnalyzer
 
         # One dominant species, others rare
-        Y = np.array([
-            [100, 5, 3, 1],
-            [90, 8, 4, 2],
-            [95, 6, 2, 1],
-        ], dtype=float)
+        Y = np.array(
+            [
+                [100, 5, 3, 1],
+                [90, 8, 4, 2],
+                [95, 6, 2, 1],
+            ],
+            dtype=float,
+        )
 
-        X = np.array([
-            [1.0, 2.0],
-            [1.5, 2.5],
-            [2.0, 3.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [1.0, 2.0],
+                [1.5, 2.5],
+                [2.0, 3.0],
+            ],
+            dtype=float,
+        )
 
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(Y, X, n_components=2, method="cca")
