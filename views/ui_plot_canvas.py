@@ -3297,3 +3297,228 @@ class InteractivePlotCanvas(QWidget):
         else:
             self._groups = {}
             self._group_labels = np.zeros(len(labels), dtype=int)
+
+    # ------------------------------------------------------------------
+    # Macroevolution plots
+    #
+    # The macroevolution/ and morpho3d/ engines had no entry point, so the
+    # README's "FBD Process", "Cohort Survivorship", "Diversity Dynamics" and
+    # "2D/3D GPA" were unreachable from the running application. These plot
+    # methods plus the StatisticsController dispatchers are the missing path.
+    # ------------------------------------------------------------------
+
+    def plot_cohort_survivorship(self, result: Any) -> None:
+        """Foote cohort survivorship per interval, with the confidence band.
+
+        Args:
+            result: SurvivorshipResult from macroevolution.cohort.
+        """
+        self._record_plot_call("plot_cohort_survivorship", result)
+        self._current_plot_type = "cohort_survivorship"
+        self._ax = self._reset_axes()
+
+        centers, labels = [], []
+        for iv in result.intervals:
+            centers.append((iv.t_start + iv.t_end) / 2.0)
+            labels.append(f"{iv.t_start:.1f}-{iv.t_end:.1f}")
+
+        survival = np.asarray(result.survival_rates, dtype=float)
+        self._ax.plot(centers, survival, "o-", color=self.COLORS[0],
+                       label=_("Survival probability"))
+        if result.confidence_intervals:
+            lo = np.array([c[0] for c in result.confidence_intervals], dtype=float)
+            hi = np.array([c[1] for c in result.confidence_intervals], dtype=float)
+            if lo.size == len(centers):
+                self._ax.fill_between(centers, lo, hi, color=self.COLORS[0],
+                                      alpha=0.18, label=_("Confidence interval"))
+
+        for x, y in zip(centers, survival):
+            if np.isfinite(y):
+                self._ax.annotate(f"{y:.2f}", (x, y), textcoords="offset points",
+                                  xytext=(0, 7), ha="center", fontsize=7,
+                                  color=self.theme_colors()["text"])
+
+        self._ax.set_xticks(centers)
+        self._ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+        self._ax.set_ylim(-0.05, 1.08)
+        self._ax.set_xlabel(_("Interval (Ma)"))
+        self._ax.set_ylabel(_("Cohort survivorship"))
+        self._ax.set_title(_("Foote Cohort Survivorship"))
+        self._ax.legend(loc="lower left", fontsize=8)
+        self._ax.grid(True, alpha=0.25)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_diversity_dynamics(self, result: Any) -> None:
+        """Richness through time with origination / extinction / turnover.
+
+        Args:
+            result: DiversityCurve from macroevolution.diversity.
+        """
+        self._record_plot_call("plot_diversity_dynamics", result)
+        self._current_plot_type = "diversity_dynamics"
+        self._ax = self._reset_axes()
+
+        t = np.asarray(result.times, dtype=float)
+        richness = np.asarray(result.richness, dtype=float)
+        ax2 = self._ax.twinx()
+        ax2.patch.set_visible(False)
+
+        self._ax.plot(t, richness, "s-", color=self.COLORS[0], label=_("Richness"))
+        self._ax.set_xlabel(_("Time"))
+        self._ax.set_ylabel(_("Taxonomic richness"), color=self.COLORS[0])
+        self._ax.tick_params(axis="y", labelcolor=self.COLORS[0])
+
+        for values, color, name in (
+            (result.origination_rates, self.COLORS[2], _("Origination rate")),
+            (result.extinction_rates, self.COLORS[3], _("Extinction rate")),
+            (result.turnover_rate, self.COLORS[5], _("Turnover")),
+        ):
+            v = np.asarray(values, dtype=float)
+            if v.size == t.size and np.any(np.isfinite(v)):
+                ax2.plot(t, v, "^-", color=color, label=name, linewidth=1.1, alpha=0.85)
+
+        ax2.set_ylabel(_("Per-capita rate"), color=self.theme_colors()["text"])
+        self._ax.set_title(_("Diversity Dynamics"))
+
+        h1, l1 = self._ax.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        if h1 or h2:
+            ax2.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=7)
+        self._ax.grid(True, alpha=0.25)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_survival_curve(self, result: Any) -> None:
+        """Kaplan-Meier step function with confidence band and risk table.
+
+        Args:
+            result: SurvivalResult from macroevolution.survival.
+        """
+        self._record_plot_call("plot_survival_curve", result)
+        self._current_plot_type = "survival"
+        self._ax = self._reset_axes()
+
+        t = np.asarray(result.times_full, dtype=float)
+        s = np.asarray(result.survival_prob, dtype=float)
+        self._ax.step(t, s, where="post", color=self.COLORS[0], label=_("Survival function"))
+
+        if result.lower_ci is not None and result.upper_ci is not None:
+            lo = np.asarray(result.lower_ci, dtype=float)
+            hi = np.asarray(result.upper_ci, dtype=float)
+            if lo.size == t.size:
+                self._ax.fill_between(t, lo, hi, step="post", color=self.COLORS[0],
+                                      alpha=0.18, label=_("Confidence interval"))
+
+        if result.median_survival is not None and np.isfinite(result.median_survival):
+            self._ax.axvline(result.median_survival, color=self.COLORS[3], linestyle="--",
+                             linewidth=1, label=f"{_('Median')} = {result.median_survival:.2f}")
+
+        if result.n_at_risk is not None:
+            risk = np.asarray(result.n_at_risk, dtype=float)
+            if risk.size == t.size:
+                ax2 = self._ax.twinx()
+                ax2.patch.set_visible(False)
+                ax2.step(t, risk, where="post", color=self.COLORS[7], linewidth=1,
+                          linestyle=":", label=_("At risk"))
+                ax2.set_ylabel(_("Number at risk"), color=self.COLORS[7])
+                ax2.tick_params(axis="y", labelcolor=self.COLORS[7])
+                ax2.set_ylim(0, max(1.0, float(np.nanmax(risk)) * 1.15))
+
+        n_events = int(np.sum(result.events)) if result.events is not None else 0
+        self._ax.set_xlabel(_("Time"))
+        self._ax.set_ylabel(_("Survival probability"))
+        self._ax.set_ylim(-0.02, 1.05)
+        self._ax.set_title(f"{_('Kaplan-Meier')}  (n={int(t.size)}, events={n_events})")
+        self._ax.legend(loc="lower left", fontsize=8)
+        self._ax.grid(True, alpha=0.25)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    def plot_fbd_diversity(self, replicates: list[Any]) -> None:
+        """Standing-diversity trajectories from FBD replicates.
+
+        Args:
+            replicates: list of FBDSimulationResult.
+        """
+        self._record_plot_call("plot_fbd_diversity", replicates)
+        self._current_plot_type = "fbd"
+        self._ax = self._reset_axes()
+
+        drew = 0
+        for k, rep in enumerate(replicates):
+            curve = getattr(rep, "diversity_curve", None)
+            if curve is None:
+                continue
+            arr = np.asarray(curve, dtype=float)
+            if arr.ndim != 1 or arr.size < 2:
+                continue
+            xs = np.linspace(0.0, 1.0, arr.size)
+            self._ax.plot(xs, arr, color=self.COLORS[k % len(self.COLORS)],
+                          alpha=0.8 if len(replicates) < 6 else 0.5, linewidth=1.2)
+            drew += 1
+
+        self._ax.set_xlabel(_("Time (normalised)"))
+        self._ax.set_ylabel(_("Standing diversity"))
+        self._ax.set_title(f"{_('FBD Simulation')}  ({drew} replicate(s))")
+        self._ax.grid(True, alpha=0.25)
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    # ------------------------------------------------------------------
+    # 3-D morphometrics plots
+    # ------------------------------------------------------------------
+
+    def plot_gpa3d_aligned(self, aligned: np.ndarray, consensus: np.ndarray,
+                           specimen_labels: list[str] | None = None,
+                           title: str = "") -> None:
+        """GPA alignment of 3-D landmark configurations.
+
+        A 2-D canvas cannot show a 3-D scatter honestly, so the first two
+        principal dimensions carry the layout and the third drives the
+        per-specimen colour.
+
+        Args:
+            aligned: (n_specimens, n_landmarks, 3) aligned configurations.
+            consensus: (n_landmarks, 3) consensus shape.
+            specimen_labels: Optional per-specimen labels.
+            title: Optional title override.
+        """
+        self._record_plot_call("plot_gpa3d_aligned", aligned)
+        self._current_plot_type = "gpa3d"
+        self._ax = self._reset_axes()
+
+        arr = np.asarray(aligned, dtype=float)
+        if arr.ndim != 3 or arr.shape[2] != 3:
+            raise ValueError(
+                "plot_gpa3d_aligned expects (n_specimens, n_landmarks, 3); "
+                f"got shape {arr.shape}. Use plot_gpa_aligned for 2-D data."
+            )
+
+        cmap = plt.get_cmap("viridis")
+        lo3 = float(np.min(arr[:, 0, 2]))
+        span = float(np.max(arr[:, 0, 2]) - lo3) or 1.0
+        for i in range(arr.shape[0]):
+            frac = (arr[i, 0, 2] - lo3) / span
+            xy = arr[i, :, :2]
+            self._ax.plot(xy[:, 0], xy[:, 1], "o-", markersize=3, linewidth=0.8,
+                          color=cmap(frac), alpha=0.85)
+            if specimen_labels and i < len(specimen_labels):
+                self._ax.annotate(specimen_labels[i], (xy[0, 0], xy[0, 1]),
+                                  fontsize=6, color=self.theme_colors()["text"])
+
+        cons = np.asarray(consensus, dtype=float)
+        have_cons = cons.ndim == 2 and cons.shape == (arr.shape[1], arr.shape[2])
+        if have_cons:
+            self._ax.plot(cons[:, 0], cons[:, 1], "s--", color="#E74C3C",
+                          markersize=4, linewidth=1.6, label=_("Consensus"))
+
+        self._ax.set_aspect("equal", adjustable="datalim")
+        self._ax.set_xlabel(_("Dim 1"))
+        self._ax.set_ylabel(_("Dim 2"))
+        self._ax.set_title(title or _("3-D GPA Alignment"))
+        if have_cons:
+            self._ax.legend(loc="best", fontsize=8)
+        self._ax.grid(True, alpha=0.2)
+        self._figure.tight_layout()
+        self._canvas.draw()

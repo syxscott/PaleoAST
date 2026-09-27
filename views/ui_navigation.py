@@ -635,6 +635,7 @@ class NavigationTree(QWidget):
             NavigationItem(_("Eigenshape"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Allometry"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
             NavigationItem(_("Evolution Rate"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
+            NavigationItem(_("3-D GPA"), NavigationCategory.MORPHOMETRICS, "morphometrics"),
         ]
         for child in morpho_children:
             categories[NavigationCategory.MORPHOMETRICS].children.append(child)
@@ -670,6 +671,12 @@ class NavigationTree(QWidget):
             NavigationItem("SHE", NavigationCategory.ECOLOGY, "diversity"),
             NavigationItem(_("Beta Diversity"), NavigationCategory.ECOLOGY, "diversity"),
             NavigationItem(_("Null Models"), NavigationCategory.ECOLOGY, "diversity"),
+            # Macroevolution engines: implemented and covered by tests, but
+            # previously unreachable from the running application.
+            NavigationItem(_("Cohort Survivorship"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Diversity Dynamics"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("Survival Analysis"), NavigationCategory.ECOLOGY, "diversity"),
+            NavigationItem(_("FBD Simulation"), NavigationCategory.ECOLOGY, "diversity"),
         ]
         for child in ecology_children:
             categories[NavigationCategory.ECOLOGY].children.append(child)

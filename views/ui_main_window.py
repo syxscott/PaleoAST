@@ -111,6 +111,10 @@ from views.ui_dialogs import (
 )
 from views.ui_evolution_rate_dialogs import EvolutionRateDialog
 from views.ui_extinction_dialogs import ExtinctionIntervalDialog
+from views.ui_macroevolution_dialogs import (
+    MacroevolutionDialog,
+    Morpho3DDialog,
+)
 from views.ui_imputation_dialog import ImputationDialog
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_null_model_dialogs import NullModelDialog
@@ -2165,6 +2169,12 @@ class MainWindow(QMainWindow):
             _("Stratigraphic Correlation"): self._on_run_stratigraphic,
             _("Wavelet"): self._on_run_wavelet,
             _("CA Axis"): self._on_run_paleo_env,
+            # Macroevolution + 3-D morphometrics (newly reachable).
+            _("Cohort Survivorship"): self._on_run_cohort_survivorship,
+            _("Diversity Dynamics"): self._on_run_diversity_dynamics,
+            _("Survival Analysis"): self._on_run_survival_analysis,
+            _("FBD Simulation"): self._on_run_fbd_simulation,
+            _("3-D GPA"): self._on_run_gpa3d,
         }
 
         handler = action_map.get(name)
@@ -5339,6 +5349,98 @@ class MainWindow(QMainWindow):
         """Run Evolution Rate analysis."""
         dialog = EvolutionRateDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.exec()
+
+    def _macroevolution_dialog(self) -> MacroevolutionDialog:
+        dialog = MacroevolutionDialog(self._statistics_controller, self)
+        dialog.setDarkTheme(self._is_dark_theme)
+        return dialog
+
+    def _plot_macroevolution_result(self, kind: str, payload: object) -> None:
+        """Render a macroevolution result and add it to the workspace."""
+        plot = InteractivePlotCanvas()
+        if kind == "cohort_survivorship":
+            plot.plot_cohort_survivorship(payload)
+            name = _("Cohort Survivorship")
+        elif kind == "diversity_dynamics":
+            plot.plot_diversity_dynamics(payload)
+            name = _("Diversity Dynamics")
+        elif kind == "survival":
+            plot.plot_survival_curve(payload)
+            name = _("Survival Analysis")
+        elif kind == "survival_logrank":
+            # A log-rank result has no curve; report it in a results tab.
+            plot = InteractivePlotCanvas()
+            plot.plot_survival_curve(self._statistics_controller.get_cached_result("survival_result"))
+            name = _("Survival Analysis (log-rank p={0:.4f})").format(payload.p_value)
+        elif kind == "fbd":
+            plot.plot_fbd_diversity(payload)
+            name = _("FBD Simulation")
+        else:
+            self._logger.warning("Unknown macroevolution result kind: %s", kind)
+            return
+        idx = self._add_plot_to_workspace(plot, name)
+        self._workspace.setCurrentIndex(idx)
+        self._status_bar.setInfo(f"{name}: {plot._current_plot_type}")
+
+    def _on_run_cohort_survivorship(self) -> None:
+        """Foote cohort survivorship from the loaded matrix."""
+        if self._state.data_matrix is None:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        dialog = self._macroevolution_dialog()
+        dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            dialog.accept()
+
+    def _on_run_diversity_dynamics(self) -> None:
+        """Diversity dynamics from the loaded matrix."""
+        if self._state.data_matrix is None:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        dialog = self._macroevolution_dialog()
+        dialog.setProperty("tab", 1)
+        dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
+        dialog.exec()
+
+    def _on_run_survival_analysis(self) -> None:
+        """Kaplan-Meier / log-rank from the loaded matrix."""
+        if self._state.data_matrix is None:
+            QMessageBox.warning(self, _("No Data"), _("Please load data first."))
+            return
+        dialog = self._macroevolution_dialog()
+        dialog.setProperty("tab", 2)
+        dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
+        dialog.exec()
+
+    def _on_run_fbd_simulation(self) -> None:
+        """Fossilised birth-death simulation (parameters only, no data needed)."""
+        dialog = self._macroevolution_dialog()
+        dialog.setProperty("tab", 3)
+        dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
+        dialog.exec()
+
+    def _on_run_gpa3d(self) -> None:
+        """Generalized Procrustes analysis of 3-D landmark configurations."""
+        if self._state.data_matrix is None:
+            QMessageBox.warning(self, _("No Data"), _("Please load a 3-D landmark matrix first."))
+            return
+        dialog = Morpho3DDialog(self._statistics_controller, self)
+        dialog.setDarkTheme(self._is_dark_theme)
+
+        def _show(result: object) -> None:
+            plot = InteractivePlotCanvas()
+            plot.plot_gpa3d_aligned(
+                result.aligned_configurations,
+                result.mean_config,
+                specimen_labels=list(self._state.data_matrix.row_labels or []),
+                title=_("3-D GPA Alignment"),
+            )
+            idx = self._add_plot_to_workspace(plot, _("3-D GPA Aligned Landmarks"))
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(_("3-D GPA completed"))
+
+        dialog.resultsReady.connect(_show)
         dialog.exec()
 
     def _on_run_extinction_intervals(self) -> None:

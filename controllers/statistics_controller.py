@@ -1112,6 +1112,201 @@ class StatisticsController:
             return result
 
     # =========================================================================
+    # Macroevolution & 3-D morphometrics
+    #
+    # These engines (macroevolution/, morpho3d/) were implemented and tested
+    # but had no entry point, so the README's "FBD Process", "Cohort
+    # Survivorship", "Diversity Dynamics" and "2D/3D GPA" were unreachable
+    # from the running application. The methods below are thin dispatchers;
+    # the engines stay the single source of truth.
+    # =========================================================================
+
+    def _records_from_matrix(self, fad_col: int, lad_col: int) -> list[tuple[float, float]]:
+        """Read (FAD, LAD) ranges for each row from the loaded matrix.
+
+        FAD = first appearance date, LAD = last appearance date, both in Ma
+        (older = larger), matching the convention used by
+        stratigraphy.time_bins and macroevolution.cohort.
+        """
+        data = self._ensure_data(None)
+        n_vars = data.shape[1]
+        for col, name in ((fad_col, "FAD"), (lad_col, "LAD")):
+            if not 0 <= col < n_vars:
+                raise ValidationError(
+                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
+                )
+        return [(float(r[fad_col]), float(r[lad_col])) for r in data]
+
+    def analyze_cohort_survivorship(
+        self,
+        data: npt.NDArray | None = None,
+        fad_column: int = 0,
+        lad_column: int = 1,
+        n_intervals: int = 4,
+        confidence_level: float = 0.95,
+    ) -> Any:
+        """Foote (1997, 2000) cohort survivorship.
+
+        The taxon ranges are read from two columns of the loaded matrix
+        (FAD, LAD); time intervals are derived from the observed age span so
+        the caller does not have to invent bin edges.
+        """
+        from macroevolution.cohort import analyze_cohort_survivorship
+
+        if data is not None:
+            self._state.set_data_matrix(data)
+        records = self._records_from_matrix(fad_column, lad_column)
+        if not records:
+            raise ValidationError("No taxon ranges available for cohort analysis")
+
+        ages = np.array([r for rec in records for r in rec], dtype=float)
+        lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            raise ValidationError(
+                "Taxon ranges have no usable age span; check the FAD/LAD columns"
+            )
+        edges = np.linspace(hi, lo, int(n_intervals) + 1)  # oldest first
+        intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
+
+        result = analyze_cohort_survivorship(records, intervals, confidence_level=confidence_level)
+        self._state.cache_result("cohort_survivorship_result", result)
+        return result
+
+    def analyze_diversity_dynamics(
+        self,
+        data: npt.NDArray | None = None,
+        fad_column: int = 0,
+        lad_column: int = 1,
+        n_intervals: int = 8,
+    ) -> Any:
+        """Foote per-capita diversity / origination / extinction over time bins."""
+        from macroevolution.diversity import DiversityDynamics
+
+        if data is not None:
+            self._state.set_data_matrix(data)
+        records = self._records_from_matrix(fad_column, lad_column)
+        if not records:
+            raise ValidationError("No taxon ranges available for diversity dynamics")
+
+        ages = np.array([r for rec in records for r in rec], dtype=float)
+        lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            raise ValidationError("Taxon ranges have no usable age span")
+        edges = np.linspace(hi, lo, int(n_intervals) + 1)
+        intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
+
+        result = DiversityDynamics().estimate_diversity(records, intervals)
+        self._state.cache_result("diversity_dynamics_result", result)
+        return result
+
+    def analyze_survival(
+        self,
+        data: npt.NDArray | None = None,
+        time_column: int = 0,
+        event_column: int = 1,
+    ) -> Any:
+        """Kaplan-Meier survival curve from a duration + event-indicator pair."""
+        from macroevolution.survival import KaplanMeierAnalyzer
+
+        if data is not None:
+            self._state.set_data_matrix(data)
+        matrix = self._ensure_data(None)
+        n_vars = matrix.shape[1]
+        for col, name in ((time_column, "duration"), (event_column, "event")):
+            if not 0 <= col < n_vars:
+                raise ValidationError(
+                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
+                )
+        times = np.asarray(matrix[:, time_column], dtype=float)
+        events = np.asarray(matrix[:, event_column], dtype=float)
+        keep = np.isfinite(times) & np.isfinite(events)
+        times, events = times[keep], events[keep]
+        if times.size == 0:
+            raise ValidationError("No finite duration/event rows for survival analysis")
+
+        result = KaplanMeierAnalyzer().fit(times, (events > 0).astype(int))
+        self._state.cache_result("survival_result", result)
+        return result
+
+    def compare_survival_groups(
+        self,
+        data: npt.NDArray | None = None,
+        time_a: int = 0,
+        event_a: int = 1,
+        time_b: int = 2,
+        event_b: int = 3,
+    ) -> Any:
+        """Log-rank test between two duration/event column pairs."""
+        from macroevolution.survival import log_rank_test
+
+        if data is not None:
+            self._state.set_data_matrix(data)
+        matrix = self._ensure_data(None)
+        n_vars = matrix.shape[1]
+        for col, name in ((time_a, "A duration"), (event_a, "A event"),
+                          (time_b, "B duration"), (event_b, "B event")):
+            if not 0 <= col < n_vars:
+                raise ValidationError(
+                    f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)"
+                )
+
+        def _pair(t_col: int, e_col: int) -> tuple[np.ndarray, np.ndarray]:
+            t = np.asarray(matrix[:, t_col], dtype=float)
+            e = np.asarray(matrix[:, e_col], dtype=float)
+            keep = np.isfinite(t) & np.isfinite(e)
+            return t[keep], (e[keep] > 0).astype(int)
+
+        t1, e1 = _pair(time_a, event_a)
+        t2, e2 = _pair(time_b, event_b)
+        if t1.size == 0 or t2.size == 0:
+            raise ValidationError("One of the two groups has no finite duration/event rows")
+
+        result = log_rank_test(t1, e1, t2, e2)
+        self._state.cache_result("survival_logrank_result", result)
+        return result
+
+    def simulate_fbd(
+        self,
+        speciation_rate: float = 0.5,
+        extinction_rate: float = 0.2,
+        fossilization_rate: float = 0.1,
+        duration: float = 10.0,
+        n_replicates: int = 1,
+        random_seed: int | None = 42,
+    ) -> Any:
+        """Gillespie simulation of the fossilised birth-death process."""
+        from macroevolution.fbd import simulate_fbd_process
+
+        results = simulate_fbd_process(
+            lambda_=speciation_rate,
+            mu=extinction_rate,
+            psi=fossilization_rate,
+            duration=duration,
+            n_replicates=int(n_replicates),
+            random_seed=random_seed,
+        )
+        self._state.cache_result("fbd_result", results)
+        return results
+
+    def analyze_gpa3d(self, configurations: Any, **kwargs: Any) -> Any:
+        """Generalized Procrustes analysis on 3-D landmark configurations."""
+        from morpho3d.gpa3d import GPA3D
+
+        result = GPA3D(**kwargs).analyze(configurations)
+        self._state.cache_result("gpa3d_result", result)
+        return result
+
+    def run_tps3d(self, source: Any, target: Any, **kwargs: Any) -> Any:
+        """Thin-plate spline in 3-D with a Jacobian and deformation grid."""
+        from morpho3d.tps3d import TPS3D
+
+        tps = TPS3D(**kwargs)
+        tps.fit(source, target)
+        result = tps.create_deformation_grid()
+        self._state.cache_result("tps3d_result", result)
+        return result
+
+    # =========================================================================
     # Cached Results Access
     # =========================================================================
 
