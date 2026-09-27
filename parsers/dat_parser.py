@@ -15,6 +15,8 @@ version: 1.0.1
 """
 
 import logging
+
+from utils.exceptions import PaleoASTError
 import os
 import re
 from dataclasses import dataclass
@@ -24,7 +26,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-class DATParseError(Exception):
+class DATParseError(PaleoASTError, Exception):
     """Exception raised when DAT file parsing fails.
 
     Attributes:
@@ -94,13 +96,17 @@ class DATParser:
         (r"^\{(.+)\}$", re.compile(r"^\{(.+)\}$")),
     ]
 
-    def __init__(self, decimal_comma: bool = False) -> None:
+    def __init__(self, decimal_comma: bool | None = None) -> None:
         """
         Initialize DAT parser.
 
         Parameters:
-            decimal_comma: If True, treat comma as decimal separator (European format).
-                           If False (default), comma is treated as thousand separator.
+            decimal_comma: How to read a value containing a single comma.
+                           ``True`` -> the comma is a decimal separator
+                           ("1234,56" -> 1234.56); ``False`` -> it is a
+                           thousands separator ("1,234" -> 1234.0);
+                           ``None`` (default) -> auto-detect from the digits
+                           that follow the comma.
         """
         self._logger = logging.getLogger(f"{__name__}.DATParser")
         self._decimal_comma = decimal_comma
@@ -332,11 +338,18 @@ class DATParser:
             return float(value)
 
         if comma_count == 1 and dot_count == 0:
-            # Single comma - could be decimal separator (European) or thousand separator
-            # European format: 1234,56 -> 1234.56
-            # Thousand format: 1,234 -> 1234.0
+            # Single comma - genuinely ambiguous: decimal separator (1234,56)
+            # or thousand separator (1,234). The parser auto-detects, and the
+            # ``decimal_comma`` flag is honoured when the caller has stated a
+            # preference -- it used to be stored and never read at all, so
+            # DATParser(decimal_comma=True) produced byte-identical output to
+            # DATParser(decimal_comma=False).
             parts = value.split(",")
-            if len(parts[1]) <= 2 and parts[0].isdigit():
+            if self._decimal_comma is True:
+                value = value.replace(",", ".")
+            elif self._decimal_comma is False:
+                value = value.replace(",", "")
+            elif len(parts[1]) <= 2 and parts[0].isdigit():
                 # Likely decimal separator (European format)
                 value = value.replace(",", ".")
             else:
@@ -378,13 +391,19 @@ class DATParser:
         if self._is_all_thousands_separated_numbers(parts):
             return False
 
-        # Count numeric vs non-numeric
+        # Count numeric vs non-numeric.
+        #
+        # Use the same _parse_numeric_value the data path uses. The old probe
+        # did float(part.replace(",", ".")), which turns the European decimal
+        # "1.234,56" into "1.234.56" -> ValueError, so a headerless file
+        # written that way had numeric_count == 0, was judged to be a header,
+        # and its FIRST SPECIMEN WAS SILENTLY DROPPED.
         numeric_count = 0
         for part in parts:
             try:
-                float(part.replace(",", "."))
+                self._parse_numeric_value(part)
                 numeric_count += 1
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
 
         # If more than half are non-numeric, it's likely a header

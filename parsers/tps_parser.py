@@ -19,10 +19,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from utils.exceptions import PaleoASTError
+
 logger = logging.getLogger(__name__)
 
 
-class TPSParseError(Exception):
+class TPSParseError(PaleoASTError, Exception):
     """Exception raised when TPS file parsing fails.
 
     Attributes:

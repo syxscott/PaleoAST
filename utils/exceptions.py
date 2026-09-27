@@ -388,13 +388,16 @@ class FileOperationError(PaleoASTError):
     pass
 
 
-class NewickParseError(ValueError):
+class NewickParseError(PaleoASTError, ValueError):
     """
     Exception raised when a Newick string fails to parse.
 
-    Subclasses ``ValueError`` so existing ``except ValueError`` call
-    sites keep working, while carrying structured diagnostics
-    (DendroPy-style line / column localization) for UI display.
+    Subclasses both ``PaleoASTError`` and ``ValueError``:
+    ``ValueError`` keeps existing ``except ValueError`` call sites working,
+    while ``PaleoASTError`` makes it reachable from the single handler the
+    rest of the package documents ("catch any PaleoAST-related error with a
+    single exception handler"). It previously inherited only ``ValueError``,
+    so a user following that contract silently missed every parse failure.
 
     Attributes:
         message: Primary error message (without location suffix).
