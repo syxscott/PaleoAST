@@ -315,22 +315,35 @@ class TBROperation(TreeOperation):
 
     def apply(self, tree: PhyloTree) -> PhyloTree:
         """
-        应用TBR变换
+        应用 TBR 变换。
 
-        1. 深拷贝树
-        2. 移除cut_node1和cut_node2之间的边，将树分为两棵子树
-        3. 在子树1中选择reconnect_node1（默认为cut_node1的父节点）
-        4. 在子树2中选择reconnect_node2（默认为cut_node2）
-        5. 将子树2挂接到reconnect_node1上
+        真正的 TBR 需要**两条切边、两条接边**：
 
-        Raises:
-            ValueError: 若 reconnect_node1 落在被移动的 n2 子树内部 —— 那会把
-                子树挂回自己身上并使父子图成环 (旧实现会静默产出损坏树)。
+        1. 切掉 ``cut_node1 -> cut_node2``，树分为 A（含 cut_node1）与 B（cut_node2 子树）
+        2. 在 A 中再切一条边 ``r1 -> c1``（c1 不得是通往 cut_node1 的那条）
+        3. 交叉重接：``cut_node1`` 接管 ``c1``，``cut_node2`` 接管 ``r1``
+
+        旧实现只做了一次摘除加一次挂接（``n1.children.remove(n2)`` 后
+        ``r1.add_child(n2)``），那是 **SPR**，而且从不把 n1 那一侧接回去：
+        n1 若原本是二叉节点会剩一个子节点变成一元节点，r1 则变成三叉。
+        实测 12/12 个生成的邻居都非二叉，而且 ``n1.node_type = NodeType.LEAF``
+        会把仍有子树的内部节点标成叶端，使 ``get_leaves()`` 丢掉真正的类元，
+        Fitch 随后给这些假端点空状态集，整棵树被记为 0 步。
+
+        最后统一走 :meth:`_normalise_binary`，把一元节点收缩、多叉节点合并，
+        因此返回的树保证是二叉且叶集合与输入完全一致。
+
+        Parameters
+        ----------
+        reconnect_node1
+            A 侧的重接点（r1）。默认取 ``cut_node1`` 的父节点。
+        reconnect_node2
+            保留以兼容旧调用。真正的 TBR 里 B 侧的接收点恒为 cut_node2 本身，
+            该参数不再参与重接（它以前只在一个守卫分支里被读一次）。
         """
         if tree.root is None:
             raise ValueError("Tree has no root")
 
-        # 深拷贝
         new_root = self._deep_copy(tree.root)
         node_map = self._build_map(tree.root, new_root)
 
@@ -339,49 +352,133 @@ class TBROperation(TreeOperation):
         if n1 is None or n2 is None:
             raise ValueError("Node mapping failed")
 
-        # 确保n2是n1的子节点
         if n2.parent is not n1:
             if n1.parent is n2:
                 n1, n2 = n2, n1
             else:
                 raise ValueError("cut_node1 and cut_node2 must be adjacent")
 
-        # 选择重连点
         r1 = node_map.get(self.reconnect_node1) if self.reconnect_node1 else n1.parent
-        r2 = node_map.get(self.reconnect_node2) if self.reconnect_node2 else n2
-
         if r1 is None:
             raise ValueError("reconnect_node1 not found in tree")
 
-        # 如果r1就是n1（重连点就是切割点的父节点一侧），且r2就是n2，需要选择不同的重连点
-        # 此时选择n1的另一个子节点作为重连点
-        if r1 is n1 and r2 is n2:
-            # 选择n1的其他子节点
-            other_children = [c for c in n1.children if c is not n2]
-            if other_children:
-                r1 = other_children[0]
+        # 第二次切边必须在 A 侧，且切掉的那个子节点不能是通往 n1 的那条，
+        # 否则 A 会被切成两半而 n1 不在任何一半里。
+        if r1 is n1:
+            raise ValueError("TBR needs a reconnect node distinct from the cut parent")
 
-        # 被移动的子树 = n2 及其全部后代；重连点必须落在该子树之外，
-        # 否则会把 n2 挂回它自己内部，父子图成环。
-        moved_subtree = set(n2.get_subtree_nodes())
-        if r1 in moved_subtree:
+        on_path_to_n1 = None
+        walk = r1
+        while walk is not n1:
+            walk = walk.parent
+            if walk is None:
+                raise ValueError("reconnect_node1 is not an ancestor of cut_node1")
+            on_path_to_n1 = walk
+
+        c1 = next((c for c in r1.children if c is not on_path_to_n1), None)
+        if c1 is None:
+            raise ValueError("reconnect_node1 has no second child to cut")
+
+        if r1 in set(n2.get_subtree_nodes()):
             raise ValueError(
                 f"TBR reconnect node '{r1.name}' lies inside the subtree rooted at "
                 f"'{n2.name}'; regrafting there would create a cycle"
             )
 
-        # 执行TBR: 将n2子树从n1断开，挂接到r1上
+        # --- 两条切边 ---
+        n1_len = n2.branch_length
         n1.children.remove(n2)
         n2.parent = None
 
-        # 处理n1变为叶节点的情况
-        if not n1.children and not n1.is_root:
-            n1.node_type = NodeType.LEAF
+        r1_len = c1.branch_length
+        r1.children.remove(c1)
+        c1.parent = None
 
-        # 将n2子树挂接到r1
+        # --- 两条接边：交叉重接被切开的两条边 ---
+        # 切掉的是 (n1, n2) 与 (r1, c1)，必须交叉接回 (n1, c1) 与 (r1, n2)。
+        # 早期版本写成 ``n2.add_child(r1)``，方向反了：n2 子树被整体丢弃
+        # （6 个邻居的叶集合全部从 6 个 taxon 掉到 3-4 个）。
+        # 二叉输入下这四个节点的 arity 全部守恒，归一化通常无事可做。
+        n1.add_child(c1)
+        c1.branch_length = r1_len
+
         r1.add_child(n2)
+        n2.branch_length = n1_len
 
+        new_root = self._normalise_binary(new_root)
         return PhyloTree(new_root)
+
+    @classmethod
+    def _normalise_binary(cls, root: PhyloNode) -> PhyloNode:
+        """Return ``root``'s subtree as a strictly binary tree.
+
+        A TBR on a binary input leaves a unary node where a pendant edge was
+        reattached and a trifurcation where the receiving node already had two
+        children. Both are removed here so the neighbour honours the invariant
+        every downstream consumer assumes:
+
+        * a node with a single child is suppressed -- the child takes its place
+          and inherits the suppressed node's branch length. If the suppressed
+          node is the root, the child BECOMES the root and is returned.
+        * a node with more than two children is resolved by merging the first
+          two, which preserves the subtree and the total path length.
+
+        Leaf sets are never altered, so the caller can rely on the neighbour
+        containing exactly the input taxa.
+        """
+        while True:
+            unarity = None
+            excess = None
+            for node in root.preorder_traverse():
+                k = len(node.children)
+                if k == 1:
+                    unarity = node
+                    break
+                if k > 2:
+                    excess = node
+                    break
+
+            if excess is not None:
+                # Resolve the polytomy by grouping two children under a NEW
+                # internal node. Grafted onto an existing child instead, the
+                # extra child just moves the polytomy one level down and the
+                # loop never terminates; and grafting onto a LEAF gives that
+                # leaf a child, which the next pass "suppresses" as a unary
+                # node -- deleting the taxon outright (observed: D vanishing
+                # from a 6-taxon tree).
+                kids = list(excess.children)
+                m = PhyloNode(name="", node_type=NodeType.INTERNAL, branch_length=0.0)
+                a, b = kids[0], kids[1]
+                excess.remove_child(a)
+                excess.remove_child(b)
+                a.parent = None
+                b.parent = None
+                m.add_child(a)
+                m.add_child(b)
+                excess.add_child(m)
+                continue
+
+            if unarity is None:
+                return root
+
+            only = unarity.children[0]
+            parent = unarity.parent
+            if parent is None:
+                # The suppressed node is the root: its only child must become
+                # the new root. Re-attaching the child to the same node (as an
+                # earlier attempt did) changes nothing while claiming
+                # progress, so the loop never terminated and the tree was
+                # returned still holding a unary root.
+                unarity.remove_child(only)
+                only.parent = None
+                only.branch_length = unarity.branch_length
+                return only
+
+            parent.remove_child(unarity)
+            unarity.remove_child(only)
+            only.parent = None
+            only.branch_length = unarity.branch_length
+            parent.add_child(only)
 
     def _deep_copy(self, root: PhyloNode) -> PhyloNode:
         """深拷贝树 (保留 data / label / metadata)"""
@@ -645,28 +742,43 @@ class HeuristicSearch:
                 except (ValueError, AttributeError):
                     pass
 
-            # TBR邻居（以 _tbr_prob 决定是否生成，避免搜索空间过大）
+            # TBR 邻居（以 _tbr_prob 决定是否生成，避免搜索空间过大）
             if self._rng.random() >= self._tbr_prob:
                 continue
 
-            # 重连点候选：node2 子树内的非叶节点 (r2, 用于标识被移动的一侧)
-            subtree_nodes = [n for n in node2.get_all_nodes() if not n.is_leaf]
-            # 挂载点候选必须是"全树节点 - node2 子树(含后代)"。旧实现从
-            # node1 的子树里取候选，其中包含 node2 的后代，会把 node2 挂回
-            # 自己内部形成环。
+            # 挂载点候选必须是"全树节点 - node2 子树(含后代)"，否则会把
+            # node2 挂回自己内部形成环。
+            #
+            # 旧实现还对 node2 子树内的非叶节点取 r2 候选并逐个尝试，但 TBR
+            # 的第二条切边由 r1 自身决定，r2 从未参与重接——同一 (r1) 被重复
+            # 生成 3 次，12 个邻居里只有 2-3 个不同拓扑。现在只沿 r1 变化。
             moved = set(node2.get_subtree_nodes())
             parent_candidates = [n for n in all_nodes if n not in moved and not n.is_leaf]
 
-            for r2 in subtree_nodes[:3]:  # 限制候选数
-                for r1 in parent_candidates[:3]:
-                    try:
-                        tbr = TBROperation(node1, node2, r1, r2)
-                        neighbor = tbr.apply(tree)
-                        neighbors.append(neighbor)
-                    except (ValueError, AttributeError):
-                        pass
+            for r1 in parent_candidates[:3]:  # 限制候选数
+                if r1 is node1:
+                    continue
+                try:
+                    tbr = TBROperation(node1, node2, r1)
+                    neighbor = tbr.apply(tree)
+                    neighbors.append(neighbor)
+                except (ValueError, AttributeError):
+                    pass
 
-        return neighbors
+        # 去重：TBR 的 (r1, c1) 选择可能收敛到同一拓扑（例如 r1 与 c1 在不同
+        # 轮次被选为同一对），保留首次出现的那棵。
+        seen: set[str] = set()
+        unique: list[PhyloTree] = []
+        for t in neighbors:
+            try:
+                key = t.to_newick()
+            except Exception:
+                unique.append(t)
+                continue
+            if key not in seen:
+                seen.add(key)
+                unique.append(t)
+        return unique
 
     def _collect_internal_edges(self, node: PhyloNode) -> list[tuple[PhyloNode, PhyloNode]]:
         """
