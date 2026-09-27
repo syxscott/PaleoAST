@@ -147,30 +147,32 @@ jobs:
           R --version | head -1
           # The runner user cannot write to site-library, so this must run under
           # sudo (an earlier version of this step failed here).
-          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT','RRPP'), repos='https://cloud.r-project.org', Ncpus=4)"
-          # geomorph is installed separately, from the CRAN archive, newest
-          # archived release first.
           #
-          # Two separate reasons it cannot come from CRAN directly, both found
-          # in the log rather than guessed:
-          #   - the current version (4.1.0) declares a newer R than
-          #     ubuntu-24.04 provides, and R declines it with
-          #     "package 'geomorph' is not available for this version of R"
-          #     -- and carries on with the other packages, so the step used to
-          #     pass and the suite used to skip;
-          #   - the archived 4.0.x releases need RRPP, rgl and jpeg, which need
-          #     the system libraries installed above. Missing those, all four
-          #     candidates fail identically with
-          #     "dependencies 'RRPP', 'rgl', 'jpeg' are not available".
-          #     RRPP is installed above so its own failure is separable from
-          #     geomorph's.
-          # The loop stops at the first version this R can build and prints
-          # which; it is four deep so a future R bump or geomorph release does
-          # not immediately require re-deriving the number. If none build, R
-          # exits non-zero rather than letting the step pass quietly.
+          # rgl and jpeg are listed explicitly even though nothing else here
+          # needs them: they are geomorph's dependencies, and installing
+          # geomorph from a bare tarball URL below does NOT resolve
+          # dependencies -- `install.packages(url, repos = NULL)` only unpacks
+          # the tarball you hand it. Omitting them made every geomorph
+          # candidate fail with
+          #   ERROR: dependencies 'RRPP', 'rgl', 'jpeg' are not available
+          # The system libraries they need are in the apt line above.
+          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT','RRPP','rgl','jpeg'), repos='https://cloud.r-project.org', Ncpus=4)"
+          # geomorph is installed separately, from the CRAN archive, newest
+          # archived release first. Two independent reasons it cannot come from
+          # CRAN directly, both read out of the log rather than guessed:
+          #   - 4.1.0 (current) and 4.0.8 / 4.0.9 / 4.0.10 all declare
+          #     "R (>= 4.4.0)" and R refuses them against the 4.3.3 that
+          #     ubuntu-24.04 provides:
+          #       ERROR: this R is version 4.3.3, package 'geomorph' requires R >= 4.4.0
+          #     so the list has to reach further back, to 4.0.7 and older;
+          #   - and the newer ones also carry the dependency problem above.
+          # Newest first means a future runner with a newer R picks the newest
+          # release without anyone editing this file. The list is six deep so it
+          # survives a geomorph release too. If none build, R exits non-zero
+          # rather than letting the step pass quietly.
           sudo R --slave -e '
             ok <- FALSE
-            for (v in c("4.0.10", "4.0.9", "4.0.8", "4.0.7")) {
+            for (v in c("4.0.10", "4.0.9", "4.0.8", "4.0.7", "4.0.6", "4.0.5")) {
               url <- sprintf("https://cran.r-project.org/src/contrib/Archive/geomorph/geomorph_%s.tar.gz", v)
               try(install.packages(url, repos = NULL, type = "source"), silent = TRUE)
               if (requireNamespace("geomorph", quietly = TRUE)) {
