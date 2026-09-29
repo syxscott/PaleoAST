@@ -126,9 +126,14 @@ jobs:
           # source too -- which needs the R headers plus a C/C++ toolchain.
           # curl/ssl/xml2 are the system libs those R packages commonly link;
           # the image/graphics block is for the stack geomorph pulls in
-          # transitively -- rgl needs X11 and GLMesa headers, jpeg needs
-          # libjpeg -- and without it every archived geomorph release fails the
-          # same way. See the geomorph block below.
+          # transitively, and each entry corresponds to a concrete configure
+          # failure seen in the log:
+          #   libjpeg / libtiff / libpng / freetype / cairo -> jpeg, tiff, png, rgl
+          #   libx11 + libglu1-mesa                              -> rgl
+          #   libuv1-dev                                         -> fs, which is
+          #     "Configuration failed because libuv was not found", and fs
+          #     failing took sass, bslib, rmarkdown, htmlwidgets and rgl down
+          #     with it -- one missing library, six failed packages.
           #
           # The rpy2 pin in pyproject.toml (<3.6) is a constraint on THIS R, not
           # on rpy2 in the abstract: rpy2 3.6 imports `R_getVar`, which does not
@@ -140,7 +145,7 @@ jobs:
           sudo apt-get install -y r-base r-base-dev build-essential \
             libcurl4-openssl-dev libssl-dev libxml2-dev \
             libjpeg-dev libtiff-dev libpng-dev libfreetype6-dev libcairo2-dev \
-            libx11-dev libglu1-mesa-dev libfftw3-dev
+            libx11-dev libglu1-mesa-dev libfftw3-dev libuv1-dev
           # Reported after the install, so it is the R rpy2 will actually load
           # rather than whatever the image happened to ship.
           echo "R version after install:"
@@ -154,18 +159,38 @@ jobs:
           # dependencies -- `install.packages(url, repos = NULL)` only unpacks
           # the tarball you hand it. Omitting them made every geomorph
           # candidate fail with
-          #   ERROR: dependencies 'RRPP', 'rgl', 'jpeg' are not available
+          #   ERROR: dependencies 'RRPP', 'rgl' are not available
           # The system libraries they need are in the apt line above.
-          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT','RRPP','rgl','jpeg'), repos='https://cloud.r-project.org', Ncpus=4)"
-          # geomorph is installed separately, from the CRAN archive, newest
-          # archived release first. Two independent reasons it cannot come from
-          # CRAN directly, both read out of the log rather than guessed:
+          sudo R -e "install.packages(c('vegan','ape','phytools','iNEXT','rgl','jpeg'), repos='https://cloud.r-project.org', Ncpus=4)"
+          # RRPP is geomorph's other dependency, and the same trap applies one
+          # level up: RRPP's current CRAN release (2.2.0) declares R (>= 4.4.0),
+          # so the runner's R 4.3.3 refuses it and the failure reads as
+          #   package 'RRPP' is not available for this version of R
+          # rather than as anything to do with geomorph. It gets the same
+          # archive treatment, newest usable first. The versions below are the
+          # real entries in the CRAN archive for RRPP -- 2.1.2 is the newest,
+          # 2.1.3 and later do not exist.
+          sudo R --slave -e '
+            ok <- FALSE
+            for (v in c("2.1.2", "2.1.1", "2.1.0", "2.0.4", "2.0.3", "2.0.2")) {
+              url <- sprintf("https://cran.r-project.org/src/contrib/Archive/RRPP/RRPP_%s.tar.gz", v)
+              try(install.packages(url, repos = NULL, type = "source"), silent = TRUE)
+              if (requireNamespace("RRPP", quietly = TRUE)) {
+                cat("RRPP", as.character(utils::packageVersion("RRPP")), "installed\n")
+                ok <- TRUE
+                break
+              }
+            }
+            if (!ok) quit(status = 1)
+          '
+          # geomorph itself is installed from the CRAN archive, newest archived
+          # release first. Two independent reasons it cannot come from CRAN
+          # directly, both read out of the log rather than guessed:
           #   - 4.1.0 (current) and 4.0.8 / 4.0.9 / 4.0.10 all declare
           #     "R (>= 4.4.0)" and R refuses them against the 4.3.3 that
           #     ubuntu-24.04 provides:
           #       ERROR: this R is version 4.3.3, package 'geomorph' requires R >= 4.4.0
-          #     so the list has to reach further back, to 4.0.7 and older;
-          #   - and the newer ones also carry the dependency problem above.
+          #     so the list has to reach further back, to 4.0.7 and older.
           # Newest first means a future runner with a newer R picks the newest
           # release without anyone editing this file. The list is six deep so it
           # survives a geomorph release too. If none build, R exits non-zero
