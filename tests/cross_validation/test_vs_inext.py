@@ -25,10 +25,22 @@ pytestmark = pytest.mark.cross_validation
 
 R_INEXT = require("iNEXT")
 
+# `ChaoSpecies` is an S4 generic. `importr` walks the package namespace and does
+# not attach S4 generics to the Python module, so `R_INEXT.ChaoSpecies` raised
+# AttributeError in CI. Going through R's own `::` lookup is the reliable path
+# and does not depend on what importr chooses to export.
+_CHAO_SPECIES = r("iNEXT::ChaoSpecies")
+
 
 def _sample(abundances: np.ndarray) -> np.ndarray:
     """One sample's species abundances as a 1-row matrix, as iNEXT expects."""
     return np.atleast_2d(np.asarray(abundances, dtype=float))
+
+
+def _r_single_sample(abundances: np.ndarray):
+    """One sample as a 1-row R matrix, the shape iNEXT's estimators expect."""
+    flat = np.asarray(abundances, dtype=float).ravel()
+    return r("matrix")(r("t")(r_vector(flat.tolist())), nrow=1)
 
 
 def _paleo_chao1(abundances: np.ndarray) -> float:
@@ -39,10 +51,7 @@ def _paleo_chao1(abundances: np.ndarray) -> float:
 
 def _r_chao1(abundances: np.ndarray) -> float:
     """iNEXT's Chao1 estimate for one sample, as a scalar."""
-    x = _sample(abundances)
-    r_x = r["t"](r_vector(x.ravel().tolist()))
-    r_x = r["matrix"](r_x, nrow=1)
-    return as_float(R_INEXT.ChaoSpecies(r_x, q=0, method="Chao1").rx2("Est"))
+    return as_float(_CHAO_SPECIES(_r_single_sample(abundances), q=0, method="Chao1").rx2("Est"))
 
 
 class TestChao1VsINEXT:
@@ -83,8 +92,8 @@ class TestChao1VsINEXT:
         assert_allclose(paleo, reference, rtol=1e-8, atol=1e-10)
         # In this branch both must equal observed richness; assert it against R's
         # observed value so a "fix" cannot quietly reintroduce a correction term.
-        r_x = r["matrix"](r_vector(abundances.tolist()), nrow=1)
-        r_observed = as_float(R_INEXT.ChaoSpecies(r_x, q=0, method="Chao1").rx2("Observed"))
+        r_x = _r_single_sample(abundances)
+        r_observed = as_float(_CHAO_SPECIES(r_x, q=0, method="Chao1").rx2("Observed"))
         assert_allclose(paleo, r_observed, rtol=1e-8, atol=1e-10)
 
     def test_estimate_is_never_below_observed(self):
@@ -101,8 +110,8 @@ class TestChao1VsINEXT:
             np.array([4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]),
         ]
         for abundances in samples:
-            r_x = r["matrix"](r_vector(abundances.tolist()), nrow=1)
-            r_result = R_INEXT.ChaoSpecies(r_x, q=0, method="Chao1")
+            r_x = _r_single_sample(abundances)
+            r_result = _CHAO_SPECIES(r_x, q=0, method="Chao1")
             observed = as_float(r_result.rx2("Observed"))
             paleo = _paleo_chao1(abundances)
             assert paleo >= observed - 1e-9, (
@@ -126,8 +135,8 @@ class TestRarefactionVsINEXT:
         abundances = np.array([10.0, 8.0, 5.0, 5.0, 3.0, 2.0, 2.0, 1.0, 1.0])
         paleo = float(compute_diversity_indices(abundances).taxa_count)
 
-        r_x = r["matrix"](r_vector(abundances.tolist()), nrow=1)
-        r_result = R_INEXT.ChaoSpecies(r_x, q=0, method="Chao1")
+        r_x = _r_single_sample(abundances)
+        r_result = _CHAO_SPECIES(r_x, q=0, method="Chao1")
         reference = as_float(r_result.rx2("Observed"))
 
         assert_allclose(

@@ -42,6 +42,7 @@ __all__ = [
     "r",
     "r_array",
     "r_matrix",
+    "r_string_vector",
     "r_vector",
     "require",
     "vector_to_array",
@@ -89,13 +90,26 @@ def r_array(values) -> robjects.FloatVector:
 
     geomorph takes landmark configurations as a 3-D array
     (specimens x landmarks x dimensions), so 2-D-only would not do.
+
+    Uses ``array(data, dim=)`` rather than the replacement form ``dim<-``. The
+    subscript spelling of a replacement function is looked up as a *variable*
+    name in the global environment and raises
+    ``KeyError: "'dim=' not found"``; ``r("array")`` is an ordinary function
+    lookup and behaves the same on every rpy2 version.
     """
     arr = np.asarray(values, dtype=float)
     if arr.ndim == 0:
         raise ValueError("r_array needs at least one dimension")
     vec = FloatVector(arr.ravel(order="C").tolist())
-    dim = FloatVector([float(n) for n in arr.shape])
-    return r["dim="](vec, dim)
+    return r("array")(vec, dim=FloatVector([float(n) for n in arr.shape]))
+
+
+def r_string_vector(values) -> robjects.StrVector:
+    """An R character vector -- for Newick strings, tip names, and the like.
+
+    ``r_vector`` coerces to float, so anything textual has to go through here.
+    """
+    return StrVector([str(v) for v in values])
 
 
 def r_data_frame(columns: dict[str, object]):
@@ -122,7 +136,7 @@ def r_data_frame(columns: dict[str, object]):
         else:
             converted[name] = r_vector(values)
 
-    return r["data.frame"](
+    return r("data.frame")(
         ListVector(converted),
         stringsAsFactors=False,
         check_names=False,
@@ -157,7 +171,7 @@ def matrix_to_array(value) -> np.ndarray:
     array the way it reads in R rather than in storage order. Works for
     n-dimensional arrays as long as only the first two indices are used.
     """
-    dims = [int(as_float(d)) for d in r["dim"](value)]
+    dims = [int(as_float(d)) for d in r("dim")(value)]
     n_row, n_col = dims[0], dims[1]
     out = [[float(value[i, j]) for j in range(1, n_col + 1)] for i in range(1, n_row + 1)]
     arr = np.array(out, dtype=float)

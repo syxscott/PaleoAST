@@ -18,16 +18,29 @@ called "root", node labelling) do not register as differences.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from ._rbridge import as_array, r, r_matrix, r_vector, require
+from ._rbridge import as_array, r, r_matrix, r_string_vector, r_vector, require
 
 pytestmark = pytest.mark.cross_validation
 
 R_APE = require("ape")
 R_STATS = require("stats")
+
+
+def _three_point_holds(matrix, i: int, j: int, k: int, tol: float = 1e-8) -> bool:
+    """True if the triple (i, j, k) satisfies the three-point condition.
+
+    A tree is ultrametric exactly when, for every triple, the two largest of the
+    three pairwise distances are equal.
+    """
+    distances = sorted((matrix[i, j], matrix[i, k], matrix[j, k]))
+    return abs(distances[1] - distances[2]) <= tol
+
 
 DISTANCES = np.array(
     [
@@ -93,7 +106,8 @@ class TestDistanceMethodsVsApe:
 
         paleo_tree = NeighborJoining().build(DistanceMatrix.from_array(DISTANCES, TAXA))
 
-        r_dist = R_APE.as_dist(r_matrix(DISTANCES))
+        # `as.dist` is stats::as.dist, not ape -- ape has no such function.
+        r_dist = R_STATS.as_dist(r_matrix(DISTANCES))
         r_tree = R_APE.nj(r_dist)
         r_tree = R_APE.setRoot(r_tree, outgroup=TAXA[0])
 
@@ -117,7 +131,7 @@ class TestDistanceMethodsVsApe:
 
         paleo_tree = UPGMA().build(DistanceMatrix.from_array(DISTANCES, TAXA))
 
-        r_hclust = R_STATS.hclust(R_APE.as_dist(r_matrix(DISTANCES)), method="average")
+        r_hclust = R_STATS.hclust(R_STATS.as_dist(r_matrix(DISTANCES)), method="average")
         r_tree = R_APE.as_phylo(r_hclust)
 
         paleo, reference = _aligned(_cophenetic(paleo_tree), _r_cophenetic(r_tree))
@@ -130,25 +144,40 @@ class TestDistanceMethodsVsApe:
         )
 
     def test_ultrametric_property_holds_for_upgma(self):
-        """UPGMA output is ultrametric, checked against ape's own UPGMA.
+        """UPGMA output is ultrametric; NJ output is not.
 
-        ``hclust(method="average")`` produces ultrametric trees, so every tip
-        must be equidistant from the root. This is the property that
-        distinguishes UPGMA from NJ, and it is verified against R rather than
-        against a constant.
+        Checked with the **three-point condition** -- a tree is ultrametric iff,
+        for every triple of tips, the two largest of the three pairwise
+        distances are equal.
+
+        An earlier version of this test asserted that ``sum(d(i, .)) / 2`` is the
+        same for every tip. That is not an identity for ultrametric trees: the
+        quantity depends on the heights of the internal nodes, so two trees that
+        are both ultrametric by construction can disagree on it. It failed here
+        against a correct UPGMA, and the three-point condition below passes it.
         """
-        from phylogenetics.distance_methods import UPGMA, DistanceMatrix
+        from phylogenetics.distance_methods import UPGMA, DistanceMatrix, NeighborJoining
 
-        paleo_tree = UPGMA().build(DistanceMatrix.from_array(DISTANCES, TAXA))
-        paleo_mat, names = _cophenetic(paleo_tree)
-
-        # Root-to-tip distance = (sum of the two tip-to-root paths) - the tip
-        # distance, i.e. for each tip: (mat[i,:].sum() - mat[i,i]) / 2 + ...
-        # Simpler and equivalent for an ultrametric tree: the distance from a
-        # tip to every other tip plus half its own total must be constant.
-        half = paleo_mat.sum(axis=1) / 2.0
-        assert_allclose(half, half[0], rtol=1e-6, atol=1e-8)
+        paleo_mat, names = _cophenetic(UPGMA().build(DistanceMatrix.from_array(DISTANCES, TAXA)))
         assert len(set(names)) == len(TAXA)
+
+        violations = [
+            (i, j, k)
+            for i, j, k in itertools.combinations(range(len(names)), 3)
+            if not _three_point_holds(paleo_mat, i, j, k)
+        ]
+        assert not violations, (
+            f"UPGMA output is not ultrametric; {len(violations)} of "
+            f"{len(names) * (len(names) - 1) * (len(names) - 2) // 6} triples "
+            f"violate the three-point condition, first: {violations[0]}"
+        )
+
+        # The same check must FAIL for NJ, otherwise it is not actually
+        # discriminating -- a guard that passes everything catches nothing.
+        nj_mat, _ = _cophenetic(NeighborJoining().build(DistanceMatrix.from_array(DISTANCES, TAXA)))
+        assert any(
+            not _three_point_holds(nj_mat, i, j, k) for i, j, k in itertools.combinations(range(len(names)), 3)
+        ), "NJ came out ultrametric; the check cannot tell UPGMA from NJ"
 
 
 class TestPICVsApe:
@@ -169,8 +198,8 @@ class TestPICVsApe:
 
         paleo_contrasts, _pairs = compute_pic(PhyloTree.from_newick(newick), traits)
 
-        r_tree = R_APE.read_tree(r_vector([newick]))
-        r_x = r["c"](r["setNames"](r_vector(list(traits.values())), r_vector(list(traits))))
+        r_tree = R_APE.read_tree(r_string_vector([newick]))
+        r_x = r("c")(r("setNames")(r_vector(list(traits.values())), r_vector(list(traits))))
         r_pic = R_APE.pic(r_tree, x=r_x)
 
         r_contrasts = np.array([float(r_pic.rx2("pic")[i]) for i in range(len(paleo_contrasts))])

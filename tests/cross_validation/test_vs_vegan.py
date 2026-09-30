@@ -181,7 +181,7 @@ class TestPermanovaVsAdonis2:
             {"v1": data[:, 0], "v2": data[:, 1], "v3": data[:, 2], "v4": data[:, 3], "v5": data[:, 4], "group": groups}
         )
         r_result = R_VEGAN.adonis2(
-            r["formula"]("~ group"),
+            r("formula")("~ group"),
             data=frame,
             method="euclidean",
             permutations=99,
@@ -228,7 +228,7 @@ class TestPermanovaVsAdonis2:
             {"v1": data[:, 0], "v2": data[:, 1], "v3": data[:, 2], "v4": data[:, 3], "v5": data[:, 4], "group": groups}
         )
         r_result = R_VEGAN.adonis2(
-            r["formula"]("~ group"),
+            r("formula")("~ group"),
             data=frame,
             method="euclidean",
             permutations=99,

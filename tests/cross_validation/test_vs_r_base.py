@@ -100,9 +100,9 @@ class TestBridgeIsLive:
         """
         from ._rbridge import as_float, r
 
-        assert as_float(r["sum"](r["c"](1, 2, 3, 4))) == 10.0
+        assert as_float(r("sum")(r("c")(1, 2, 3, 4))) == 10.0
         # Same input, different function, different answer.
-        assert as_float(r["max"](r["c"](1, 2, 3, 4))) == 4.0
+        assert as_float(r("max")(r("c")(1, 2, 3, 4))) == 4.0
 
     def test_reference_packages_load(self):
         """The four reference packages used here are installed and importable.
@@ -208,7 +208,7 @@ class TestPCAVsPrcomp:
         result = PCAAnalyzer().analyze(x, n_components=3, method="covariance")
 
         r_prcomp = R_STATS.prcomp(r_matrix(x), center=True, scale_=False)
-        r_score_means = as_array(r["colMeans"](r_prcomp.rx2("x")))
+        r_score_means = as_array(r("colMeans")(r_prcomp.rx2("x")))
 
         assert_allclose(
             np.mean(np.asarray(result.scores), axis=0),
@@ -218,4 +218,4 @@ class TestPCAVsPrcomp:
         # A vector of zeros would pass the comparison above trivially, so also
         # assert the scores are not degenerate.
         assert float(np.std(np.asarray(result.scores))) > 1e-6
-        assert as_float(as_array(r["sum"](r_prcomp.rx2("x") ** 2)) > 0.0)
+        assert as_float(as_array(r("sum")(r_prcomp.rx2("x") ** 2)) > 0.0)
