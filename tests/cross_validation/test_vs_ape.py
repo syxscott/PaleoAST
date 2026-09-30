@@ -24,7 +24,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from ._rbridge import as_array, r, r_matrix, r_string_vector, r_vector, require
+from ._rbridge import as_array, matrix_to_array, r, r_matrix, r_string_vector, r_vector, require
 
 pytestmark = pytest.mark.cross_validation
 
@@ -74,15 +74,16 @@ def _cophenetic(tree) -> tuple[np.ndarray, list[str]]:
 
 
 def _r_cophenetic(r_tree) -> tuple[np.ndarray, list[str]]:
-    """ape tree -> (square cophenetic matrix, tip order as returned by ape)."""
-    r_mat = R_APE.cophenetic_phylo(r_tree)
+    """ape tree -> (square cophenetic matrix, tip order as returned by ape).
+
+    ``cophenetic.phylo`` returns a symmetric matrix; it is read through
+    ``matrix_to_array``, which goes via the column-major storage order rather
+    than indexing. Indexing it by hand as ``r_mat[i + 1, j + 1]]`` would be
+    wrong: rpy2's ``__getitem__`` is zero-based, so that skipped the first row
+    and column and would have raised on the last.
+    """
     names = [str(n) for n in as_array(R_APE.getTL(r_tree))]
-    n_row = len(names)
-    out = np.array(
-        [[float(r_mat[i + 1, j + 1]) for j in range(n_row)] for i in range(n_row)],
-        dtype=float,
-    )
-    return out, names
+    return matrix_to_array(R_APE.cophenetic_phylo(r_tree)), names
 
 
 def _aligned(paleo: tuple[np.ndarray, list[str]], reference: tuple[np.ndarray, list[str]]):

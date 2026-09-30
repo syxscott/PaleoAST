@@ -171,17 +171,21 @@ def as_array(value) -> np.ndarray:
 def matrix_to_array(value) -> np.ndarray:
     """Coerce an R matrix/array to a numpy array of the same shape.
 
-    Indexing with ``[i, j]`` follows R's 1-based convention, so this returns the
-    array the way it reads in R rather than in storage order. Works for
-    n-dimensional arrays as long as only the first two indices are used.
+    R arrays are stored **column-major**, and ``as.numeric()`` on an array
+    returns exactly that flattened storage order with the ``dim`` attribute
+    dropped. Reshaping that in numpy with ``order="F"`` therefore restores the
+    array in its original shape without ever indexing it.
+
+    The previous version built the array with ``value[i, j]`` over
+    ``range(1, n + 1)``. That is wrong twice over: rpy2's ``__getitem__`` is
+    **zero-based** (the R-style one-based accessor is ``rx``), so the loop
+    skipped the first row and column and would have raised on the last. Going
+    through the storage order instead means there is no index base to get wrong,
+    and it works for any number of dimensions.
     """
     dims = [int(as_float(d)) for d in r("dim")(value)]
-    n_row, n_col = dims[0], dims[1]
-    out = [[float(value[i, j]) for j in range(1, n_col + 1)] for i in range(1, n_row + 1)]
-    arr = np.array(out, dtype=float)
-    if len(dims) > 2:
-        arr = arr.reshape([n_row, n_col, *dims[2:]])
-    return arr
+    flat = as_array(r("as.numeric")(value))
+    return flat.reshape(dims, order="F")
 
 
 def vector_to_array(value) -> np.ndarray:
