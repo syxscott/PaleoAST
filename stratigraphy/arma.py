@@ -201,12 +201,29 @@ class ARMAAnalyzer:
                 predicted = result["predicted"]
                 residuals = result["residuals"]
 
-            # Compute information criteria
+            # Compute information criteria.
+            #
+            # AIC/BIC are n*ln(sigma^2) + penalty. A constant series fits
+            # exactly, so the residuals are all zero and sigma^2 is 0:
+            # ln(0) is -inf, and the old code produced an AIC and BIC of
+            # -inf, which is not a score -- it is a sign the model
+            # ordering is meaningless (every other model looks infinitely
+            # worse). Guard it, and say why.
             n = len(y)
             k = result["n_params"]
-            sigma2 = np.var(residuals)
-            aic = float(n * np.log(sigma2) + 2 * k)
-            bic = float(n * np.log(sigma2) + k * np.log(n))
+            sigma2 = float(np.var(residuals))
+            if not np.isfinite(sigma2) or sigma2 <= 0.0:
+                # A perfect (or numerically degenerate) fit: information
+                # criteria are undefined, so report NaN rather than -inf.
+                self._logger.warning(
+                    "Residual variance is %s; AIC/BIC are undefined for a degenerate fit and are reported as NaN.",
+                    sigma2,
+                )
+                aic = float("nan")
+                bic = float("nan")
+            else:
+                aic = float(n * np.log(sigma2) + 2 * k)
+                bic = float(n * np.log(sigma2) + k * np.log(n))
 
             armaresult = ARMAResult(
                 ar_params=result["ar_params"],
@@ -268,6 +285,89 @@ class ARMAAnalyzer:
             "n_params": p + q + (1 if include_intercept else 0),
         }
 
+    def _fit_ma_hannan_rissanen(
+        self,
+        y_c: npt.NDArray,
+        p: int,
+        q: int,
+    ) -> npt.NDArray:
+        """Estimate MA coefficients by the Hannan-Rissanen innovation method.
+
+        Hannan, E. J. & Rissanen, J. (1972), "A level of approximation for
+        estimating the power spectrum of a process", IEEE Trans. Acoust.
+        Speech Signal Process. 20:323-332.
+
+        1. Fit a LONG AR filter (longer than the model's own p) to the series.
+           Its residuals are a proxy for the unobserved innovations; without
+           them an MA term is unidentifiable from the data alone.
+        2. Regress the series on its own AR lags AND on the lagged proxy
+           innovations. The coefficients on the innovations are theta.
+
+        Returns an empty array when q == 0, or when the design matrix is too
+        small / rank-deficient to solve.
+        """
+        if q <= 0:
+            return np.zeros(0)
+
+        n = len(y_c)
+        # A long filter, but never so long that there is no data left to
+        # regress. p_long is deliberately allowed to exceed p: that is the
+        # whole point of the innovation step.
+        p_long = min(max(p + q, 5), max(1, n // 8))
+        start = max(p, p_long, q, 2)
+
+        if n - start < max(p + q, 1):
+            self._logger.warning(
+                "Hannan-Rissanen MA estimation needs more than %d observations for "
+                "p=%d q=%d; returning zero MA coefficients",
+                n - start,
+                p,
+                q,
+            )
+            return np.zeros(q)
+
+        # Step 1 -- long AR filter by Yule-Walker, for the innovation proxy.
+        innovation = np.zeros(n)
+        if p_long > 0:
+            gamma = np.correlate(y_c, y_c, mode="full")[n - 1 :]
+            if gamma[0] <= 0:
+                return np.zeros(q)
+            r_matrix = np.array([[gamma[abs(i - j)] for j in range(p_long)] for i in range(p_long)])
+            try:
+                long_ar = np.linalg.solve(r_matrix, gamma[1 : p_long + 1])
+            except np.linalg.LinAlgError:
+                long_ar = np.linalg.lstsq(r_matrix, gamma[1 : p_long + 1], rcond=None)[0]
+            for t in range(p_long, n):
+                innovation[t] = y_c[t] - float(np.dot(long_ar, y_c[t - p_long : t][::-1]))
+
+        # Step 2 -- OLS of the series on its AR lags and the innovation lags.
+        rows = []
+        target = []
+        for t in range(start, n):
+            ar_block = y_c[t - p : t][::-1] if p > 0 else np.zeros(0)
+            ma_block = innovation[t - q : t][::-1]
+            rows.append(np.concatenate([ar_block, ma_block]))
+            target.append(y_c[t])
+
+        design = np.asarray(rows, dtype=float)
+        if design.shape[0] <= design.shape[1]:
+            return np.zeros(q)
+        if np.linalg.matrix_rank(design) < design.shape[1]:
+            self._logger.warning(
+                "Hannan-Rissanen design matrix is rank deficient for p=%d q=%d; "
+                "MA coefficients are not identifiable from this series",
+                p,
+                q,
+            )
+            return np.zeros(q)
+
+        try:
+            beta = np.linalg.lstsq(design, np.asarray(target, dtype=float), rcond=None)[0]
+        except np.linalg.LinAlgError:
+            return np.zeros(q)
+
+        return np.asarray(beta[-q:], dtype=float)
+
     def _fit_manual_ar(
         self,
         y: npt.NDArray,
@@ -321,15 +421,25 @@ class ARMAAnalyzer:
                     self._logger.warning("Yule-Walker system is singular; falling back to least squares")
                     ar_params = np.linalg.lstsq(R, rhs, rcond=None)[0]
 
-        # Innovation algorithm for MA part (simplified): MA coefficients are
-        # left at zero and therefore *not* counted as fitted parameters.
-        ma_params = np.zeros(q)
+        # MA coefficients: Hannan-Rissanen.
+        #
+        # The previous code left them at zero and merely logged a warning. That
+        # is worse than useless for a cyclostratigraphy workflow: MA(1) on a
+        # series with a real moving-average term came back as ``[0.0]``, and
+        # the summary printed "MA coefficients: [0.0]" -- which reads as
+        # "measured, and it is zero" rather than "never estimated". A
+        # researcher would conclude the series has no MA structure.
+        #
+        # Hannan & Rissanen (1972): fit a LONG AR filter first to get an
+        # innovation proxy, then regress the data on the AR lags AND the
+        # innovation lags; the coefficients on the innovations are the MA part.
+        ma_params = self._fit_ma_hannan_rissanen(y_c=y_centered if p > 0 else (y - mu), p=p, q=q)
         if q > 0:
-            self._logger.warning(
-                "statsmodels unavailable: MA(%d) parameters are not estimated by the manual "
-                "Yule-Walker fallback; reported AIC/BIC reflect an AR(%d) model only",
+            self._logger.info(
+                "statsmodels unavailable: MA(%d) coefficients estimated by the "
+                "Hannan-Rissanen innovation algorithm rather than MLE; AIC/BIC "
+                "are therefore approximate.",
                 q,
-                p,
             )
 
         # Constant term: for a stationary AR(p) with mean mu the intercept is
@@ -424,13 +534,30 @@ class ARMAAnalyzer:
 
             self._logger.info(f"Generating {n_steps}-step ahead forecast")
 
-            # Simple AR forecast using last observations
+            # AR(p) forecasts must be taken about the series mean.
+            #
+            # A stationary AR(p) says
+            #     x_t - mu = phi_1 (x_{t-1} - mu) + ... + phi_p (x_{t-p} - mu) + e_t
+            # so the h-step forecast is
+            #     x_{t+h} = mu + sum_i phi_i (x_{t+h-i} - mu)
+            # and omitting `mu` was not a small slip: the previous
+            # implementation recursed on the raw values,
+            #     forecast = dot(ar_params, recent[::-1])
+            # which drives every forecast toward zero instead of toward the
+            # series mean. A constant series at 3.25 forecast to ~0, and an
+            # AR(1) with phi=0.6 on data centred at 100 forecast to ~60.
+            # The AR coefficients describe dynamics *about* the mean, so the
+            # recursion runs on centred values and the mean is added back at
+            # each step.
+            mu = float(np.mean(result.values)) if result.values.size else 0.0
+
             forecasts = np.zeros(n_steps)
             stderr = np.zeros(n_steps)
             scale = np.std(result.residuals)
 
-            # Use last p values as starting point
+            # Use last p values as starting point, centred
             recent = result.values[-result.p :] if result.p > 0 else result.values[-1:]
+            recent = np.asarray(recent, dtype=float) - mu
 
             for h in range(n_steps):
                 # Point forecast
@@ -440,7 +567,10 @@ class ARMAAnalyzer:
                 else:
                     forecast = np.dot(result.ar_params, recent[::-1])
 
-                forecasts[h] = forecast
+                # Back to the original scale for the reported value...
+                forecasts[h] = forecast + mu
+                # ...but the recursion continues on centred values.
+                centred = forecast
 
                 # Recursive prediction variance. The previous
                 # implementation used an ad-hoc ``scale *
@@ -469,8 +599,8 @@ class ARMAAnalyzer:
                     variance_h = scale**2 * (1.0 + psi_sum)
                 stderr[h] = np.sqrt(max(variance_h, 0.0))
 
-                # Update recent values for next step
-                recent = np.append(recent[1:], forecast)
+                # Update recent values for next step (still centred)
+                recent = np.append(recent[1:], centred)
 
             # Confidence intervals
             z = 1.96  # ~95% CI
@@ -507,13 +637,21 @@ class ARMAAnalyzer:
             Dict with best_order, aic_table, bic_table
         """
         best_aic = np.inf
-        best_order = (2, 2)
+        best_order = (0, 0)
 
         aic_table = {}
         bic_table = {}
 
-        for p in range(1, max_p + 1):
-            for q in range(1, max_q + 1):
+        # Start BOTH loops at 0. The previous range(1, ...) meant p=0 and
+        # q=0 were never fitted, so:
+        #   * a pure AR series could never win -- the search was FORCED to add
+        #     a moving-average term that is not there (an AR(0.9) series came
+        #     back as (1,1) instead of (1,0));
+        #   * a pure MA series, and white noise, had no reachable order at all.
+        # p=0 is well defined: a blank AR vector, and the MA innovation
+        # estimator handles a pure MA model.
+        for p in range(0, max_p + 1):
+            for q in range(0, max_q + 1):
                 try:
                     result = self.fit(times, values, p=p, q=q, d=d)
                     aic_table[(p, q)] = result.aic
