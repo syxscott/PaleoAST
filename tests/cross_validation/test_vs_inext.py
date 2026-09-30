@@ -25,11 +25,13 @@ pytestmark = pytest.mark.cross_validation
 
 R_INEXT = require("iNEXT")
 
-# `ChaoSpecies` is an S4 generic. `importr` walks the package namespace and does
-# not attach S4 generics to the Python module, so `R_INEXT.ChaoSpecies` raised
-# AttributeError in CI. Going through R's own `::` lookup is the reliable path
-# and does not depend on what importr chooses to export.
-_CHAO_SPECIES = r("iNEXT::ChaoSpecies")
+# iNEXT has no `ChaoSpecies` -- that name is not in its exported namespace, which
+# is why `importr("iNEXT").ChaoSpecies` raised AttributeError and
+# `r("iNEXT::ChaoRichness")` then raised
+# "'ChaoSpecies' is not an exported object from 'namespace:iNEXT'".
+# The current entry point is `ChaoRichness`, which returns a data.frame with one
+# row per estimator; the first row is the default, Chao1.
+_CHAO_RICHNESS = r("iNEXT::ChaoRichness")
 
 
 def _sample(abundances: np.ndarray) -> np.ndarray:
@@ -49,13 +51,40 @@ def _paleo_chao1(abundances: np.ndarray) -> float:
     return float(compute_diversity_indices(np.asarray(abundances, dtype=float)).indices["chao1"].value)
 
 
+def _chao_columns(result) -> tuple[int, int]:
+    """Locate the ``Observed`` and ``Est`` columns of a ChaoRichness result.
+
+    Read by name rather than by position, and refuse to guess: the previous
+    version of this file assumed a fixed column layout and would have compared
+    the wrong numbers -- or the standard error -- without saying so.
+    """
+    names = list(result.names)
+    missing = [c for c in ("Observed", "Est") if c not in names]
+    if missing:
+        raise AssertionError(f"iNEXT::ChaoRichness result has no column(s) {missing}; it returned {names}")
+    return names.index("Observed"), names.index("Est")
+
+
+def _r_chao(abundances: np.ndarray) -> tuple[float, float]:
+    """(observed richness, Chao1 estimate) from iNEXT, for one sample."""
+    result = _CHAO_RICHNESS(_r_single_sample(abundances))
+    observed_col, est_col = _chao_columns(result)
+    # Row 0 is the default estimator, Chao1.
+    return as_float(result[0, observed_col]), as_float(result[0, est_col])
+
+
 def _r_chao1(abundances: np.ndarray) -> float:
     """iNEXT's Chao1 estimate for one sample, as a scalar."""
-    return as_float(_CHAO_SPECIES(_r_single_sample(abundances), q=0, method="Chao1").rx2("Est"))
+    return _r_chao(abundances)[1]
+
+
+def _r_observed(abundances: np.ndarray) -> float:
+    """iNEXT's observed species richness for one sample."""
+    return _r_chao(abundances)[0]
 
 
 class TestChao1VsINEXT:
-    """Verify the Chao1 richness estimator against ``iNEXT::ChaoSpecies``."""
+    """Verify the Chao1 richness estimator against ``iNEXT::ChaoRichness``."""
 
     def test_standard_case_with_singletons_and_doubletons(self):
         """f1 = 2, f2 = 1: Chao1 = S + f1^2 / (2 f2)."""
@@ -65,7 +94,7 @@ class TestChao1VsINEXT:
             _r_chao1(abundances),
             rtol=1e-8,
             atol=1e-10,
-            err_msg="Chao1 disagrees with iNEXT::ChaoSpecies (f2 > 0 branch)",
+            err_msg="Chao1 disagrees with iNEXT::ChaoRichness (f2 > 0 branch)",
         )
 
     def test_no_doubletons_branch(self):
@@ -80,7 +109,7 @@ class TestChao1VsINEXT:
             _r_chao1(abundances),
             rtol=1e-8,
             atol=1e-10,
-            err_msg="Chao1 disagrees with iNEXT::ChaoSpecies (f2 == 0 branch)",
+            err_msg="Chao1 disagrees with iNEXT::ChaoRichness (f2 == 0 branch)",
         )
 
     def test_no_singleton_branch(self):
@@ -92,8 +121,7 @@ class TestChao1VsINEXT:
         assert_allclose(paleo, reference, rtol=1e-8, atol=1e-10)
         # In this branch both must equal observed richness; assert it against R's
         # observed value so a "fix" cannot quietly reintroduce a correction term.
-        r_x = _r_single_sample(abundances)
-        r_observed = as_float(_CHAO_SPECIES(r_x, q=0, method="Chao1").rx2("Observed"))
+        r_observed = _r_observed(abundances)
         assert_allclose(paleo, r_observed, rtol=1e-8, atol=1e-10)
 
     def test_estimate_is_never_below_observed(self):
@@ -110,9 +138,7 @@ class TestChao1VsINEXT:
             np.array([4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]),
         ]
         for abundances in samples:
-            r_x = _r_single_sample(abundances)
-            r_result = _CHAO_SPECIES(r_x, q=0, method="Chao1")
-            observed = as_float(r_result.rx2("Observed"))
+            observed = _r_observed(abundances)
             paleo = _paleo_chao1(abundances)
             assert paleo >= observed - 1e-9, (
                 f"Chao1 {paleo} is below iNEXT's observed richness {observed} for {abundances.tolist()}"
@@ -135,14 +161,12 @@ class TestRarefactionVsINEXT:
         abundances = np.array([10.0, 8.0, 5.0, 5.0, 3.0, 2.0, 2.0, 1.0, 1.0])
         paleo = float(compute_diversity_indices(abundances).taxa_count)
 
-        r_x = _r_single_sample(abundances)
-        r_result = _CHAO_SPECIES(r_x, q=0, method="Chao1")
-        reference = as_float(r_result.rx2("Observed"))
+        reference = _r_observed(abundances)
 
         assert_allclose(
             paleo,
             reference,
             rtol=0.0,
             atol=0.0,
-            err_msg="observed richness disagrees with iNEXT::ChaoSpecies(Observed)",
+            err_msg="observed richness disagrees with iNEXT::ChaoRichness(Observed)",
         )
