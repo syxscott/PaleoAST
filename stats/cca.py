@@ -67,6 +67,14 @@ class CCAResult:
         env_names: Names of environmental variables
         inertia: Total inertia (for CCA) or total variance (for RDA)
         constrained_variance: Variance explained by constrained axes
+        f_statistic: Overall F-statistic (pseudo-F for CCA, classical F for
+            RDA) for the full constrained model
+        p_value: Permutation-based p-value for the overall model
+        f_per_axis: Per-axis F-statistics (length n_components)
+        p_per_axis: Per-axis permutation-based p-values (length n_components)
+        wilks_lambda: Wilks' lambda = product(1 - r_k^2) for the constrained
+            axes (close to 0 for strong relationships, 1 for none)
+        n_permutations: Number of permutations used for the p-values
     """
 
     site_scores: npt.NDArray
@@ -84,6 +92,12 @@ class CCAResult:
     env_names: list[str]
     inertia: float
     constrained_variance: float
+    f_statistic: float = 0.0
+    p_value: float = 1.0
+    f_per_axis: npt.NDArray | None = None
+    p_per_axis: npt.NDArray | None = None
+    wilks_lambda: float = 1.0
+    n_permutations: int = 0
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -108,8 +122,20 @@ class CCAResult:
             )
 
         lines.append("")
-        lines.append(f"{_('Total constrained variance: {0}%').format(f'{self.constrained_variance:.2f}')}")
+        lines.append(
+            f"{_('Total constrained variance: {0}%').format(f'{self.constrained_variance:.2f}')}"
+        )
         lines.append(f"{_('Inertia (total): {0:.4f}').format(self.inertia)}")
+        lines.append("")
+        lines.append(f"{_('Overall F: {0:.4f}').format(self.f_statistic)}")
+        lines.append(f"{_('Overall p-value: {0:.4f}').format(self.p_value)}")
+        lines.append(f"{_('Wilks lambda: {0:.4f}').format(self.wilks_lambda)}")
+        if self.f_per_axis is not None and len(self.f_per_axis) > 0:
+            lines.append("")
+            lines.append(f"{_('Per-axis F / p:')}")
+            for i in range(self.n_components):
+                p = self.p_per_axis[i] if self.p_per_axis is not None else 1.0
+                lines.append(f"  AX{i + 1}: F = {self.f_per_axis[i]:.4f}, p = {p:.4f}")
 
         return "\n".join(lines)
 
@@ -142,6 +168,8 @@ class CCAAnalyzer:
         method: str = "cca",
         species_names: list[str] | None = None,
         env_names: list[str] | None = None,
+        n_permutations: int = 999,
+        random_seed: int | None = None,
     ) -> CCAResult:
         """
         Perform CCA or RDA analysis.
@@ -154,9 +182,23 @@ class CCAAnalyzer:
                    'rda' for Redundancy Analysis
             species_names: Names of species/variables
             env_names: Names of environmental variables
+            n_permutations: Number of permutations for the significance
+                test. The default (999) matches ``vegan::anova.cca``. Set
+                to 0 to skip the permutation test (still returns F/Wilks).
+            random_seed: Optional seed for the permutation RNG so the
+                p-value is reproducible. When supplied, a local
+                ``np.random.default_rng(seed)`` is used so the global
+                numpy state is unaffected.
 
         Returns:
-            CCAResult: CCA/RDA analysis results
+            CCAResult: CCA/RDA analysis results, including F-statistic,
+                p-value, per-axis F and p, and Wilks lambda.
+
+        Notes:
+            Permutations shuffle **Y rows** (the response) -- not X. CCA
+            permutes the abundance table, not the environmental table; this
+            is the convention of ``vegan::anova.cca(..., by='marginal')``
+            and Legendre & Legendre (2012, §11.4).
         """
         with self._lock:
             # Validate input
@@ -190,9 +232,23 @@ class CCAAnalyzer:
             else:
                 result = self._analyze_rda(Y_arr, X_arr, n_components, species_names, env_names)
 
+            # Permutation-based significance test (shuffles Y rows).
+            f_overall, f_per_axis, wilks_lambda, p_overall, p_per_axis = self._permutation_test(
+                Y_arr, X_arr, n_components, method,
+                n_permutations=n_permutations, random_seed=random_seed,
+            )
+            result.f_statistic = float(f_overall)
+            result.f_per_axis = np.asarray(f_per_axis, dtype=float)
+            result.p_per_axis = np.asarray(p_per_axis, dtype=float)
+            result.p_value = float(p_overall)
+            result.wilks_lambda = float(wilks_lambda)
+            result.n_permutations = int(n_permutations) if n_permutations > 0 else 0
+
             self._last_result = result
             self._logger.info(
-                f"CCA/RDA completed: method={result.method}, constrained_variance={result.constrained_variance:.2f}%"
+                f"CCA/RDA completed: method={result.method}, "
+                f"constrained_variance={result.constrained_variance:.2f}%, "
+                f"F={result.f_statistic:.4f}, p={result.p_value:.4f}"
             )
             return result
 
@@ -486,7 +542,7 @@ class CCAAnalyzer:
             Y = Y[keep_rows][:, keep_cols]
             X = X[keep_rows, :]
             if species_names is not None:
-                species_names = [nm for nm, keep in zip(species_names, keep_cols) if keep]
+                species_names = [nm for nm, keep in zip(species_names, keep_cols, strict=False) if keep]
             grand_total = float(Y.sum())
 
         n_samples, n_species = Y.shape
@@ -607,6 +663,251 @@ class CCAAnalyzer:
             inertia=total_inertia,
             constrained_variance=constrained_variance,
         )
+
+    def _permutation_test(
+        self,
+        Y: npt.NDArray,
+        X: npt.NDArray,
+        n_components: int,
+        method: str,
+        n_permutations: int = 999,
+        random_seed: int | None = None,
+    ) -> tuple[float, npt.NDArray, float, float, npt.NDArray]:
+        """
+        Permutation-based significance test for CCA / RDA.
+
+        Implementation notes
+        --------------------
+        - Permutations shuffle the **Y rows** (the response), not the X
+          rows. This is the convention of ``vegan::anova.cca(..., by='marginal')``
+          and Legendre & Legendre (2012, §11.4). Permuting X instead would
+          test a different null (a null on the environment, not on the
+          species/response) and is a common bug in ecological software.
+        - Test statistic = trace of the constrained eigenvalues (sum of the
+          top-q constrained eigenvalues). For RDA this is the constrained
+          sum of squares; for CCA the constrained chi-square inertia.
+        - Overall F is the classical ratio (constrained SS / q) / (residual
+          SS / (n - 1 - q)) for RDA, and an analogous trace-based F for CCA.
+        - Wilks lambda = prod(1 - lambda_k / inertia) where inertia is the
+          total (chi-square or SS) inertia and lambda_k the constrained
+          eigenvalues. lambda is in (0, 1]; small lambda means strong
+          relationship.
+        - Uses a local ``np.random.default_rng`` when ``random_seed`` is
+          supplied, otherwise warns and falls back to the global state
+          (with no reproducibility).
+
+        Returns
+        -------
+        (f_overall, f_per_axis, wilks_lambda, p_overall, p_per_axis)
+        """
+        n_samples = Y.shape[0]
+        rng: np.random.Generator | np.random.RandomState
+        if random_seed is not None:
+            rng = np.random.default_rng(random_seed)
+        else:
+            import warnings as _warnings
+
+            _warnings.warn(
+                "CCA: no ``random_seed`` supplied; the permutation p-values "
+                "use the global ``np.random`` state and are not "
+                "reproducible across runs. Pass ``random_seed=`` to make "
+                "the result deterministic.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._logger.warning(
+                "CCA: no random_seed supplied; p-values use global np.random "
+                "state and are not reproducible."
+            )
+            rng = np.random
+
+        # Compute the observed F (overall + per-axis), the constrained SS,
+        # the residual SS, and Wilks lambda, by re-using the same eigen
+        # decomposition that _analyze_rda / _analyze_cca just produced.
+        # To avoid recomputing scores and proportions for every perm,
+        # we extract just enough (eigenvalues, total inertia) here.
+        observed_eigenvalues, total_inertia, total_SS, n_q, n_eff = self._constrained_eigenvalues(
+            Y, X, n_components, method
+        )
+        if len(observed_eigenvalues) == 0 or total_inertia <= 0:
+            return (
+                0.0,
+                np.zeros(n_components),
+                1.0,
+                1.0,
+                np.ones(n_components),
+            )
+
+        # Overall F and per-axis F for the observed data
+        f_overall, f_per_axis, wilks_lambda = self._F_from_eigenvalues(
+            observed_eigenvalues, total_inertia, total_SS, n_eff, n_q
+        )
+
+        # Permutation null distribution
+        f_overall_perm = np.zeros(n_permutations)
+        f_per_axis_perm = np.zeros((n_permutations, n_components))
+        for i in range(n_permutations):
+            perm_idx = rng.permutation(n_samples)
+            Y_perm = Y[perm_idx]
+            perm_eigs, _, _, _, _ = self._constrained_eigenvalues(
+                Y_perm, X, n_components, method
+            )
+            if len(perm_eigs) == 0:
+                f_overall_perm[i] = 0.0
+                f_per_axis_perm[i, :] = 0.0
+                continue
+            f_p, f_pa, _ = self._F_from_eigenvalues(
+                perm_eigs, total_inertia, total_SS, n_eff, n_q
+            )
+            f_overall_perm[i] = f_p
+            f_per_axis_perm[i, :] = f_pa
+
+        # p-values (add-one correction: (1 + #{perm >= obs}) / (1 + n_perm))
+        n_ge_overall = int(np.sum(f_overall_perm >= f_overall))
+        p_overall = float((1 + n_ge_overall) / (1 + n_permutations))
+        p_per_axis = np.array(
+            [(1 + int(np.sum(f_per_axis_perm[:, k] >= f_per_axis[k]))) / (1 + n_permutations)
+             for k in range(n_components)],
+            dtype=float,
+        )
+
+        return float(f_overall), f_per_axis, float(wilks_lambda), float(p_overall), p_per_axis
+
+    def _constrained_eigenvalues(
+        self,
+        Y: npt.NDArray,
+        X: npt.NDArray,
+        n_components: int,
+        method: str,
+    ) -> tuple[npt.NDArray, float, float, int, int]:
+        """
+        Compute the constrained eigenvalues and the relevant inertias/SS
+        for one (Y, X) pair (no score recomputation, just enough for the
+        permutation test).
+
+        Returns
+        -------
+        eigenvalues : the top-q constrained eigenvalues (length n_components)
+        total_inertia : for CCA, the chi-square inertia; for RDA, the
+            sum of squares of Y (same as ``total_SS``)
+        total_SS : sum-of-squares of Y (RDA only; for CCA returned as
+            ``np.nan`` and not used)
+        n_q : number of constrained axes actually computed (may be less
+            than the requested n_components when X has very few columns)
+        n_eff : number of sample rows the quantities above were computed
+            from. This is smaller than the input row count when CCA dropped
+            zero-total samples, and it is what the residual degrees of
+            freedom must use.
+        """
+        if method == "rda":
+            Y_centered = Y - Y.mean(axis=0)
+            X_centered = X - X.mean(axis=0)
+            XtX = X_centered.T @ X_centered
+            try:
+                XtX_inv = self._solve_XtX(XtX, method="rda")
+            except Exception:
+                return np.array([]), 0.0, 0.0, 0, int(Y.shape[0])
+            Q = X_centered @ XtX_inv @ X_centered.T
+            M = Y_centered.T @ Q @ Y_centered
+            eigenvalues, _ = np.linalg.eigh(M)
+            # Sort descending
+            eigenvalues = np.sort(eigenvalues)[::-1]
+            eigenvalues = np.maximum(eigenvalues[:n_components], 1e-10)
+            total_SS = float(np.sum(Y_centered**2))
+            return eigenvalues, total_SS, total_SS, len(eigenvalues), int(Y.shape[0])
+
+        # CCA
+        if np.any(Y < 0):
+            # Non-negative data is required for CCA. If a permutation ever
+            # produced negatives (impossible: we only permute rows), fall
+            # back to zeros to avoid raising mid-test.
+            return np.array([]), 0.0, 0.0, 0, int(Y.shape[0])
+        # Drop zero-total rows and columns BEFORE doing anything --
+        # otherwise the chi-square standardization divides by 0 and
+        # the SVD explodes with NaN/Inf. Same convention as
+        # ``_analyze_cca``.
+        keep_rows = Y.sum(axis=1) > 0
+        keep_cols = Y.sum(axis=0) > 0
+        if not np.all(keep_rows) or not np.all(keep_cols):
+            Y = Y[keep_rows][:, keep_cols]
+            X = X[keep_rows, :]
+        if Y.shape[0] < 2 or Y.shape[1] == 0 or X.shape[0] < 2:
+            return np.array([]), 0.0, 0.0, 0, int(Y.shape[0])
+        # Clamp n_components to what is actually available
+        n_components_eff = min(n_components, min(Y.shape[0] - 1, Y.shape[1], X.shape[1]))
+        if n_components_eff < 1:
+            return np.array([]), 0.0, 0.0, 0, int(Y.shape[0])
+
+        grand_total = float(Y.sum())
+        if grand_total <= 0:
+            return np.array([]), 0.0, 0.0, 0, int(Y.shape[0])
+        P = Y / grand_total
+        r = P.sum(axis=1)
+        c = P.sum(axis=0)
+        expected = np.outer(r, c)
+        # Avoid /0 where r_i = 0 or c_j = 0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            S = (P - expected) / np.sqrt(expected)
+            S = np.nan_to_num(S, nan=0.0, posinf=0.0, neginf=0.0)
+        total_inertia = float(np.sum(S**2))
+        if total_inertia <= 0:
+            return np.array([]), total_inertia, np.nan, 0, int(Y.shape[0])
+
+        X_tilde = X - r @ X
+        XtX = X_tilde.T @ (r[:, np.newaxis] * X_tilde)
+        try:
+            XtX_inv = self._solve_XtX(XtX, method="cca")
+        except Exception:
+            return np.array([]), total_inertia, np.nan, 0, int(Y.shape[0])
+        S_hat = X_tilde @ (XtX_inv @ (X_tilde.T @ (r[:, np.newaxis] * S)))
+
+        A = np.sqrt(r)[:, np.newaxis] * S_hat / np.sqrt(c)[np.newaxis, :]
+        try:
+            _U, singular_values, _Vt = np.linalg.svd(A, full_matrices=False)
+        except np.linalg.LinAlgError:
+            # Degenerate permuted table; treat as zero contribution so the
+            # test still has a well-defined distribution.
+            return np.array([]), total_inertia, np.nan, 0, int(Y.shape[0])
+        all_lambdas = singular_values**2
+        eigenvalues = np.sort(all_lambdas)[::-1][:n_components_eff]
+        eigenvalues = np.maximum(eigenvalues, 1e-10)
+        return eigenvalues, total_inertia, np.nan, len(eigenvalues), int(Y.shape[0])
+
+    def _F_from_eigenvalues(
+        self,
+        eigenvalues: npt.NDArray,
+        total_inertia: float,
+        total_SS: float,
+        n_samples: int,
+        n_components_actual: int,
+    ) -> tuple[float, npt.NDArray, float]:
+        """
+        Compute (overall F, per-axis F, Wilks lambda) from constrained
+        eigenvalues and total inertia/SS.
+
+        RDA: F_overall = (SS_constrained / q) / (SS_residual / (n - 1 - q))
+        CCA: F_overall = (inertia_constrained / q) / (inertia_residual / (n - 1 - q))
+
+        Wilks lambda = prod(1 - lambda_k / total_inertia).
+        """
+        n_components_actual = max(int(n_components_actual), 1)
+        constrained = float(np.sum(eigenvalues))
+        if total_inertia <= 0:
+            return 0.0, np.zeros(n_components_actual), 1.0
+        residual = max(float(total_inertia) - constrained, 0.0)
+        q = n_components_actual
+        df_residual = max(n_samples - 1 - q, 1)
+        f_overall = (constrained / q) / (residual / df_residual) if residual > 0 else 0.0
+
+        # Per-axis F (marginal test: SS_k vs MS_residual)
+        f_per_axis = eigenvalues * df_residual / residual if residual > 0 else np.zeros(q)
+
+        # Wilks lambda
+        # r_k^2 = lambda_k / total_inertia; truncated to [0, 1]
+        ratios = np.clip(eigenvalues / total_inertia, 0.0, 1.0)
+        wilks_lambda = float(np.prod(1.0 - ratios))
+
+        return float(f_overall), f_per_axis, wilks_lambda
 
     @property
     def last_result(self) -> CCAResult | None:
