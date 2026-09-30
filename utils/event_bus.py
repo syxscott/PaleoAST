@@ -78,19 +78,43 @@ class EventBus(QObject):
     # Singleton Access
     # =========================================================================
 
-    def __new__(cls) -> "EventBus":
+    def __new__(cls, *args, **kwargs) -> "EventBus":
+        """Create the singleton, initialising the QObject here.
+
+        The ``QObject`` base must be constructed *inside* ``__new__``, before
+        the object is published to ``cls._instance``.
+
+        The previous version did the opposite: ``__new__`` returned a raw
+        ``super().__new__(cls)`` with its C++ side still uninitialised, and
+        ``__init__`` then did ``if self._initialized: ...; super().__init__()``.
+        Reading an attribute on a QObject whose ``__init__`` has not run puts
+        PyQt6 into unbounded recursion -- the interpreter dies with a native
+        "stack overflow" (WinError / exit 127), not a catchable
+        ``RecursionError``. Instantiating ``EventBus()`` crashed the process,
+        which took down ``models.state_manager`` and, through it, most of the
+        test suite at ``tests/controllers/test_data_controller.py``.
+
+        Initialising the base class in ``__new__`` and leaving ``__init__`` a
+        no-op sidesteps the whole problem: by the time any attribute is
+        touched the QObject is fully constructed, and ``cls()`` still returns
+        the one shared instance.
+        """
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+                    instance = super().__new__(cls)
+                    QObject.__init__(instance)
+                    cls._instance = instance
         return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
+        """Set up per-instance state. The QObject base is built in ``__new__``.
+
+        Only the first construction does any work; later ``EventBus()`` calls
+        return the same object and must not re-register anything.
+        """
+        if getattr(self, "_logger", None) is not None:
             return
-        super().__init__()
-        self._initialized = True
         self._logger = logging.getLogger(f"{__name__}.EventBus")
         self._logger.info("EventBus initialized")
 
