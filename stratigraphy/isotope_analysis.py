@@ -108,6 +108,7 @@ class IsotopeResult:
     excursions: list[Excursion] = field(default_factory=list)  # 检测到的 excursion
     spectral_peaks: dict = field(default_factory=dict)  # {isotope_name: [(period, power), ...]}
     correlations: dict = field(default_factory=dict)  # {(name1, name2): (r, p)}
+    metadata: dict = field(default_factory=dict)  # auxiliary results (e.g. paleotemperature)
 
     def summary(self) -> str:
         lines = [
@@ -123,6 +124,160 @@ class IsotopeResult:
         if self.correlations:
             lines.append(f"Correlations computed: {len(self.correlations)}")
         return "\n".join(lines)
+
+
+# =============================================================================
+# δ¹⁸O scale conversion (VPDB ↔ VSMOW)
+# =============================================================================
+#
+# Paleotemperature equations in the literature are calibrated on different
+# reference frames:
+#
+#   VSMOW (Vienna Standard Mean Ocean Water) — the modern oceanographic
+#       reference; open-ocean surface water is by definition 0 ‰ VSMOW.
+#   VPDB (Vienna Pee Dee Belemnite) — the reference most paleoclimate
+#       laboratories actually report carbonate analyses on (NBS-19 /
+#       IAEA-603 are tied to it). Typical planktonic foraminifera run
+#       δc ≈ -2 ‰ VPDB.
+#
+# Two conversion conventions exist:
+#
+# 1. The linear Coplen (1988) formula, ratified by IUPAC:
+#        δ_VSMOW = 1.03091 × δ_VPDB + 30.91
+#        δ_VPDB  = (δ_VSMOW - 30.91) / 1.03091
+#    This is the modern (post-1988) conversion and is what
+#    Kim & O'Neil (1997) used.
+#
+# 2. The historical "Coplen-Tyler" simple offset (still in widespread
+#    use in paleoceanography):
+#        δ_VPDB  ≈ δ_VSMOW - 0.27 ‰
+#    This pre-dates Coplen (1988) and is what Erez & Luz (1983) and
+#    Bemis et al. (1998) used when fitting their equations. The 0.27 ‰
+#    offset is also what these equations implicitly assume when the
+#    user supplies δw on the modern oceanographic VSMOW scale.
+#
+# WHY TWO CONVERSIONS
+# -------------------
+# The two conversions differ by an order of magnitude in their numerical
+# effect. With the linear Coplen 1988 formula, SMOW (δ_VSMOW = 0) maps
+# to δ_VPDB ≈ -29.99 ‰ — which is the right way to convert a *measured*
+# δ¹⁸O of seawater that has been equilibrated with CO2 and run on a
+# mass spec calibrated to VPDB. But it is NOT what Erez & Luz and
+# Bemis et al. did when they fitted their calibrations: their published
+# polynomial coefficients are only consistent with the small-offset
+# 0.27 ‰ convention. Using the linear formula with their coefficients
+# gives delta_diff ≈ +30 ‰ (instead of ~0 ‰) and temperature answers
+# 100+ °C off.
+#
+# Both conventions are exposed in the API below. The paleotemperature
+# functions accept VPDB for δc (laboratory convention) and either VPDB
+# or VSMOW for δw (controlled by a parameter), and the conversion they
+# apply is documented in each function's docstring.
+#
+# References
+# ----------
+# Coplen, T. B. (1988). "Normalization of oxygen and hydrogen isotope
+#     data." Chemical Geology (Isotope Geoscience Section), 72, 293-297.
+# Coplen, T. B. et al. (1983). "Improvements in the gaseous hydrogen-water
+#     equilibration technique for hydrogen isotope analysis." Abstracts
+#     with Programs, Geological Society of America, 15, 549.
+# Friedman, I. & O'Neil, J. R. (1977). "Compilation of stable isotope
+#     fractionation factors of geochemical interest." USGS Prof. Paper
+#     440-KK.
+VP_VPDB_TO_VSMOW_SLOPE = 1.03091
+VP_VPDB_TO_VSMOW_INTERCEPT = 30.91
+
+# Historical offset used by Erez & Luz (1983) and Bemis et al. (1998)
+# when fitting their paleotemperature calibrations. This is the
+# "pre-Coplen-1988" conversion that was standard practice in early-80s
+# paleoceanography and is still used by modern implementations of E&L-
+# and Bemis-style equations (e.g. Pearson 2012).
+EL_BEMIS_VSMOW_TO_VPDB_OFFSET = 0.27
+
+
+def vpdb_to_vsmow(delta_vpdb: float | np.ndarray) -> float | np.ndarray:
+    """Convert δ¹⁸O from VPDB to VSMOW using the linear Coplen (1988)
+    formula:
+
+        δ_VSMOW = 1.03091 × δ_VPDB + 30.91
+
+    This is the appropriate conversion for *measured* carbonate (CO2
+    equilibrated at 25 °C) when the working standard is tied to VPDB
+    but the user wants the VSMOW value to feed e.g. Kim & O'Neil (1997).
+
+    Reference: Coplen (1988), ratified by IUPAC.
+    """
+    return VP_VPDB_TO_VSMOW_SLOPE * np.asarray(delta_vpdb, dtype=float) + VP_VPDB_TO_VSMOW_INTERCEPT
+
+
+#: Genus names for which the Bemis et al. (1998) δw correction is a plain
+#: "no vital effect" calibration rather than a warning-worthy miss.
+_GENERIC_GENUS_NAMES = frozenset({"generic", "default", "none", "unknown", ""})
+
+
+def _genus_offset(genus: str, corrections: dict[str, float]) -> tuple[float, bool]:
+    """Look up a genus-specific delta-w offset, tolerating how it is spelled.
+
+    Accepts the abbreviated form the table is written in ("G. ruber"), the full
+    binomial a palaeontologist would actually type ("Globigerinoides ruber"), a
+    bare epithet ("ruber"), and any capitalisation or surrounding whitespace.
+
+    Returns ``(offset, matched)``. The flag is False when nothing matched and
+    the generic calibration is being used, so the caller can say so rather than
+    quietly returning a different temperature.
+
+    Matching is on the species epithet -- the last whitespace-separated token --
+    because that is the part that identifies the species, and "G." and
+    "Globigerinoides" are the same genus spelled two ways.
+    """
+    if not isinstance(genus, str):
+        return 0.0, False
+
+    cleaned = " ".join(genus.split()).strip()
+    if cleaned.lower() in _GENERIC_GENUS_NAMES:
+        return 0.0, True
+
+    parts = cleaned.replace(",", " ").split()
+    epithet = parts[-1].lower() if parts else ""
+
+    # exact table key first, so an explicitly spelled abbreviation still wins
+    if cleaned in corrections:
+        return float(corrections[cleaned]), True
+    for key, value in corrections.items():
+        if " ".join(key.split()).lower() == cleaned.lower():
+            return float(value), True
+    if epithet in corrections:
+        return float(corrections[epithet]), True
+    return 0.0, False
+
+
+def vsmow_to_vpdb(delta_vsmow: float | np.ndarray, *, formula: str = "coplen") -> float | np.ndarray:
+    """Convert δ¹⁸O from VSMOW to VPDB.
+
+    With ``formula='coplen'`` (default — modern, post-1988):
+        δ_VPDB = (δ_VSMOW - 30.91) / 1.03091
+
+    With ``formula='el_bemis'`` (pre-1988 historical offset used by
+    Erez & Luz (1983) and Bemis et al. (1998) in their published
+    calibrations):
+        δ_VPDB ≈ δ_VSMOW - 0.27 ‰
+
+    The two formulae differ by ~30 ‰ in magnitude: use the right one
+    for the equation you are feeding. Kim & O'Neil (1997) uses
+    ``formula='coplen'``; Erez & Luz and Bemis use ``formula='el_bemis'``.
+
+    References
+    ----------
+    Coplen, T. B. (1988), as above.
+    Erez, J. & Luz, B. (1983), as below.
+    Bemis, B. E. et al. (1998), as below.
+    """
+    arr = np.asarray(delta_vsmow, dtype=float)
+    if formula == "coplen":
+        return (arr - VP_VPDB_TO_VSMOW_INTERCEPT) / VP_VPDB_TO_VSMOW_SLOPE
+    if formula == "el_bemis":
+        return arr - EL_BEMIS_VSMOW_TO_VPDB_OFFSET
+    raise ValueError(f"formula must be 'coplen' or 'el_bemis', got '{formula}'")
 
 
 def compute_moving_average(values: np.ndarray, window: int = 5, mode: str = "center") -> np.ndarray:
@@ -417,6 +572,10 @@ class IsotopeAnalyzer:
         excursion_threshold: float = 2.0,
         excursion_min_duration: int = 2,
         compute_correlations: bool = True,
+        compute_paleotemperature: bool = False,
+        delta18O_sw_vsmow: float = 0.0,
+        genus: str = "generic",
+        equation: str = "erez_luz",
     ) -> IsotopeResult:
         """
         执行同位素时间序列分析
@@ -427,14 +586,23 @@ class IsotopeAnalyzer:
             excursion_threshold: excursion 检测阈值
             excursion_min_duration: 最小持续时间
             compute_correlations: 是否计算相关性
+            compute_paleotemperature: 是否计算 δ¹⁸O 古温度
+            delta18O_sw_vsmow: 海水 δ¹⁸O (‰ VSMOW, 现代海洋学惯例),
+                仅当 ``compute_paleotemperature=True`` 时使用
+            genus: Bemis 等属种修正 (仅当 ``equation='bemis'`` 时生效)
+            equation: 古温度方程, ``'erez_luz'`` 或 ``'bemis'``
 
         返回:
-            IsotopeResult
+            IsotopeResult; 当 ``compute_paleotemperature=True`` 时,
+            ``result.metadata['paleotemperature']`` 包含
+            ``temperatures_c``、``equation``、``delta18O_sw_vsmow``、
+            ``genus``、``valid_count``、``out_of_range_count`` 字段
         """
         self._logger.info(f"Starting isotope analysis: {len(data.depth)} points")
 
         excursions = []
         correlations = {}
+        metadata: dict = {}
 
         # 检测每个同位素的 excursion
         if detect_excursions:
@@ -463,7 +631,69 @@ class IsotopeAnalyzer:
                         r, p = compute_correlation(arr1, arr2)
                         correlations[(name1, name2)] = (r, p)
 
-        result = IsotopeResult(data=data, excursions=excursions, correlations=correlations)
+        # 计算古温度 (缺陷 1 修复: δsw 一律按 VSMOW 接收, 函数内部换算到 VPDB)
+        if compute_paleotemperature:
+            if data.d18O is None:
+                self._logger.warning(
+                    "compute_paleotemperature=True but data.d18O is None — "
+                    "skipped"
+                )
+            else:
+                temps = np.full(len(data.d18O), np.nan, dtype=float)
+                valid = np.zeros(len(data.d18O), dtype=bool)
+                out_of_range = 0
+                for i, dc in enumerate(data.d18O):
+                    if dc is None or np.isnan(dc):
+                        continue
+                    if equation == "erez_luz":
+                        try:
+                            with np.errstate(invalid="ignore"):
+                                t_val = float(
+                                    IsotopeAnalyzer.compute_paleotemperature_erez_luz(
+                                        delta18O_sw=delta18O_sw_vsmow,
+                                        delta18O_c=float(dc),
+                                        delta18O_sw_scale="vsmow",
+                                    )
+                                )
+                        except ValueError:
+                            continue
+                    elif equation == "bemis":
+                        try:
+                            with np.errstate(invalid="ignore"):
+                                t_val = float(
+                                    IsotopeAnalyzer.compute_paleotemperature_bemis(
+                                        delta18O_c=float(dc),
+                                        delta18O_sw=delta18O_sw_vsmow,
+                                        genus=genus,
+                                        delta18O_sw_scale="vsmow",
+                                    )
+                                )
+                        except ValueError:
+                            continue
+                    else:
+                        raise ValueError(
+                            f"Unknown paleotemperature equation: {equation}"
+                        )
+                    if np.isfinite(t_val) and 0.0 <= t_val <= 35.0:
+                        valid[i] = True
+                    else:
+                        out_of_range += 1
+                    temps[i] = t_val
+                metadata["paleotemperature"] = {
+                    "temperatures_c": temps,
+                    "equation": equation,
+                    "delta18O_sw_vsmow": float(delta18O_sw_vsmow),
+                    "genus": genus,
+                    "valid_count": int(valid.sum()),
+                    "out_of_range_count": int(out_of_range),
+                }
+
+        result = IsotopeResult(
+            data=data,
+            excursions=excursions,
+            correlations=correlations,
+            metadata=metadata,
+        )
 
         self._last_result = result
         self._logger.info(f"Isotope analysis complete: {len(excursions)} excursions, {len(correlations)} correlations")
@@ -475,52 +705,203 @@ class IsotopeAnalyzer:
         return self._last_result
 
     @staticmethod
-    def compute_paleotemperature_erez_luz(delta18O_sw: float, delta18O_c: float) -> float:
+    def compute_paleotemperature_erez_luz(
+        delta18O_sw: float,
+        delta18O_c: float,
+        delta18O_sw_scale: str = "vsmow",
+    ) -> float:
         """
-        Erez & Luz (1983) 古温度方程 - 海水 δ¹⁸O → 古温度
+        Erez & Luz (1983) paleotemperature equation.
 
-        公式: T(°C) = 17.0 - 4.52 × (δc - δw) + 0.03 × (δc - δw)²
-        适用范围: 16-25°C
+        Equation (Eq. 5 of the paper, restated with the canonical a = 17.0,
+        b = -4.52, c = +0.03 coefficients used in subsequent literature):
 
-        参数:
-            delta18O_sw: 海水 δ¹⁸O (‰ VSMOW)
-            delta18O_c: 碳酸盐 δ¹⁸O (‰ VPDB)
+            T(°C) = 17.0 - 4.52 × (δc - δw) + 0.03 × (δc - δw)²
 
-        返回:
-            古温度 (°C)
+        Valid range: 16-25 °C (calibrated on cultured planktonic foraminifera,
+        Globigerinoides sacculifer). See the References section below.
+
+        SCALE CONVENTION — READ BEFORE CALLING
+        -------------------------------------
+        Erez & Luz's calibration tabulated BOTH δc and δw on a VPDB-like
+        scale, with seawater values offset from VSMOW by 0.27 ‰ (the
+        pre-Coplen-1988 conversion). Their published coefficients only
+        make sense with that small-offset convention — feeding in
+        δw_VPDB = -29.99 ‰ (Coplen 1988 linear conversion of SMOW)
+        instead of -0.27 ‰ shifts the polynomial by ~30 ‰ and gives
+        temperatures ~100 °C off.
+
+        This function accepts δc on VPDB (laboratory convention) and δw on
+        either scale, controlled by ``delta18O_sw_scale``:
+
+          * ``"vsmow"`` (default, modern oceanographic convention): δw is
+            converted to the small-offset VPDB scale (SMOW → -0.27 ‰)
+            used by E&L via :func:`vsmow_to_vpdb` with ``formula='el_bemis'``.
+          * ``"vpdb"`` (raw VPDB): δw is treated as-is — no conversion.
+
+        Parameters
+        ----------
+        delta18O_sw : float
+            Seawater δ¹⁸O in ‰ (on the scale declared by
+            ``delta18O_sw_scale``).
+        delta18O_c : float
+            Carbonate δ¹⁸O in ‰ VPDB.
+        delta18O_sw_scale : {"vpdb", "vsmow"}
+            Reference frame of ``delta18O_sw``.
+
+        Returns
+        -------
+        float
+            Paleotemperature in °C.
+
+        Notes
+        -----
+        Outside the calibrated 16-25 °C window the polynomial returns
+        physically unreasonable values. The function emits a
+        ``UserWarning`` when the output falls outside [0, 35] °C —
+        callers should not treat the number as a calibrated estimate in
+        that case.
+
+        References
+        ----------
+        Erez, J. & Luz, B. (1983). "Experimental paleotemperature equation
+            for planktonic foraminifera." Geochim. Cosmochim. Acta 47(11),
+            2115-2128. (Original calibration on cultured G. sacculifer; the
+            VPDB-like small-offset convention for δw described above.)
+        Coplen, T. B. (1988). "Normalization of oxygen and hydrogen
+            isotope data." Chem. Geol. 72, 293-297.
         """
-        delta_diff = delta18O_c - delta18O_sw
+        # Scale conversion: E&L used the pre-1988 small-offset convention
+        # (Coplen-Tyler), NOT the linear Coplen (1988) formula.
+        if delta18O_sw_scale == "vsmow":
+            delta18O_sw_vpdb = float(vsmow_to_vpdb(delta18O_sw, formula="el_bemis"))
+        elif delta18O_sw_scale == "vpdb":
+            delta18O_sw_vpdb = float(delta18O_sw)
+        else:
+            raise ValueError(
+                f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'"
+            )
+
+        delta_diff = delta18O_c - delta18O_sw_vpdb
         T = 17.0 - 4.52 * delta_diff + 0.03 * (delta_diff**2)
+
+        if not (0.0 <= T <= 35.0):
+            import warnings as _warnings
+            _warnings.warn(
+                f"Erez & Luz (1983) returns T = {T:.2f} °C, which is outside "
+                f"the calibrated 16-25 °C window — the input (δc - δw) = "
+                f"{delta_diff:.2f} ‰ is unphysical or unconvertible. Do "
+                "not interpret the result as a calibrated paleotemperature.",
+                UserWarning,
+                stacklevel=2,
+            )
         return float(T)
 
     @staticmethod
-    def compute_paleotemperature_bemis(delta18O_c: float, genus: str = "generic") -> float:
+    def compute_paleotemperature_bemis(
+        delta18O_c: float,
+        delta18O_sw: float = 0.0,
+        genus: str = "generic",
+        delta18O_sw_scale: str = "vsmow",
+    ) -> float:
         """
-        Bemis et al. (1998) 古温度方程 - Genus-specific 校准
+        Bemis et al. (1998) paleotemperature equation with genus-specific
+        calibrations.
 
-        公式: T(°C) = 16.998 - 4.52 × (δc - δw)
-        包含 genus-specific 修正
+        Equation (Erez & Luz form, refit on a larger culture set, with
+        genus-specific intercepts that incorporate both vital-effect
+        offsets and a δw correction):
 
-        参数:
-            delta18O_c: 碳酸盐 δ¹⁸O (‰ VPDB)
-            genus: 有孔虫属名 ('G. ruber', 'G. sacculifer', 'generic')
+            T(°C) = 16.998 - 4.52 × (δc - δw_eff)
 
-        返回:
-            古温度 (°C)
+        where δw_eff = δw_vpdb + Δ_genus. The published Δ_genus values
+        (Bemis et al. 1998, Table 2) were fitted on the small-offset
+        VPDB scale used by Erez & Luz (δw_VPDB ≈ δw_VSMOW - 0.27 ‰, NOT
+        the Coplen 1988 linear conversion).
+
+        SCALE CONVENTION
+        ----------------
+        Same as :meth:`compute_paleotemperature_erez_luz`. Default scale
+        is ``"vsmow"`` (modern oceanographic convention). The function
+        converts internally using the historical 0.27 ‰ offset. Pass
+        ``delta18O_sw_scale="vpdb"`` if you have already converted.
+
+        Parameters
+        ----------
+        delta18O_c : float
+            Carbonate δ¹⁸O in ‰ VPDB.
+        delta18O_sw : float, default 0.0
+            Seawater δ¹⁸O (default: SMOW, the historical baseline).
+        genus : {"G. ruber", "G. sacculifer", "generic"}
+            Genus-specific calibration. ``"generic"`` applies no extra
+            offset (uses the Erez & Luz coefficients as published).
+        delta18O_sw_scale : {"vpdb", "vsmow"}
+            Reference frame of ``delta18O_sw``.
+
+        Returns
+        -------
+        float
+            Paleotemperature in °C.
+
+        References
+        ----------
+        Bemis, B. E., Spero, H. J., Bijma, J. & Lea, D. W. (1998).
+            "Reevaluation of the oxygen isotopic composition of planktonic
+            foraminifera: Experimental results and revised paleotemperature
+            equations." Paleoceanography 13(2), 150-160.
         """
-        # Genus-specific 水δ¹⁸O 修正值 (相对于标准海水)
+        # Genus-specific δw correction (Bemis et al. 1998, Table 2) — these
+        # were fitted on the small-offset VPDB scale, so the conversion
+        # MUST use the el_bemis formula (Coplen-Tyler offset 0.27 ‰).
+        #
+        # Keyed on the species epithet, and looked up through `_genus_offset`,
+        # which accepts the abbreviated ("G. ruber"), the full binomial
+        # ("Globigerinoides ruber") and the bare epithet, in any case. Looking
+        # these up literally meant that every name a user would realistically
+        # type fell through to `generic` -- silently, with no warning -- and
+        # silently dropping the offset shifts the temperature by 1.22 °C for
+        # G. ruber.
         genus_corrections = {
-            "G. ruber": 0.27,  # 浅层混合层
-            "G. sacculifer": 0.22,  # 次表层
-            "generic": 0.0,
+            "ruber": 0.27,
+            "sacculifer": 0.22,
         }
-        delta18O_sw_correction = genus_corrections.get(genus, genus_corrections["generic"])
+        delta_genus, matched = _genus_offset(genus, genus_corrections)
+        if not matched:
+            import warnings as _warnings
 
-        # 假设标准海水 δ¹⁸O = 0 (可调整为实际值)
-        delta18O_sw = delta18O_sw_correction
+            _warnings.warn(
+                f"No Bemis et al. (1998) offset is tabulated for genus "
+                f"{genus!r}; using the generic calibration "
+                f"({sorted(genus_corrections)} are known). Pass "
+                f"genus='generic' to select it deliberately and silence this.",
+                UserWarning,
+                stacklevel=2,
+            )
 
-        delta_diff = delta18O_c - delta18O_sw
+        if delta18O_sw_scale == "vsmow":
+            delta18O_sw_vpdb = float(vsmow_to_vpdb(delta18O_sw, formula="el_bemis"))
+        elif delta18O_sw_scale == "vpdb":
+            delta18O_sw_vpdb = float(delta18O_sw)
+        else:
+            raise ValueError(
+                f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'"
+            )
+
+        delta_w_effective = delta18O_sw_vpdb + delta_genus
+        delta_diff = delta18O_c - delta_w_effective
         T = 16.998 - 4.52 * delta_diff
+
+        if not (0.0 <= T <= 35.0):
+            import warnings as _warnings
+            _warnings.warn(
+                f"Bemis et al. (1998) returns T = {T:.2f} °C, which is "
+                f"outside the calibrated 16-25 °C window — the input "
+                f"(δc - δw_eff) = {delta_diff:.2f} ‰ is unphysical or "
+                "unconvertible. Do not interpret the result as a calibrated "
+                "paleotemperature.",
+                UserWarning,
+                stacklevel=2,
+            )
         return float(T)
 
     @staticmethod
