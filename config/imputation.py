@@ -234,12 +234,34 @@ def impute_knn(data: np.ndarray, k: int = 5, distance_metric: str = "euclidean")
 
     Parameters:
         data: Input data matrix
-        k: Number of nearest neighbors
-        distance_metric: Distance metric for neighbor finding
+        k: Number of nearest neighbors. Must be >= 1.
+        distance_metric: Distance metric for neighbor finding. Only
+            ``"euclidean"`` is implemented; any other value raises rather than
+            silently falling back to Euclidean. The parameter used to be
+            accepted and ignored, so asking for ``"manhattan"`` quietly
+            returned Euclidean neighbours -- a wrong answer that looked like a
+            successful imputation.
 
     Returns:
         ImputationResult with imputed data
+
+    Raises:
+        ValueError: If k < 1 or distance_metric is not supported.
     """
+    if not isinstance(k, (int, np.integer)) or isinstance(k, bool):
+        raise ValueError(f"k must be an integer, got {type(k).__name__}")
+    if k < 1:
+        # With k <= 0 the neighbour slice is empty, the weights normalise to
+        # nothing, and the weighted sum is exactly 0.0 -- so every imputed
+        # cell silently became zero. Filling missing data with 0 is precisely
+        # what the DAT parser refuses to do, because it pollutes every
+        # downstream mean, PCA and PERMANOVA result.
+        raise ValueError(f"k must be >= 1, got {k}")
+    if distance_metric != "euclidean":
+        raise ValueError(
+            f"unsupported distance_metric {distance_metric!r}; only 'euclidean' is implemented"
+        )
+
     logger.info(f"Performing KNN imputation with k={k}")
     result_data = data.copy().astype(float)
     nan_mask = np.isnan(result_data)
@@ -407,6 +429,15 @@ def impute(data: np.ndarray, method: ImputationMethod, **kwargs) -> ImputationRe
     if data.size == 0:
         raise ValueError("Cannot impute empty data")
 
+    # Validate the method *before* the no-NaN early return below. The dispatch
+    # at the bottom of this function only reached its `else` branch when the
+    # matrix actually contained a NaN, so an invalid method was accepted
+    # silently on a clean matrix and rejected on a dirty one -- the same bad
+    # input, two different outcomes, decided by the data rather than by the
+    # call.
+    if not isinstance(method, ImputationMethod):
+        raise ValueError(f"Unknown imputation method: {method!r}")
+
     nan_count = int(np.sum(np.isnan(data)))
     if nan_count == 0:
         logger.info("No missing values found, returning copy of data")
@@ -419,11 +450,18 @@ def impute(data: np.ndarray, method: ImputationMethod, **kwargs) -> ImputationRe
     elif method == ImputationMethod.MEDIAN:
         return impute_median(data)
     elif method == ImputationMethod.KNN:
+        # Forward both KNN options. Forwarding only `k` would leave
+        # `impute(data, KNN, distance_metric="manhattan")` silently running
+        # euclidean, which is the same dead-parameter hazard one level up.
         k = kwargs.get("k", 5)
-        return impute_knn(data, k=k)
+        distance_metric = kwargs.get("distance_metric", "euclidean")
+        return impute_knn(data, k=k, distance_metric=distance_metric)
     elif method == ImputationMethod.REMOVE_ROWS:
         return remove_rows_with_nan(data)
     elif method == ImputationMethod.REMOVE_COLUMNS:
         return remove_columns_with_nan(data)
     else:
-        raise ValueError(f"Unknown imputation method: {method}")
+        # Unreachable while every ImputationMethod has a branch above, and
+        # kept on purpose: adding a member to the enum without wiring it up
+        # here should fail loudly rather than fall through as a no-op.
+        raise ValueError(f"Unknown imputation method: {method!r}")
