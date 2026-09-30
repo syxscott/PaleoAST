@@ -28,7 +28,12 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from ._rbridge import as_float, matrix_to_array, r, r_data_frame, r_matrix, require
+# Imported from ._rbridge rather than from rpy2 directly: _rbridge is the only
+# module that is allowed to know how to reach R, and its module-level
+# importorskip is what turns "no R here" into a skip. An `import rpy2` above
+# this line would raise instead, turning a skip into a collection error on
+# every machine without R.
+from ._rbridge import ListVector, StrVector, as_float, matrix_to_array, r, r_matrix, require
 
 pytestmark = pytest.mark.cross_validation
 
@@ -58,29 +63,33 @@ def _grouped_dataset() -> tuple[np.ndarray, list[str]]:
 def _r_adonis2_table(data: np.ndarray, groups: list[str]):
     """The result table of ``vegan::adonis2`` for this dataset.
 
-    Two things about adonis2 that the previous version of this file got wrong,
-    both of them stated in the R documentation:
+    Three things about adonis2 that the previous version of this file got wrong,
+    all of them stated in the R documentation (``?adonis2``):
 
-    * **The formula needs a left-hand side.** adonis2 partitions *distances*,
-      so the LHS must be a community data matrix or a dissimilarity matrix. A
-      bare ``~ group`` has no response at all. Writing the response variables
-      as ``v1 + v2 + ... ~ group`` makes the LHS a multi-column response, which
-      is exactly a community data matrix.
+    * **The LHS of the formula must be a matrix.** adonis2 partitions
+      *distances*, and the docs say the LHS "must be either a community data
+      matrix or a dissimilarity matrix". Naming the columns one by one
+      (``v1 + v2 + v3 ~ group``) makes ``model.frame`` build a *multi-column
+      data frame* response instead, and adonis2 then fails trying to turn that
+      into a distance matrix -- surfacing as
+      ``Error in eval(YVAR, parent.frame(), environment(formula))``. The
+      documented form puts a single matrix in the data frame and names it:
+      ``as.formula(paste("counts_matrix", rhs, sep = " ~ "))``.
+    * **The response must be a real matrix, not a flattened vector.** It is
+      passed through ``r_matrix``, which flattens column-major to match R's
+      storage order.
     * **The return value is an ``anova.cca`` object, not the data frame.** The
       per-term statistics live in its ``table`` element, with columns ``Df``,
       ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)`` and one row per term plus
       ``Residual`` and ``Total``.
     """
-    n_var = data.shape[1]
-    columns = {f"v{i + 1}": data[:, i] for i in range(n_var)}
-    columns["group"] = groups
-    # `group` must arrive as a factor; a character column makes R model it as
-    # numeric and the test is then silently a different test.
-    frame = r_data_frame(columns, factors=("group",))
+    columns = {
+        "spec": r_matrix(data),  # the community data matrix, kept as a matrix column
+        "group": r("factor")(StrVector([str(g) for g in groups])),
+    }
+    frame = r("data.frame")(ListVector(columns), check_names=False)
 
-    response = " + ".join(f"v{i + 1}" for i in range(n_var))
-    formula = r("as.formula")(f"{response} ~ group")
-
+    formula = r("as.formula")("spec ~ group")
     result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
     return result.rx2("table")
 

@@ -51,18 +51,30 @@ def _paleo_chao1(abundances: np.ndarray) -> float:
     return float(compute_diversity_indices(np.asarray(abundances, dtype=float)).indices["chao1"].value)
 
 
+#: Column names this file reads out of an ``iNEXT::ChaoRichness`` data.frame.
+#: The estimate column is ``Estimator``, not ``Est`` -- confirmed against the
+#: real return value, whose names are
+#: ``['Observed', 'Estimator', 'Est_s.e.', '95% Lower', '95% Upper']``.
+#: ``Est_s.e.`` is a *different* quantity (the standard error), so guessing a
+#: prefix here would have compared the estimate against its own error bar.
+_CHAO_OBSERVED = "Observed"
+_CHAO_ESTIMATE = "Estimator"
+
+
 def _chao_columns(result) -> tuple[int, int]:
-    """Locate the ``Observed`` and ``Est`` columns of a ChaoRichness result.
+    """Locate the ``Observed`` and ``Estimator`` columns of a ChaoRichness result.
 
     Read by name rather than by position, and refuse to guess: the previous
     version of this file assumed a fixed column layout and would have compared
-    the wrong numbers -- or the standard error -- without saying so.
+    the wrong numbers -- or the standard error -- without saying so. That
+    refusal is also what made the ``Est``/``Estimator`` mix-up obvious instead
+    of silent.
     """
     names = list(result.names)
-    missing = [c for c in ("Observed", "Est") if c not in names]
+    missing = [c for c in (_CHAO_OBSERVED, _CHAO_ESTIMATE) if c not in names]
     if missing:
         raise AssertionError(f"iNEXT::ChaoRichness result has no column(s) {missing}; it returned {names}")
-    return names.index("Observed"), names.index("Est")
+    return names.index(_CHAO_OBSERVED), names.index(_CHAO_ESTIMATE)
 
 
 def _r_chao(abundances: np.ndarray) -> tuple[float, float]:

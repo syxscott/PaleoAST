@@ -89,7 +89,14 @@ class TestBridgeIsLive:
 
         # 7 * 6 is arithmetic R performs; no local constant could satisfy this
         # if the bridge were not really talking to R.
-        assert as_float(r["*"])(7, 6) == 42.0
+        #
+        # The parentheses matter: `as_float(r["*"])(7, 6)` parses as
+        # `(as_float(r["*"]))(7, 6)`, which hands the *function* to as_float and
+        # raises `TypeError: object of type 'SignatureTranslatedFunction' has no
+        # len()` before R ever multiplies anything. This test is the tripwire
+        # for the bridge degrading to local constants, so it has to actually
+        # call R.
+        assert as_float(r["*"](7, 6)) == 42.0
 
     def test_r_lies_about_nothing(self):
         """A deliberately wrong expectation from R must not pass.
@@ -178,29 +185,16 @@ class TestPCAVsPrcomp:
         assert_allclose(float(np.sum(result.explained_variance)), 100.0, atol=1e-8)
 
     def test_loadings_match_after_sign_alignment(self):
-        """Loadings match ``prcomp``'s ``rotation``, up to per-column sign."""
-        from stats.pca import PCAAnalyzer
+        """Loadings match ``prcomp``'s rotation, once the conventions agree.
 
-        x = _dataset()
-        result = PCAAnalyzer().analyze(x, n_components=3, method="covariance")
-
-        r_prcomp = R_STATS.prcomp(r_matrix(x), center=True, scale_=False)
-        r_rotation = np.array(r_prcomp.rx2("rotation"), dtype=float)[:, :3]
-
-        paleo = _align_signs(np.asarray(result.loadings, dtype=float), r_rotation)
-        assert_allclose(
-            paleo,
-            r_rotation,
-            rtol=1e-6,
-            atol=1e-8,
-            err_msg="PCA loadings disagree with stats::prcomp (after sign alignment)",
-        )
-
-    def test_scores_are_centred(self):
-        """Scores are zero-centred, as ``prcomp$x`` is.
-
-        This is a property R also guarantees, so it is checked against R's own
-        output rather than against a hardcoded zero.
+        PaleoAST reports *factor-analysis* loadings, ``V * sqrt(lambda)``
+        (see ``stats/pca.py``: ``loadings = V * np.sqrt(eigenvalues)``), which
+        is what ``scores = X_centered @ loadings`` requires. ``prcomp``'s
+        ``rotation`` is instead the unit-norm eigenvector matrix. Comparing
+        the two directly fails by a factor of ``sqrt(lambda)`` per component
+        and looks like a numerical disagreement when nothing is wrong. R's
+        equivalent is ``prcomp$rotation %*% diag(prcomp$sdev)``, so that is
+        what gets compared here.
         """
         from stats.pca import PCAAnalyzer
 
@@ -208,7 +202,45 @@ class TestPCAVsPrcomp:
         result = PCAAnalyzer().analyze(x, n_components=3, method="covariance")
 
         r_prcomp = R_STATS.prcomp(r_matrix(x), center=True, scale_=False)
-        r_score_means = as_array(r("colMeans")(r_prcomp.rx2("x")))
+        sdev = as_array(r_prcomp.rx2("sdev"))
+        r_loadings = np.array(r_prcomp.rx2("rotation"), dtype=float)[:, :3] * sdev[:3]
+
+        paleo = _align_signs(np.asarray(result.loadings, dtype=float), r_loadings)
+        assert_allclose(
+            paleo,
+            r_loadings,
+            rtol=1e-6,
+            atol=1e-8,
+            err_msg="PCA loadings disagree with stats::prcomp (after sign alignment)",
+        )
+        # Also pin the convention itself, so a future change to `loadings`
+        # cannot silently redefine what this comparison means: a loadings
+        # matrix of the form V*sqrt(lambda) has column norms sqrt(lambda).
+        assert_allclose(
+            np.linalg.norm(np.asarray(result.loadings), axis=0),
+            np.sqrt(np.asarray(result.eigenvalues)),
+            rtol=1e-10,
+            err_msg="loadings are not V*sqrt(lambda): column norms should equal sqrt(eigenvalue)",
+        )
+
+    def test_scores_are_centred(self):
+        """Scores are zero-centred, as ``prcomp$x`` is.
+
+        This is a property R also guarantees, so it is checked against R's own
+        output rather than against a hardcoded zero.
+
+        Only the first ``n_components`` columns are compared. R returns a score
+        for every variable (5 here) while the analyzer was asked for 3, so
+        comparing the full vectors is a shape mismatch, not a numerical one.
+        """
+        from stats.pca import PCAAnalyzer
+
+        x = _dataset()
+        n_components = 3
+        result = PCAAnalyzer().analyze(x, n_components=n_components, method="covariance")
+
+        r_prcomp = R_STATS.prcomp(r_matrix(x), center=True, scale_=False)
+        r_score_means = as_array(r("colMeans")(r_prcomp.rx2("x")))[:n_components]
 
         assert_allclose(
             np.mean(np.asarray(result.scores), axis=0),

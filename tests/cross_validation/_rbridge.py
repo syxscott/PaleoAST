@@ -36,6 +36,9 @@ from rpy2.robjects import FloatVector, ListVector, StrVector
 from rpy2.robjects.packages import importr
 
 __all__ = [
+    "FloatVector",
+    "ListVector",
+    "StrVector",
     "as_array",
     "as_float",
     "matrix_to_array",
@@ -78,9 +81,15 @@ def r_vector(values) -> robjects.FloatVector:
 def r_matrix(values) -> robjects.FloatVector:
     """An R base *matrix* (2-D, column-major) from a 2-D numpy array.
 
-    ``FloatVector`` is flat and column-major, which is exactly R's storage
-    order, so flattening with ``ravel()`` and restoring the shape with ``dim=``
-    is lossless.
+    Flattening and restoring the shape is lossless **only** because
+    ``r_array`` flattens in column-major (``order="F"``) order, which is R's
+    storage order. Flattening row-major and letting ``array(data, dim=)`` fill
+    column-major scrambles the data instead of transcribing it: for the 30x5
+    matrix the cross-validation suite uses, 148 of 150 entries land in the
+    wrong position, and the result is not even a transpose, so no caller-side
+    reshape can recover it. R would then run prcomp/vegan/ape on different
+    data than the test intended, and every comparison would be against the
+    wrong matrix.
     """
     return r_array(values)
 
@@ -91,6 +100,13 @@ def r_array(values) -> robjects.FloatVector:
     geomorph takes landmark configurations as a 3-D array
     (specimens x landmarks x dimensions), so 2-D-only would not do.
 
+    The flatten is ``order="F"`` (column-major) on purpose. R's ``array()``
+    fills its storage column by column, so element ``(i, j)`` of an
+    ``nrow x ncol`` array is flat position ``i + nrow * j``. numpy's default
+    ``ravel()`` is row-major, so pairing it with ``array(data, dim=)`` sends a
+    scrambled matrix to R -- an easy mistake to make because the failure looks
+    like a legitimate numerical disagreement rather than a crash.
+
     Uses ``array(data, dim=)`` rather than the replacement form ``dim<-``. The
     subscript spelling of a replacement function is looked up as a *variable*
     name in the global environment and raises
@@ -100,7 +116,7 @@ def r_array(values) -> robjects.FloatVector:
     arr = np.asarray(values, dtype=float)
     if arr.ndim == 0:
         raise ValueError("r_array needs at least one dimension")
-    vec = FloatVector(arr.ravel(order="C").tolist())
+    vec = FloatVector(arr.ravel(order="F").tolist())
     return r("array")(vec, dim=FloatVector([float(n) for n in arr.shape]))
 
 
@@ -182,8 +198,20 @@ def matrix_to_array(value) -> np.ndarray:
     skipped the first row and column and would have raised on the last. Going
     through the storage order instead means there is no index base to get wrong,
     and it works for any number of dimensions.
+
+    ``dist`` objects are converted first. ``vegan::vegdist`` returns a
+    ``dist``, and R's ``dim()`` on a ``dist`` is NULL (a ``dist`` carries
+    ``Size``, not ``dim``), so reading the shape off it raised
+    ``TypeError: 'NULLType' object is not iterable``. ``as.matrix()`` turns it
+    into the full symmetric n x n matrix, which is also the shape the
+    PaleoAST side produces -- so the comparison becomes like-for-like instead
+    of comparing a matrix against a condensed upper triangle.
     """
-    dims = [int(as_float(d)) for d in r("dim")(value)]
+    dims_obj = r("dim")(value)
+    if type(dims_obj).__name__ == "NULLType":
+        value = r("as.matrix")(value)
+        dims_obj = r("dim")(value)
+    dims = [int(as_float(d)) for d in dims_obj]
     flat = as_array(r("as.numeric")(value))
     return flat.reshape(dims, order="F")
 
