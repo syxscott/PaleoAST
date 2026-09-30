@@ -75,21 +75,28 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
       ``Error in eval(YVAR, parent.frame(), environment(formula))``. The
       documented form puts a single matrix in the data frame and names it:
       ``as.formula(paste("counts_matrix", rhs, sep = " ~ "))``.
-    * **The response must be a real matrix, not a flattened vector.** It is
-      passed through ``r_matrix``, which flattens column-major to match R's
-      storage order.
+    * **The formula is evaluated in its own environment.** adonis2 resolves the
+      LHS there, not in ``data``: naming a column of the data frame produced
+      ``object 'spec' not found`` from ``eval(YVAR, parent.frame(),
+      environment(formula))``. ``?adonis2`` says ``data`` carries "the data
+      frame for the independent variables", so the community matrix is assigned
+      into a dedicated environment that the formula is then built in. A local
+      environment is used rather than the global one so nothing leaks between
+      tests.
     * **The return value is an ``anova.cca`` object, not the data frame.** The
       per-term statistics live in its ``table`` element, with columns ``Df``,
       ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)`` and one row per term plus
       ``Residual`` and ``Total``.
     """
-    columns = {
-        "spec": r_matrix(data),  # the community data matrix, kept as a matrix column
-        "group": r("factor")(StrVector([str(g) for g in groups])),
-    }
-    frame = r("data.frame")(ListVector(columns), check_names=False)
+    group = r("factor")(StrVector([str(g) for g in groups]))
 
-    formula = r("as.formula")("spec ~ group")
+    env = r("new.env")()
+    r("assign")("spec", r_matrix(data), env=env)
+    r("assign")("group", group, env=env)
+
+    frame = r("data.frame")(ListVector({"group": group}), check_names=False)
+    formula = r("as.formula")("spec ~ group", env=env)
+
     result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
     return result.rx2("table")
 

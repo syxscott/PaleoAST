@@ -21,6 +21,22 @@ exactly, so this quantity is invariant to rotation, reflection and translation.
 It is therefore a faithful fingerprint of the shape while being free of the
 arbitrary conventions that make a raw coordinate comparison meaningless.
 
+Scale has to be handled separately, and this was the one gap in the argument
+above. A rigid transform is not a similarity: **scaling changes every
+inter-landmark distance**. The two implementations do not agree on scale --
+``geomorph::gpagen`` returns the consensus in the original units, while
+``morphometrics.gpa.GPAAnalyzer`` performs a documented "Scale to unit size"
+step -- and on this fixture that difference is a factor of about 5.45. Every
+distance comparison here therefore goes through ``_unit_centroid_size`` first.
+Without it the comparison measured the scale convention rather than the shape,
+and reported a shape disagreement of ``5.3848`` where the true shape residual
+is ``0.0318`` (the jitter the fixture injects).
+
+The unit-size step in ``GPAAnalyzer`` is a deliberate, documented product
+decision and is left alone here: other consumers may rely on it, and changing a
+scientific module's output convention is not a test's call. What the test does
+is compare on a footing where the convention cannot leak in.
+
 References
 ----------
     Adams, D.C. & Otarola-Castillo, E. (2013). geomorph: an R package for the
@@ -60,12 +76,36 @@ def _configurations() -> np.ndarray:
     return np.array(specimens)
 
 
+def _unit_centroid_size(config: np.ndarray) -> np.ndarray:
+    """Centre a configuration and divide by its centroid size.
+
+    Needed before any inter-landmark distance is compared between the two
+    implementations, because they do not agree on scale. ``geomorph::gpagen``
+    returns the consensus in the original units; ``morphometrics.gpa.GPAAnalyzer``
+    performs a documented "Scale to unit size" step, so its consensus has
+    centroid size 1. On this fixture that is a factor of ~5.45, which is far
+    larger than the jitter the fixture injects.
+
+    The module docstring's argument -- that a rigid transform preserves every
+    inter-landmark distance, so the comparison is free of arbitrary
+    conventions -- is correct for rotation, reflection and translation but
+    **not for scaling**. Comparing raw distances therefore measured the scale
+    convention, not the shape: the disagreement was reported as
+    ``assert 5.3848067600016245 < 0.5`` while the shape itself agreed.
+    """
+    centred = np.asarray(config, dtype=float) - np.asarray(config, dtype=float).mean(axis=0)
+    size = np.sqrt(np.sum(centred**2))
+    if size < 1e-12:
+        return centred
+    return centred / size
+
+
 def _pairwise_landmark_distances(consensus: np.ndarray) -> np.ndarray:
-    """The rotation/reflection/translation-invariant fingerprint.
+    """The rotation/reflection/translation/scale-invariant fingerprint.
 
     Takes the upper triangle so the result is a flat, order-stable vector.
     """
-    consensus = np.asarray(consensus, dtype=float)
+    consensus = _unit_centroid_size(consensus)
     distances = np.linalg.norm(consensus[:, None, :] - consensus[None, :, :], axis=-1)
     return distances[np.triu_indices(consensus.shape[0], k=1)]
 
@@ -171,6 +211,10 @@ class TestGPAVsGeomorph:
         and if GPA were doing nothing the residuals would be zero. This pins
         the fixture, so a failure in the comparisons above can be read as a
         disagreement rather than as a broken test setup.
+
+        Measured through ``_pairwise_landmark_distances``, so this is a shape
+        residual with the scale convention divided out. The fixture injects
+        0.05-scale jitter, and the measured magnitude is 0.0318.
         """
         from morphometrics.gpa import GPAAnalyzer
 

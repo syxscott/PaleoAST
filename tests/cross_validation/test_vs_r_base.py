@@ -250,4 +250,8 @@ class TestPCAVsPrcomp:
         # A vector of zeros would pass the comparison above trivially, so also
         # assert the scores are not degenerate.
         assert float(np.std(np.asarray(result.scores))) > 1e-6
-        assert as_float(as_array(r("sum")(r_prcomp.rx2("x") ** 2)) > 0.0)
+        # R's own exponentiation operator, not Python's `**`: prcomp$x is an
+        # R matrix, and rpy2's FloatMatrix does not implement `__pow__`, so
+        # `scores ** 2` raises "unsupported operand type(s) for ** or pow()".
+        total_ss = r("sum")(r("^")(r_prcomp.rx2("x"), 2))
+        assert as_float(as_array(total_ss)) > 0.0

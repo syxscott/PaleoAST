@@ -81,8 +81,15 @@ def _r_chao(abundances: np.ndarray) -> tuple[float, float]:
     """(observed richness, Chao1 estimate) from iNEXT, for one sample."""
     result = _CHAO_RICHNESS(_r_single_sample(abundances))
     observed_col, est_col = _chao_columns(result)
-    # Row 0 is the default estimator, Chao1.
-    return as_float(result[0, observed_col]), as_float(result[0, est_col])
+    names = list(result.names)
+    # Read column-then-row, never result[row, col]. ChaoRichness returns a
+    # data.frame, and rpy2 indexes a data.frame as a list of columns: a tuple
+    # index reaches rinterface.ListSexpVector.__getitem__, which rejects it
+    # with "Indices must be integers or slices, not <class 'tuple'>". Row 0 is
+    # the default estimator, Chao1.
+    observed = as_float(result[names[observed_col]][0])
+    estimate = as_float(result[names[est_col]][0])
+    return observed, estimate
 
 
 def _r_chao1(abundances: np.ndarray) -> float:
