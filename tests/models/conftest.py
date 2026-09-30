@@ -15,7 +15,29 @@ _PROJECT_ROOT = __import__("pathlib").Path(__file__).parent.parent.parent
 
 
 def _patch_event_bus_only():
-    """Patch only utils.event_bus (PyQt6 dep) without replacing state_manager."""
+    """Patch only utils.event_bus (PyQt6 dep) without replacing state_manager.
+
+    Only does anything when PyQt6 is genuinely unavailable. Installing a
+    ``sys.modules`` mock unconditionally is process-global, and popping it
+    again afterwards cannot undo it: any module that already ran
+    ``from utils.event_bus import get_event_bus`` keeps the mock bound in its
+    OWN namespace for the rest of the session. That is how the mock leaked
+    into tests/test_regression_bugfixes.py, where
+    ``spreadsheet.data_changed.connect(...)`` hit the mock's
+    ``__getattr__`` -- which answers every attribute with a plain lambda --
+    and raised ``AttributeError: 'function' object has no attribute
+    'connect'``.
+
+    With PyQt6 present there is no headless problem to solve here, so the
+    real module is used and nothing leaks.
+    """
+    try:
+        import PyQt6.QtCore  # noqa: F401
+    except ImportError:
+        pass  # genuinely headless: fall through and install the mock
+    else:
+        return
+
     mock_event_bus = ModuleType("utils.event_bus")
 
     class MockQObject:
