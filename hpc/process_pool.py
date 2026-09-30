@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -20,6 +21,8 @@ from multiprocessing import Manager, Pool
 from typing import Any, TypeVar
 
 import numpy as np
+
+from utils.exceptions import ComputationError
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,10 @@ class ProcessPool:
         self._progress_queue = self._manager.Queue()
         self._tasks: dict[str, Task] = {}
         self._results: dict[str, Any] = {}
+        # Failures recorded by error_callback, so a crashed task can be told
+        # apart from one that has not finished yet.
+        self._errors: dict[str, str] = {}
+        self._shutdown = False
         self._logger = logging.getLogger(f"{__name__}.ProcessPool")
 
     def __enter__(self):
@@ -149,6 +156,7 @@ class ProcessPool:
             self._manager = None
 
         self._logger.info("Process pool shut down")
+        self._shutdown = True
 
     def map(
         self,
@@ -156,6 +164,7 @@ class ProcessPool:
         items: list[Any],
         chunk_size: int = 1,
         callback: Callable[[R], None] | None = None,
+        raise_on_error: bool = True,
     ) -> list[R]:
         """
         并行映射
@@ -165,10 +174,32 @@ class ProcessPool:
             items: 输入项列表
             chunk_size: 每个任务处理的项数
             callback: 结果回调
+            raise_on_error: 默认 True。任一 item 失败即抛错。
+                设为 False 则返回带 ``None`` 空洞、部分 chunk 可能缺失的
+                列表（仅在你确实要"尽力而为"时使用）。
 
         返回:
             结果列表
+
+        Raises:
+            ComputationError: 有 item 失败或 chunk 整体失败，且
+                ``raise_on_error`` 为 True。
+
+        Note:
+            旧实现在 item 失败时只写一条日志就把 ``None`` 放进结果里，
+            chunk 整体失败时甚至直接跳过——调用方拿到的是一个"看起来
+            完整"的列表，无法分辨哪个输入失败了。bootstrap 统计量算出来
+            就会少掉那些重复。
         """
+        if self._shutdown:
+            # shutdown() released the Manager as well as the pool, so
+            # start() here would silently resurrect a set of processes the
+            # caller had just torn down. Say so instead.
+            raise ComputationError(
+                "This ProcessPool has been shut down and cannot accept more "
+                "work; construct a new ProcessPool."
+            )
+
         if self._pool is None:
             self.start()
 
@@ -178,19 +209,29 @@ class ProcessPool:
         # 分块
         chunks = self._chunk_items(items, chunk_size)
 
-        results = []
         total = len(chunks)
+        failed_chunks: list[int] = []
 
+        # (chunk_index, chunk, future) triples rather than a bare list of
+        # futures. A bare list desynchronises from `chunks` as soon as one
+        # submission raises -- the failed chunk is not appended -- and then
+        # `enumerate(results)` indexes the wrong chunk for every later failure.
+        # That misattribution is exactly what this function now exists to
+        # prevent, so the pairing is carried explicitly instead of implied.
+        submitted: list[tuple[int, list, Any]] = []
         for i, chunk in enumerate(chunks):
             try:
                 result = self._pool.apply_async(_worker_map, args=(func, chunk))
-                results.append(result)
             except Exception as e:
                 self._logger.error(f"Failed to submit chunk {i}: {e}")
+                failed_chunks.append(i)
+                continue
+            submitted.append((i, chunk, result))
 
         # 收集结果
-        output = []
-        for i, result in enumerate(results):
+        output: list[Any] = []
+        failed_items: list[Any] = []
+        for i, chunk, result in submitted:
             try:
                 chunk_result = result.get(timeout=300)
                 output.extend(chunk_result)
@@ -201,14 +242,26 @@ class ProcessPool:
                             callback(item)
 
                 # 更新进度
-                failed = sum(1 for item in chunk_result if item is None)
-                if failed > 0:
-                    self._logger.warning(f"Chunk {i}: {failed}/{len(chunk_result)} items failed")
+                for position, value in enumerate(chunk_result):
+                    if value is None:
+                        failed_items.append(chunk[position])
                 progress = (i + 1) / total
                 self._report_progress(progress, f"Processed chunk {i + 1}/{total}")
 
             except Exception as e:
                 self._logger.error(f"Chunk {i} failed: {e}")
+                failed_chunks.append(i)
+                failed_items.extend(chunk)
+
+        if (failed_items or failed_chunks) and raise_on_error:
+            raise ComputationError(
+                f"map() had {len(failed_items)} failing item(s) "
+                f"and {len(failed_chunks)} failing chunk(s); returning the "
+                f"survivors would silently misrepresent which inputs were "
+                f"processed. Failing items: {failed_items[:10]}"
+                f"{' ...' if len(failed_items) > 10 else ''}. Pass "
+                f"raise_on_error=False to get a best-effort list instead."
+            )
 
         return output
 
@@ -233,11 +286,14 @@ class ProcessPool:
             self.start()
 
         # 提交到进程池，添加回调收集结果
+        # ``error_callback`` receives only the exception, so the id is bound
+        # through a closure -- otherwise a transport-level failure cannot be
+        # attributed to a task and stays invisible.
         self._pool.apply_async(
             _worker_execute,
             args=(func, args, kwargs, task_id),
             callback=self._on_task_complete,
-            error_callback=self._on_task_error,
+            error_callback=lambda exc, tid=task_id: self._on_task_error(exc, tid),
         )
 
         return task
@@ -255,25 +311,67 @@ class ProcessPool:
                 task.status = TaskStatus.FAILED
                 task.error = error
 
-    def _on_task_error(self, error: Exception) -> None:
-        """任务错误回调"""
-        self._logger.error(f"Task failed with exception: {error}")
+    def _on_task_error(self, error: Exception, task_id: str | None = None) -> None:
+        """Mark a task FAILED instead of only logging.
+
+        This is the ``error_callback`` of ``apply_async``, so it fires when the
+        failure is at the transport level (the worker died, the payload could
+        not be pickled). The old version only logged, which left the task
+        PENDING forever: ``get_result`` then raised ``KeyError`` that read
+        like "not ready yet", and ``wait_all`` never saw it finish. A crashed
+        task was indistinguishable from a slow one.
+        """
+        self._logger.error(f"Task {task_id} failed with exception: {error}")
+        if task_id is not None and task_id in self._tasks:
+            task = self._tasks[task_id]
+            task.status = TaskStatus.FAILED
+            task.error = str(error)
+            # Recorded so get_result can raise the real cause, and so
+            # wait_all counts it as finished.
+            self._errors[task_id] = error
 
     def get_result(self, task_id: str, timeout: float | None = None) -> Any:
         """
-        获取任务结果
+        获取任务结果，**等待**至完成
 
         参数:
             task_id: 任务ID
-            timeout: 超时时间
+            timeout: 最长等待秒数。``None`` 表示一直等。
 
         返回:
             任务结果
-        """
-        if task_id not in self._results:
-            raise KeyError(f"Task {task_id} not found or not completed")
 
-        return self._results[task_id]
+        Raises:
+            KeyError: 任务ID未提交
+            TimeoutError: 超时仍未完成
+            RuntimeError: 任务失败（附原因）
+
+        Note:
+            ``submit_task`` is asynchronous, so the natural
+            ``submit_task(...)`` then ``get_result(...)`` sequence used to
+            raise ``KeyError: not found or not completed`` whenever the
+            worker had not finished yet -- the ``timeout`` parameter was
+            accepted and never used.
+        """
+        if task_id not in self._tasks:
+            raise KeyError(f"Task {task_id} was never submitted to this pool")
+
+        deadline = None if timeout is None else time.time() + timeout
+        while True:
+            if task_id in self._results:
+                return self._results[task_id]
+            if task_id in self._errors:
+                raise RuntimeError(
+                    f"Task {task_id} failed: {self._errors[task_id]}"
+                )
+            task = self._tasks.get(task_id)
+            if task is not None and task.status is TaskStatus.FAILED:
+                raise RuntimeError(f"Task {task_id} failed: {task.error}")
+            if deadline is not None and time.time() > deadline:
+                raise TimeoutError(
+                    f"Task {task_id} did not complete within {timeout}s"
+                )
+            time.sleep(0.01)
 
     def wait_all(self, timeout: float | None = None) -> dict[str, Any]:
         """
@@ -352,10 +450,18 @@ class ProcessPool:
         参数:
             data: 输入数据
             n_bootstraps: Bootstrap次数
-            statistic_func: 统计函数
+            statistic_func: 统计函数。
+
+                **必须可 pickle**——它在 worker 进程里执行，闭包、
+                lambda、局部函数都无法跨进程传递。
 
         返回:
             Bootstrap统计量列表
+
+        Raises:
+            ComputationError: 任一重复失败。旧实现在这种情况下把
+                ``None`` 放进结果里，调用方算出的 ``np.mean`` 是 NaN，
+                却看不出有 40 个重复没跑成。
 
         Notes:
             ``statistic_func`` is honoured. It used to be accepted, documented
