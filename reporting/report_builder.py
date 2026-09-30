@@ -173,7 +173,10 @@ class ReportBuilder:
             keywords: 关键词列表
         """
         if keywords:
-            abstract += f"\\par\\textbf{{Keywords:}} {', '.join(keywords)}"
+            # Keywords are caller-supplied text, same as the section titles and
+            # captions escaped below. An author typing "N=5 & 95% CI" would
+            # otherwise emit broken LaTeX.
+            abstract += "\\par\\textbf{Keywords:} " + ", ".join(_escape_latex(str(k)) for k in keywords)
         self._abstract = abstract
         return self
 
@@ -400,7 +403,11 @@ class ReportBuilder:
         # 章节命令
         section_cmd = {1: "\\section", 2: "\\subsection", 3: "\\subsubsection"}.get(section.level, "\\section")
 
-        label_part = f"\\label{{{section.label}}}" if section.label else ""
+        # The label is escaped for the same reason the title is: it is
+        # caller-supplied, and a stray brace or underscore in it breaks the
+        # document. Escaping one and not the other, two lines apart, is how
+        # the gap existed in the first place.
+        label_part = f"\\label{{{_escape_latex(section.label)}}}" if section.label else ""
         # Caller-supplied title must be escaped (figure_handler and
         # table_generator do the same for their captions); previously a
         # title such as ``Body_mass & 95%`` was interpolated raw and
