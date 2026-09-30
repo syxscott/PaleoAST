@@ -41,6 +41,76 @@ from utils.validators import validate_data_array
 logger = logging.getLogger(__name__)
 
 
+def _compute_canonical_eigenvalues(
+    data: npt.NDArray, groups: npt.NDArray, n_components: int
+) -> npt.NDArray:
+    """
+    Compute the canonical roots of the generalized eigenproblem
+        S_W^{-1} S_B w = lambda w
+    (Fisher 1936), where S_B is the between-class scatter and S_W the
+    within-class scatter.
+
+    These are the numbers R's ``lda::lda`` reports as the canonical
+    eigenvalues; they are unbounded (larger == better separation), unlike
+    the [0, 1] explained-variance proportions sklearn exposes.
+
+    Returns an empty array when S_W is singular (so the canonical
+    problem is undefined) -- callers should treat that as "not
+    available" rather than as zero.
+    """
+    _n_samples, n_vars = data.shape
+    overall_mean = data.mean(axis=0)
+    unique_groups = np.unique(groups)
+
+    # Between-class scatter: S_B = Σ_k n_k (mu_k - mu)(mu_k - mu)'
+    S_B = np.zeros((n_vars, n_vars))
+    for g in unique_groups:
+        in_g = groups == g
+        n_k = int(np.sum(in_g))
+        if n_k == 0:
+            continue
+        mu_k = data[in_g].mean(axis=0)
+        d = (mu_k - overall_mean).reshape(-1, 1)
+        S_B += n_k * (d @ d.T)
+
+    # Within-class scatter: S_W = Σ_k Σ_{i in C_k} (x_i - mu_k)(x_i - mu_k)'
+    S_W = np.zeros((n_vars, n_vars))
+    for g in unique_groups:
+        in_g = groups == g
+        if int(np.sum(in_g)) < 2:
+            continue
+        mu_k = data[in_g].mean(axis=0)
+        diff = data[in_g] - mu_k
+        S_W += diff.T @ diff
+
+    # S_W may be singular when n_classes > 1 but the data lies in a
+    # lower-dimensional subspace (e.g. only 2 unique samples per class).
+    # Fall back to a small ridge to keep the eigenproblem well-posed.
+    cond = np.linalg.cond(S_W)
+    if not np.isfinite(cond) or cond > 1e10:
+        S_W = S_W + 1e-8 * np.eye(n_vars)
+
+    try:
+        # Solve S_W^{-1} S_B w = lambda w via the symmetric generalized
+        # eigenproblem formulation: cholesky of S_W, reduce to the
+        # symmetric S_W^{-1/2} S_B S_W^{-1/2} problem.
+        L = np.linalg.cholesky(S_W)
+        # L L' = S_W  =>  L^{-1} S_B L^{-T} is the symmetric reduction
+        Linv = np.linalg.inv(L)
+        M = Linv @ S_B @ Linv.T
+        M = 0.5 * (M + M.T)  # enforce symmetry
+        roots = np.linalg.eigvalsh(M)
+        # Sort descending and take the top n_components (canonical roots
+        # can be negative when S_B is indefinite, e.g. when there are
+        # fewer samples than variables -- clip to 0 for downstream use).
+        roots = np.sort(roots)[::-1][:n_components]
+        roots = np.maximum(roots, 0.0)
+        return roots
+    except np.linalg.LinAlgError:
+        # S_W truly singular; canonical roots are not defined.
+        return np.array([], dtype=float)
+
+
 @dataclass
 class LDAResult:
     """
@@ -49,8 +119,23 @@ class LDAResult:
     Attributes:
         scores: LD score matrix (n_samples x n_components)
         loadings: Discriminant coefficient matrix (n_variables x n_components)
-        explained_variance_ratio: Proportion of between-class variance explained
-        eigenvalues: Eigenvalues of the discriminant problem
+        explained_variance_ratio: Proportion of between-class variance
+            explained (alias for ``eigenvalue_proportions``; kept for
+            backward compatibility).
+        eigenvalue_proportions: Proportion of between-class variance
+            explained by each LD axis. Lies in [0, 1]. Sum across axes
+            is at most 1.
+        eigenvalues: **DEPRECATED NAME** -- kept for backward
+            compatibility, but now holds the same numbers as
+            ``eigenvalue_proportions`` (i.e. the [0, 1] explained-
+            variance proportion), NOT the canonical roots of
+            S_W^{-1} S_B. New code should read ``eigenvalue_proportions``
+            or, for the actual canonical roots, ``eigenvalues_canonical``.
+        eigenvalues_canonical: The true canonical roots of the
+            generalized eigenvalue problem S_W^{-1} S_B w = lambda w
+            (Fisher 1936). These are the numbers R's ``lda::lda``
+            reports as ``$scaling`` eigenvalues -- unbounded, larger
+            means more separation. Empty array if S_W was singular.
         confusion_matrix: Classification confusion matrix
         accuracy: Cross-validated classification accuracy
         n_classes: Number of classes
@@ -64,7 +149,9 @@ class LDAResult:
     scores: npt.NDArray
     loadings: npt.NDArray
     explained_variance_ratio: npt.NDArray
-    eigenvalues: npt.NDArray
+    eigenvalue_proportions: npt.NDArray
+    eigenvalues: npt.NDArray  # alias for eigenvalue_proportions (see note)
+    eigenvalues_canonical: npt.NDArray
     confusion_matrix: npt.NDArray
     accuracy: float
     n_classes: int
@@ -85,7 +172,9 @@ class LDAResult:
             "-" * 50,
         ]
         cum = 0.0
-        for i, (ev, vr) in enumerate(zip(self.eigenvalues, self.explained_variance_ratio, strict=False)):
+        for i, (ev, vr) in enumerate(
+            zip(self.eigenvalues, self.explained_variance_ratio, strict=False)
+        ):
             cum += vr
             lines.append(f"LD{i + 1:<4} {ev:>12.4f} {vr:>14.2%} {cum:>11.2%}")
 
@@ -185,22 +274,69 @@ class LDAAnalyzer:
 
             # Fit LDA
             lda = LinearDiscriminantAnalysis(n_components=n_components, solver="svd")
-            scores = lda.fit_transform(data_grouped, groups_grouped)
+            # sklearn's SVD solver reaches for the leading singular value to
+            # pick its numerical rank, and it is zero when a class has no
+            # within-class spread at all. The rank filter then keeps nothing
+            # and it indexes an empty array, surfacing as
+            #   IndexError: index 0 is out of bounds for axis 0 with size 0
+            # from inside sklearn, with nothing to say what the user did
+            # wrong. Constant columns, or classes that are constant within
+            # themselves, are a real and understandable thing to hand a
+            # discriminant analysis, so they get a message instead.
+            spread = data_grouped.astype(float, copy=True)
+            spread -= spread.mean(axis=0, keepdims=True)
+            within_class_spread = spread.std(axis=0)
+            degenerate = np.flatnonzero(within_class_spread <= 0.0)
+            if degenerate.size:
+                names = [str(v) for v in np.asarray(variable_names)[degenerate]] if variable_names is not None else [
+                    f"variable {i}" for i in degenerate
+                ]
+                raise ComputationError(
+                    f"LDA cannot proceed: {', '.join(names[:5])}"
+                    f"{' ...' if names and len(names) > 5 else ''} has zero variance across "
+                    f"all samples, so the within-class scatter matrix is singular. "
+                    f"Remove the constant variable(s) or supply data with spread."
+                )
+            try:
+                scores = lda.fit_transform(data_grouped, groups_grouped)
+            except IndexError as exc:  # pragma: no cover - defensive
+                raise ComputationError(
+                    f"LDA could not fit a discriminant model to this data: {exc}. "
+                    f"This usually means a class has no within-class variation."
+                ) from exc
 
             # Loadings (coefficients)
             loadings = lda.scalings_[:, :n_components]
 
             # Eigenvalues and explained variance.
-            # sklearn's LDA only exposes `explained_variance_ratio_`
-            # (proportion of between-class variance per LD axis), not the raw
-            # eigenvalues. We expose this quantity under both `eigenvalues`
-            # and `explained_variance_ratio` for compatibility, but document
-            # explicitly that these are the explained-variance *ratios*, not
-            # the original eigenvalues.
+            # sklearn's LDA only exposes ``explained_variance_ratio_``
+            # (the [0, 1] proportion of between-class variance per LD
+            # axis). Historically PaleoAST stored this same array under
+            # both ``explained_variance_ratio`` and ``eigenvalues`` --
+            # but ``eigenvalues`` is the canonical R/Fisher term for the
+            # roots of the generalized eigenproblem S_W^{-1} S_B w = lambda w,
+            # which has nothing to do with a [0, 1] proportion.
+            # We now:
+            #   1. Add a new field ``eigenvalue_proportions`` carrying the
+            #      sklearn quantity (the [0, 1] explained-variance ratio).
+            #   2. Keep ``eigenvalues`` as an alias of the same array for
+            #      backward compatibility (and document the change).
+            #   3. Compute and expose the actual generalized eigenproblem
+            #      roots under ``eigenvalues_canonical``.
             explained_var = lda.explained_variance_ratio_
-            # Pseudo-eigenvalues proportional to explained variance.
-            # Used internally by `summary()` for display.
-            eigenvalues = explained_var.copy()
+            eigenvalue_proportions = explained_var.copy()
+            # Backward-compatibility alias -- documented as holding the
+            # [0, 1] proportions, NOT the canonical roots.
+            eigenvalues = eigenvalue_proportions.copy()
+
+            # Compute the true canonical roots lambda_k from the
+            # generalized eigenvalue problem S_W^{-1} S_B w = lambda w.
+            # We compute S_W and S_B directly from the data; degenerate
+            # cases (S_W singular, n_components > min(n_classes-1, n_vars))
+            # leave ``eigenvalues_canonical`` as an empty array.
+            eigenvalues_canonical = _compute_canonical_eigenvalues(
+                data_grouped, groups_codes, n_components
+            )
 
             # Class means in LD space
             class_means = lda.transform(lda.means_)
@@ -239,7 +375,9 @@ class LDAAnalyzer:
                 scores=scores,
                 loadings=loadings,
                 explained_variance_ratio=explained_var,
+                eigenvalue_proportions=eigenvalue_proportions,
                 eigenvalues=eigenvalues,
+                eigenvalues_canonical=eigenvalues_canonical,
                 confusion_matrix=cm,
                 accuracy=accuracy,
                 n_classes=n_classes,
