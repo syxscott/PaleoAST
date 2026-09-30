@@ -277,6 +277,16 @@ class LexerTokenizer:
         self._skip_newlines = skip_newlines
         self._case_sensitive = case_sensitive
 
+        # 组名 -> 规则 映射 (由 _compile_pattern 维护)。
+        #
+        # 必须在 _compile_pattern() **之前**初始化。该方法在编译时会清空并
+        # 重建这个映射; 旧代码把它放在编译之后, 于是无条件抹掉了刚填好的
+        # 9 条映射。结果是正则照常匹配(组名 r0..rN 都在), 但
+        # ``name in self._group_rules`` 永远为假, token_type 保持 None,
+        # 每个 token 都落到 UNKNOWN 兜底——create_basic_lexer() 因此分不
+        # 出标识符、数字和运算符, 而行/列/取值全都正确, 表面看不出问题。
+        self._group_rules: dict[str, LexerRule] = {}
+
         # 编译合并后的正则表达式
         self._combined_pattern: Pattern[str] | None = None
         self._compile_pattern()
@@ -290,9 +300,6 @@ class LexerTokenizer:
 
         # 关键字映射
         self._keywords: dict[str, TokenType] = {}
-
-        # 组名 -> 规则 映射 (由 _compile_pattern 维护)
-        self._group_rules: dict[str, LexerRule] = {}
 
     def _compile_pattern(self) -> None:
         """
@@ -519,6 +526,17 @@ class LexerTokenizer:
             match = self._combined_pattern.match(source, position) if self._combined_pattern else None
 
             if match:
+                # Classify, exactly as tokenize() does. This path used to
+                # hard-code `type=TokenType.UNKNOWN`, so the incremental
+                # generator classified nothing at all while still producing
+                # correct text, lines and columns -- two tokenisation APIs on
+                # the same lexer that disagreed about every token's type.
+                token_type = None
+                for name, value in match.groupdict().items():
+                    if value is not None and name in self._group_rules:
+                        token_type = self._group_rules[name].token_type
+                        break
+
                 token_value = match.group()
                 start_line = self._line
                 start_col = self._column
@@ -527,7 +545,7 @@ class LexerTokenizer:
                 position = self._update_position(source, position - len(token_value), position)
 
                 token = Token(
-                    type=TokenType.UNKNOWN,
+                    type=token_type or TokenType.UNKNOWN,
                     value=token_value,
                     line=start_line,
                     column=start_col,
@@ -535,7 +553,30 @@ class LexerTokenizer:
                     end_column=self._column,
                 )
 
-                if not token.is_whitespace():
+                if token.type == TokenType.IDENTIFIER:
+                    check_key = token.value.upper() if not self._case_sensitive else token.value
+                    if check_key in self._keywords:
+                        token = Token(
+                            type=self._keywords[check_key],
+                            value=token.value,
+                            line=token.line,
+                            column=token.column,
+                            end_line=token.end_line,
+                            end_column=token.end_column,
+                            metadata=token.metadata,
+                        )
+
+                should_add = True
+                if token.is_whitespace() and self._skip_whitespace:
+                    should_add = False
+                if token.type == TokenType.NEWLINE and self._skip_newlines:
+                    should_add = False
+                for rule in self._rules:
+                    if rule.token_type == token.type and rule.skip:
+                        should_add = False
+                        break
+
+                if should_add:
                     yield token
             else:
                 char = source[position]
@@ -596,7 +637,14 @@ def create_basic_lexer() -> LexerTokenizer:
         LexerRule(TokenType.PUNCTUATION, re.compile(r"[;,:\[\]{}().]"), priority=50),
     ]
 
-    lexer = LexerTokenizer(rules)
+    # NEXUS keywords (BEGIN, END, IF, ELSE, TAXLABELS, ...) are conventionally
+    # matched without regard to case, and the table below registers them
+    # upper-cased. With the default case_sensitive=True the lookup used the
+    # token's own case, so `if` never matched the stored `IF` and every one of
+    # these keywords was permanently unreachable. Normalising the lexer to
+    # case-insensitive makes the existing (correct) upper-casing in
+    # add_keyword / tokenize do what it was written to do.
+    lexer = LexerTokenizer(rules, case_sensitive=False)
 
     # 添加常见关键字
     keywords = {
