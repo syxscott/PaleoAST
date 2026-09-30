@@ -73,10 +73,17 @@ def _pairwise_landmark_distances(consensus: np.ndarray) -> np.ndarray:
 def _geomorph_consensus(configurations: np.ndarray) -> np.ndarray:
     """geomorph's consensus configuration, as a numpy array.
 
-    ``gpagen`` takes a 3-D array (specimens x landmarks x dimensions) and returns
-    a list whose ``consensus`` element is a 2-D (landmarks x dimensions) array.
+    ``gpagen`` takes a **3-D array laid out p x k x n** -- landmarks x
+    dimensions x specimens -- while the configurations here are built in the
+    more common numpy orientation n x p x k. Passing them straight through
+    would tell geomorph that there are 5 landmarks of 8 dimensions across 2
+    specimens, which is not a shape it can analyse, and if it had accepted it
+    the comparison would have been against the wrong data. Hence the
+    transpose.
+    ``gpagen`` returns a list whose ``consensus`` element is a 2-D
+    (landmarks x dimensions) matrix.
     """
-    gpa = R_GEOMORPH.gpagen(r_array(configurations))
+    gpa = R_GEOMORPH.gpagen(r_array(np.asarray(configurations).transpose(1, 2, 0)))
     return matrix_to_array(gpa.rx2("consensus"))
 
 
@@ -92,6 +99,25 @@ class TestGPAVsGeomorph:
         reference = _geomorph_consensus(configurations)
 
         assert paleo.shape == reference.shape, f"PaleoAST consensus is {paleo.shape}, geomorph's is {reference.shape}"
+
+    def test_input_is_transposed_into_gpagen_layout(self):
+        """The array handed to gpagen is p x k x n, not the numpy n x p x k.
+
+        gpagen reads its input as landmarks x dimensions x specimens. Handing it
+        the numpy orientation instead would describe a dataset with the wrong
+        number of landmarks and the wrong number of dimensions -- 8 "dimensions"
+        for a 2-D shape is not something it can analyse, but the failure mode
+        worth guarding is the one where it *does* accept it and the comparison
+        is quietly against different data. So the layout is asserted directly
+        rather than left implicit in a transpose.
+        """
+        configurations = _configurations()
+        n_specimens, n_landmarks, n_dims = configurations.shape
+
+        laid_out = configurations.transpose(1, 2, 0)
+        assert laid_out.shape == (n_landmarks, n_dims, n_specimens)
+        # and the data survived the transpose intact
+        assert np.array_equal(laid_out[0, 0, :], configurations[:, 0, 0])
 
     def test_consensus_landmark_distances_match(self):
         """Inter-landmark distances of the consensus agree with geomorph.
