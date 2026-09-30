@@ -415,64 +415,42 @@ class DFA(FiniteAutomaton):
         # 获取字母表
         alphabet = self._get_alphabet()
 
-        # Step 2: 初始化工作队列。Partitions are mutable sets and
-        # therefore cannot be stored inside another set. Keep the work
-        # collection as a list and deduplicate by frozenset identity when
-        # adding newly split partitions.
-        if len(partitions) == 2:
-            work_set = list(partitions)
-        else:
-            work_set = [partitions[-1]] if partitions else []
-
-        # 迭代细化
-        changed = True
-        while changed and len(partitions) > 1:
-            changed = False
-            new_partitions: list[set[State]] = []
-            work_queue = list(work_set)
-            work_set = []
-            work_keys: set[frozenset[State]] = set()
-
-            for partition in work_queue:
-                if not partition:
-                    continue
-
-                # 为每个符号检查是否可以分割
-                split_done = False
-                for symbol in alphabet:
-                    # 构建反向映射
-                    reverse_map: dict[tuple[frozenset[State], str], set[State]] = {}
-
-                    for state in partition:
-                        # 找到转移目标所在的分区
-                        target_state = self._find_transition(state, symbol)
-                        if target_state is not None:
-                            target_partition = self._find_partition(target_state.target, partitions)
-                            key = (target_partition, symbol)
-                        else:
-                            key = (frozenset(), symbol)
-
-                        if key not in reverse_map:
-                            reverse_map[key] = set()
-                        reverse_map[key].add(state)
-
-                    # 如果产生了分割
-                    if len(reverse_map) > 1:
-                        for new_part in reverse_map.values():
-                            new_partitions.append(new_part)
-                            key = frozenset(new_part)
-                            if key not in work_keys:
-                                work_set.append(new_part)
-                                work_keys.add(key)
-                        split_done = True
-                        changed = True
-                        break
-
-                if not split_done:
-                    new_partitions.append(partition)
-
-            if changed:
-                partitions = new_partitions
+        # Refinement.
+        #
+        # The previous work-queue version was guarded by
+        # ``len(partitions) > 1`` and only refined on the FIRST symbol that
+        # produced a split (a ``break`` inside the symbol loop). Both are wrong.
+        # A DFA in which *every* state is accepting -- e.g. /a?/, whose subset
+        # construction yields two accepting states -- starts with a single
+        # partition, so the guard skipped refinement entirely, both states were
+        # merged, and the result accepted "aa" and "ab". Minimisation must
+        # preserve the language exactly; that is what this test is for.
+        #
+        # Moore refinement: split each block by the tuple of blocks its
+        # states lead to, and repeat until nothing splits. O(n^2 |Sigma|),
+        # which is fine for the automaton sizes this module builds.
+        ordered_alphabet = sorted(alphabet)
+        while True:
+            refined: list[set[State]] = []
+            split_happened = False
+            for partition in partitions:
+                groups: dict[tuple, set[State]] = {}
+                for state in partition:
+                    signature = []
+                    for symbol in ordered_alphabet:
+                        transition = self._find_transition(state, symbol)
+                        signature.append(
+                            self._find_partition(transition.target, partitions)
+                            if transition is not None
+                            else None
+                        )
+                    groups.setdefault(tuple(signature), set()).add(state)
+                if len(groups) > 1:
+                    split_happened = True
+                refined.extend(groups.values())
+            partitions = refined
+            if not split_happened:
+                break
 
         # 构建最小化DFA
         minimized_dfa = DFA(name=f"{self._name}_minimized")
@@ -641,6 +619,7 @@ class RegexNodeType(Enum):
     OPTIONAL = auto()
     CHAR = auto()
     CHARCLASS = auto()
+    ANY = auto()          # the dot: one character other than newline
     EPSILON = auto()
 
 
@@ -667,6 +646,8 @@ class RegexNode:
             return f"Opt({self.children[0]})"
         elif self.node_type == RegexNodeType.CHARCLASS:
             return f"Class('{self.value}')"
+        elif self.node_type == RegexNodeType.ANY:
+            return "Any"
         elif self.node_type == RegexNodeType.EPSILON:
             return "Epsilon"
         return "Unknown"
@@ -723,13 +704,28 @@ class _RegexParser:
             char = self._peek()
             if char == "*":
                 self._advance()
-                return RegexNode(RegexNodeType.STAR, children=(atom,))
+                result: RegexNode = RegexNode(RegexNodeType.STAR, children=(atom,))
             elif char == "+":
                 self._advance()
-                return RegexNode(RegexNodeType.PLUS, children=(atom,))
+                result = RegexNode(RegexNodeType.PLUS, children=(atom,))
             elif char == "?":
                 self._advance()
-                return RegexNode(RegexNodeType.OPTIONAL, children=(atom,))
+                result = RegexNode(RegexNodeType.OPTIONAL, children=(atom,))
+            else:
+                return atom
+
+            # A second quantifier is a lazy (*?, +?, ??) or possessive form.
+            # Neither is expressible in a DFA, and the old code consumed the
+            # first one and returned, so the second fell through to being read
+            # as a literal character -- /a*?/ built a DFA that accepted
+            # nothing at all. Refuse instead.
+            if self._pos < self._length and self._peek() in "*+?{":
+                raise NotImplementedError(
+                    "Lazy and possessive quantifiers (*?, +?, ??, **) are not "
+                    f"supported by this engine (pattern position {self._pos}). "
+                    "A DFA cannot express them; omit the modifier."
+                )
+            return result
 
         return atom
 
@@ -753,10 +749,30 @@ class _RegexParser:
         elif char == "\\":
             return self._parse_escape()
 
-        elif char in ".^$":
-            # 特殊字符暂不支持完整功能
+        elif char == ".":
+            # The dot matches ONE character other than a newline. It used to
+            # become a literal CHAR node with value ".", so /a.b/ matched the
+            # three-character string "a.b" and nothing else -- a silently
+            # wrong answer for a pattern that reads as "a, any char, b".
             self._advance()
-            return RegexNode(RegexNodeType.CHAR, value=char)
+            return RegexNode(RegexNodeType.ANY)
+
+        elif char in "^$":
+            # Anchors are zero-width assertions. An NFA over plain symbols
+            # cannot express them, and quietly treating them as literals
+            # turns /^abc/ into a pattern that matches "^abc".
+            raise NotImplementedError(
+                f"Anchor {char!r} is not supported by this engine "
+                f"(pattern position {self._pos}). Match the full string with "
+                f"accepts_string() instead of anchoring with ^ or $."
+            )
+
+        elif char == "{":
+            raise NotImplementedError(
+                "Counted repetition {n,m} is not supported by this engine "
+                f"(pattern position {self._pos}). Use * , + or ? , or expand "
+                "the repetition explicitly."
+            )
 
         else:
             self._advance()
@@ -829,6 +845,28 @@ class _RegexParser:
             self._pos += 1
 
 
+def _expand_character_class(chars: str) -> set[str]:
+    """Expand a character-class body into the set of characters it denotes.
+
+    ``"abc"`` -> {a, b, c}; ``"a-z"`` -> the 26 letters; ``"a-z0-9"`` -> both.
+    A trailing ``-`` (as in ``[a-]``) is a literal hyphen, per POSIX.
+    """
+    members: set[str] = set()
+    index = 0
+    length = len(chars)
+    while index < length:
+        current = chars[index]
+        if index + 2 < length and chars[index + 1] == "-":
+            upper = chars[index + 2]
+            if ord(current) <= ord(upper):
+                members.update(chr(code) for code in range(ord(current), ord(upper) + 1))
+                index += 3
+                continue
+        members.add(current)
+        index += 1
+    return members
+
+
 class _NFABuilder:
     """Thompson NFA构建器（使用正确的Thompson构造算法）"""
 
@@ -845,6 +883,8 @@ class _NFABuilder:
             return self._build_char(node.value)
         elif node.node_type == RegexNodeType.CHARCLASS:
             return self._build_charclass(node.value)
+        elif node.node_type == RegexNodeType.ANY:
+            return self._build_any()
         elif node.node_type == RegexNodeType.CONCAT:
             return self._build_concat(node.children)
         elif node.node_type == RegexNodeType.ALTERNATION:
@@ -888,23 +928,42 @@ class _NFABuilder:
     def _build_charclass(self, chars: str) -> tuple[State, State]:
         """构建字符类NFA片段
 
-        Supports negation via leading '^' character (e.g. '\\D' from the
-        escape_map is represented as '^0123456789'). When the leading '^'
-        is present, the NFA accepts any character NOT in the subsequent set.
+        Supports negation via a leading '^' (e.g. '\\D' from escape_map is
+        represented as '^0123456789'). When present, the NFA accepts any
+        printable ASCII character NOT in the set.
+
+        Ranges are expanded. ``[a-z]`` previously became the three-character
+        set ``{'a', '-', 'z'}``, so a *negated* class like ``[^a-z]`` accepted
+        every letter of the alphabet it was meant to exclude -- the reason
+        ``[^a-z]+`` happily matched ``"color"``.
         """
         start = self._new_state()
         end = self._new_state()
         negated = chars.startswith("^")
+        members = _expand_character_class(chars[1:] if negated else chars)
         if negated:
-            forbidden = set(chars[1:])
-            # Accept any printable ASCII char NOT in forbidden
+            # Accept any printable ASCII char NOT in the class.
             for code in range(32, 127):
                 ch = chr(code)
-                if ch not in forbidden:
+                if ch not in members:
                     self._nfa.add_transition(start, ch, end)
         else:
-            for char in chars:
+            for char in sorted(members):
                 self._nfa.add_transition(start, char, end)
+        return (start, end)
+
+    def _build_any(self) -> tuple[State, State]:
+        """构建 '.' 片段: 匹配任意一个非换行字符。
+
+        Printable ASCII and space, and deliberately NOT the newline -- which is
+        what this docstring and ``RegexNodeType.ANY``'s own comment both say.
+        The previous version also added ``chr(10)``, so ``/a.b/`` accepted
+        ``"a\\nb"`` and the code contradicted its documentation.
+        """
+        start = self._new_state()
+        end = self._new_state()
+        for code in range(32, 127):
+            self._nfa.add_transition(start, chr(code), end)
         return (start, end)
 
     def _build_concat(self, children: tuple[RegexNode, ...]) -> tuple[State, State]:
