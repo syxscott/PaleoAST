@@ -756,6 +756,20 @@ class CCAAnalyzer:
                 f_overall_perm[i] = 0.0
                 f_per_axis_perm[i, :] = 0.0
                 continue
+            # `total_inertia` is the *observed* one on purpose, and it is worth
+            # saying why because it reads like an oversight. For CCA the total
+            # inertia is the chi-square divergence
+            #   I = sum(P^2 / E) - 1,  P = Y / T,  E = outer(r, c)
+            # and sum(P^2 / E) = sum_i (1/r_i) * sum_j Y_ij^2 / c_j. Permuting
+            # Y's rows moves each (r_i, row_i) pair together, so that per-row
+            # factor travels with its row and I is unchanged -- measured at
+            # ~1e-16 relative difference over 30 permutations on tables that
+            # are plain, sparse-with-zeros, and dominated by a single row.
+            #
+            # The constrained eigenvalues *do* change, which is the whole point
+            # of the permutation; the denominator they are measured against
+            # does not, so recomputing it per permutation would be wasted work
+            # and would invite a subtly different bug.
             f_p, f_pa, _ = self._F_from_eigenvalues(
                 perm_eigs, total_inertia, total_SS, n_eff, n_q
             )
