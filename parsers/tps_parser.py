@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from parsers.sentinels import is_missing_token
 from utils.exceptions import PaleoASTError
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class TPSParseError(PaleoASTError, Exception):
         self.line_number = line_number
         self.line_content = line_content
         self.message = message
-        full_message = f"TPS Parse Error"
+        full_message = "TPS Parse Error"
         if file_path:
             full_message += f" in {os.path.basename(file_path)}"
         if line_number > 0:
@@ -473,8 +474,23 @@ class TPSParser:
         tokens = line.split()
         if not tokens:
             return
+        # Missing-value handling. Real TPS files written by tpsDig use ``?``
+        # for absent landmarks (or sometimes ``*``); the previous code threw
+        # ``ValueError`` on those tokens and refused to load the file. We now
+        # recognise every shared sentinel (``?``, ``*``, ``NA``, ``N/A``,
+        # ``NaN``, ``None``, ``NULL``, ``-``) and substitute ``np.nan`` so
+        # downstream GPA / Procrustes code can keep the specimen in the
+        # analysis instead of dropping it. The sentinel set is shared with
+        # the DAT parser via ``parsers.sentinels``.
+        # Both paths share ONE guarded conversion. An earlier revision kept the
+        # sentinel substitution in a separate, unguarded branch, so a line
+        # carrying a sentinel *and* a non-numeric token (e.g. "10.0 ? banana")
+        # escaped as a bare ValueError with no file/line context, while the
+        # same junk without a sentinel produced a proper TPSParseError. A
+        # parse error that loses its file and line is close to useless in the
+        # UI, so the guard must not depend on whether a sentinel was seen.
         try:
-            coords = [float(t) for t in tokens]
+            coords = [float("nan") if is_missing_token(t) else float(t) for t in tokens]
         except ValueError as e:
             # This is likely not a coordinate line; check if it looks like one
             # If the tokens look like they should be numbers but aren't, report error

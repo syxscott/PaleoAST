@@ -93,7 +93,15 @@ class NexusTokenType(Enum):
     RBRACKET = auto()  # ]
     LPAREN = auto()  # (
     RPAREN = auto()  # )
-    ASTERISK = auto()  # *
+
+    # NOTE: there is deliberately no ASTERISK member. ``*`` used to have its own
+    # rule, but the MISSING rule also matches it and outranks it (priority 6
+    # vs 53, same 1-char match), so the ASTERISK branch became unreachable dead
+    # code -- every ``*`` became MISSING while the enum still advertised an
+    # ASTERISK token that nothing could ever emit. ``*`` is MorphoJ/geomorph's
+    # missing-landmark convention, so MISSING is the intended meaning; the
+    # enum member was removed rather than left as a trap for the next reader
+    # who writes ``if tok.type is NexusTokenType.ASTERISK``.
 
     # 空白和注释
     WHITESPACE = auto()  # 空白
@@ -105,6 +113,7 @@ class NexusTokenType(Enum):
     SEQUENCE = auto()  # 序列数据
     TAXON_NAME = auto()  # 分类单元名称
     UNKNOWN = auto()  # 未知字符
+    MISSING = auto()  # missing-value sentinel (? or - per NEXUS standard; * also accepted)
 
     # 终止符
     EOF = auto()
@@ -196,6 +205,25 @@ class NexusLexer(BaseLexer):
         8. 空白 (跳过)
         9. 换行 (跳过)
         """
+        # NEXUS missing-value tokens. The lexer only emits MISSING for the
+        # single-character glyphs ``?``, ``*`` and ``-``; the textual
+        # sentinels like ``NA``/``NaN`` live in ``MISSING_SENTINELS`` for the
+        # matrix parsers to consume but must NOT be promoted here, since the
+        # NEXUS lexer also feeds identifiers (``NA`` is a valid taxon name).
+        #
+        # ``-`` is the one glyph that is NOT safe to match unconditionally: it
+        # is a legal NEXUS gap character but it is also the word separator in
+        # hyphenated block keywords (``begin-trees``) and in taxon labels
+        # (``Hsapiens-1``). Matching it bare used to split those into three
+        # tokens with a bogus MISSING wedged in the middle -- a silent
+        # mis-tokenisation of the identifier that a downstream consumer has no
+        # way to detect. The lookarounds keep ``-`` a MISSING token only when
+        # it stands alone (``"-"``), which is the gap use case, and leave
+        # hyphenated words to fail loudly via LexerError instead of quietly
+        # becoming the wrong label. ``?`` and ``*`` are never valid identifier
+        # characters, so they need no such guard.
+        self.add_rule(NexusTokenType.MISSING, r"\?|\*|(?<![A-Za-z0-9_])-(?![A-Za-z0-9_])", priority=6)
+
         # #NEXUS 头部
         self.add_rule(NexusTokenType.NEXUS_HEADER, r"^#NEXUS", priority=1)
 
@@ -229,7 +257,9 @@ class NexusLexer(BaseLexer):
 
         self.add_rule(NexusTokenType.EQUALS, r"=", priority=52)
 
-        self.add_rule(NexusTokenType.ASTERISK, r"\*", priority=53)
+        # No ``*`` rule: ``*`` is claimed by the MISSING rule above (priority 6).
+        # Adding a priority-53 ``*`` rule here would be shadowed on every input
+        # and would only re-introduce the unreachable ASTERISK branch.
 
         self.add_rule(NexusTokenType.END_STATEMENT, r";", priority=60)
 

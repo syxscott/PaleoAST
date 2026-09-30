@@ -15,13 +15,14 @@ version: 1.0.1
 """
 
 import logging
-
-from utils.exceptions import PaleoASTError
 import os
 import re
 from dataclasses import dataclass
 
 import numpy as np
+
+from parsers.sentinels import MISSING_SENTINELS_UPPER
+from utils.exceptions import PaleoASTError
 
 logger = logging.getLogger(__name__)
 
@@ -228,10 +229,24 @@ class DATParser:
                 row_labels.append(f"Row_{line_num + 1}")
                 data_parts = parts
 
-            # Strict field count validation
+            # Strict field count validation. We deliberately raise instead of
+            # silently padding with 0 — missing values becoming 0 would corrupt
+            # every downstream mean/PCA/PERMANOVA result. The error message
+            # names the line, expected count and observed count so the user
+            # can fix the file (or accept the rejection).
             if len(data_parts) != expected_field_count:
+                hint = ""
+                if len(data_parts) < expected_field_count:
+                    hint = (
+                        " This often means a row is missing one or more "
+                        "values; do NOT let missing cells fall through to 0 "
+                        "(they would pollute downstream statistics). "
+                        "Use a recognised missing sentinel ('?', '*', 'NA', "
+                        "'N/A', 'NaN', 'None', 'NULL', '-') or fix the file."
+                    )
                 raise DATParseError(
-                    f"Field count mismatch: expected {expected_field_count} data fields, got {len(data_parts)}",
+                    f"Field count mismatch at line {line_num + 1}: "
+                    f"expected {expected_field_count} data fields, got {len(data_parts)}.{hint}",
                     file_path=file_path,
                     line_number=line_num + 1,
                     line_content=original_line,
@@ -324,8 +339,11 @@ class DATParser:
         if not value:
             raise ValueError(f"Empty value")
 
-        # Check for NaN indicators
-        if value.upper() in ("NAN", "NA", "N/A", "NONE", "NULL", "-"):
+        # Check for NaN indicators. The sentinel set is shared with the TPS
+        # parser and the NEXUS standard via ``parsers.sentinels``; a hard-coded
+        # list here previously dropped the TpsDig ``?`` and MorphoJ ``*``
+        # conventions, making real-world files unparseable.
+        if value.upper() in MISSING_SENTINELS_UPPER:
             return np.nan
 
         # Determine the decimal separator
