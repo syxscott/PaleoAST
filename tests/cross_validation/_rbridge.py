@@ -112,12 +112,14 @@ def r_string_vector(values) -> robjects.StrVector:
     return StrVector([str(v) for v in values])
 
 
-def r_data_frame(columns: dict[str, object]):
+def r_data_frame(columns: dict[str, object], factors: tuple[str, ...] = ()):
     """An R data.frame from a dict of column name -> values.
 
-    Numeric and character columns are both supported, which matters because a
-    grouping factor (``adonis2(~ group)``) has to arrive in R as a factor, not
-    as a numeric vector.
+    Numeric and character columns are both supported. Character columns arrive
+    as strings, which is *not* the same thing as a factor -- and a grouping
+    variable that R treats as character instead of factor is exactly the kind
+    of difference that makes a model silently wrong. Name such columns in
+    ``factors`` to have them converted on the R side.
     """
     if not columns:
         raise ValueError("r_data_frame needs at least one column")
@@ -131,7 +133,9 @@ def r_data_frame(columns: dict[str, object]):
     for name in names:
         values = list(columns[name])
         first = next((v for v in values if v is not None), None)
-        if isinstance(first, str):
+        if name in factors:
+            converted[name] = r("factor")(StrVector([str(v) for v in values]))
+        elif isinstance(first, str):
             converted[name] = StrVector([str(v) for v in values])
         else:
             converted[name] = r_vector(values)

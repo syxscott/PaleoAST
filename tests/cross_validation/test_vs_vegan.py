@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from ._rbridge import as_array, as_float, matrix_to_array, r, r_data_frame, r_matrix, require
+from ._rbridge import as_float, matrix_to_array, r, r_data_frame, r_matrix, require
 
 pytestmark = pytest.mark.cross_validation
 
@@ -53,6 +53,56 @@ def _grouped_dataset() -> tuple[np.ndarray, list[str]]:
     data = rng.normal(loc=np.repeat([0.0, 4.0], 8)[:, None], scale=1.0, size=(16, 5))
     groups = ["A"] * 8 + ["B"] * 8
     return data, groups
+
+
+def _r_adonis2_table(data: np.ndarray, groups: list[str]):
+    """The result table of ``vegan::adonis2`` for this dataset.
+
+    Two things about adonis2 that the previous version of this file got wrong,
+    both of them stated in the R documentation:
+
+    * **The formula needs a left-hand side.** adonis2 partitions *distances*,
+      so the LHS must be a community data matrix or a dissimilarity matrix. A
+      bare ``~ group`` has no response at all. Writing the response variables
+      as ``v1 + v2 + ... ~ group`` makes the LHS a multi-column response, which
+      is exactly a community data matrix.
+    * **The return value is an ``anova.cca`` object, not the data frame.** The
+      per-term statistics live in its ``table`` element, with columns ``Df``,
+      ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)`` and one row per term plus
+      ``Residual`` and ``Total``.
+    """
+    n_var = data.shape[1]
+    columns = {f"v{i + 1}": data[:, i] for i in range(n_var)}
+    columns["group"] = groups
+    # `group` must arrive as a factor; a character column makes R model it as
+    # numeric and the test is then silently a different test.
+    frame = r_data_frame(columns, factors=("group",))
+
+    response = " + ".join(f"v{i + 1}" for i in range(n_var))
+    formula = r("as.formula")(f"{response} ~ group")
+
+    result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
+    return result.rx2("table")
+
+
+def _r_adonis2_component(data: np.ndarray, groups: list[str], column: str, row: str) -> float:
+    """One cell of the adonis2 result table, located by name.
+
+    Rows are located by their term label and columns by name; a miss raises
+    naming what was actually present. Indexing positionally is what let an
+    earlier version of this file read the wrong quantity silently.
+    """
+    table = _r_adonis2_table(data, groups)
+
+    columns = [str(c) for c in table.names]
+    if column not in columns:
+        raise AssertionError(f"adonis2 table has no column {column!r}; it has {columns}")
+
+    labels = [str(x) for x in r("rownames")(table)]
+    if row not in labels:
+        raise AssertionError(f"adonis2 table has no row {row!r}; it has {labels}")
+
+    return as_float(table[labels.index(row), columns.index(column)])
 
 
 class TestDistanceVsVegan:
@@ -177,17 +227,8 @@ class TestPermanovaVsAdonis2:
             random_seed=0,
         )
 
-        frame = r_data_frame(
-            {"v1": data[:, 0], "v2": data[:, 1], "v3": data[:, 2], "v4": data[:, 3], "v5": data[:, 4], "group": groups}
-        )
-        r_result = R_VEGAN.adonis2(
-            r("formula")("~ group"),
-            data=frame,
-            method="euclidean",
-            permutations=99,
-        )
-        r_sq = as_float(r_result.rx2("R2")[0])
-        r_f = as_float(r_result.rx2("F")[0])
+        r_sq = _r_adonis2_component(data, groups, "R2", "group")
+        r_f = _r_adonis2_component(data, groups, "F", "group")
 
         paleo_r_sq = float(paleo.ss_between) / float(paleo.ss_between + paleo.ss_within)
 
@@ -224,25 +265,17 @@ class TestPermanovaVsAdonis2:
             random_seed=0,
         )
 
-        frame = r_data_frame(
-            {"v1": data[:, 0], "v2": data[:, 1], "v3": data[:, 2], "v4": data[:, 3], "v5": data[:, 4], "group": groups}
-        )
-        r_result = R_VEGAN.adonis2(
-            r("formula")("~ group"),
-            data=frame,
-            method="euclidean",
-            permutations=99,
-        )
-        r_ss = as_array(r_result.rx2("SumOfSquares"))
-        r_df = as_array(r_result.rx2("Df"))
         paleo_total = float(paleo.ss_between) + float(paleo.ss_within)
+        r_total_ss = _r_adonis2_component(data, groups, "SumOfSqs", "Total")
+        r_df_between = _r_adonis2_component(data, groups, "Df", "group")
+        r_df_within = _r_adonis2_component(data, groups, "Df", "Residual")
 
         assert_allclose(
             paleo_total,
-            float(np.sum(r_ss)),
+            r_total_ss,
             rtol=1e-6,
             atol=1e-10,
             err_msg="total sum of squares disagrees with vegan::adonis2",
         )
-        assert_allclose(float(paleo.df_between), float(r_df[1]), atol=0.5)
-        assert_allclose(float(paleo.df_within), float(r_df[2]), atol=0.5)
+        assert_allclose(float(paleo.df_between), r_df_between, atol=0.5)
+        assert_allclose(float(paleo.df_within), r_df_within, atol=0.5)
