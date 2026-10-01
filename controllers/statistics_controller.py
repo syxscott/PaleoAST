@@ -179,7 +179,11 @@ class StatisticsController:
     # =========================================================================
 
     def run_pcoa(
-        self, distance_matrix: npt.NDArray | None = None, n_components: int = 10, metric: str = "bray_curtis"
+        self,
+        distance_matrix: npt.NDArray | None = None,
+        n_components: int = 10,
+        metric: str = "bray_curtis",
+        correction: str = "cmdscale",
     ) -> PCoAResult:
         """
         Run Principal Coordinate Analysis.
@@ -188,19 +192,28 @@ class StatisticsController:
             distance_matrix: Distance matrix. If None, computes from state data.
             n_components: Number of coordinates.
             metric: Distance metric for computation.
+            correction: How to handle negative eigenvalues — one of
+                ``"cmdscale"`` (default; matches R ``cmdscale`` and the
+                historical behavior), ``"lingoes"``, ``"wickoff"``,
+                ``"torgerson"``. See :mod:`stats.pcoa` for formulas and
+                references.
 
         Returns:
             PCoAResult: PCoA analysis results
         """
         with self._lock:
             self._logger.info(
-                f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}'"
+                f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}', correction='{correction}'"
             )
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
-            result = self._pcoa_analyzer.analyze(distance_matrix, n_components, metric=metric)
+            result = self._pcoa_analyzer.analyze(
+                distance_matrix, n_components, metric=metric, correction=correction
+            )
             self._state.cache_result("pcoa_result", result)
             self._state.cache_result("pcoa_metric", metric)
-            self._logger.info(f"PCoA completed: {n_components} coordinates extracted")
+            self._logger.info(
+                f"PCoA completed: {n_components} coordinates extracted (correction={result.correction_method})"
+            )
             return result
 
     # =========================================================================
@@ -580,13 +593,29 @@ class StatisticsController:
         data: npt.NDArray | None = None,
         groups: list[int] | None = None,
         n_components: int | None = None,
+        cross_validate: bool = True,
+        cv_folds: int = 5,
     ) -> LDAResult:
-        """Run Linear Discriminant Analysis."""
+        """Run Linear Discriminant Analysis.
+
+        Parameters:
+            cross_validate: When False, the leave-group-out accuracy check is
+                skipped. The engine skips cross-validation whenever the
+                effective fold count drops below 2, so this maps to
+                ``cv_folds=1`` rather than to a special flag.
+            cv_folds: Requested fold count; the engine clamps it to the size
+                of the smallest group.
+        """
         with self._lock:
             data = self._ensure_data(data)
             if groups is None:
                 groups = [0] * data.shape[0]
-            result = self._lda_analyzer.analyze(data, groups, n_components=n_components)
+            result = self._lda_analyzer.analyze(
+                data,
+                groups,
+                n_components=n_components,
+                cv_folds=cv_folds if cross_validate else 1,
+            )
             self._state.cache_result("lda_result", result)
             return result
 
@@ -602,6 +631,8 @@ class StatisticsController:
         method: str = "cca",
         species_names: list[str] | None = None,
         env_names: list[str] | None = None,
+        n_permutations: int = 999,
+        random_seed: int | None = None,
     ) -> CCAResult:
         """
         Run Canonical Correspondence Analysis (CCA) or Redundancy Analysis (RDA).
@@ -614,9 +645,14 @@ class StatisticsController:
             method: 'cca' or 'rda'
             species_names: Names of species/variables.
             env_names: Names of environmental variables.
+            n_permutations: Permutation count for the significance test. The
+                engine permutes the RESPONSE (Y), never the predictors (X).
+            random_seed: Seed for the permutation test. When None the engine
+                warns and the p-value is not reproducible.
 
         Returns:
-            CCAResult: CCA/RDA analysis results
+            CCAResult: CCA/RDA analysis results, including ``f_statistic``,
+            ``p_value``, per-axis F/p and Wilks' lambda.
         """
         with self._lock:
             if not self._state.has_data:
@@ -632,16 +668,30 @@ class StatisticsController:
             if X is None:
                 raise ValidationError("Environmental variables required for CCA/RDA")
 
-            self._logger.info(f"run_cca called with Y.shape={Y.shape}, X.shape={X.shape}, method={method}")
+            self._logger.info(
+                f"run_cca called with Y.shape={Y.shape}, X.shape={X.shape}, method={method}, "
+                f"n_permutations={n_permutations}, random_seed={random_seed}"
+            )
 
             result = self._cca_analyzer.analyze(
-                Y, X, n_components=n_components, method=method, species_names=species_names, env_names=env_names
+                Y,
+                X,
+                n_components=n_components,
+                method=method,
+                species_names=species_names,
+                env_names=env_names,
+                n_permutations=n_permutations,
+                random_seed=random_seed,
             )
 
             self._state.cache_result("cca_result", result)
             self._state.cache_result("cca_method", method)
 
-            self._logger.info(f"CCA/RDA completed: constrained variance={result.constrained_variance:.2f}%")
+            self._logger.info(
+                f"CCA/RDA completed: constrained variance={result.constrained_variance:.2f}%, "
+                f"p={getattr(result, 'p_value', float('nan')):.4f}, "
+                f"Wilks lambda={getattr(result, 'wilks_lambda', float('nan')):.4f}"
+            )
             return result
 
     def analyze_cca(
@@ -1151,22 +1201,23 @@ class StatisticsController:
         """
         from macroevolution.cohort import analyze_cohort_survivorship
 
-        if data is not None:
-            self._state.set_data_matrix(data)
-        records = self._records_from_matrix(fad_column, lad_column)
-        if not records:
-            raise ValidationError("No taxon ranges available for cohort analysis")
+        with self._lock:
+            if data is not None:
+                self._state.set_data_matrix(data)
+            records = self._records_from_matrix(fad_column, lad_column)
+            if not records:
+                raise ValidationError("No taxon ranges available for cohort analysis")
 
-        ages = np.array([r for rec in records for r in rec], dtype=float)
-        lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
-        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-            raise ValidationError("Taxon ranges have no usable age span; check the FAD/LAD columns")
-        edges = np.linspace(hi, lo, int(n_intervals) + 1)  # oldest first
-        intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
+            ages = np.array([r for rec in records for r in rec], dtype=float)
+            lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
+            if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+                raise ValidationError("Taxon ranges have no usable age span; check the FAD/LAD columns")
+            edges = np.linspace(hi, lo, int(n_intervals) + 1)  # oldest first
+            intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
 
-        result = analyze_cohort_survivorship(records, intervals, confidence_level=confidence_level)
-        self._state.cache_result("cohort_survivorship_result", result)
-        return result
+            result = analyze_cohort_survivorship(records, intervals, confidence_level=confidence_level)
+            self._state.cache_result("cohort_survivorship_result", result)
+            return result
 
     def analyze_diversity_dynamics(
         self,
@@ -1178,22 +1229,23 @@ class StatisticsController:
         """Foote per-capita diversity / origination / extinction over time bins."""
         from macroevolution.diversity import DiversityDynamics
 
-        if data is not None:
-            self._state.set_data_matrix(data)
-        records = self._records_from_matrix(fad_column, lad_column)
-        if not records:
-            raise ValidationError("No taxon ranges available for diversity dynamics")
+        with self._lock:
+            if data is not None:
+                self._state.set_data_matrix(data)
+            records = self._records_from_matrix(fad_column, lad_column)
+            if not records:
+                raise ValidationError("No taxon ranges available for diversity dynamics")
 
-        ages = np.array([r for rec in records for r in rec], dtype=float)
-        lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
-        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-            raise ValidationError("Taxon ranges have no usable age span")
-        edges = np.linspace(hi, lo, int(n_intervals) + 1)
-        intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
+            ages = np.array([r for rec in records for r in rec], dtype=float)
+            lo, hi = float(np.nanmin(ages)), float(np.nanmax(ages))
+            if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+                raise ValidationError("Taxon ranges have no usable age span")
+            edges = np.linspace(hi, lo, int(n_intervals) + 1)
+            intervals = [(float(edges[i]), float(edges[i + 1])) for i in range(len(edges) - 1)]
 
-        result = DiversityDynamics().estimate_diversity(records, intervals)
-        self._state.cache_result("diversity_dynamics_result", result)
-        return result
+            result = DiversityDynamics().estimate_diversity(records, intervals)
+            self._state.cache_result("diversity_dynamics_result", result)
+            return result
 
     def analyze_survival(
         self,
@@ -1204,23 +1256,24 @@ class StatisticsController:
         """Kaplan-Meier survival curve from a duration + event-indicator pair."""
         from macroevolution.survival import KaplanMeierAnalyzer
 
-        if data is not None:
-            self._state.set_data_matrix(data)
-        matrix = self._ensure_data(None)
-        n_vars = matrix.shape[1]
-        for col, name in ((time_column, "duration"), (event_column, "event")):
-            if not 0 <= col < n_vars:
-                raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
-        times = np.asarray(matrix[:, time_column], dtype=float)
-        events = np.asarray(matrix[:, event_column], dtype=float)
-        keep = np.isfinite(times) & np.isfinite(events)
-        times, events = times[keep], events[keep]
-        if times.size == 0:
-            raise ValidationError("No finite duration/event rows for survival analysis")
+        with self._lock:
+            if data is not None:
+                self._state.set_data_matrix(data)
+            matrix = self._ensure_data(None)
+            n_vars = matrix.shape[1]
+            for col, name in ((time_column, "duration"), (event_column, "event")):
+                if not 0 <= col < n_vars:
+                    raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
+            times = np.asarray(matrix[:, time_column], dtype=float)
+            events = np.asarray(matrix[:, event_column], dtype=float)
+            keep = np.isfinite(times) & np.isfinite(events)
+            times, events = times[keep], events[keep]
+            if times.size == 0:
+                raise ValidationError("No finite duration/event rows for survival analysis")
 
-        result = KaplanMeierAnalyzer().fit(times, (events > 0).astype(int))
-        self._state.cache_result("survival_result", result)
-        return result
+            result = KaplanMeierAnalyzer().fit(times, (events > 0).astype(int))
+            self._state.cache_result("survival_result", result)
+            return result
 
     def compare_survival_groups(
         self,
@@ -1233,28 +1286,29 @@ class StatisticsController:
         """Log-rank test between two duration/event column pairs."""
         from macroevolution.survival import log_rank_test
 
-        if data is not None:
-            self._state.set_data_matrix(data)
-        matrix = self._ensure_data(None)
-        n_vars = matrix.shape[1]
-        for col, name in ((time_a, "A duration"), (event_a, "A event"), (time_b, "B duration"), (event_b, "B event")):
-            if not 0 <= col < n_vars:
-                raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
+        with self._lock:
+            if data is not None:
+                self._state.set_data_matrix(data)
+            matrix = self._ensure_data(None)
+            n_vars = matrix.shape[1]
+            for col, name in ((time_a, "A duration"), (event_a, "A event"), (time_b, "B duration"), (event_b, "B event")):
+                if not 0 <= col < n_vars:
+                    raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
 
-        def _pair(t_col: int, e_col: int) -> tuple[np.ndarray, np.ndarray]:
-            t = np.asarray(matrix[:, t_col], dtype=float)
-            e = np.asarray(matrix[:, e_col], dtype=float)
-            keep = np.isfinite(t) & np.isfinite(e)
-            return t[keep], (e[keep] > 0).astype(int)
+            def _pair(t_col: int, e_col: int) -> tuple[np.ndarray, np.ndarray]:
+                t = np.asarray(matrix[:, t_col], dtype=float)
+                e = np.asarray(matrix[:, e_col], dtype=float)
+                keep = np.isfinite(t) & np.isfinite(e)
+                return t[keep], (e[keep] > 0).astype(int)
 
-        t1, e1 = _pair(time_a, event_a)
-        t2, e2 = _pair(time_b, event_b)
-        if t1.size == 0 or t2.size == 0:
-            raise ValidationError("One of the two groups has no finite duration/event rows")
+            t1, e1 = _pair(time_a, event_a)
+            t2, e2 = _pair(time_b, event_b)
+            if t1.size == 0 or t2.size == 0:
+                raise ValidationError("One of the two groups has no finite duration/event rows")
 
-        result = log_rank_test(t1, e1, t2, e2)
-        self._state.cache_result("survival_logrank_result", result)
-        return result
+            result = log_rank_test(t1, e1, t2, e2)
+            self._state.cache_result("survival_logrank_result", result)
+            return result
 
     def simulate_fbd(
         self,
@@ -1268,34 +1322,189 @@ class StatisticsController:
         """Gillespie simulation of the fossilised birth-death process."""
         from macroevolution.fbd import simulate_fbd_process
 
-        results = simulate_fbd_process(
-            lambda_=speciation_rate,
-            mu=extinction_rate,
-            psi=fossilization_rate,
-            duration=duration,
-            n_replicates=int(n_replicates),
-            random_seed=random_seed,
-        )
-        self._state.cache_result("fbd_result", results)
-        return results
+        with self._lock:
+            results = simulate_fbd_process(
+                lambda_=speciation_rate,
+                mu=extinction_rate,
+                psi=fossilization_rate,
+                duration=duration,
+                n_replicates=int(n_replicates),
+                random_seed=random_seed,
+            )
+            self._state.cache_result("fbd_result", results)
+            return results
 
     def analyze_gpa3d(self, configurations: Any, **kwargs: Any) -> Any:
         """Generalized Procrustes analysis on 3-D landmark configurations."""
         from morpho3d.gpa3d import GPA3D
 
-        result = GPA3D(**kwargs).analyze(configurations)
-        self._state.cache_result("gpa3d_result", result)
-        return result
+        with self._lock:
+            result = GPA3D(**kwargs).analyze(configurations)
+            self._state.cache_result("gpa3d_result", result)
+            return result
 
     def run_tps3d(self, source: Any, target: Any, **kwargs: Any) -> Any:
         """Thin-plate spline in 3-D with a Jacobian and deformation grid."""
         from morpho3d.tps3d import TPS3D
 
-        tps = TPS3D(**kwargs)
-        tps.fit(source, target)
-        result = tps.create_deformation_grid()
-        self._state.cache_result("tps3d_result", result)
-        return result
+        with self._lock:
+            tps = TPS3D(**kwargs)
+            tps.fit(source, target)
+            result = tps.create_deformation_grid()
+            self._state.cache_result("tps3d_result", result)
+            return result
+
+    # =========================================================================
+    # Morphometrics: Allometry & Two-Block PLS (Integration)
+    # =========================================================================
+
+    def _resolve_aligned_configurations(
+        self,
+        aligned: npt.NDArray | None,
+        n_dims: int = 2,
+    ) -> npt.NDArray:
+        """Return a (n, k, m) Procrustes-aligned array.
+
+        Falls back to the most recent ``gpa_result`` cached in state
+        when ``aligned`` is ``None``. A 3D array is taken as-is; a 2D
+        array is split into landmarks, and ``n_dims`` says how many
+        coordinates each landmark has. Raises a clear
+        :class:`ValidationError` when no input is available. The caller
+        must hold ``self._lock``.
+
+        ``n_dims`` exists because a flattened (n, k*m) array is ambiguous,
+        and guessing wrong is silent. This used to hard-code 2, so a
+        flattened 3D configuration -- 5 specimens x 8 landmarks x 3
+        dimensions, the ordinary case in morphometrics -- was reshaped to
+        (5, 12, 2): 12 landmarks instead of 8, 2 dimensions instead of 3,
+        no exception and no warning. Allometry then regressed that
+        invented shape on log centroid size and returned a number for a
+        dataset that does not exist. The old "must have an even number of
+        columns" guard did not help either: 8*3 = 24 is even.
+        """
+        if aligned is not None:
+            arr = np.asarray(aligned, dtype=float)
+            if arr.ndim == 2:
+                n_rows, n_cols = arr.shape
+                if n_dims < 2:
+                    raise ValidationError(f"n_dims must be at least 2, got {n_dims}")
+                if n_cols % n_dims != 0:
+                    raise ValidationError(
+                        f"2D aligned data has {n_cols} columns, which is not a "
+                        f"multiple of n_dims={n_dims}. A flattened "
+                        f"(n_specimens, n_landmarks x n_dims) array needs "
+                        f"n_cols = n_landmarks * {n_dims}; pass the 3D array "
+                        f"directly, or set n_dims to match the data."
+                    )
+                arr = arr.reshape(n_rows, n_cols // n_dims, n_dims)
+            if arr.ndim != 3:
+                raise ValidationError(
+                    "Aligned configurations must be a 3D array "
+                    "(n_specimens, n_landmarks, n_dims)."
+                )
+            return arr
+
+        cached = self._state.get_cached_result("gpa_result")
+        if cached is None:
+            raise ValidationError(
+                "No aligned configurations available. "
+                "Run Generalized Procrustes Analysis (GPA) first, or pass "
+                "explicit configurations to analyze_allometry."
+            )
+        aligned_attr = getattr(cached, "aligned_configurations", None)
+        if aligned_attr is None:
+            raise ValidationError(
+                "The cached GPA result has no aligned_configurations attribute."
+            )
+        return np.asarray(aligned_attr, dtype=float)
+
+    def analyze_allometry(
+        self,
+        aligned_configurations: npt.NDArray | None = None,
+        n_components: int | None = None,
+        n_dims: int = 2,
+    ) -> Any:
+        """Multivariate regression of Procrustes shape on log centroid size.
+
+        Parameters:
+            aligned_configurations: Optional ``(n, k, m)`` array from GPA.
+                When ``None``, the controller falls back to the most
+                recent ``gpa_result`` cached in state.
+            n_components: Optional PCA-reduced dimensionality for the
+                regression. ``None`` keeps the full Procrustes shape
+                vector (default).
+            n_dims: Coordinates per landmark, used **only** when
+                ``aligned_configurations`` is a flattened 2D array. Pass the
+                3D array and this is ignored. The default of 2 is right for
+                planar landmarks; for 3D landmarks pass 3, because the
+                flattened shape alone does not say which it is.
+
+        Returns:
+            :class:`morphometrics.allometry.AllometryResult`.
+        """
+        from morphometrics.allometry import AllometryAnalyzer
+
+        with self._lock:
+            configurations = self._resolve_aligned_configurations(aligned_configurations, n_dims=n_dims)
+            self._logger.info(
+                f"analyze_allometry called with shape {configurations.shape}, "
+                f"n_components={n_components}, n_dims={n_dims}"
+            )
+            analyzer = AllometryAnalyzer()
+            result = analyzer.analyze_allometry(configurations, n_components=n_components)
+            self._state.cache_result("allometry_result", result)
+            return result
+
+    def analyze_pls(
+        self,
+        block_a: npt.NDArray | None = None,
+        block_b: npt.NDArray | None = None,
+        division: str = "anterior_posterior",
+        n_components: int | None = None,
+        permutations: int = 0,
+        seed: int | None = None,
+    ) -> Any:
+        """Two-Block PLS (morphological integration).
+
+        When ``block_a``/``block_b`` are ``None``, the controller splits
+        the cached GPA-aligned configurations by ``division`` (see
+        :meth:`morphometrics.allometry.IntegrationAnalyzer.divide_configuration_into_blocks`).
+
+        Parameters:
+            block_a: Optional explicit ``(n, p)`` first block.
+            block_b: Optional explicit ``(n, q)`` second block.
+            division: Landmark-split rule used only when both blocks
+                are ``None``. One of ``"anterior_posterior"``,
+                ``"size_matched"`` or ``"random"``.
+            n_components: Number of PLS components to retain.
+            permutations: Permutations for the r₁ significance test
+                (``0`` to skip).
+            seed: RNG seed for the permutation test.
+
+        Returns:
+            :class:`morphometrics.allometry.PLSResult`.
+        """
+        from morphometrics.allometry import IntegrationAnalyzer
+
+        with self._lock:
+            analyzer = IntegrationAnalyzer()
+            if block_a is None or block_b is None:
+                configurations = self._resolve_aligned_configurations(None)
+                a, b = analyzer.divide_configuration_into_blocks(
+                    configurations, division=division, random_seed=seed
+                )
+            else:
+                a = np.asarray(block_a, dtype=float)
+                b = np.asarray(block_b, dtype=float)
+            self._logger.info(
+                f"analyze_pls called with block_a {a.shape}, block_b {b.shape}, "
+                f"n_components={n_components}, permutations={permutations}"
+            )
+            result = analyzer.analyze_pls(
+                a, b, n_components=n_components, permutations=permutations, seed=seed
+            )
+            self._state.cache_result("pls_result", result)
+            return result
 
     # =========================================================================
     # Cached Results Access
