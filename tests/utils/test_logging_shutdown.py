@@ -75,26 +75,45 @@ class TestLoggingShutdown:
         QApplication and drops the console lets the weakref in
         ``logging._handlerList`` die first, so the bad entry is skipped and
         the test passes against buggy code.
+
+        The quit is requested from a plain daemon thread rather than from
+        ``QTimer.singleShot(0, poll)`` scheduled BEFORE ``main()`` runs. At
+        that point no QApplication exists and therefore no event dispatcher
+        does either, so whether the timer ever fires is platform-dependent:
+        it happened to fire on Linux/Windows and never fired on macOS, where
+        ``app.exec()`` then ran until the 180 s subprocess timeout and the
+        test reported a failure that had nothing to do with its subject.
+
+        Two mechanisms were measured and only one is portable:
+          - ``app.quit()`` called directly from the thread is a NO-OP, because
+            it is invoked outside the thread running the event loop.
+          - ``QMetaObject.invokeMethod(app, "quit", QueuedConnection)`` posts
+            the call onto the app's own thread, so the loop actually stops.
         """
         proc = _run_in_subprocess(
             """
-            import os, sys
+            import os, sys, threading, time
             os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
             import faulthandler; faulthandler.enable()
 
             import main
             import PyQt6.QtCore as QtCore
 
-            # main() builds its own QApplication, so poll for the instance
-            # before scheduling the quit.
-            def _poll():
-                app = QtCore.QCoreApplication.instance()
-                if app is None:
-                    QtCore.QTimer.singleShot(200, _poll)
-                    return
-                QtCore.QTimer.singleShot(4000, app.quit)
+            def _quit_when_running():
+                # main() builds its own QApplication; wait for it, give the
+                # startup a moment, then ask that app to stop from its own
+                # thread via a queued call.
+                for _ in range(250):          # ~50 s ceiling to find the app
+                    app = QtCore.QCoreApplication.instance()
+                    if app is not None:
+                        time.sleep(4.0)
+                        QtCore.QMetaObject.invokeMethod(
+                            app, "quit", QtCore.Qt.ConnectionType.QueuedConnection
+                        )
+                        return
+                    time.sleep(0.2)
 
-            QtCore.QTimer.singleShot(0, _poll)
+            threading.Thread(target=_quit_when_running, daemon=True).start()
             rc = main.main()
             print("SURVIVED rc=%s" % rc)
             """
