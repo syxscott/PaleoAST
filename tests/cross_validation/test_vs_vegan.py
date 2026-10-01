@@ -98,13 +98,15 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
     group = r("factor")(StrVector([str(g) for g in groups]))
     frame = r("data.frame")(ListVector({"group": group}), check_names=False)
 
-    r("assign")("spec", r_matrix(data), env="globalenv")
-    r("assign")("group", group, env="globalenv")
+    # R's `assign` argument is `envir`, not `env`; `env=` produced
+    # "invalid 'envir' argument".
+    r("assign")("spec", r_matrix(data), envir="globalenv")
+    r("assign")("group", group, envir="globalenv")
     try:
         formula = r("as.formula")("spec ~ group")
         result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
     finally:
-        r("rm")("spec", "group", env="globalenv")
+        r("rm")("spec", "group", envir="globalenv")
     return result.rx2("table")
 
 

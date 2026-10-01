@@ -40,9 +40,24 @@ def _sample(abundances: np.ndarray) -> np.ndarray:
 
 
 def _r_single_sample(abundances: np.ndarray):
-    """One sample as a 1-row R matrix, the shape iNEXT's estimators expect."""
+    """One sample as a **column** vector, n rows x 1 column.
+
+    The orientation matters and was wrong. ``ChaoRichness`` counts taxa down
+    the rows, so a 1 x n row vector was read as *one taxon* with a single
+    sample: the fixture with abundances [10, 8, 5, 5, 3, 2, 2, 1, 1] came back
+    with Observed = 1 and Chao1 = 1.0, while the textbook answer for nine
+    taxa is S_obs = 9, f1 = 2, f2 = 2, so Chao1 = 9 + 4/4 = 10.0 -- which is
+    what PaleoAST returns, and what the failing CI run reported as ACTUAL.
+
+    The 10x ratio was the tell: 1.0 is one taxon's Chao1, not nine taxa's.
+
+    ``r("t")`` is gone from here for a second reason: ``t()`` on a plain
+    numeric *vector* is a no-op in R, it only transposes a matrix. It was
+    never doing anything, and the explicit ``nrow``/``ncol`` below says what
+    shape is actually wanted.
+    """
     flat = np.asarray(abundances, dtype=float).ravel()
-    return r("matrix")(r("t")(r_vector(flat.tolist())), nrow=1)
+    return r("matrix")(r_vector(flat.tolist()), nrow=flat.size, ncol=1)
 
 
 def _paleo_chao1(abundances: np.ndarray) -> float:
