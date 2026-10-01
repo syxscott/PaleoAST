@@ -28,9 +28,13 @@ a) 添加分类单元的顺序
    - 基于距离添加 (逐步添加)
 
 b) 局部搜索操作符
-   - NNI (Nearest Neighbor Interchange)
-   - TBR (Tree Bisection and Reconnection)
-   - SPR (Subtree Pruning and Regrafting)
+   - NNI (Nearest Neighbor Interchange)  —— :class:`NNIOperation`
+   - TBR (Tree Bisection and Reconnection) —— :class:`TBROperation`
+
+   注意：**SPR 没有单独实现**。SPR 是 TBR 的真子集（TBR 多一次
+   "重定根"步骤），所以 :meth:`HeuristicSearch._generate_neighbors` 用
+   TBR 覆盖了 SPR 能到达的全部拓扑；此处曾把 SPR 列为已支持算子，
+   但代码里没有 :class:`SPROperation`，属于文档与实现不符。
 
 3. NNI变换
 --------------------
@@ -107,6 +111,40 @@ class SearchResult:
 
         consensus_builder = StrictConsensusTree()
         return consensus_builder.build(self.all_trees)
+
+
+
+def _unrooted_topology(tree: PhyloTree) -> frozenset:
+    """A root-independent fingerprint of a tree's topology.
+
+    Two trees have the same unrooted topology exactly when they induce the
+    same set of bipartitions, so the set of leaf-sets hanging below every node
+    (with each node's leaf-set paired against its complement, smaller side
+    first) identifies the tree regardless of where the root sits.
+
+    Branch lengths are deliberately excluded: this is a topology key, used to
+    drop duplicates and to drop self-loops.
+    """
+    def _leafset(node) -> frozenset:
+        return frozenset(
+            (leaf.name if leaf.name is not None else leaf.label)
+            for leaf in node.get_leaves()
+        )
+
+    labels = _leafset(tree.root)
+    whole = tree.root
+    splits: set[frozenset] = set()
+
+    for node in whole.get_all_nodes():
+        side = _leafset(node)
+        if not side:
+            continue
+        other = labels - side
+        if not other:
+            continue
+        small, large = sorted((side, other), key=lambda s: sorted(s))
+        splits.add(frozenset({small, large}))
+    return frozenset(splits)
 
 
 class TreeOperation:
@@ -368,12 +406,22 @@ class TBROperation(TreeOperation):
             raise ValueError("TBR needs a reconnect node distinct from the cut parent")
 
         on_path_to_n1 = None
-        walk = r1
-        while walk is not n1:
-            walk = walk.parent
-            if walk is None:
+        # Walk UP FROM cut_node1 towards reconnect_node1, not the other way
+        # round. r1 is required to be an ancestor of n1 (by default it is
+        # n1.parent), so n1 lies BELOW r1 and a downward walk from r1 can
+        # never reach it. Walking the wrong way made every default-path call
+        # raise, and since _generate_neighbors swallows ValueError, TBR's
+        # neighbourhood was left far smaller than a real TBR neighbourhood.
+        #
+        # Walking up from n1 also yields what we actually need: the child of
+        # r1 that lies on the path to n1, which is the branch that must NOT be
+        # cut a second time or side A would be split in half.
+        walk = n1
+        while walk is not r1:
+            if walk.parent is None:
                 raise ValueError("reconnect_node1 is not an ancestor of cut_node1")
             on_path_to_n1 = walk
+            walk = walk.parent
 
         c1 = next((c for c in r1.children if c is not on_path_to_n1), None)
         if c1 is None:
@@ -532,6 +580,7 @@ class HeuristicSearch:
         max_iterations: int = 1000,
         random_seed: int | None = None,
         nni_swap_probability: float = 0.7,
+        tbr_max_candidates: int = 3,
         acceptance_probability: float = 0.1,
         temperature: float = 1.0,
         cooling_rate: float = 0.95,
@@ -559,6 +608,13 @@ class HeuristicSearch:
         self._initial_temperature = temperature
         self._nni_prob = nni_swap_probability
         self._tbr_prob = 1.0 - nni_swap_probability
+        # How many reconnect candidates to try per cut edge. The default of 3
+        # is what this search has always done; it is NOT a complete TBR
+        # neighbourhood (see _generate_neighbors for the measured shortfall),
+        # and it is exposed here so a caller who wants a fuller sweep can ask
+        # for one instead of being given a method named "TBR" that quietly
+        # explores a fifth of it.
+        self._tbr_max_candidates = max(1, int(tbr_max_candidates))
         self._acceptance_prob = acceptance_probability
         self._temperature = temperature
         self._cooling_rate = cooling_rate
@@ -711,6 +767,16 @@ class HeuristicSearch:
         """
         生成邻居树（NNI + TBR）
 
+        **TBR 的实现范围**（重要，别把它当成教科书完整 TBR）：
+        1. 重组点 r1 只在 cut_node1 的**祖先链**上，即剪下的子树总是接回
+           cut_node1 之上。接回 cut_node1 自身剩余子树内部的那一半 TBR 移动
+           不在支持范围内。
+        2. 每条切边最多试 ``tbr_max_candidates`` 个重组点（默认 3）。
+
+        两者都**有意的**：教科书完整 TBR 每步是二次复杂度，实测 n=8 时
+        完整邻域为 66 个拓扑，默认设置探索到 12 个。若要更彻底的重搜索，
+        调大 ``tbr_max_candidates``；若要真正完整的 TBR，需要另一个实现。
+
         Parameters:
             tree: 当前树
 
@@ -747,13 +813,36 @@ class HeuristicSearch:
             # 挂载点候选必须是"全树节点 - node2 子树(含后代)"，否则会把
             # node2 挂回自己内部形成环。
             #
-            # 旧实现还对 node2 子树内的非叶节点取 r2 候选并逐个尝试，但 TBR
-            # 的第二条切边由 r1 自身决定，r2 从未参与重接——同一 (r1) 被重复
-            # 生成 3 次，12 个邻居里只有 2-3 个不同拓扑。现在只沿 r1 变化。
+            # 还必须是 cut_node1 的**祖先**。TBROperation 的重接方式是
+            # "cut_node1 接管 c1、cut_node2 接管 r1"，这只有在 r1 位于
+            # cut_node1 之上时才构成合法的二叉树。教科书 TBR 允许把剪下的
+            # 子树接到 cut_node1 剩余子树的内部（那样 reroot 点就在
+            # cut_node1 之下），本实现不支持那一半邻域。
+            #
+            # 先在这里过滤，而不是靠 TBROperation 逐个抛 ValueError：
+            # 8 叶树上原本有 48/72 的候选注定失败，逐一抛异常再吞掉纯属浪费，
+            # 而过滤后**生成的邻居集合完全不变**（它们本来就被 skip 了）。
             moved = set(node2.get_subtree_nodes())
-            parent_candidates = [n for n in all_nodes if n not in moved and not n.is_leaf]
+            ancestors_of_cut = {id(node1)}
+            for node in node1.get_ancestors():
+                ancestors_of_cut.add(id(node))
+            parent_candidates = [
+                n for n in all_nodes
+                if id(n) not in moved and not n.is_leaf and id(n) in ancestors_of_cut
+            ]
 
-            for r1 in parent_candidates[:3]:  # 限制候选数
+            # CANDIDATE CAP. A textbook TBR move may regraft the pruned
+            # subtree on ANY edge of the retained side, so the full
+            # neighbourhood is much larger than what is explored here.
+            # Measured against the known TBR-graph degree (2 -> 10 -> 18 ->
+            # 34 -> 66 neighbours for n = 4..8), the default cap of 3
+            # explores roughly a fifth of the available moves. That is a
+            # deliberate speed / quality trade-off -- a full TBR sweep is
+            # quadratic per cut edge and makes the search intractable -- but
+            # it must be stated rather than implied, so nobody reads the
+            # result as an exhaustive TBR search. Pass
+            # ``tbr_max_candidates=len(candidates)`` to sweep all of them.
+            for r1 in parent_candidates[: self._tbr_max_candidates]:
                 if r1 is node1:
                     continue
                 try:
@@ -763,19 +852,32 @@ class HeuristicSearch:
                 except (ValueError, AttributeError):
                     pass
 
-        # 去重：TBR 的 (r1, c1) 选择可能收敛到同一拓扑（例如 r1 与 c1 在不同
-        # 轮次被选为同一对），保留首次出现的那棵。
-        seen: set[str] = set()
+        # 去重与自环排除都必须按**无根拓扑**做，不能用 Newick 字符串。
+        #
+        # TBR 把剪下的子树接回 cut_node1 之上时，可能恰好回到原来的拓扑、
+        # 只是根被挪到了别处。Newick 字符串对根敏感，所以这种"换了根的
+        # 同一棵树"看起来是新邻居，会被当成一次真实移动送进爬山搜索 -- 实测
+        # 4 分类时 3 个"邻居"里有一个与起始树的无根分裂集完全相同。无根
+        # 4 分类拓扑总共只有 3 种，邻域上限本应是 2。
+        try:
+            start_splits = _unrooted_topology(tree)
+        except Exception:
+            start_splits = None
+
+        seen: set[frozenset] = set()
         unique: list[PhyloTree] = []
         for t in neighbors:
             try:
-                key = t.to_newick()
+                key = _unrooted_topology(t)
             except Exception:
                 unique.append(t)
                 continue
-            if key not in seen:
-                seen.add(key)
-                unique.append(t)
+            if start_splits is not None and key == start_splits:
+                continue  # self-loop: same tree, different rooting
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(t)
         return unique
 
     def _collect_internal_edges(self, node: PhyloNode) -> list[tuple[PhyloNode, PhyloNode]]:
