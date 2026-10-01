@@ -77,7 +77,7 @@ def _ape_fn(name: str):
     fn = getattr(R_APE, name, None)
     if fn is not None:
         return fn
-    exported = [str(n) for n in as_array(r("getNamespaceExports")("ape"))]
+    exported = [str(n) for n in r("getNamespaceExports")("ape")]
     if name not in exported:
         pytest.skip(f"this ape build does not export {name!r}; environment, not PaleoAST")
     return r("getExportedValue")("ape", name)

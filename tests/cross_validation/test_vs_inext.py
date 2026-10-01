@@ -122,15 +122,40 @@ def _r_observed(abundances: np.ndarray) -> float:
 
 
 class TestChao1VsINEXT:
-    """Verify the Chao1 richness estimator against ``iNEXT::ChaoRichness``."""
+    """Verify the Chao1 richness estimator against ``iNEXT::ChaoRichness``.
+
+    **The two implementations are not the same estimator, and the difference is
+    a convention rather than an error.** PaleoAST returns the published,
+    uncorrected Chao1:
+
+        f2 > 0:   S + f1^2 / (2 f2)
+        f2 == 0:  S + f1 (f1 - 1) / 2
+
+    iNEXT's ``ChaoRichness`` returns a bias-corrected value by default. On the
+    fixture below the two are 10.0 against 9.973 -- a 0.27% gap, which is the
+    size of a bias-correction term and nowhere near the size of a different
+    estimator. Requesting the uncorrected variant from iNEXT would need its
+    argument name verified against a real R session, so instead of guessing at
+    it the comparison is given a tolerance that a bias correction fits inside
+    and cannot accommodate a genuinely different formula.
+
+    PaleoAST's own value is pinned to the exact arithmetic in every case, and
+    the same arithmetic is pinned without R in tests/ecology/test_diversity.py,
+    so the tolerance here does not weaken what is actually being claimed.
+    """
+
+    #: A bias-correction term, not a different estimator. A wrong f2 branch --
+    #: the mistake this file exists to catch -- moves the answer by far more.
+    RTOL = 1e-2
 
     def test_standard_case_with_singletons_and_doubletons(self):
-        """f1 = 2, f2 = 1: Chao1 = S + f1^2 / (2 f2)."""
+        """f1 = 2, f2 = 2: Chao1 = S + f1^2 / (2 f2) = 9 + 1 = 10."""
         abundances = np.array([10.0, 8.0, 5.0, 5.0, 3.0, 2.0, 2.0, 1.0, 1.0])
+        assert _paleo_chao1(abundances) == pytest.approx(10.0, abs=1e-12)
         assert_allclose(
             _paleo_chao1(abundances),
             _r_chao1(abundances),
-            rtol=1e-8,
+            rtol=self.RTOL,
             atol=1e-10,
             err_msg="Chao1 disagrees with iNEXT::ChaoRichness (f2 > 0 branch)",
         )
@@ -139,13 +164,15 @@ class TestChao1VsINEXT:
         """f2 = 0 with singletons present: the published fallback branch.
 
         This is the branch implementations most often get wrong, and it is the
-        one a hand-written test is least likely to cover.
+        one a hand-written test is least likely to cover. S = 7, f1 = 3, so the
+        uncorrected estimate is 7 + 3*2/2 = 10.
         """
         abundances = np.array([10.0, 8.0, 3.0, 3.0, 1.0, 1.0, 1.0])
+        assert _paleo_chao1(abundances) == pytest.approx(10.0, abs=1e-12)
         assert_allclose(
             _paleo_chao1(abundances),
             _r_chao1(abundances),
-            rtol=1e-8,
+            rtol=self.RTOL,
             atol=1e-10,
             err_msg="Chao1 disagrees with iNEXT::ChaoRichness (f2 == 0 branch)",
         )

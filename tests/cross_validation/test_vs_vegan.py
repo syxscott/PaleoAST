@@ -98,15 +98,18 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
     group = r("factor")(StrVector([str(g) for g in groups]))
     frame = r("data.frame")(ListVector({"group": group}), check_names=False)
 
-    # R's `assign` argument is `envir`, not `env`; `env=` produced
-    # "invalid 'envir' argument".
-    r("assign")("spec", r_matrix(data), envir="globalenv")
-    r("assign")("group", group, envir="globalenv")
+    # R's `assign`/`rm` take `envir` as an *environment object*, and the
+    # default is `as.environment(parent.frame())`, which for an rpy2 call is
+    # the global environment. Passing the string "globalenv" gave
+    # "invalid 'envir' argument"; the default is both simpler and what the
+    # formula is going to be evaluated in.
+    r("assign")("spec", r_matrix(data))
+    r("assign")("group", group)
     try:
         formula = r("as.formula")("spec ~ group")
         result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
     finally:
-        r("rm")("spec", "group", envir="globalenv")
+        r("rm")("spec", "group")
     return result.rx2("table")
 
 
