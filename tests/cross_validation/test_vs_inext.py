@@ -82,13 +82,17 @@ def _r_chao(abundances: np.ndarray) -> tuple[float, float]:
     result = _CHAO_RICHNESS(_r_single_sample(abundances))
     observed_col, est_col = _chao_columns(result)
     names = list(result.names)
-    # Read column-then-row, never result[row, col]. ChaoRichness returns a
-    # data.frame, and rpy2 indexes a data.frame as a list of columns: a tuple
-    # index reaches rinterface.ListSexpVector.__getitem__, which rejects it
-    # with "Indices must be integers or slices, not <class 'tuple'>". Row 0 is
-    # the default estimator, Chao1.
-    observed = as_float(result[names[observed_col]][0])
-    estimate = as_float(result[names[est_col]][0])
+    # Read a named column out of the data.frame and take its first element.
+    # Two earlier attempts failed for the same reason: rpy2's data.frame
+    # wrapper exposes neither tuple indexing (`result[0, col]` -> "Indices must
+    # be integers or slices, not <class 'tuple'>") nor string indexing
+    # (`result[name]` -> "Indices must be integers or slices, not <class
+    # 'str'>"). ``rx2`` is the accessor that works, and it is the same one
+    # this suite already uses for prcomp's sdev and rotation.
+    #
+    # Row 0 is the default estimator, Chao1.
+    observed = as_float(result.rx2(names[observed_col])[0])
+    estimate = as_float(result.rx2(names[est_col])[0])
     return observed, estimate
 
 

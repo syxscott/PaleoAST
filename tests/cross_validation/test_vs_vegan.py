@@ -79,25 +79,32 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
       LHS there, not in ``data``: naming a column of the data frame produced
       ``object 'spec' not found`` from ``eval(YVAR, parent.frame(),
       environment(formula))``. ``?adonis2`` says ``data`` carries "the data
-      frame for the independent variables", so the community matrix is assigned
-      into a dedicated environment that the formula is then built in. A local
-      environment is used rather than the global one so nothing leaks between
-      tests.
+      frame for the independent variables", so the community matrix has to be
+      reachable by name from the formula's environment.
+
+      Building the formula with ``as.formula("spec ~ group", env=<local env>)``
+      did not work: the name is still resolved in the evaluation frame rather
+      than the one supplied, and the same ``object 'spec' not found`` came
+      back. The bindings therefore go into the global environment, which is
+      where an rpy2 call evaluates by default, and are removed again in a
+      ``finally``. The cleanup matters: leaving a stale ``spec`` bound in
+      globalenv would let a later test pick up the previous dataset, which is
+      the sys.modules-mock failure mode all over again.
     * **The return value is an ``anova.cca`` object, not the data frame.** The
       per-term statistics live in its ``table`` element, with columns ``Df``,
       ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)`` and one row per term plus
       ``Residual`` and ``Total``.
     """
     group = r("factor")(StrVector([str(g) for g in groups]))
-
-    env = r("new.env")()
-    r("assign")("spec", r_matrix(data), env=env)
-    r("assign")("group", group, env=env)
-
     frame = r("data.frame")(ListVector({"group": group}), check_names=False)
-    formula = r("as.formula")("spec ~ group", env=env)
 
-    result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
+    r("assign")("spec", r_matrix(data), env="globalenv")
+    r("assign")("group", group, env="globalenv")
+    try:
+        formula = r("as.formula")("spec ~ group")
+        result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
+    finally:
+        r("rm")("spec", "group", env="globalenv")
     return result.rx2("table")
 
 

@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from ._rbridge import as_array, as_float, r, r_matrix, require
+from ._rbridge import as_array, as_float, matrix_to_array, r, r_matrix, require
 
 pytestmark = pytest.mark.cross_validation
 
@@ -85,8 +85,6 @@ class TestBridgeIsLive:
 
     def test_r_evaluates_r_code(self):
         """R is running and returns a value computed in R."""
-        from ._rbridge import as_float, r
-
         # 7 * 6 is arithmetic R performs; no local constant could satisfy this
         # if the bridge were not really talking to R.
         #
@@ -105,8 +103,6 @@ class TestBridgeIsLive:
         returns the wrong number proves the value came from R rather than from a
         stub, and that the helper is not echoing its own input.
         """
-        from ._rbridge import as_float, r
-
         assert as_float(r("sum")(r("c")(1, 2, 3, 4))) == 10.0
         # Same input, different function, different answer.
         assert as_float(r("max")(r("c")(1, 2, 3, 4))) == 4.0
@@ -145,13 +141,22 @@ class TestPCAVsPrcomp:
         )
 
     def test_correlation_eigenvalues_match(self):
-        """Eigenvalues of the correlation PCA match ``prcomp(scale.=TRUE)``."""
+        """Eigenvalues of the correlation PCA match ``prcomp(scale.=TRUE)``.
+
+        The R argument is ``scale.`` *with* the trailing dot. Passing
+        ``scale_=True`` does not translate: the name falls through prcomp's
+        ``...`` and is ignored, so R returned the *unscaled* eigenvalues --
+        which is why the mismatch it produced was exactly
+        ``[2.491440, 0.604022, 0.019649]``, the covariance-PCA numbers this
+        same file asserts are correct two tests above. The keyword is passed
+        as a dict so the dot survives.
+        """
         from stats.pca import PCAAnalyzer
 
         x = _dataset()
         result = PCAAnalyzer().analyze(x, n_components=5, method="correlation")
 
-        r_prcomp = R_STATS.prcomp(r_matrix(x), center=True, scale_=True)
+        r_prcomp = R_STATS.prcomp(r_matrix(x), **{"center": True, "scale.": True})
         r_eigenvalues = as_array(r_prcomp.rx2("sdev")) ** 2
 
         assert_allclose(
@@ -161,6 +166,16 @@ class TestPCAVsPrcomp:
             atol=1e-10,
             err_msg="correlation PCA eigenvalues disagree with stats::prcomp",
         )
+        # A guard against exactly the mistake above: a correlation PCA on this
+        # fixture has eigenvalues summing to n_vars = 5, and its first
+        # eigenvalue cannot equal the covariance PCA's (2.491440), because
+        # standardising the columns cannot leave the spectrum unchanged.
+        assert not np.isclose(r_eigenvalues[0], 2.491439700660851), (
+            "prcomp returned unscaled eigenvalues -- the 'scale.' keyword did "
+            "not reach R and this test was comparing correlation PCA against "
+            "covariance PCA"
+        )
+        assert float(np.sum(r_eigenvalues)) == pytest.approx(5.0, rel=1e-8)
 
     def test_variance_proportions_match(self):
         """``explained_variance`` (as a percentage) matches prcomp's share."""
@@ -250,8 +265,9 @@ class TestPCAVsPrcomp:
         # A vector of zeros would pass the comparison above trivially, so also
         # assert the scores are not degenerate.
         assert float(np.std(np.asarray(result.scores))) > 1e-6
-        # R's own exponentiation operator, not Python's `**`: prcomp$x is an
-        # R matrix, and rpy2's FloatMatrix does not implement `__pow__`, so
-        # `scores ** 2` raises "unsupported operand type(s) for ** or pow()".
-        total_ss = r("sum")(r("^")(r_prcomp.rx2("x"), 2))
-        assert as_float(as_array(total_ss)) > 0.0
+        # R's `^` is an operator, not a function name, so r("^") fails at parse
+        # time with "PARSING_STATUS.PARSE_ERROR". matrix_to_array already knows
+        # how to bring an R matrix across in storage order, and squaring in
+        # numpy says the same thing.
+        r_scores = matrix_to_array(r_prcomp.rx2("x"))
+        assert float(np.sum(r_scores**2)) > 0.0
