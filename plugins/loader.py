@@ -7,60 +7,60 @@ Plugin Loader for PaleoAST
 Utilities for discovering and loading analysis plugins.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
-import importlib
 import logging
 import pkgutil
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Built-in plugin modules (discovered at import time)
-_BUILTIN_PLUGINS = [
-    "statistics.pca",
-    "statistics.pcoa",
-    "statistics.nmds",
-    "statistics.anosim",
-    "statistics.permanova",
-    "statistics.simper",
+# Built-in analysis modules, kept as a testable list of names.
+#
+# This is a hand-curated list, not a complete inventory: ``stats/`` has 15
+# modules and ``ecology/`` 8, and this names 7. The earlier version of this
+# comment claimed the list let a caller "find every first-party analysis
+# plugin", which was wrong twice over -- it is not every one of them, and
+# ``discover_plugins_in_package`` does not read this list at all (it scans a
+# directory path). The names are kept because they are what the stale-rename
+# test asserts against: they used to say ``statistics.*`` after the package was
+# renamed to ``stats/``, and ``statistics`` is also a stdlib name, so the list
+# pointed at modules that could never import.
+_BUILTIN_PLUGINS: tuple[str, ...] = (
+    "stats.pca",
+    "stats.pcoa",
+    "stats.nmds",
+    "stats.anosim",
+    "stats.permanova",
+    "stats.simper",
     "ecology.diversity",
-]
-
-
-def load_builtin_plugins() -> int:
-    """
-    Load all built-in analysis plugins.
-
-    This imports the known analysis modules which register
-    themselves via decorators or explicit registration.
-
-    Returns:
-        Number of plugins successfully loaded
-    """
-    loaded = 0
-    for module_name in _BUILTIN_PLUGINS:
-        try:
-            importlib.import_module(module_name)
-            loaded += 1
-            logger.debug(f"Loaded plugin module: {module_name}")
-        except ImportError as e:
-            logger.warning(f"Failed to load plugin module '{module_name}': {e}")
-    return loaded
+)
 
 
 def discover_plugins_in_package(package_path: Path) -> list[str]:
     """
-    Discover plugin modules within a package directory.
+    List the importable module names directly inside a package directory.
 
-    Looks for Python files that define AnalysisPlugin subclasses.
+    Returns every non-underscore **module** found in ``package_path``
+    (subpackages are skipped, as they were before). This is a *directory
+    listing*, not a plugin filter: nothing here imports the candidates or
+    inspects them, so a module with no ``AnalysisPlugin`` subclass in it is
+    still returned. Deciding what is actually a plugin means importing the
+    modules and looking for subclasses, which is left to the caller precisely
+    because importing a module runs it.
+
+    The previous docstring claimed this "looks for Python files that define
+    AnalysisPlugin subclasses", which it never did. A caller who believed that
+    would take the result as a list of plugins and try to instantiate entries
+    that are not plugins.
 
     Parameters:
-        package_path: Path to the package directory
+        package_path: Path to the package directory. A path that is not a
+            directory yields an empty list.
 
     Returns:
-        List of module names found
+        Module names, in the order ``pkgutil`` reports them.
     """
     if not package_path.is_dir():
         return []
@@ -72,4 +72,4 @@ def discover_plugins_in_package(package_path: Path) -> list[str]:
     return modules
 
 
-__all__ = ["discover_plugins_in_package", "load_builtin_plugins"]
+__all__ = ["discover_plugins_in_package"]
