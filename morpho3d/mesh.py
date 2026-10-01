@@ -47,6 +47,19 @@ class Mesh3D:
             logger.error(f"Faces must be (n, 3), got {self.faces.shape}")
             raise ValueError(f"Faces must be (n, 3), got {self.faces.shape}")
 
+        # Face indices are checked here rather than left to blow up inside a
+        # numpy fancy-index later, where the traceback points at index
+        # arithmetic instead of at the mesh that is wrong.
+        n_vertices = len(self.vertices)
+        if self.faces.size:
+            lowest = int(self.faces.min())
+            highest = int(self.faces.max())
+            if lowest < 0 or highest >= n_vertices:
+                raise ValueError(
+                    f"Face indices must lie in [0, {n_vertices}), got range "
+                    f"[{lowest}, {highest}]"
+                )
+
         logger.info(f"Mesh3D created: {len(self.vertices)} vertices, {len(self.faces)} faces")
         if self.normals is None:
             self.compute_normals()
@@ -109,9 +122,45 @@ class Mesh3D:
         logger.info(f"Surface area computed: {total_area:.4f}")
         return total_area
 
-    def compute_volume(self) -> float:
-        """计算体积 (假设闭合曲面)"""
-        logger.debug(f"Computing volume for {len(self.faces)} faces (assuming closed surface)")
+    def compute_volume(self, require_closed: bool = True) -> float:
+        """计算体积（散度定理，要求**闭合**曲面）
+
+        The divergence theorem only gives the enclosed volume for a closed
+        surface. For an open mesh the per-face tetrahedra terms no longer
+        cancel, so the sum silently returns a number that depends on where
+        the origin happens to be -- translation of the whole mesh changes the
+        answer. That is a wrong number, not a rough one, and it was previously
+        returned without complaint.
+
+        Parameters
+        ----------
+        require_closed:
+            When True (the default) an open mesh raises. Pass False to get
+            the raw sum anyway, for callers who know what they are doing.
+        """
+        n_vertices = len(self.vertices)
+
+        # Every edge of a closed orientable surface is shared by exactly two
+        # faces. Counting directed face edges and looking for any vertex-edge
+        # that appears once detects the common open case cheaply.
+        edge_counts: dict[tuple[int, int], int] = {}
+        for face in self.faces:
+            for i in range(3):
+                a, b = int(face[i]), int(face[(i + 1) % 3])
+                edge_counts[(min(a, b), max(a, b))] = edge_counts.get((min(a, b), max(a, b)), 0) + 1
+        boundary_edges = [edge for edge, count in edge_counts.items() if count == 1]
+
+        if boundary_edges and require_closed:
+            raise ValueError(
+                f"Volume is not defined for an open mesh: found "
+                f"{len(boundary_edges)} boundary edge(s) (e.g. {boundary_edges[:3]}) "
+                f"that are used by only one face out of {len(self.faces)} faces "
+                f"spanning {n_vertices} vertices. Close the surface, or call "
+                "compute_volume(require_closed=False) to get the raw "
+                "divergence sum and accept that it is origin-dependent."
+            )
+
+        logger.debug(f"Computing volume for {len(self.faces)} faces (closed surface)")
         total_volume = 0.0
 
         for face in self.faces:
@@ -125,12 +174,16 @@ class Mesh3D:
         logger.info(f"Volume computed: {volume:.4f}")
         return volume
 
-    def sample_points(self, n_points: int) -> np.ndarray:
+    def sample_points(self, n_points: int, seed: int | None = None) -> np.ndarray:
         """
-        在曲面上采样点
+        在曲面上采样点（按面积均匀）
 
         参数:
             n_points: 采样点数
+            seed: 随机种子。给定时结果可复现且不触碰全局随机状态；不给定
+                时使用一个局部生成器，仍然**不会**污染进程内其他使用者的
+                ``np.random``（旧实现直接调用 ``np.random.choice`` /
+                ``np.random.random``，既不可传入种子也不线程安全）。
 
         返回:
             采样点坐标 (n_points, 3)
@@ -146,10 +199,19 @@ class Mesh3D:
             areas.append(area)
 
         areas = np.array(areas)
-        weights = areas / areas.sum()
+        total_area = areas.sum()
+        if not np.isfinite(total_area) or total_area <= 0.0:
+            raise ValueError(
+                "Cannot sample a mesh whose faces have zero total area; "
+                "check the geometry or remove degenerate faces."
+            )
+        weights = areas / total_area
+
+        # 局部随机源：与 phylogenetics/heuristic_search 同一约定
+        rng = np.random.default_rng(seed)
 
         # 采样面
-        sampled_face_indices = np.random.choice(len(self.faces), size=n_points, p=weights)
+        sampled_face_indices = rng.choice(len(self.faces), size=n_points, p=weights)
 
         # 在每个选中面上采样点
         points = np.zeros((n_points, 3))
@@ -159,8 +221,8 @@ class Mesh3D:
             v0, v1, v2 = self.vertices[face]
 
             # 重心坐标采样
-            r1 = np.sqrt(np.random.random())
-            r2 = np.random.random()
+            r1 = np.sqrt(rng.random())
+            r2 = rng.random()
 
             u = 1 - r1
             v = r1 * (1 - r2)

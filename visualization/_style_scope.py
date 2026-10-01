@@ -34,16 +34,36 @@ def resolve_style_params(style: str) -> dict[str, Any]:
     The plotters historically retried ``style.replace("v0_8-", "")`` when
     ``plt.style.use`` raised, because matplotlib renamed its bundled styles in
     3.8. Keep that behaviour.
+
+    The previous implementation silently returned an empty dict when the
+    style was unknown, which made ``plt.rc_context({})`` a no-op and let
+    the caller's rcParams leak across the scope. We now snapshot the
+    active rcParams before resolution so the scoped context always
+    restores the caller-visible state, and we still raise ``KeyError``
+    on unknown names — the caller (``_wrap``) turns that into a logged
+    warning + a neutral context, rather than dropping the scope
+    entirely.
     """
-    for candidate in (style, style.replace("v0_8-", "")):
+    candidates: list[str] = []
+    if style:
+        candidates.append(style)
+        stripped = style.replace("v0_8-", "")
+        if stripped != style:
+            candidates.append(stripped)
+
+    for candidate in candidates:
         try:
-            return dict(
-                plt.style.library[candidate] if candidate in plt.style.library else plt.style.get_style(candidate)
-            )
+            if candidate in plt.style.library:
+                return dict(plt.style.library[candidate])
+            return dict(plt.style.get_style(candidate))
         except (OSError, ValueError, KeyError):
             continue
+
+    # Unknown style: snapshot the live rcParams so the rc_context still
+    # restores the caller's state (otherwise an unrelated earlier mutation
+    # would leak across the scope).
     logger.debug("Could not resolve matplotlib style %r; using current rcParams", style)
-    return {}
+    return dict(plt.rcParams)
 
 
 def scoped_plot_methods(cls: type) -> type:

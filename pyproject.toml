@@ -104,10 +104,12 @@ py-modules = ["main", "plot_export"]
 "data" = ["examples/*", "golden/*"]
 
 [tool.setuptools.packages.find]
-# NOTE: `_core`, `rthooks` and `app_infrastructure` were removed in
-# cf1471e's successor -- see the commit that deletes them. They had zero
-# import sites anywhere (including tests); `rthooks/` was additionally dead
-# because ``PaleoAST.spec`` ships ``runtime_hooks=[]``.
+# NOTE: `_core`, `rthooks` and `app_infrastructure` are GONE from disk. They
+# were empty (0 files), untracked by git, and had zero import sites anywhere
+# (including tests); `rthooks/` was additionally dead because
+# ``PaleoAST.spec`` ships ``runtime_hooks=[]``. The now-empty directories were
+# removed on 2026-10-01 -- git never recorded them, so there is nothing to
+# delete from the index. If you reintroduce any of these names, add them here.
 include = [
     "config*",
     "controllers*",

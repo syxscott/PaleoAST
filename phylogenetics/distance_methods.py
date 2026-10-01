@@ -158,14 +158,46 @@ class DistanceMatrix:
 
     @classmethod
     def from_array(cls, matrix: np.ndarray, labels: list[str]) -> DistanceMatrix:
-        """Create from a numpy distance matrix and label list."""
+        """Create from a numpy distance matrix and label list.
+
+        A distance matrix is symmetric by definition, so an asymmetric input
+        is a malformed input rather than something to average over. It used to
+        be accepted silently: every ``(i, j)`` was written into the lookup
+        dict, so the later ``(j, i)`` write overwrote the earlier one and the
+        two directions of a pair could end up holding different numbers. The
+        result was a non-symmetric matrix that still passed ``to_matrix()``,
+        and whose ``get_distance(a, b)`` answer depended on dict insertion
+        order. That silently breaks the triangle inequality and any
+        tree-building downstream.
+        """
         matrix = np.asarray(matrix, dtype=float)
         n = len(labels)
+        if matrix.shape != (n, n):
+            raise ValueError(
+                f"Distance matrix is {matrix.shape} but {n} labels were given; "
+                "expected a square (n, n) matrix."
+            )
+
+        asymmetry = float(np.abs(matrix - matrix.T).max()) if n > 1 else 0.0
+        if not np.isfinite(asymmetry) or asymmetry > 1e-8:
+            worst = None
+            if n > 1:
+                i, j = np.unravel_index(
+                    int(np.argmax(np.abs(matrix - matrix.T))), matrix.shape
+                )
+                worst = (labels[i], labels[j], float(matrix[i, j]), float(matrix[j, i]))
+            detail = f" (worst: {worst[0]}/{worst[1]} = {worst[2]} vs {worst[3]})" if worst else ""
+            raise ValueError(
+                "Distance matrix is not symmetric: max |d(i,j) - d(j,i)| = "
+                f"{asymmetry:.6g}{detail}. A distance must not depend on the "
+                "order of the two taxa; symmetrise the input first."
+            )
+
         distances = {}
         for i in range(n):
-            for j in range(n):
-                if i != j:
-                    distances[(labels[i], labels[j])] = float(matrix[i, j])
+            for j in range(i + 1, n):
+                distances[(labels[i], labels[j])] = float(matrix[i, j])
+                distances[(labels[j], labels[i])] = float(matrix[i, j])
         return cls(taxa=list(labels), distances=distances)
 
     @classmethod

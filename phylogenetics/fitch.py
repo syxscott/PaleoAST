@@ -338,19 +338,30 @@ class FitchAlgorithm:
                 node_states.update(child_states)
 
             # Fitch交集运算 (支持多分叉)
+            #
+            # Per Fitch (1971), the parent state set is the intersection of
+            # ALL children's state sets; if that intersection is empty, it is
+            # the union of ALL children's state sets. Folding the children
+            # left-to-right (the previous implementation) loses any state
+            # that was absorbed by an earlier union as soon as a later child
+            # intersects it -- e.g. ( {A} , {B} , {A} ) becomes
+            # {A} -> {A,B} -> {A} (dropping B), but the correct answer is
+            # {A,B}.
             if node.children:
-                # 从第一个子节点的状态集合开始
-                combined = node_states.get(node.children[0], set()).copy()
-                for child in node.children[1:]:
-                    child_set = node_states.get(child, set())
-                    # 交集
-                    intersection = combined & child_set
-                    if intersection:
-                        combined = intersection
-                    else:
-                        # 并集
-                        combined = combined | child_set
-                node_states[node] = combined
+                child_sets = [node_states.get(child, set()) for child in node.children]
+                # Compute the full intersection across every child.
+                intersection = child_sets[0].copy()
+                for child_set in child_sets[1:]:
+                    intersection = intersection & child_set
+                if intersection:
+                    node_states[node] = intersection
+                else:
+                    # Intersection empty: take the union of *all* children,
+                    # not the union of the running intersection.
+                    union: set[Any] = set()
+                    for child_set in child_sets:
+                        union = union | child_set
+                    node_states[node] = union
             else:
                 node_states[node] = set()
 

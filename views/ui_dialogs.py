@@ -19,8 +19,6 @@ version: 1.0.1
 import logging
 from typing import Any
 
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -878,8 +876,10 @@ class DiversityDialog(BaseAnalysisDialog):
 
     Parameters:
         sample_name: Sample identifier
-        indices: Which diversity indices to compute
-        confidence: Confidence interval method
+        indices: Which diversity indices to plot. The engine always
+            computes every index, so this is applied by the caller
+            (``MainWindow._select_diversity_indices``) just before the
+            plot, not passed to the analyser.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -923,46 +923,22 @@ class DiversityDialog(BaseAnalysisDialog):
         self._evenness_check = QCheckBox(_("Pielou's Evenness (J')"))
         indices_layout.addWidget(self._evenness_check)
 
-        # Options
-        options_group = self.add_parameter_group(_("Options"))
-        options_layout = QVBoxLayout(options_group)
-
-        self._log_base_combo = QComboBox()
-        self._log_base_combo.addItems([_("Natural log (e)"), _("Log base 2"), _("Log base 10")])
-        options_layout.addWidget(QLabel(_("Shannon log base:")))
-        options_layout.addWidget(self._log_base_combo)
-
-        self._ci_check = QCheckBox(_("Calculate confidence intervals (bootstrap)"))
-        self._ci_check.setChecked(False)
-        options_layout.addWidget(self._ci_check)
-
-        self._ci_iterations_spin = QSpinBox()
-        self._ci_iterations_spin.setRange(100, 9999)
-        self._ci_iterations_spin.setValue(1000)
-        self._ci_iterations_spin.setPrefix(_("Bootstrap iterations: "))
-        options_layout.addWidget(self._ci_iterations_spin)
-
-        self._ci_level_spin = QDoubleSpinBox()
-        self._ci_level_spin.setRange(90, 99)
-        self._ci_level_spin.setValue(95)
-        self._ci_level_spin.setSuffix(" %")
-        self._ci_level_spin.setPrefix(_("Confidence level: "))
-        options_layout.addWidget(self._ci_level_spin)
-
-        # Display
-        display_group = self.add_parameter_group(_("Display"))
-        display_layout = QVBoxLayout(display_group)
-
-        self._bar_chart_check = QCheckBox(_("Bar chart comparison"))
-        display_layout.addWidget(self._bar_chart_check)
-
-        self._radar_chart_check = QCheckBox(_("Radar chart"))
-        display_layout.addWidget(self._radar_chart_check)
+        # NOTE: this dialog once also offered a Shannon log base, bootstrap
+        # confidence intervals (iterations + level) and a bar/radar chart
+        # toggle. None of them reached the analysis:
+        # ``StatisticsController.analyze_diversity`` and
+        # ``ecology.compute_diversity_indices`` take only (abundances,
+        # sample_name), always compute Shannon with the natural log and no
+        # CIs, and ``InteractivePlotCanvas.plot_diversity_summary`` only
+        # ever draws a bar chart. They were collected by
+        # ``get_parameters()`` and silently dropped by the caller, so they
+        # are removed here instead of being left in the UI as dead
+        # controls (same treatment as ``BetaDiversityDialog``'s transform /
+        # pairwise toggles). The six index checkboxes above ARE honoured:
+        # the main window restricts the plotted indices to them.
 
     def get_parameters(self) -> dict[str, Any]:
         """Get diversity analysis parameters."""
-        log_bases = [np.e, 2, 10]
-
         self._parameters = {
             "sample_name": self._sample_name_edit.text(),
             "richness": self._richness_check.isChecked(),
@@ -971,12 +947,6 @@ class DiversityDialog(BaseAnalysisDialog):
             "fisher": self._fisher_check.isChecked(),
             "chao1": self._chao_check.isChecked(),
             "evenness": self._evenness_check.isChecked(),
-            "log_base": log_bases[self._log_base_combo.currentIndex()],
-            "confidence_intervals": self._ci_check.isChecked(),
-            "ci_iterations": self._ci_iterations_spin.value(),
-            "ci_level": self._ci_level_spin.value() / 100.0,
-            "bar_chart": self._bar_chart_check.isChecked(),
-            "radar_chart": self._radar_chart_check.isChecked(),
         }
         return self._parameters
 
@@ -1412,16 +1382,17 @@ class LDADialog(BaseAnalysisDialog):
         self._n_comp_spin.setPrefix(_("Number of LD axes: "))
         comp_layout.addWidget(self._n_comp_spin)
 
-        opt_group = self.add_parameter_group(_("Options"))
-        opt_layout = QVBoxLayout(opt_group)
-        self._cv_check = QCheckBox(_("Cross-validation (leave-one-out)"))
-        self._cv_check.setChecked(True)
-        opt_layout.addWidget(self._cv_check)
+        # The previous "Cross-validation (leave-one-out)" checkbox
+        # surfaced a ``cross_validate`` flag in ``get_parameters`` that
+        # nothing downstream consumed: ``LDAAnalyzer.analyze`` (stats/lda.py)
+        # and ``StatisticsController.analyze_lda`` both ignore this flag.
+        # Showing it on the UI implied a behaviour the engine never had,
+        # so it has been removed. A plain info label below keeps the
+        # documentation in the dialog body.
 
     def get_parameters(self) -> dict[str, Any]:
         self._parameters = {
             "n_components": self._n_comp_spin.value(),
-            "cross_validate": self._cv_check.isChecked(),
         }
         return self._parameters
 
@@ -1519,8 +1490,31 @@ class MarkovDialog(BaseAnalysisDialog):
             QLabel(_("The analysis uses the first column of data as facies codes (integers starting from 0)."))
         )
 
+        # ``MarkovAnalyzer.analyze`` (stratigraphy/markov.py) accepts
+        # only ``sequence`` and ``facies_names``; everything else is
+        # hard-coded inside the analyzer. The dialog therefore exposes
+        # only the facies-name label, which is the one knob the user
+        # actually controls.
+
+        names_group = self.add_parameter_group(_("Facies Names"))
+        names_layout = QVBoxLayout(names_group)
+        self._facies_names_edit = QLineEdit()
+        self._facies_names_edit.setPlaceholderText(
+            _("Comma-separated names, e.g. Sandstone, Mudstone, Limestone")
+        )
+        names_layout.addWidget(QLabel(_("Facies names (one per distinct code, in code order):")))
+        names_layout.addWidget(self._facies_names_edit)
+
     def get_parameters(self) -> dict[str, Any]:
-        self._parameters = {}
+        names_text = self._facies_names_edit.text().strip()
+        facies_names: list[str] | None
+        if names_text:
+            facies_names = [n.strip() for n in names_text.split(",") if n.strip()]
+        else:
+            facies_names = None
+        self._parameters = {
+            "facies_names": facies_names,
+        }
         return self._parameters
 
     def _get_help_text(self) -> str:
@@ -1714,11 +1708,14 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
 
         opt_group = self.add_parameter_group(_("Options"))
         opt_layout = QVBoxLayout(opt_group)
-        self._min_events_spin = QSpinBox()
-        self._min_events_spin.setRange(2, 20)
-        self._min_events_spin.setValue(2)
-        self._min_events_spin.setPrefix(_("Min events per zone: "))
-        opt_layout.addWidget(self._min_events_spin)
+
+        # The ``min_events`` flag used to live here as a spinner but the
+        # underlying ``UAAnalyzer.analyze`` (stratigraphy/biostratigraphy.py)
+        # never exposed it; showing the spinner implied a feature that
+        # did not exist.  The endemic-filter knob
+        # (``min_section_occurrence``) and the UAZ similarity knob are
+        # the controls that actually reach the engine, and they live
+        # in the "Advanced UA Options" group below.
 
         self._rasc_iterations = QSpinBox()
         self._rasc_iterations.setRange(10, 500)
@@ -1780,7 +1777,6 @@ class BiostratigraphyDialog(BaseAnalysisDialog):
         method = "ua" if "UA" in method_text else "rasc"
         self._parameters = {
             "method": method,
-            "min_events": self._min_events_spin.value(),
             "rasc_iterations": self._rasc_iterations.value(),
             "min_section_occurrence": self._min_section_occurrence_spin.value(),
             "uaz_similarity_threshold": self._uaz_similarity_spin.value(),
@@ -1851,9 +1847,20 @@ class WaveletDialog(BaseAnalysisDialog):
             self._max_scale.setMinimum(min(value + 1, self._max_scale.maximum()))
 
     def _on_max_scale_changed(self, value: int) -> None:
-        """Keep ``min_scale`` strictly below ``max_scale``."""
-        if self._min_scale.maximum() != value - 1:
-            self._min_scale.setMaximum(max(value - 1, self._min_scale.minimum()))
+        """Keep ``min_scale`` strictly below ``max_scale``.
+
+        The constraint is enforced on the VALUE, not on the spin's range.
+        Clamping ``_min_scale.maximum()`` to ``value - 1`` ratcheted itself
+        shut: raising ``min_scale`` pushes ``max_scale`` up one step (see
+        :meth:`_on_min_scale_changed`), which then lowered min's maximum
+        again, and Qt silently discards a ``setValue`` beyond the current
+        maximum. With the initial max of 50 that pinned min at 50 and made
+        every value in 51..199 of its DECLARED 1..199 range unreachable.
+        Lowering the value keeps the whole declared range usable and still
+        guarantees ``min < max``.
+        """
+        if self._min_scale.value() > value - 1:
+            self._min_scale.setValue(max(value - 1, self._min_scale.minimum()))
 
     def _validate_parameters(self) -> bool:
         """Reject an inverted or degenerate scale range."""
@@ -1897,6 +1904,26 @@ class CCADialog(BaseAnalysisDialog):
         self._n_comp_spin.setPrefix(_("Constrained axes: "))
         comp_layout.addWidget(self._n_comp_spin)
 
+        # Permutation-based significance test. ``CCAAnalyzer.analyze``
+        # accepts ``n_permutations`` (default 999, ``0`` skips the
+        # test but still returns F / Wilks) and ``random_seed`` (passed
+        # to a local ``np.random.default_rng`` for reproducibility).
+        # The default 999 matches ``vegan::anova.cca``; setting it to
+        # 0 is a legitimate "fit only, no permutation test" choice.
+        perm_group = self.add_parameter_group(_("Significance Test (permutation)"))
+        perm_layout = QFormLayout(perm_group)
+
+        self._n_perm_spin = QSpinBox()
+        self._n_perm_spin.setRange(0, 99999)
+        self._n_perm_spin.setValue(999)
+        self._n_perm_spin.setSingleStep(100)
+        perm_layout.addRow(_("Permutations:"), self._n_perm_spin)
+
+        self._seed_spin = QSpinBox()
+        self._seed_spin.setRange(0, 10**6)
+        self._seed_spin.setValue(42)
+        perm_layout.addRow(_("Random seed (0 = non-reproducible):"), self._seed_spin)
+
         env_group = self.add_parameter_group(_("Environmental Variables"))
         env_layout = QVBoxLayout(env_group)
         self._env_col_list = QListWidget()
@@ -1923,6 +1950,8 @@ class CCADialog(BaseAnalysisDialog):
             "method": self._method_combo.currentText().lower(),
             "n_components": self._n_comp_spin.value(),
             "env_columns": self.get_selected_env_columns(),
+            "n_permutations": int(self._n_perm_spin.value()),
+            "random_seed": int(self._seed_spin.value()),
         }
         return self._parameters
 

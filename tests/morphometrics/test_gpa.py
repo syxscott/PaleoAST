@@ -344,22 +344,25 @@ class TestGPAEdgeCases(unittest.TestCase):
         np.random.seed(42)
 
     def test_single_landmark(self):
-        """Test GPA with single landmark (edge case that may have numerical issues).
+        """A single landmark must be refused with an actionable message.
 
-        Note: Single landmark configurations can cause SVD issues because
-        there's no shape information - just translation. This test verifies
-        the method handles it gracefully rather than crashing.
+        One landmark carries no shape information -- Procrustes alignment
+        removes exactly the translation a lone point contributes, leaving a
+        zero centroid size to divide by. The analyser already rejects it:
+        it is a caller error, not a numerical accident, and the message has
+        to say what to fix.
+
+        This test used to catch *any* exception and skip, which meant the
+        case had no protection at all: a ZeroDivisionError, a KeyError and
+        the correct guard were all indistinguishable.
         """
         config = np.random.randn(5, 1, 2)
         gpa = GPAAnalyzer()
-        try:
-            result = gpa.analyze(config)
-            # If it succeeds, verify basic properties
-            self.assertEqual(result.aligned_configurations.shape, (5, 1, 2))
-        except Exception:
-            # Single landmark is an edge case - may fail with SVD issues
-            # This is expected behavior for this degenerate case
-            self.skipTest("Single landmark GPA has numerical issues (expected)")
+        with self.assertRaises(Exception) as caught:
+            gpa.analyze(config)
+        message = str(caught.exception).lower()
+        self.assertIn("landmark", message)
+        self.assertIn("2", message)
 
     def test_two_landmarks(self):
         """Test GPA with two landmarks."""

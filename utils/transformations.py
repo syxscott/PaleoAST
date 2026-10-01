@@ -269,8 +269,18 @@ def impute_knn(data: npt.NDArray, k: int = 5) -> npt.NDArray:
     """
     KNN-based missing value imputation.
 
-    For each sample with missing values, finds K nearest neighbors
+    For each sample with missing values, finds the K nearest neighbors
     (using non-missing dimensions) and imputes with their mean.
+
+    Neighbours that share no observed dimension with the target row
+    cannot be compared at all and are given an infinite distance; they
+    are removed *before* the nearest-K selection, so the K chosen are
+    always the K nearest rows that can actually be compared. When fewer
+    than K comparable rows exist -- common in sparse palaeo data, where
+    taxa are scored on disjoint character sets -- the mean is taken over
+    those that are available and a warning names the shortfall, rather
+    than the caller receiving a quietly low-K estimate. The zero-
+    neighbour case keeps the pre-existing column-mean fallback.
 
     Parameters:
         data: Data matrix with NaN values
@@ -308,10 +318,26 @@ def impute_knn(data: npt.NDArray, k: int = 5) -> npt.NDArray:
             diff = result[i, both_observed] - result[other, both_observed]
             distances[other] = np.sqrt(np.sum(diff**2))
 
-        # Find K nearest neighbors
-        neighbor_idx = np.argsort(distances)[:k]
-        # Filter out infinite distances
-        neighbor_idx = neighbor_idx[np.isfinite(distances[neighbor_idx])]
+        # Find K nearest neighbors, keeping only rows that could actually
+        # be compared. The filter comes first: the previous order
+        # (argsort[:k], then drop the infinite ones) was written to
+        # "backfill" with further-nearest rows but could not do so --
+        # np.argsort already sorts the infs last, so a neighbour removed
+        # by the post-filter was never a candidate the pre-filter would
+        # have kept, and the selection silently fell below K whenever
+        # fewer than K rows shared an observed dimension with the target.
+        comparable = np.flatnonzero(np.isfinite(distances))
+        neighbor_idx = comparable[np.argsort(distances[comparable])[:k]]
+        if len(neighbor_idx) < k:
+            logger.warning(
+                "impute_knn: row %d has only %d of the requested k=%d neighbours with a "
+                "comparable observed dimension; imputing from those %d instead. Raise k, or "
+                "score the taxa on more shared characters, if this is not intended.",
+                i,
+                len(neighbor_idx),
+                k,
+                len(neighbor_idx),
+            )
 
         if len(neighbor_idx) == 0:
             # Fallback to column means

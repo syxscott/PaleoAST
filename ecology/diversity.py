@@ -57,7 +57,23 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
     if len(abundances) == 0:
         raise ComputationError("No positive abundances found in sample")
 
-    N = int(np.sum(abundances))  # Total individuals
+    # `individuals` is reported to the user and drives Fisher's alpha, so it
+    # must be a real count. `int(np.sum(...))` used to truncate silently: a
+    # relative-abundance vector like [0.1, 0.2, 0.3, 0.4] summed to exactly
+    # 1.0, became N=1, and the result claimed "4 taxa, 1 individual".
+    #
+    # The test MUST be on the individual values, not on the sum: these
+    # fractions sum to an integer, so a sum-integrality check passes them.
+    non_integer = ~np.isclose(abundances, np.round(abundances), rtol=0.0, atol=1e-9)
+    if np.any(non_integer):
+        offenders = np.unique(np.asarray(abundances)[non_integer])[:5]
+        raise ComputationError(
+            "Diversity indices require integer abundance counts (individuals), "
+            f"but got fractional values {list(offenders)}. Pass raw counts, "
+            "not a relative-abundance or percentage vector."
+        )
+
+    N = int(round(float(np.sum(abundances))))  # Total individuals
     S = len(abundances)  # Number of taxa
     logger.info(f"compute_diversity_indices started: n_taxa={S}, total_abundance={N}, sample_name='{sample_name}'")
 
@@ -335,27 +351,129 @@ class DiversityAnalyzer:
             return result
 
     def analyze_multiple(
-        self, abundance_matrix: npt.NDArray, sample_names: list[str] | None = None
+        self,
+        abundance_matrix: npt.NDArray,
+        sample_names: list[str] | None = None,
+        compute_standardized: bool = True,
+        q_values: tuple[int, ...] = (0, 1, 2),
+        coverage_levels: tuple[float, ...] = (0.50, 0.80, 0.90, 0.95),
+        n_bootstrap: int = 100,
+        seed: int | None = 42,
     ) -> list[DiversityResult]:
         """
         Analyze diversity for multiple samples.
 
-        Parameters:
-            abundance_matrix: 2D array (n_samples, n_taxa)
-            sample_names: Optional list of sample names
+        Raw Shannon / Simpson / Pielou / Chao1 are computed as before
+        (per-sample, on each sample's own N). When ``compute_standardized``
+        is true, coverage-based standardized Hill numbers (q = 0, 1, 2)
+        are also evaluated at the supplied coverage levels, using the
+        helper from :mod:`ecology.beta_diversity`. Hill numbers are
+        stored in each ``DiversityResult.metadata`` under
+        ``standardized_hill``:
 
-        Returns:
-            List of DiversityResult objects
+            {
+                "q0": {"C=0.50": <S@50%>, "C=0.80": <S@80%>, ...},
+                "q1": {"C=0.50": <exp(H')@50%>, ...},
+                "q2": {"C=0.50": <1/λ@50%>, ...},
+                "asymptote": {"q0": <Chao1>, "q1": <exp(H'_asymp)>,
+                              "q2": <1/λ_asymp>},
+                "note": str,
+            }
+
+        Comparing standardized Hill numbers across samples with unequal N
+        is the only way to compare like-with-like — see Chao & Jost (2012)
+        and Chao et al. (2014). The raw indices are still returned so
+        callers that want the un-standardized values (e.g. for display
+        next to a literature comparison that did the same) keep working.
+
+        Parameters
+        ----------
+        abundance_matrix : array-like, shape (n_samples, n_taxa)
+        sample_names : list of str, optional
+        compute_standardized : bool, default True
+            Whether to also compute coverage-based Hill numbers.
+        q_values : tuple of {0, 1, 2}
+            Hill orders to compute.
+        coverage_levels : tuple of float in (0, 1)
+            Coverage levels at which to evaluate Hill numbers.
+        n_bootstrap : int, default 100
+            Bootstrap replicates for the standardized estimator CIs.
+        seed : int, optional
+            RNG seed for reproducibility.
+
+        Returns
+        -------
+        list of DiversityResult
         """
         with self._lock:
+            abundance_matrix = np.asarray(abundance_matrix, dtype=float)
+            if abundance_matrix.ndim == 1:
+                abundance_matrix = abundance_matrix.reshape(1, -1)
             if sample_names is None:
                 sample_names = [f"Sample_{i + 1}" for i in range(abundance_matrix.shape[0])]
 
-            # Use list comprehension for slightly better performance
+            n_samples = abundance_matrix.shape[0]
+            sample_sizes = abundance_matrix.sum(axis=1)
+            sample_sizes_unequal = (
+                np.ptp(sample_sizes) > 0 if n_samples > 1 else False
+            )
+
+            # Per-sample raw indices (unchanged behaviour)
             results = [
                 compute_diversity_indices(abundance_matrix[i], sample_names[i])
-                for i in range(abundance_matrix.shape[0])
+                for i in range(n_samples)
             ]
+
+            if not compute_standardized:
+                return results
+
+            # Coverage-based standardized Hill numbers, one q at a time.
+            # The beta_diversity.coverage_rarefaction_hill helper
+            # aggregates expected_richness across samples (returns the
+            # sample-mean curve), but we want PER-SAMPLE values. We
+            # therefore call it once per sample (single-row matrix) so
+            # the result's expected_richness curve and asymptote index
+            # back to that one sample unambiguously.
+            from ecology.beta_diversity import coverage_rarefaction_hill
+
+            for q in q_values:
+                if q not in (0, 1, 2):
+                    raise ValueError(
+                        f"q must be 0, 1, or 2, got {q}"
+                    )
+                for i, res in enumerate(results):
+                    single_row = abundance_matrix[i : i + 1]
+                    raref = coverage_rarefaction_hill(
+                        single_row,
+                        sample_names=[sample_names[i]],
+                        q=q,
+                        n_points=max(len(coverage_levels) * 4, 20),
+                        n_bootstrap=n_bootstrap,
+                        seed=seed,
+                    )
+                    cl = np.asarray(raref.coverage_levels)
+                    meta = res.metadata.setdefault("standardized_hill", {})
+                    for c_target in coverage_levels:
+                        idx = int(np.argmin(np.abs(cl - c_target)))
+                        meta.setdefault(f"q{q}", {})[f"C={c_target:.2f}"] = float(
+                            raref.expected_richness[idx]
+                        )
+                    meta.setdefault("asymptote", {})[f"q{q}"] = float(
+                        raref.asymptote_estimate[0]
+                    )
+
+            # Warning + explanatory note when sample sizes differ
+            if sample_sizes_unequal:
+                note = (
+                    "Sample sizes differ across rows; raw Shannon/Simpson "
+                    "values are NOT comparable across samples. Use "
+                    "metadata['standardized_hill'] (coverage-based Hill "
+                    "numbers) for valid cross-sample comparison "
+                    "(Chao & Jost 2012; Chao et al. 2014)."
+                )
+                for res in results:
+                    res.metadata.setdefault("standardized_hill", {})["note"] = note
+                logger.warning(note)
 
             return results
 

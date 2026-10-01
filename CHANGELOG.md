@@ -96,6 +96,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `inf - inf = nan` rule.
 
 ### Verification
+
+> **Superseded on 2026-10-01 — do not read these numbers as current.**
+> Re-running them against `79cbecd` gave:
+> - `ruff check .` → **375 errors**, not "all checks passed"
+> - `ruff format --check .` → **103 files** would be reformatted (this repo has
+>   332 Python files, not 158 — the count below was never right for this tree)
+> - `pytest tests tests_morpho3d_macroevolution` → **2365 collected** (5 skipped),
+>   not 133
+> - `python test_regression.py` → **file does not exist**; it was moved to
+>   `scripts/smoke_check.py`
+>
+> The original claims are kept below for history only.
+
 - `ruff check .`: All checks passed.
 - `ruff format --check .`: All 158 files already formatted.
 - `mypy`: 0 errors.

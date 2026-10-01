@@ -699,6 +699,12 @@ class CCAAnalyzer:
         Returns
         -------
         (f_overall, f_per_axis, wilks_lambda, p_overall, p_per_axis)
+
+        The two per-axis arrays are as long as the number of axes actually
+        computed, which can be fewer than the requested ``n_components`` when
+        zero-total rows/columns were dropped; that is the same count
+        ``CCAResult.n_components`` reports, so its ``summary()`` stays in
+        range. (The degenerate early return above keeps the requested length.)
         """
         n_samples = Y.shape[0]
         rng: np.random.Generator | np.random.RandomState
@@ -743,9 +749,22 @@ class CCAAnalyzer:
             observed_eigenvalues, total_inertia, total_SS, n_eff, n_q
         )
 
-        # Permutation null distribution
+        # Permutation null distribution.
+        #
+        # ``n_q`` -- NOT the requested ``n_components`` -- is the number of
+        # axes that were actually computed: ``_constrained_eigenvalues``
+        # drops zero-total rows/columns first and clamps the count to
+        # min(n_rows-1, n_cols, n_env) *after* that drop. Allocating and
+        # looping over the requested count therefore broadcast a shorter
+        # ``f_pa`` into a wider row and raised
+        # "could not broadcast input array from shape (7,) into shape (8,)"
+        # for any table with an all-zero species column (a perfectly normal
+        # abundance table). The per-axis arrays now carry the effective count,
+        # which is what ``CCAResult.n_components`` already reports because
+        # ``_analyze_cca`` applies the same clamp.
+        n_axes = int(n_q)
         f_overall_perm = np.zeros(n_permutations)
-        f_per_axis_perm = np.zeros((n_permutations, n_components))
+        f_per_axis_perm = np.zeros((n_permutations, n_axes))
         for i in range(n_permutations):
             perm_idx = rng.permutation(n_samples)
             Y_perm = Y[perm_idx]
@@ -774,14 +793,22 @@ class CCAAnalyzer:
                 perm_eigs, total_inertia, total_SS, n_eff, n_q
             )
             f_overall_perm[i] = f_p
-            f_per_axis_perm[i, :] = f_pa
+            # A permutation can lose a further axis (its zero-total structure
+            # may differ from the observed table's); fit instead of assigning
+            # so a shorter vector cannot break the broadcast. Missing axes
+            # count as 0.0, the same convention the ``len(perm_eigs) == 0``
+            # branch above uses for a degenerate permutation.
+            f_pa_aligned = np.zeros(n_axes)
+            n_fill = min(len(f_pa), n_axes)
+            f_pa_aligned[:n_fill] = f_pa[:n_fill]
+            f_per_axis_perm[i, :] = f_pa_aligned
 
         # p-values (add-one correction: (1 + #{perm >= obs}) / (1 + n_perm))
         n_ge_overall = int(np.sum(f_overall_perm >= f_overall))
         p_overall = float((1 + n_ge_overall) / (1 + n_permutations))
         p_per_axis = np.array(
             [(1 + int(np.sum(f_per_axis_perm[:, k] >= f_per_axis[k]))) / (1 + n_permutations)
-             for k in range(n_components)],
+             for k in range(n_axes)],
             dtype=float,
         )
 

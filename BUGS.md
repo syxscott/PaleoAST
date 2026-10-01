@@ -21,7 +21,27 @@
 
 ## 1. 严重 bug
 
-### 1.1 statistics/pcoa.py:174-180 - PCoA 比例解释分母错
+> **本节已于 2026-10-01 全部重新核对，请勿照单执行。**
+>
+> 1. **路径全部过时**：`statistics/` 已改名为 `stats/`。本文下列的
+>    `statistics/pcoa.py`、`statistics/nmds.py`、`statistics/cca.py`、
+>    `statistics/pcm.py` 在当前树中**都不存在**。
+> 2. **§1 的多数条目其实已经修好了**，抽查结果：
+>    - 1.1 PCoA 比例分母 —— `stats/pcoa.py` 现有明确注释说明
+>      "reported proportion never depends on how many components were"，
+>      分母用全谱而非切片。
+>    - 1.2 NMDS 缺 isotonic regression —— `stats/nmds.py` 已有 PAVA
+>      块与 `d̂ = isotonic regression of d̂ on d` 的完整说明。
+>    - 1.4 beta_diversity 分解 —— `ecology/beta_diversity.py:303-304`
+>      已有 `min_bc = min(b, c)` 与 `denom_turn = a + 2*min_bc`。
+>    - 1.3 CCA 标准化 —— `stats/cca.py` 已按 ter Braak (1986) 形式实现。
+> 3. 因此**"立刻修"这批条目的指示是错的**。真正需要动作的是：把本节
+>    对着 `stats/*` 重新生成，然后逐条复审是否仍成立。
+>
+> 另注：本文件末尾提到的 `app_infrastructure/theme/styles.py` 所在目录
+> **已从磁盘删除**（它本来就是 0 文件、未被 git 跟踪的空目录）。
+
+### 1.1 statistics/pcoa.py:174-180 - PCoA 比例解释分母错（路径应为 `stats/pcoa.py`；经查已修复）
 - 现象：proportion = eigenvalues_positive[:n_components] / np.sum(eigenvalues_positive[:n_components])
 - 后果：当 n_components 远小于全部正值个数时，cumulative 不到 100%；剩余方差被吸收到前 n 个主坐标里，scree plot 误判。
 - 修复：total = np.sum(eigenvalues_positive)，先归一化再切片。

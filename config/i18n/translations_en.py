@@ -511,7 +511,9 @@ TRANSLATIONS = {
     "yes": "yes",
     "Zone / UAZ": "Zone / UAZ",
     "Similarity": "Similarity",
-    "Visualization": "Visualization",
+    # NOTE: "Visualization" already declared earlier — second copy
+    # removed so the key set is unique (regression-tested by
+    # tests/test_translation_parity.py).
     "Max pairs to render: ": "Max pairs to render: ",
     "Similarity colormap:": "Similarity colormap:",
     "Height Column": "Height Column",
@@ -558,7 +560,9 @@ TRANSLATIONS = {
     "Taxa: {0}": "Taxa: {0}",
     "Polarity auto-calibrated: {0}": "Polarity auto-calibrated: {0}",
     "PaleoEnvironmentReconstructor initialised": "PaleoEnvironmentReconstructor initialised",
-    "Method: {0}": "Method: {0}",
+    # NOTE: "Method: {0}" already declared earlier — second copy
+    # removed so the key set is unique (regression-tested by
+    # tests/test_translation_parity.py).
     "Event Ranking (RASC):": "Event Ranking (RASC):",
     "Isotope Error": "Isotope Error",
     "Correlation Error": "Correlation Error",
@@ -577,4 +581,155 @@ TRANSLATIONS = {
     "SHE Error": "SHE Error",
     "CONISS Error": "CONISS Error",
     "EFA Error": "EFA Error",
-}
+    # =========================================================================
+    # Keys present in translations_zh.py but missing here — added to keep
+    # the two dictionaries in sync (regression-tested by
+    # tests/test_translation_parity.py). Source-language keys are
+    # preserved verbatim; values are idiomatic English.
+    # =========================================================================
+    "Abundance (log)": "Abundance (log)",
+    "Apply on Next Start": "Apply on Next Start",
+    "Average Contribution (%)": "Average Contribution (%)",
+    "Biozone": "Biozone",
+    "Biozones identified: {0}": "Biozones identified: {0}",
+    "CA Axis": "CA Axis",
+    "Contour points: ": "Contour points: ",
+    "Cross-validation (leave-one-out)": "Cross-validation (leave-one-out)",
+    "Distance": "Distance",
+    "Events: {0}": "Events: {0}",
+    "Group Comparison": "Group Comparison",
+    "Harmonics": "Harmonics",
+    "Hierarchical Clustering": "Hierarchical Clustering",
+    "Input": "Input",
+    "Isotope": "Isotope",
+    "Kruskal-Wallis (non-parametric)": "Kruskal-Wallis (non-parametric)",
+    "Language will change to {0} on next start.": "Language will change to {0} on next start.",
+    "Linear Discriminant Analysis": "Linear Discriminant Analysis",
+    "Linkage Method": "Linkage Method",
+    "Linkage:": "Linkage:",
+    "Normality Test (Shapiro-Wilk)": "Normality Test (Shapiro-Wilk)",
+    "Number of LD axes: ": "Number of LD axes: ",
+    "Number of bins: ": "Number of bins: ",
+    "Number of clusters: ": "Number of clusters: ",
+    "Number of harmonics: ": "Number of harmonics: ",
+    "Number of zones: ": "Number of zones: ",
+    "Observed": "Observed",
+    "One-way ANOVA (3+ groups)": "One-way ANOVA (3+ groups)",
+    "Original": "Original",
+    "Paleo-Env. CA Reconstruction": "Paleo-Env. CA Reconstruction",
+    "Paleo-Environment": "Paleo-Environment",
+    "Rank": "Rank",
+    "Reconstructed": "Reconstructed",
+    "Resampling": "Resampling",
+    "Rose Diagram": "Rose Diagram",
+    "SHE Analysis": "SHE Analysis",
+    "SIMPER: Top Contributing Variables": "SIMPER: Top Contributing Variables",
+    "Sample Size": "Sample Size",
+    "Spatial": "Spatial",
+    "Species-Abundance Models": "Species-Abundance Models",
+    "Stratigraphic Correlation": "Stratigraphic Correlation",
+    "Summary Statistics": "Summary Statistics",
+    "Test Type": "Test Type",
+    "Transform": "Transform",
+    "Wavelet": "Wavelet",
+    "t-test (2 groups)": "t-test (2 groups)",
+    # =========================================================================
+    # Keys added for the imputation dialog i18n fix (Defect 6).
+    # =========================================================================
+    "Imputation method": "Imputation method",
+    "Column-mean imputation (Mean)": "Column-mean imputation (Mean)",
+    "Column-median imputation (Median)": "Column-median imputation (Median)",
+    "K-Nearest-Neighbour imputation (KNN)": "K-Nearest-Neighbour imputation (KNN)",
+    "Remove rows containing NaN": "Remove rows containing NaN",
+    "Remove columns containing NaN": "Remove columns containing NaN",
+    "Preview processed result": "Preview processed result",
+    "Missing-value summary": "Missing-value summary",
+    "Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}": "Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}",
+    "NaN counts by row (first 10):": "NaN counts by row (first 10):",
+    "NaN counts by column:": "NaN counts by column:",
+    "Missing-Value Centre": "Missing-Value Centre",
+    "Processing preview": "Processing preview",
+    'Press "Preview processed result" to view the projected data.': 'Press "Preview processed result" to view the projected data.',
+    "Mean imputation": "Mean imputation",
+    "Median imputation": "Median imputation",
+    "KNN imputation (k={0})": "KNN imputation (k={0})",
+    "Remove rows": "Remove rows",
+    "Remove columns": "Remove columns",
+    "Will remove {0} rows, leaving {1}": "Will remove {0} rows, leaving {1}",
+    "Will remove {0} columns, leaving {1}": "Will remove {0} columns, leaving {1}",
+    "Will impute {0} NaN values": "Will impute {0} NaN values",
+    "Preview: row count will change from": "Preview: row count will change from",
+    "Preview: column count will change from": "Preview: column count will change from",
+    "Preview: first 3 rows containing NaN": "Preview: first 3 rows containing NaN",
+    "Selected method": "Selected method",
+    "Impact": "Impact",
+    "Missing-Value Methods": "Missing-Value Methods",
+    # =========================================================================
+    # Keys added for Defect 7 (macroevolution dialog tab property) and
+    # Defect 1 (PCoA correction). When the source key already lives in
+    # an earlier section the entry below is a no-op duplicate guard;
+    # we add only the genuinely new keys.
+    # =========================================================================
+    "Negative eigenvalue correction: {0}": "Negative eigenvalue correction: {0}",
+    "Allometry analysis": "Allometry analysis",
+    "PLS analysis": "PLS analysis",
+    "Evolution Rate Analysis": "Evolution Rate Analysis",
+    "PCM Result": "PCM Result",
+    "PCM analysis completed": "PCM analysis completed",
+    "Phylogenetic Signal": "Phylogenetic Signal",
+    "Phylogenetic ANOVA": "Phylogenetic ANOVA",
+    "Ancestral State Reconstruction": "Ancestral State Reconstruction",
+    "Missing-value summary: {0}": "Missing-value summary: {0}",
+    "Holocene": "Holocene",
+    "Pleistocene": "Pleistocene",
+    # =========================================================================
+    # Keys for views/ui_main_window.py:format_user_error() — the function
+    # source uses Chinese text, but the keys themselves are English so that
+    # ``_(...)`` lookups work in both languages.  Each entry maps an
+    # English key to its idiomatic English rendering; the ZH file maps the
+    # SAME English key to the corresponding Chinese text.  The companion
+    # change in ``ui_main_window.py`` (owned by another agent) replaces
+    # the Chinese-literal ``_("…")`` calls with these English keys.
+    # =========================================================================
+    "Op: file loading": "file loading",
+    "Op: missing-value handling": "missing-value handling",
+    "Op: diversity analysis": "diversity analysis",
+    "Op: rarefaction analysis": "rarefaction analysis",
+    "Op: clustering analysis": "clustering analysis",
+    "Op: abundance models": "abundance models",
+    "Op: SHE analysis": "SHE analysis",
+    "Op: Markov chain": "Markov chain",
+    "Op: directional statistics": "directional statistics",
+    "Op: spectral analysis": "spectral analysis",
+    "Op: isotope analysis": "isotope analysis",
+    "Op: stratigraphic correlation": "stratigraphic correlation",
+    "Op: paleo-environmental reconstruction": "paleo-environmental reconstruction",
+    "Op: extinction confidence intervals": "extinction confidence intervals",
+    "ErrMsg: phylogenetic tree parse failed": "{0}failed: phylogenetic tree file could not be parsed.\n\n{1}",
+    "ErrMsg: invalid characters in data": "{0}failed: data contains invalid characters.\n\nCheck the following:\n• Selected data contains only numeric values (no letters or symbols)\n• No missing-value markers (e.g. NA, NaN, -, blank)\n• Remove any Chinese / special characters before retrying",
+    "ErrMsg: numeric computation failed": "{0}failed: numeric computation error.\n\nCheck the following:\n• Are there negative values (especially before log operations)\n• Are there zero values (especially before division)\n• Are values within valid range",
+    "ErrMsg: data dimension mismatch": "{0}failed: data dimension mismatch.\n\nCheck the following:\n• Row and column counts meet the analysis requirements\n• Sample counts are consistent across datasets\n• Landmark data is complete x,y coordinate pairs",
+    "ErrMsg: data is empty": "{0}failed: data is empty.\n\nEnsure a valid data range is selected.",
+    "ErrMsg: data type error": "{0}failed: data type error.\n\nError message: {1}\n\nCheck that the selected data is numeric and has no missing values.",
+    "ErrMsg: data validation failed": "{0}failed: data validation did not pass.\n\n{1}",
+    "ErrMsg: algorithm did not converge": "{0}warning: algorithm did not converge.\n\nThis is usually caused by data quality issues or improper parameter settings.\nSuggestions:\n• Check for outliers in data\n• Try increasing iteration count\n• Try different initialization parameters",
+    "ErrMsg: matrix computation failed": "{0}failed: matrix computation error.\n\nThis is usually caused by linear dependency (multicollinearity) in data.\nSuggestions:\n• Remove highly correlated variables\n• Standardize data before retrying\n• Reduce variable count",
+    "ErrMsg: generic error during operation": "Error during {0}:\n\n{1}\n\nIf the problem persists, check that the data format is correct.",
+
+    "Op: TPS grid": "TPS grid",
+    "Op: biostratigraphy": "Biostratigraphy",
+    "Op: wavelet analysis": "Wavelet analysis",
+    "All models (Random walk, Directional, Stasis)": "All models (Random walk, Directional, Stasis)",
+    "Random walk only": "Random walk only",
+    "Stasis only": "Stasis only",
+    "Random seed (0 = non-reproducible):": "Random seed (0 = non-reproducible):",
+    "Significance Test (permutation)": "Significance Test (permutation)",
+    "Permutations:": "Permutations:",
+    "Coverage levels (n_points):": "Coverage levels (n_points):",
+    "Number of coverage levels to evaluate between 0.10 and 0.99 (n_points).": "Number of coverage levels to evaluate between 0.10 and 0.99 (n_points).",
+    "Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap.": "Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap.",
+    "Facies Names": "Facies Names",
+    "Facies names (one per distinct code, in code order):": "Facies names (one per distinct code, in code order):",
+    "Comma-separated names, e.g. Sandstone, Mudstone, Limestone": "Comma-separated names, e.g. Sandstone, Mudstone, Limestone",
+    "PIC always standardizes contrasts by branch length (Felsenstein 1985); branch lengths are required.": "PIC always standardizes contrasts by branch length (Felsenstein 1985); branch lengths are required.",
+    "Decomposition always uses presence/absence (the abundance matrix is thresholded at zero). The full per-pair turnover / nestedness / total table is always returned alongside the three matrices — there is no toggle for either.": "Decomposition always uses presence/absence (the abundance matrix is thresholded at zero). The full per-pair turnover / nestedness / total table is always returned alongside the three matrices — there is no toggle for either.",}

@@ -122,6 +122,20 @@ class MacroevolutionDialog(QDialog):
         self._tabs.addTab(self._build_fbd_tab(), _("FBD Simulation"))
         layout.addWidget(self._tabs, 1)
 
+        # The call site uses ``setProperty("tab", N)`` (0=cohort,
+        # 1=diversity, 2=survival, 3=FBD) to direct the user to the
+        # correct tab. Previously the property was set but never read,
+        # so every entry point opened on the cohort tab. ``property()``
+        # returns ``None`` when the key is absent, so default to 0.
+        requested = self.property("tab")
+        if requested is not None:
+            try:
+                idx = int(requested)
+                if 0 <= idx < self._tabs.count():
+                    self._tabs.setCurrentIndex(idx)
+            except (TypeError, ValueError):
+                pass
+
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         close_btn = QPushButton(_("Close"))

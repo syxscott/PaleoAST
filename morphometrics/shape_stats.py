@@ -56,11 +56,34 @@ def kendall_preshape(configurations: npt.NDArray) -> npt.NDArray:
     return (centered / norms[:, None, None]).reshape(X.shape[0], -1)
 
 
-def procrustes_distance(a: npt.NDArray, b: npt.NDArray) -> float:
-    """Procrustes (full) distance: min over rotation/scale/translation of
-    ||A - B|| after optimal similarity alignment (Dryden & Mardia 2016,
-    Prop. 2.5): d = sqrt(1 - 2*tr((B'A(AA')^{-1}AB')^{1/2}...) ) computed
-    stably via the signed SVD trace with scale normalisation."""
+def procrustes_distance(
+    a: npt.NDArray,
+    b: npt.NDArray,
+    no_reflect: bool = False,
+) -> float:
+    """Procrustes (full) distance: min over translation/scale/similarity of
+    ||A - B||.  Computed via the signed-SVD trace (Dryden & Mardia 2016,
+    Prop. 2.5):
+
+        d² = 2 - 2 * Σ_i σ_i * s_i
+
+    where ``σ_i`` are the singular values of ``Aᵀ B`` (after centring and
+    unit-norm scaling) and ``s_i ∈ {+1, -1}`` flips the sign of the *last*
+    (smallest) singular value when the optimal similarity fit requires a
+    reflection (``det(Vᵀ U) < 0``).  The earlier implementation multiplied
+    the entire sum by ``sign(det)``, which made reflected distances
+    *larger* than the true full-Procrustes distance — the opposite of the
+    "full Procrustes" definition.
+
+    Parameters:
+        a, b: (p, k) landmark configurations (k = 2 or 3).
+        no_reflect: if True, only proper rotations (det = +1) are
+            considered and the smallest singular value is never negated
+            (matches ``gpa.analyze(no_reflect=True)`` behaviour).
+
+    Returns:
+        sqrt(max(2 - 2 Σ σᵢ sᵢ, 0)).
+    """
     A = np.asarray(a, dtype=float) - np.asarray(a, dtype=float).mean(axis=0)
     B = np.asarray(b, dtype=float) - np.asarray(b, dtype=float).mean(axis=0)
     na = np.sqrt(np.sum(A**2))
@@ -70,8 +93,42 @@ def procrustes_distance(a: npt.NDArray, b: npt.NDArray) -> float:
     A /= na
     B /= nb
     U, S, Vt = np.linalg.svd(A.T @ B)
-    d2 = 1.0 + 1.0 - 2.0 * np.sum(S) * np.sign(np.linalg.det(Vt.T @ U.T))
-    return float(np.sqrt(max(d2, 0.0)))
+    # With N = A'B and singular values sigma_1 >= ... >= sigma_k, the trace
+    # maximised over an UNCONSTRAINED orthogonal transform is sum(sigma), but
+    # that maximiser has det = sign(det N).  When reflections are allowed that
+    # is exactly what we want, so NO sign flip is applied.
+    #
+    # When only proper rotations are allowed and det N < 0, the best proper
+    # transform must "sacrifice" the smallest singular value: the maximised
+    # trace drops to sum(sigma) - 2*sigma_k.  That is the ONLY case where a
+    # sign flip belongs here.
+    #
+    # The two previous implementations had this inverted. Multiplying the
+    # whole sum by sign(det) inflated reflected distances; flipping sigma_k
+    # when reflections were *allowed* instead of *forbidden* swapped the two
+    # answers. Both were caught by brute-force search over all orthogonal
+    # transforms (see tests/golden/test_procrustes_ground_truth.py).
+    signs = np.ones_like(S)
+    if no_reflect and np.linalg.det(Vt.T @ U.T) < 0:
+        signs[-1] = -1.0
+    d2 = 2.0 - 2.0 * float(np.sum(S * signs))
+    # Clamp round-off at BOTH ends. For identical configurations the ideal
+    # d² is exactly 0, but the singular values of a unit-norm Gram matrix sum
+    # to 1 only to within rounding — on the 46-point 3D scallop fixture the
+    # sum came out as 1 - 1.11e-16 (one ULP low), making d² a *positive*
+    # 2.22e-16 and the distance 1.49e-8 instead of 0. Clamping only the
+    # negative side (the previous ``max(d2, 0.0)``) did not catch that,
+    # because a positive near-zero is exactly the case that slips through.
+    #
+    # The threshold must sit just above float noise and well below any real
+    # displacement. Measured on that fixture: identical input leaves d² at
+    # 4.4e-16, while displacing ONE landmark coordinate by 1e-4 gives d² =
+    # 2.7e-13 — three orders of magnitude larger. 1e-14 separates them with
+    # room to spare, and because d² is quadratic in displacement it still
+    # resolves distance differences down to ~1e-7.
+    if d2 <= 1e-14:
+        return 0.0
+    return float(np.sqrt(d2))
 
 
 def _procrustes_align_to(source: npt.NDArray, target: npt.NDArray) -> npt.NDArray:
@@ -301,7 +358,43 @@ def hotelling_t2(sample1: npt.NDArray, sample2: npt.NDArray) -> HotellingT2Resul
     S = (((X1 - X1.mean(axis=0)).T @ (X1 - X1.mean(axis=0))) + ((X2 - X2.mean(axis=0)).T @ (X2 - X2.mean(axis=0)))) / (
         n1 + n2 - 2
     )
-    sol = np.linalg.lstsq(S, diff, rcond=None)[0]
+    # Invert S via ``np.linalg.solve`` (fast + numerically stable in the
+    # well-conditioned regime).  If S is singular, fall back to
+    # ``np.linalg.lstsq`` — but emit a warning so the caller knows the
+    # T² is now the minimum-norm projection, not the true quadratic form
+    # ``diff' S^{-1} diff`` (which is undefined when det S = 0).
+    #
+    # Singularity must be detected explicitly. Relying on
+    # ``np.linalg.solve`` to raise ``LinAlgError`` does not work: LAPACK's
+    # LU factorisation only reports an exactly-zero pivot, and a matrix that
+    # is singular in exact arithmetic (here, one column a linear combination
+    # of the others) almost never produces one after rounding. Measured on a
+    # 12x4 case with column 3 := 2*c0 - c1 + 0.5*c2: det(S) = 4.6e-17, rank 3
+    # of 4, cond(S) = 1.9e17 — and ``solve`` returned a solution with a
+    # 6.2e-16 residual and raised nothing at all. The caller got a confident
+    # T² from a matrix that has no inverse, and the warning never fired.
+    import warnings
+
+    rank = int(np.linalg.matrix_rank(S))
+    if rank < d:
+        warnings.warn(
+            "Hotelling T²: pooled covariance is singular (rank {0} of {1}); "
+            "falling back to least-squares. The reported T² is the "
+            "minimum-norm projection, not the true quadratic form.".format(rank, d),
+            stacklevel=2,
+        )
+        sol = np.linalg.lstsq(S, diff, rcond=None)[0]
+    else:
+        try:
+            sol = np.linalg.solve(S, diff)
+        except np.linalg.LinAlgError:
+            warnings.warn(
+                "Hotelling T²: pooled covariance is singular; "
+                "falling back to least-squares. The reported T² is the "
+                "minimum-norm projection, not the true quadratic form.",
+                stacklevel=2,
+            )
+            sol = np.linalg.lstsq(S, diff, rcond=None)[0]
     t2 = float(n1 * n2 / (n1 + n2) * (diff @ sol))
     df1 = d
     df2 = n1 + n2 - d - 1

@@ -73,7 +73,9 @@ class PASTData:
     data: np.ndarray
     row_labels: list[str] | None = None
     col_labels: list[str] | None = None
-    groups: list[str] | None = None
+    # One entry per data row (PAST's ``{Group}`` line labels the rows that
+    # follow it). Rows before any ``{Group}`` line carry ``None``.
+    groups: list[str | None] | None = None
     comments: list[str] | None = None
     file_path: str | None = None
 
@@ -82,7 +84,9 @@ class PASTData:
             f"PAST Data: {self.data.shape[0]} rows x {self.data.shape[1]} columns",
         ]
         if self.groups is not None:
-            unique_groups = set(self.groups)
+            # Unlabelled rows (None) are not a group; counting them as one
+            # would report "Groups: 2" for a file with a single {Group}.
+            unique_groups = {group for group in self.groups if group is not None}
             lines.append(f"Groups: {len(unique_groups)}")
         return "\n".join(lines)
 
@@ -143,9 +147,18 @@ class DATParser:
         data_lines = []
         row_labels = []
         col_labels = None
-        groups = []
+        # One group label per data row. A ``{Group}`` line labels the rows
+        # that FOLLOW it (the PAST convention, and what the file format
+        # documented in the module docstring means), so the label is
+        # remembered in ``current_group`` and stamped onto every row read
+        # after it. Appending the name to a flat list instead — as this
+        # used to do — lost the association entirely: three rows under one
+        # ``{Group1}`` produced ``groups == ["Group1"]``, and a second
+        # group made the list SHORTER than the data, which every consumer
+        # (one group per row) has to reject.
+        row_groups: list[str | None] = []
+        current_group: str | None = None
         comments = []
-        has_groups = False
         expected_field_count = None
         has_found_header_or_data = False
         header_parts: list[str] | None = None
@@ -176,9 +189,7 @@ class DATParser:
             if is_comment:
                 # Check if this is a group assignment line like "{Group1}"
                 if stripped.startswith("{") and stripped.endswith("}"):
-                    group_name = stripped[1:-1]
-                    groups.append(group_name)
-                    has_groups = True
+                    current_group = stripped[1:-1]
                 continue
 
             # Try to parse as data
@@ -264,6 +275,7 @@ class DATParser:
                     if parsed_val is not None:
                         data_values.append(parsed_val)
                 data_lines.append(data_values)
+                row_groups.append(current_group)
             except ValueError as e:
                 raise DATParseError(
                     f"Cannot parse data value: {e}",
@@ -293,9 +305,11 @@ class DATParser:
         if len(row_labels) != data.shape[0]:
             row_labels = [f"Row_{i + 1}" for i in range(data.shape[0])]
 
-        # Handle groups
-        if not has_groups or len(groups) == 0:
-            groups = None
+        # Handle groups: keep the per-row association, and report "no
+        # groups" (None) when the file declared none -- or declared a
+        # ``{Group}`` that no data row ever followed, which binds to
+        # nothing.
+        groups = row_groups if any(group is not None for group in row_groups) else None
 
         self._logger.info(f"Parsed {data.shape[0]} rows x {data.shape[1]} columns")
 
@@ -460,10 +474,8 @@ class DATParser:
             # Single separator - check if it's surrounded by 3 digits
             # "123" no sep, "1,234" or "1.234" thousands, "12,34" decimal
             if comma_count == 1:
-                sep = ","
                 sep_pos = clean.find(",")
             else:
-                sep = "."
                 sep_pos = clean.find(".")
             before = clean[:sep_pos]
             after = clean[sep_pos + 1 :]

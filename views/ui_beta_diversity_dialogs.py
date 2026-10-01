@@ -188,19 +188,35 @@ class CoverageRarefactionDialog(BaseBetaDialog):
 
         method_layout = self._method_widget.layout()
 
-        # Rarefaction options
+        # Rarefaction options. ``CoverageRarefactionAnalyzer.coverage_rarefaction_hill``
+        # accepts ``n_points`` (number of coverage levels to evaluate),
+        # ``n_bootstrap`` and ``seed`` for the multinomial bootstrap CI.
+        # The bare ``CoverageRarefactionAnalyzer.analyze`` wrapper ignores
+        # the bootstrap knob, so this dialog routes through
+        # ``coverage_rarefaction_hill`` to honour the user's choices.
         opts_group = QGroupBox(_("Rarefaction Settings"))
         opts_layout = QFormLayout(opts_group)
 
         self._endpoint_spin = QSpinBox()
         self._endpoint_spin.setRange(10, 1000)
         self._endpoint_spin.setValue(100)
-        opts_layout.addRow(_("Endpoint (max sample size):"), self._endpoint_spin)
+        self._endpoint_spin.setToolTip(
+            _("Number of coverage levels to evaluate between 0.10 and 0.99 (n_points).")
+        )
+        opts_layout.addRow(_("Coverage levels (n_points):"), self._endpoint_spin)
 
         self._n_boot_spin = QSpinBox()
-        self._n_boot_spin.setRange(50, 500)
+        self._n_boot_spin.setRange(0, 5000)
         self._n_boot_spin.setValue(200)
-        opts_layout.addRow(_("Bootstrap replicates:"), self._n_boot_spin)
+        self._n_boot_spin.setToolTip(
+            _("Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap.")
+        )
+        opts_layout.addRow(_("Bootstrap replicates (0 = skip):"), self._n_boot_spin)
+
+        self._seed_spin = QSpinBox()
+        self._seed_spin.setRange(0, 10**6)
+        self._seed_spin.setValue(42)
+        opts_layout.addRow(_("Random seed:"), self._seed_spin)
 
         method_layout.addWidget(opts_group)
 
@@ -217,9 +233,15 @@ class CoverageRarefactionDialog(BaseBetaDialog):
             from ecology.beta_diversity import CoverageRarefactionAnalyzer
 
             analyzer = CoverageRarefactionAnalyzer()
-            result = analyzer.analyze(
+            # Route through ``coverage_rarefaction_hill`` so the bootstrap
+            # count and seed actually flow into the engine (the bare
+            # ``analyze`` method silently ignores them).
+            result = analyzer.coverage_rarefaction_hill(
                 abundance_matrix=abundance_matrix,
                 sample_names=site_names if site_names else None,
+                n_points=int(self._endpoint_spin.value()),
+                n_bootstrap=int(self._n_boot_spin.value()),
+                seed=int(self._seed_spin.value()),
             )
 
             # Display results
@@ -251,7 +273,18 @@ class BetaDiversityDialog(BaseBetaDialog):
 
         method_layout = self._method_widget.layout()
 
-        # Beta diversity options
+        # Beta diversity options. ``BetaDiversityAnalyzer.decompose_beta_diversity``
+        # (ecology/beta_diversity.py) accepts only ``abundance_matrix``,
+        # ``sample_names`` and ``metric``; there is no ``transform`` flag
+        # or "full pairwise display mode" switch. Both the old
+        # ``_transform_combo`` and ``_show_pairwise_check`` were dead
+        # controls — surfaced in the UI but ignored by the engine. To
+        # avoid silently dropping user input they have been replaced
+        # with an info note that the decomposition always runs on the
+        # binary (presence/absence) projection of the abundance matrix
+        # and always returns both the three full matrices and the
+        # per-pair table.
+
         opts_group = QGroupBox(_("Beta Diversity Settings"))
         opts_layout = QFormLayout(opts_group)
 
@@ -264,33 +297,19 @@ class BetaDiversityDialog(BaseBetaDialog):
         )
         opts_layout.addRow(_("Dissimilarity metric:"), self._metric_combo)
 
-        self._transform_combo = QComboBox()
-        self._transform_combo.addItems(
-            [
-                _("None (presence-absence)"),
-                _("Square root transformation"),
-                _("Log transformation"),
-            ]
-        )
-        opts_layout.addRow(_("Data transformation:"), self._transform_combo)
-
         method_layout.addWidget(opts_group)
 
-        # Pairwise options
-        pairwise_group = QGroupBox(_("Output Options"))
-        pairwise_layout = QVBoxLayout(pairwise_group)
-
-        self._show_pairwise_check = QComboBox()
-        self._show_pairwise_check.addItems(
-            [
-                _("Similarity matrix only"),
-                _("Full pairwise comparison"),
-            ]
+        info_label = QLabel(
+            _(
+                "Decomposition always uses presence/absence (the abundance "
+                "matrix is thresholded at zero). The full per-pair turnover / "
+                "nestedness / total table is always returned alongside the "
+                "three matrices — there is no toggle for either."
+            )
         )
-        pairwise_layout.addWidget(QLabel(_("Display mode:")))
-        pairwise_layout.addWidget(self._show_pairwise_check)
-
-        method_layout.addWidget(pairwise_group)
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
+        method_layout.addWidget(info_label)
 
     def _on_run(self) -> None:
         """Run beta diversity decomposition."""

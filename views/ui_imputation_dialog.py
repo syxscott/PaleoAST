@@ -5,7 +5,7 @@ Missing Value Imputation Dialog for PaleoAST
 Provides interactive UI for handling missing values in data matrices.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.2.0
 """
 
 import logging
@@ -71,20 +71,24 @@ class MissingValueReportWidget(QWidget):
         n_cols: int,
     ) -> None:
         """Update the report display."""
-        self.summary_label.setText(f"<b>缺失值统计:</b> {total_nan} 个 NaN ({nan_proportion * 100:.1f}%)")
+        self.summary_label.setText(
+            f"<b>{_('Missing-value summary')}:</b> {total_nan} NaN ({nan_proportion * 100:.1f}%)"
+        )
 
         # Show rows and columns with NaN
         self.distribution_label.setText(
-            f"含 NaN 的行: {rows_with_nan}/{n_rows} | 含 NaN 的列: {cols_with_nan}/{n_cols}"
+            _("Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}").format(
+                rows_with_nan, n_rows, cols_with_nan, n_cols
+            )
         )
 
         # Statistics
         stats_lines = [
             "=" * 40,
-            "逐行 NaN 数量 (前10行):",
+            _("NaN counts by row (first 10):"),
             str(nan_by_row[:10].tolist()),
             "",
-            "逐列 NaN 数量:",
+            _("NaN counts by column:"),
             str(nan_by_col.tolist()),
         ]
         self.stats_text.setText("\n".join(stats_lines))
@@ -108,17 +112,17 @@ class ImputationConfigWidget(QWidget):
         layout = QVBoxLayout(self)
 
         # Method selection
-        method_group = QGroupBox(_("填充方法"))
+        method_group = QGroupBox(_("Imputation method"))
         method_layout = QVBoxLayout(method_group)
 
         self.method_combo = QComboBox()
         self.method_combo.addItems(
             [
-                _("列均值填充 (Mean)"),
-                _("列中位数填充 (Median)"),
-                _("K近邻填充 (KNN)"),
-                _("删除含NaN的行"),
-                _("删除含NaN的列"),
+                _("Column-mean imputation (Mean)"),
+                _("Column-median imputation (Median)"),
+                _("K-Nearest-Neighbour imputation (KNN)"),
+                _("Remove rows containing NaN"),
+                _("Remove columns containing NaN"),
             ]
         )
         method_layout.addWidget(self.method_combo)
@@ -126,7 +130,7 @@ class ImputationConfigWidget(QWidget):
         # KNN options
         self.knn_options = QWidget()
         knn_layout = QHBoxLayout(self.knn_options)
-        knn_layout.addWidget(QLabel(_("K 值:")))
+        knn_layout.addWidget(QLabel(_("K value:")))
         self.k_spin = QSpinBox()
         self.k_spin.setRange(1, 20)
         self.k_spin.setValue(5)
@@ -138,7 +142,7 @@ class ImputationConfigWidget(QWidget):
         layout.addWidget(method_group)
 
         # Preview button
-        self.preview_btn = QPushButton(_("预览处理结果"))
+        self.preview_btn = QPushButton(_("Preview processed result"))
         layout.addWidget(self.preview_btn)
 
         layout.addStretch()
@@ -196,7 +200,7 @@ class ImputationDialog(BaseAnalysisDialog):
             n_cols: Total number of columns
             nan_proportion: Proportion of data that is NaN
         """
-        super().__init__(_("缺失值处理中心"), parent)
+        super().__init__(_("Missing-Value Centre"), parent)
 
         self.nan_count = nan_count
         self.rows_with_nan = rows_with_nan
@@ -219,7 +223,12 @@ class ImputationDialog(BaseAnalysisDialog):
     def _setup_parameters(self) -> None:
         """Setup the dialog UI."""
         # Header
-        header = QLabel(_("<h2>缺失值处理中心</h2><p>检测到数据中存在缺失值，请选择处理方式。</p>"))
+        header = QLabel(
+            _(
+                "<h2>Missing-Value Centre</h2>"
+                "<p>Missing values were detected in the data — choose a strategy.</p>"
+            )
+        )
         header.setWordWrap(True)
         self.layout().addWidget(header)
 
@@ -232,10 +241,10 @@ class ImputationDialog(BaseAnalysisDialog):
         self.layout().addWidget(self.config_widget)
 
         # Result preview
-        result_group = QGroupBox(_("处理预览"))
+        result_group = QGroupBox(_("Processing preview"))
         result_layout = QVBoxLayout(result_group)
 
-        self.result_label = QLabel(_('点击"预览处理结果"查看处理后的数据预览'))
+        self.result_label = QLabel(_('Press "Preview processed result" to view the projected data.'))
         self.result_label.setWordWrap(True)
         self.result_label.setStyleSheet("color: #666; padding: 8px;")
         result_layout.addWidget(self.result_label)
@@ -265,34 +274,35 @@ class ImputationDialog(BaseAnalysisDialog):
         k = self.config_widget.get_k()
 
         method_names = {
-            "mean": "均值填充",
-            "median": "中位数填充",
-            "knn": f"KNN填充 (k={k})",
-            "remove_rows": "删除行",
-            "remove_columns": "删除列",
+            "mean": _("Mean imputation"),
+            "median": _("Median imputation"),
+            "knn": _("KNN imputation (k={0})").format(k),
+            "remove_rows": _("Remove rows"),
+            "remove_columns": _("Remove columns"),
         }
 
         # Generate impact description
         if method == "remove_rows":
             remaining_rows = self.n_rows - self.rows_with_nan
-            impact = f"将删除 {self.rows_with_nan} 行，剩余 {remaining_rows} 行"
-            preview_note = f"\n\n<i>预览: 数据将从 {self.n_rows} 行变为 {remaining_rows} 行</i>"
+            impact = _("Will remove {0} rows, leaving {1}").format(self.rows_with_nan, remaining_rows)
+            preview_note = f"\n\n<i>{_('Preview: row count will change from')}: {self.n_rows} → {remaining_rows}</i>"
         elif method == "remove_columns":
             remaining_cols = self.n_cols - self.cols_with_nan
-            impact = f"将删除 {self.cols_with_nan} 列，剩余 {remaining_cols} 列"
-            preview_note = f"\n\n<i>预览: 数据将从 {self.n_cols} 列变为 {remaining_cols} 列</i>"
+            impact = _("Will remove {0} columns, leaving {1}").format(self.cols_with_nan, remaining_cols)
+            preview_note = f"\n\n<i>{_('Preview: column count will change from')}: {self.n_cols} → {remaining_cols}</i>"
         else:
-            impact = f"将填充 {self.nan_count} 个 NaN 值"
+            impact = _("Will impute {0} NaN values").format(self.nan_count)
             # Show sample of rows with NaN
             rows_with_nan_indices = np.where(self.nan_by_row > 0)[0]
             if len(rows_with_nan_indices) > 0:
                 sample_rows = rows_with_nan_indices[:3]  # Show first 3
-                preview_note = f"\n\n<i>预览: 前3个含NaN的行: {sample_rows.tolist()}...</i>"
+                preview_note = f"\n\n<i>{_('Preview: first 3 rows containing NaN')}: {sample_rows.tolist()}...</i>"
             else:
                 preview_note = ""
 
         self.result_label.setText(
-            f"<b>选择的方法:</b> {method_names.get(method, method)}\n<b>影响:</b> {impact}{preview_note}"
+            f"<b>{_('Selected method')}:</b> {method_names.get(method, method)}<br/>"
+            f"<b>{_('Impact')}:</b> {impact}{preview_note}"
         )
 
     def get_parameters(self) -> dict[str, Any]:
@@ -305,22 +315,23 @@ class ImputationDialog(BaseAnalysisDialog):
 
     def _get_help_text(self) -> str:
         """Return help text for the dialog."""
-        return _("""
-<h2>缺失值处理方法</h2>
+        return _(
+            """
+<h2>Missing-Value Methods</h2>
 
-<h3>列均值填充 (Mean)</h3>
-<p>用每列的非NaN值的均值填充该列的NaN。简单快速，但会降低数据方差。</p>
+<h3>Column-mean imputation (Mean)</h3>
+<p>Replace each NaN with the mean of the non-NaN values in its column. Fast, but reduces the column variance.</p>
 
-<h3>列中位数填充 (Median)</h3>
-<p>用每列的非NaN值的中位数填充。对异常值更稳健。</p>
+<h3>Column-median imputation (Median)</h3>
+<p>Replace each NaN with the median of the non-NaN values in its column. More robust against outliers.</p>
 
-<h3>K近邻填充 (KNN)</h3>
-<p>对于每个NaN，找到与该样本最相似的K个邻居，利用邻居的值进行填充。
-考虑数据的局部结构，更加精确但计算较慢。</p>
+<h3>K-Nearest-Neighbour imputation (KNN)</h3>
+<p>For every NaN cell, find the K most similar samples and use their values to fill it in. Captures local structure, but is slower.</p>
 
-<h3>删除行</h3>
-<p>直接删除包含任何NaN的行。会减少样本数量，但保持数据完整性。</p>
+<h3>Remove rows</h3>
+<p>Drop every row that contains any NaN. Reduces the sample count but preserves data integrity.</p>
 
-<h3>删除列</h3>
-<p>直接删除包含任何NaN的列。可能丢失重要特征。</p>
-        """)
+<h3>Remove columns</h3>
+<p>Drop every column that contains any NaN. May discard important features.</p>
+"""
+        )

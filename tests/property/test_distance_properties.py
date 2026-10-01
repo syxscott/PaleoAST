@@ -74,13 +74,20 @@ def test_distance_symmetry(data, metric):
 @given(data=_abundance_data)
 @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 def test_bray_curtis_symmetry(data):
-    """Property: Bray-Curtis is symmetric."""
+    """Property: Bray-Curtis is symmetric.
+
+    Pairs of samples that are both entirely zero have a zero denominator, so
+    their dissimilarity is undefined and the implementation returns NaN rather
+    than 0. NaN is not equal to itself, so ``allclose`` needs ``equal_nan``;
+    and the *pattern* of undefined pairs must itself be symmetric.
+    """
     X = _try_make_array(data)
     if X is None or X.ndim != 2 or X.shape[0] < 2:
         return
     result = compute_distance_matrix(X, metric="bray_curtis")
     D = result.matrix
-    assert np.allclose(D, D.T, atol=1e-10)
+    assert np.array_equal(np.isnan(D), np.isnan(D.T)), "undefined pairs must be symmetric"
+    assert np.allclose(D, D.T, atol=1e-10, equal_nan=True)
 
 
 @given(data=_general_data, metric=st.sampled_from(METRICS))
@@ -125,14 +132,20 @@ def test_euclidean_triangle_inequality(data, metric):
 @given(data=_abundance_data)
 @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 def test_bray_curtis_in_unit_interval(data):
-    """Property: Bray-Curtis dissimilarity is in [0, 1]."""
+    """Property: Bray-Curtis dissimilarity is in [0, 1].
+
+    Undefined pairs (both samples entirely zero -> zero denominator) are NaN
+    and are excluded from the range check; asserting on them would compare
+    against NaN, which is false for every operator.
+    """
     X = _try_make_array(data)
     if X is None or X.ndim != 2 or X.shape[0] < 2:
         return
     D = compute_distance_matrix(X, metric="bray_curtis").matrix
     upper = D[np.triu_indices(D.shape[0], k=1)]
-    assert np.all(upper >= 0.0 - 1e-10)
-    assert np.all(upper <= 1.0 + 1e-10)
+    defined = upper[np.isfinite(upper)]
+    assert np.all(defined >= 0.0 - 1e-10)
+    assert np.all(defined <= 1.0 + 1e-10)
 
 
 @given(data=_general_data)

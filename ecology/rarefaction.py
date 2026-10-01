@@ -25,6 +25,7 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
+import math
 import logging
 import threading
 
@@ -61,7 +62,24 @@ def compute_rarefaction(
 
     abundances = abundances[abundances > 0]
 
-    N = int(np.sum(abundances))  # Total individuals
+    # Rarefaction is defined over INDIVIDUALS, so the input must be integer
+    # counts. `int(np.sum(...))` used to truncate silently: a
+    # relative-abundance vector like [0.1, 0.2, 0.3, 0.4] summed to exactly
+    # 1.0, became N=1, and produced the nonsense curve "1 individual yields
+    # 4 species".
+    #
+    # The test MUST be on the individual values, not on the sum: these
+    # fractions sum to an integer, so a sum-integrality check passes them.
+    non_integer = ~np.isclose(abundances, np.round(abundances), rtol=0.0, atol=1e-9)
+    if np.any(non_integer):
+        offenders = np.unique(np.asarray(abundances)[non_integer])[:5]
+        raise ComputationError(
+            "Rarefaction requires integer abundance counts (total individuals), "
+            f"but got fractional values {list(offenders)}. Pass raw counts, "
+            "not a relative-abundance or percentage vector."
+        )
+
+    N = int(round(float(np.sum(abundances))))  # Total individuals
     S = len(abundances)  # Observed richness
     logger.info(f"compute_rarefaction started: n_taxa={S}, total_individuals={N}, max_n={max_n}, n_points={n_points}")
 
@@ -104,8 +122,11 @@ def _rarefaction_formula(abundances: npt.NDArray, N: int, n: int) -> float:
 
     # Precompute binomial coefficient
     # C(N, n) = N! / (n! * (N-n)!)
-    log_N_choose_n = _log_factorial(N) - _log_factorial(n) - _log_factorial(N - n)
-
+    # Exact integer arithmetic: the previous log-gamma route lost ~1e-4 of
+    # relative accuracy for N >= 60, where _log_factorial switches to
+    # Stirling. At k = 1 the expectation is exactly 1.0 and it came out
+    # 1.0001, which is a visible artefact on a reported species count.
+    total_choose_n = _combinations(N, n)
     expected_S = 0.0
 
     for ni in abundances:
@@ -114,8 +135,7 @@ def _rarefaction_formula(abundances: npt.NDArray, N: int, n: int) -> float:
             expected_S += 1.0
         else:
             # P(species excluded) = C(N-ni, n) / C(N, n)
-            log_term = _log_factorial(N - ni) - _log_factorial(n) - _log_factorial(N - ni - n)
-            prob_excluded = np.exp(log_term - log_N_choose_n)
+            prob_excluded = _combinations(N - ni, n) / total_choose_n
             expected_S += 1.0 - prob_excluded
 
     return expected_S
@@ -213,13 +233,28 @@ def compute_sample_based_rarefaction(
 
 
 def _combinations(n: int, k: int) -> float:
-    """Compute C(n, k) using log space."""
+    """Compute C(n, k), exactly.
+
+    ``math.comb`` needs Python ints; sample-size grids arrive as numpy arrays
+    whose dtype may be float, so coerce rather than trust the caller.
+    """
+    n = int(n)
+    k = int(k)
     if k > n or k < 0:
         return 0.0
     if k == 0 or k == n:
         return 1.0
 
-    return np.exp(_log_factorial(n) - _log_factorial(k) - _log_factorial(n - k))
+    # ``math.comb`` is exact arbitrary-precision integer arithmetic and is
+    # instantaneous for the sample sizes a rarefaction curve ever sees (the
+    # log-gamma route was only needed to avoid materialising the integer, and
+    # its Stirling branch for n >= 60 cost ~1e-4 of relative accuracy on a
+    # quantity whose exact value at k = 1 is 1.0). Fall back to the log route
+    # only if the integers would actually overflow a float.
+    try:
+        return float(math.comb(n, k))
+    except (OverflowError, ValueError):
+        return np.exp(_log_factorial(n) - _log_factorial(k) - _log_factorial(n - k))
 
 
 class RarefactionAnalyzer:

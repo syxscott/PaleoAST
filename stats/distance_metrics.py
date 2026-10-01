@@ -106,7 +106,7 @@ def compute_distance_matrix(
         - 'euclidean': Euclidean (L2) distance
         - 'manhattan': Manhattan (L1) distance
         - 'bray_curtis': Bray-Curtis dissimilarity
-        - 'jaccard': Jaccard dissimilarity
+        - 'jaccard': Jaccard dissimilarity (presence/absence)
         - 'canberra': Canberra distance
         - 'chebychev': Chebychev (L∞) distance
     """
@@ -130,6 +130,35 @@ def compute_distance_matrix(
 
     if metric_lower == "bray_curtis":
         D = _bray_curtis_distance_matrix(X)
+    elif metric_lower == "jaccard":
+        # scipy's jaccard treats non-zero as present and zero as absent. If
+        # the input contains fractional/quantitative abundances, scipy
+        # silently binarises them and throws away the magnitude information.
+        # Warn the user explicitly so a count-matrix input is not misreported
+        # as Jaccard-on-presence/absence.
+        if _looks_quantitative(X):
+            import warnings as _warnings
+
+            _warnings.warn(
+                "Jaccard is a presence/absence metric: scipy.broadcast treats any "
+                "non-zero value as 'present'. The input matrix appears to contain "
+                "quantitative values (not a pure 0/1 presence/absence matrix); "
+                "the magnitudes will be DISCARDED and only the support sets used. "
+                "If the input is a species count or abundance matrix, consider "
+                "'bray_curtis' instead, which preserves the quantitative structure.",
+                UserWarning,
+                stacklevel=2,
+            )
+            logger.warning(
+                "Jaccard called on quantitative input: magnitudes will be discarded."
+            )
+        scipy_metric = _METRIC_MAP.get(metric_lower, metric_lower)
+        try:
+            condensed = pdist(X, metric=scipy_metric)
+            D = squareform(condensed)
+        except Exception as e:
+            logger.warning(f"pdist failed for {metric}, falling back to loop: {e}")
+            D = _fallback_distance_matrix(X, metric_lower)
     else:
         # Use scipy's pdist for efficient computation
         scipy_metric = _METRIC_MAP.get(metric_lower, metric_lower)
@@ -145,6 +174,22 @@ def compute_distance_matrix(
     return DistanceMatrixResult(matrix=D, metric=metric, labels=labels)
 
 
+def _looks_quantitative(X: npt.NDArray) -> bool:
+    """Return True if the input matrix has quantitative (non-binary) entries.
+
+    Heuristic: look at every unique value; if any value is strictly between
+    0 and 1 (or simply not exactly 0/1) treat the matrix as quantitative.
+    NaN/Inf are skipped (the caller has already accepted those).
+    """
+    finite = X[np.isfinite(X)]
+    if finite.size == 0:
+        return False
+    # Vectorised check: not every value is exactly 0 or 1
+    unique_vals = np.unique(finite)
+    non_binary_mask = ~np.isin(unique_vals, [0.0, 1.0])
+    return bool(np.any(non_binary_mask))
+
+
 def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
     """
     Compute Bray-Curtis dissimilarity matrix.
@@ -154,30 +199,44 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
     Range: [0, 1]
     - 0: Identical compositions
     - 1: No overlap in taxa
+    - NaN: undefined (e.g. both samples are all zeros, or invalid input)
+
+    Raises:
+        ValueError: if any input value is negative (Bray-Curtis requires
+            non-negative abundance data; the previous implementation
+            silently propagated negatives into |a-b|/|a+b| which has no
+            ecological meaning).
     """
+    # Bray-Curtis requires non-negative abundances.  Negative values
+    # break the denominator (Σ_k (a_k + b_k)) and produce nonsense
+    # distances; we surface a clear error rather than silently
+    # propagating NaNs / wrong numbers.
+    if np.any(X < 0):
+        raise ValueError(
+            "Bray-Curtis requires non-negative abundances; negative values were "
+            "detected in the input matrix. Use a different metric for signed "
+            "data (e.g. Euclidean)."
+        )
+
     n = X.shape[0]
 
-    # Optimized vectorized implementation
-    # Bray-Curtis = sum(|xi - xj|) / sum(xi + xj)
-    # Using broadcasting: X[:, None, :] - X[None, :, :] gives all pairwise differences
-    # But this is memory-intensive for large n, so we use cdist with custom metric
-
     try:
-        # Vectorized implementation using broadcasting with memory check
         if n <= 500:
-            # For small matrices, use full broadcasting
-            # Bray-Curtis: Σ|x_ik - x_jk| / Σ(x_ik + x_jk)
-            # The denominator uses (x_ik + x_jk) — the previous code wrapped
-            # each term in np.abs() which is unnecessary for valid (non-negative)
-            # abundance data and could produce incorrect results for negative values.
             diff = np.abs(X[:, None, :] - X[None, :, :])
             sum_arr = X[:, None, :] + X[None, :, :]
             numerator = np.sum(diff, axis=2)
             denominator = np.sum(sum_arr, axis=2)
-            denominator = np.where(denominator == 0, 1, denominator)
-            D = numerator / denominator
+            # When the denominator is 0 (both samples are all zeros) the
+            # Bray-Curtis dissimilarity is UNDEFINED (0/0). Return NaN
+            # instead of the artificial 0 the previous code returned
+            # (which made two empty samples look identical -- silently
+            # biasing downstream PCoA / NMDS / cluster analyses).
+            D = np.where(denominator == 0, np.nan, numerator / denominator)
+            # Distance of a row to itself is 0 by definition; restore the
+            # diagonal explicitly because for an all-zero row the diagonal
+            # cell also got the NaN from the above np.where.
+            np.fill_diagonal(D, 0.0)
         else:
-            # For large matrices, use cdist-style loop with chunks
             D = np.zeros((n, n))
             chunk_size = 100
             for i in range(0, n, chunk_size):
@@ -186,11 +245,11 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
                     end_j = min(j + chunk_size, n)
                     chunk = X[i:end_i, None, :] - X[None, j:end_j, :]
                     num = np.sum(np.abs(chunk), axis=2)
-                    # Standard Bray-Curtis denominator (consistent with small matrix path)
                     den = np.sum(X[i:end_i, None, :] + X[None, j:end_j, :], axis=2)
-                    den = np.where(den == 0, 1, den)
-                    D[i:end_i, j:end_j] = num / den
-                    D[j:end_j, i:end_i] = (num / den).T
+                    # NaN where the pair has zero total abundance
+                    block = np.where(den == 0, np.nan, num / den)
+                    D[i:end_i, j:end_j] = block
+                    D[j:end_j, i:end_i] = block.T
     except Exception:
         # Fallback to pure Python loop (slow)
         D = np.zeros((n, n))
@@ -201,7 +260,8 @@ def _bray_curtis_distance_matrix(X: npt.NDArray) -> npt.NDArray:
                 if denominator > 0:
                     bc = numerator / denominator
                 else:
-                    bc = 0.0
+                    # Both samples empty: undefined.
+                    bc = np.nan
                 D[i, j] = bc
                 D[j, i] = bc
 

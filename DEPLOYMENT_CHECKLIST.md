@@ -41,11 +41,17 @@
 ### views/ui_main_window.py
 
 **新增方法**:
-- [x] `_update_ui_state()` - L956-972 全局UI状态管理
-- [x] `_register_data_action()` - L974-978 菜单项注册
-- [x] `_register_data_button()` - L980-984 按钮注册
-- [x] `_on_run_anosim()` - L1531-1557 ANOSIM分析
-- [x] `_on_run_permanova()` - L1559-1585 PERMANOVA分析
+
+> **行号已于 2026-10-01 用 AST 重新定位。** 原文写的行号全部过时
+> （例如 `_update_ui_state` 标 L956-972，实际 L2069-2087，漂移 1100+ 行），
+> 所以下面只给当前行号；方法本身的存在性经核实全部为真。
+> 注意行号会随改动漂移——**请以 AST 定位为准，不要依赖这份清单里的数字**。
+
+- [x] `_update_ui_state()` - L2069-2087 全局UI状态管理
+- [x] `_register_data_action()` - L2089-2093 菜单项注册
+- [x] `_register_data_button()` - L2095-2115 按钮注册
+- [x] `_on_run_anosim()` - L4251-4273 ANOSIM分析
+- [x] `_on_run_permanova()` - L4331-4353 PERMANOVA分析
 
 **改进的方法**:
 - [x] `__init__()` - 添加UI状态列表初始化
@@ -63,8 +69,9 @@
 ### views/ui_dialogs.py
 
 **新增方法**:
-- [x] `_on_run_validated()` - L118-135 带验证的运行
-- [x] `_validate_parameters()` - L137-139 参数验证接口
+- [x] `_on_run_validated()` - L139-147 带验证的运行（`BaseAnalysisDialog`）
+- [x] `_validate_parameters()` - L367-369 参数验证接口（`BaseAnalysisDialog`；
+      `WaveletDialog` 另有一份 L1884-1886）
 
 ---
 

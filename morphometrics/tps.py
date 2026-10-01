@@ -174,7 +174,14 @@ class TPSAnalyzer:
             grid_shape: Shape of output grid (n_rows, n_cols)
 
         Returns:
-            npt.NDArray: Warped grid points (n_rows*n_cols, 2)
+            npt.NDArray: Warped grid points of shape (n_rows, n_cols, n_dims),
+                         where n_dims is 2 for a 2-D configuration and 3 for
+                         a 3-D one. The grid is a regular lattice in the first
+                         two coordinates (x across the columns, y down the
+                         rows, exactly as in 2-D); in 3-D the third coordinate
+                         is held at the mid-depth of the source bounding box,
+                         so the returned grid is a warped slice through the
+                         middle of the configuration.
         """
         if result is None:
             result = self._last_result
@@ -183,6 +190,10 @@ class TPSAnalyzer:
             raise ComputationError("No TPS result available. Run analyze() first.")
 
         source = result.source
+        n_dims = source.shape[1] if source.ndim > 1 else 1
+
+        if n_dims >= 3:
+            return self._warp_grid_3d(result, grid_shape)
 
         # Generate grid points spanning the source configuration
         x_min, x_max = source[:, 0].min(), source[:, 0].max()
@@ -205,6 +216,42 @@ class TPSAnalyzer:
         warped = self._warp_points(grid_points, result)
 
         return warped.reshape(grid_shape[0], grid_shape[1], 2)
+
+    def _warp_grid_3d(self, result: TPSResult, grid_shape: tuple[int, int]) -> npt.NDArray:
+        """
+        3-D counterpart of :meth:`warp_grid`.
+
+        The 2-D grid above is hard-coded to two columns, so it raised
+        "operands could not broadcast together with shapes (2,) (3,)" for
+        every 3-D configuration (``_warp_points`` needs a 3-column point to
+        evaluate the 3-D warp). This builds the lattice in x/y as before and
+        carries the mid-depth z value, so the caller gets a (rows, cols, 3)
+        warped slice instead of an exception.
+        """
+        source = result.source
+
+        x_min, x_max = source[:, 0].min(), source[:, 0].max()
+        y_min, y_max = source[:, 1].min(), source[:, 1].max()
+        z_min, z_max = source[:, 2].min(), source[:, 2].max()
+
+        margin = 0.1 * max(x_max - x_min, y_max - y_min, z_max - z_min)
+        x_min -= margin
+        x_max += margin
+        y_min -= margin
+        y_max += margin
+        z_mid = 0.5 * (z_min + z_max)
+
+        # Create grid
+        x_grid = np.linspace(x_min, x_max, grid_shape[1])
+        y_grid = np.linspace(y_min, y_max, grid_shape[0])
+        xx, yy = np.meshgrid(x_grid, y_grid)
+
+        grid_points = np.column_stack([xx.ravel(), yy.ravel(), np.full(xx.size, z_mid)])
+
+        # Warp grid points using TPS
+        warped = self._warp_points(grid_points, result)
+
+        return warped.reshape(grid_shape[0], grid_shape[1], 3)
 
     def _validate_configuration(self, config: npt.NDArray) -> npt.NDArray:
         """Validate and convert configuration to standard format."""
@@ -274,8 +321,19 @@ class TPSAnalyzer:
                 [np.linalg.norm(point - lm) if np.linalg.norm(point - lm) > 0 else 1e-10 for lm in source]
             )
 
-            # Compute U(r) values
-            U = distances**2 * np.log(distances)
+            # Compute U(r) values — MUST match the radial basis used in
+            # ``_build_kernel_matrix`` for the warp to interpolate the
+            # target at source landmark positions.  2-D uses the
+            # biharmonic kernel r² log r (Bookstein 1989); 3-D uses the
+            # Laplacian basic solution r (matches ``morpho3d.tps3d`` and
+            # ``morphometrics.gpa``).  The previous implementation
+            # hard-coded the 2-D form, so 3-D warps were silently wrong
+            # (the fitted coefficients targeted the r kernel, but the
+            # evaluator reconstructed against r² log r).
+            if n_dims == 2:
+                U = distances**2 * np.log(distances)
+            else:
+                U = distances
 
             # Affine contribution
             if n_dims == 2:

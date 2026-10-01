@@ -1,5 +1,26 @@
 """LaTeX figure handling utilities for PaleoAST reports."""
 
+import re
+
+# Standard LaTeX escape table, keyed by the RAW character so it can be
+# matched in a single alternation. The braces in \textasciitilde{} and
+# \textasciicircum{} are load-bearing: TeX swallows the space after a
+# control word, so the unbraced form would render as "x^2" and lose the
+# space.
+_LATEX_ESCAPES: dict[str, str] = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+_LATEX_ESCAPE_RE = re.compile("|".join(re.escape(char) for char in _LATEX_ESCAPES))
+
 
 def _escape_latex(text: str) -> str:
     """Escape LaTeX-significant characters in user-supplied text.
@@ -12,24 +33,15 @@ def _escape_latex(text: str) -> str:
     """
     if text is None:
         return ""
-    # Backslash must be escaped first to avoid re-escaping the
-    # substitutions below.
-    replacements = [
-        ("\\", r"\textbackslash{}"),
-        ("&", r"\&"),
-        ("%", r"\%"),
-        ("$", r"\$"),
-        ("#", r"\#"),
-        ("_", r"\_"),
-        ("{", r"\{"),
-        ("}", r"\}"),
-        ("~", r"\textasciitilde{}"),
-        ("^", r"\textasciicircum{}"),
-    ]
-    out = text
-    for src, dst in replacements:
-        out = out.replace(src, dst)
-    return out
+    # One pass over the input, never over our own output. The table used
+    # to be applied as a sequence of str.replace() calls with the
+    # backslash first, on the stated grounds that this avoided
+    # re-escaping the substitutions below; it did the opposite -- the
+    # braces emitted by \textbackslash{} were then rewritten by the later
+    # { and } passes into \textbackslash\{\}, which LaTeX renders as the
+    # literal words "textbackslash{}data". No ordering can fix that,
+    # because the text being consumed is produced by the same pass.
+    return _LATEX_ESCAPE_RE.sub(lambda m: _LATEX_ESCAPES[m.group()], text)
 
 
 class FigureHandler:

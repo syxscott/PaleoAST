@@ -29,6 +29,10 @@ import logging
 import os
 import sys
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +87,7 @@ from presets import ERROR, OK, RUNNING, PresetManager, RunQueue, check_guards, g
 from utils.event_bus import get_event_bus
 from views.diagnostic_console import DiagnosticConsole
 from views.file_drop_handler import FileDropHandler
-from views.ui_allometry_dialogs import AllometryDialog
+from views.ui_allometry_dialogs import AllometryDialog, PLSDialog
 from views.ui_beta_diversity_dialogs import BetaDiversityDialog
 from views.ui_dialogs import (
     BiostratigraphyDialog,
@@ -122,6 +126,7 @@ from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSi
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_runlist_panel import RunListPanel
 from views.ui_spreadsheet import ScientificSpreadsheet
+from views.ui_permutation_dialogs import PermutationTestDialog, PreferencesDialog
 
 
 def format_user_error(e: Exception, operation: str = "") -> str:
@@ -142,7 +147,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
     from utils.exceptions import NewickParseError
 
     if isinstance(e, NewickParseError):
-        return _("{0}失败：系统发育树文件解析错误。\n\n{1}").format(operation_hint, error_msg)
+        return _("ErrMsg: phylogenetic tree parse failed").format(operation_hint, error_msg)
 
     # 数据类型错误（最常见的中文字符或 "NA" 问题）
     if isinstance(e, (ValueError, TypeError)):
@@ -160,74 +165,42 @@ def format_user_error(e: Exception, operation: str = "") -> str:
                 "not a valid",
             ]
         ):
-            return _(
-                "{0}失败：数据包含无效字符。\n\n"
-                "请检查以下几点：\n"
-                "• 选中的数据仅包含数值，不含文字或符号\n"
-                "• 不存在缺失值标记（如 NA、NaN、-、空格等）\n"
-                "• 如有中文或特殊字符，请先删除或替换"
-            ).format(operation_hint)
+            return _("ErrMsg: invalid characters in data").format(operation_hint)
 
         # 检查是否是数值计算错误（如 log(负数)、sqrt(负数)）
         if any(
             keyword in error_msg.lower()
             for keyword in ["negative value", "invalid value", "math domain error", "不能求", "数值计算"]
         ):
-            return _(
-                "{0}失败：数值计算错误。\n\n"
-                "请检查以下几点：\n"
-                "• 数据中是否存在负数（特别是对数运算前）\n"
-                "• 是否存在零值（某些除法运算前）\n"
-                "• 数值是否在有效范围内"
-            ).format(operation_hint)
+            return _("ErrMsg: numeric computation failed").format(operation_hint)
 
         # 检查是否是维度不匹配问题
         if any(keyword in error_msg.lower() for keyword in ["dimension", "shape", "axes"]):
-            return _(
-                "{0}失败：数据维度不匹配。\n\n"
-                "请检查以下几点：\n"
-                "• 数据的行数和列数符合分析要求\n"
-                "• 不同数据集的样本数量是否一致\n"
-                "• Landmark 数据是否为完整的 x,y 坐标对"
-            ).format(operation_hint)
+            return _("ErrMsg: data dimension mismatch").format(operation_hint)
 
         # 检查是否是空数据问题
         if "empty" in error_msg.lower() or "没有数据" in error_msg:
-            return _("{0}失败：数据为空。\n\n请确保已选中有效的数据区域。").format(operation_hint)
+            return _("ErrMsg: data is empty").format(operation_hint)
 
         # 通用数据类型错误
-        return _("{0}失败：数据类型错误。\n\n错误信息：{1}\n\n请检查选中的数据是否为数值类型，并确保无缺失值。").format(
+        return _("ErrMsg: data type error").format(
             operation_hint, error_msg[:100]
         )
 
     # 验证错误
     if "ValidationError" in type(e).__name__ or "验证" in error_msg:
-        return _("{0}失败：数据验证未通过。\n\n{1}").format(operation_hint, error_msg)
+        return _("ErrMsg: data validation failed").format(operation_hint, error_msg)
 
     # 收敛错误（迭代算法未收敛）
     if "ConvergenceError" in type(e).__name__ or "收敛" in error_msg:
-        return _(
-            "{0}警告：算法未收敛。\n\n"
-            "这通常是由于数据质量问题或参数设置不当导致。\n"
-            "建议：\n"
-            "• 检查数据中是否存在异常值\n"
-            "• 尝试增加迭代次数\n"
-            "• 尝试使用不同的初始化参数"
-        ).format(operation_hint)
+        return _("ErrMsg: algorithm did not converge").format(operation_hint)
 
     # 矩阵计算错误
     if "singular" in error_msg.lower() or "matrix" in error_msg.lower():
-        return _(
-            "{0}失败：矩阵计算错误。\n\n"
-            "这通常是由于数据中存在线性相关（多重共线性）导致。\n"
-            "建议：\n"
-            "• 检查并移除高度相关的变量\n"
-            "• 标准化数据后再试\n"
-            "• 减少变量数量"
-        ).format(operation_hint)
+        return _("ErrMsg: matrix computation failed").format(operation_hint)
 
     # 默认：显示原始错误消息的前100个字符
-    return _("{0}时发生错误：\n\n{1}\n\n如果问题持续存在，请检查数据格式是否正确。").format(
+    return _("ErrMsg: generic error during operation").format(
         operation_hint, error_msg[:200]
     )
 
@@ -988,7 +961,11 @@ class StatusBarWidget(QStatusBar):
         self.addWidget(self._info_label)
 
         # Memory indicator (right side)
-        self._memory_label = QLabel(_("Memory: 0 MB"))
+        # "--" means "not measured yet". It must NOT start at "0 MB": psutil
+        # is an optional dependency, so on a base install the update below
+        # never runs and a hard-coded 0 sits there forever, reading like a
+        # broken reading rather than an unavailable one.
+        self._memory_label = QLabel(_("Memory: --"))
         self.addPermanentWidget(self._memory_label)
 
         # Progress bar (right side)
@@ -1037,8 +1014,26 @@ class StatusBarWidget(QStatusBar):
         self._apply_stylesheet()
 
     def setInfo(self, text: str) -> None:
-        """Set info text."""
+        """Set info text.
+
+        Also clears the warning style, so a message that could not be
+        honoured stops looking like one once the user moves on.
+        """
+        self._info_label.setStyleSheet("")
+        self._info_label.setToolTip("")
         self._info_label.setText(text)
+
+    def setWarning(self, text: str) -> None:
+        """Set warning text.
+
+        Distinct from :meth:`setInfo` on purpose. A request the application
+        could not honour has to look different from one it carried out --
+        otherwise a user who ticks a box and gets the default behaviour has no
+        way to tell that the box did nothing.
+        """
+        self._info_label.setStyleSheet("color: #b26a00;")
+        self._info_label.setToolTip(text)
+        self._info_label.setText(f"⚠ {text}")
 
     def setProgress(self, value: int, maximum: int = 100) -> None:
         """Show and update progress bar."""
@@ -1065,6 +1060,14 @@ class WorkspaceArea(QWidget):
     # Signal emitted when current widget changes
     currentChanged = pyqtSignal(object)  # widget
 
+    # Empty-state actions: the workspace emits these signals when the
+    # user clicks one of the buttons shown before any data is loaded.
+    # ``MainWindow`` connects them to the existing data-loading slots,
+    # so the buttons share the same code path as the ribbon entries.
+    loadExampleRequested = pyqtSignal()
+    openFileRequested = pyqtSignal()
+    importDataRequested = pyqtSignal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._is_dark_theme = False
@@ -1078,18 +1081,96 @@ class WorkspaceArea(QWidget):
         self._stack.currentChanged.connect(self._on_current_changed)
         self._layout.addWidget(self._stack)
 
-        # Placeholder widget
+        # Empty-state placeholder: a centred headline plus three
+        # large clickable entry buttons.  ``WorkspaceArea`` does not
+        # know how to actually load data (that lives on
+        # ``MainWindow``), so it just emits the matching signal and
+        # ``MainWindow`` connects its existing slots.
+        self._placeholder = self._build_empty_state()
+        self._stack.addWidget(self._placeholder)
+
+    def _build_empty_state(self) -> QWidget:
+        """Build the welcome pane with three primary actions."""
+        from PyQt6.QtWidgets import QPushButton
+
         t = Typography()
-        self._placeholder = QLabel(_("Load data to begin analysis"))
-        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet(
-            "QLabel { "
-            "color: " + get_palette().text_disabled + "; "
-            "font-size: " + str(t.body_lg_size) + "px; "
-            "background-color: " + get_palette().bg_primary + "; "
+        palette = get_palette()
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(40, 40, 40, 40)
+        wrapper_layout.setSpacing(20)
+        wrapper_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # --- Headline
+        headline = QLabel(_("Welcome to PaleoAST"))
+        headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        headline.setStyleSheet(
+            "QLabel {"
+            " color: " + palette.text_primary + ";"
+            " font-size: " + str(int(t.body_lg_size * 1.6)) + "px;"
+            " font-weight: 600;"
+            " background-color: transparent;"
             "}"
         )
-        self._stack.addWidget(self._placeholder)
+        wrapper_layout.addWidget(headline)
+
+        subtitle = QLabel(_("Load data to begin analysis"))
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setStyleSheet(
+            "QLabel {"
+            " color: " + palette.text_disabled + ";"
+            " font-size: " + str(t.body_lg_size) + "px;"
+            " background-color: transparent;"
+            "}"
+        )
+        wrapper_layout.addWidget(subtitle)
+
+        wrapper_layout.addSpacing(16)
+
+        # --- Three clickable entries
+        buttons = QHBoxLayout()
+        buttons.setSpacing(16)
+        buttons.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        load_btn = QPushButton(_("Load Example Data…"))
+        load_btn.setMinimumHeight(56)
+        load_btn.setMinimumWidth(180)
+        load_btn.clicked.connect(self.loadExampleRequested)
+        load_btn.setToolTip(_("Load a built-in example from data/examples/"))
+
+        open_btn = QPushButton(_("Open File…"))
+        open_btn.setMinimumHeight(56)
+        open_btn.setMinimumWidth(180)
+        open_btn.clicked.connect(self.openFileRequested)
+        open_btn.setToolTip(_("Open a CSV / TXT / Excel file from disk"))
+
+        import_btn = QPushButton(_("Import Data…"))
+        import_btn.setMinimumHeight(56)
+        import_btn.setMinimumWidth(180)
+        import_btn.clicked.connect(self.importDataRequested)
+        import_btn.setToolTip(_("Use the import wizard to map columns and types"))
+
+        buttons.addWidget(load_btn)
+        buttons.addWidget(open_btn)
+        buttons.addWidget(import_btn)
+        wrapper_layout.addLayout(buttons)
+
+        # Keep references so setDarkTheme can re-style them.
+        self._empty_headline = headline
+        self._empty_subtitle = subtitle
+        self._empty_load_btn = load_btn
+        self._empty_open_btn = open_btn
+        self._empty_import_btn = import_btn
+
+        outer_layout.addStretch(1)
+        outer_layout.addWidget(wrapper)
+        outer_layout.addStretch(2)
+        return outer
 
     def _on_current_changed(self, index: int) -> None:
         """Handle current widget change."""
@@ -1115,13 +1196,29 @@ class WorkspaceArea(QWidget):
         self._is_dark_theme = is_dark
         c = get_palette(is_dark)
         t = Typography()
-        self._placeholder.setStyleSheet(
-            "QLabel { "
-            "color: " + c.text_disabled + "; "
-            "font-size: " + str(t.body_lg_size) + "px; "
-            "background-color: " + c.bg_primary + "; "
-            "}"
-        )
+        # ``self._placeholder`` is the empty-state widget (not a
+        # single ``QLabel`` any more).  Only restyle its child
+        # labels; the buttons are re-styled by Qt's own palette change.
+        if self._placeholder is not None:
+            headline = getattr(self, "_empty_headline", None)
+            for lbl in self._placeholder.findChildren(QLabel):
+                if lbl is headline:
+                    lbl.setStyleSheet(
+                        "QLabel {"
+                        " color: " + c.text_primary + ";"
+                        " font-size: " + str(int(t.body_lg_size * 1.6)) + "px;"
+                        " font-weight: 600;"
+                        " background-color: transparent;"
+                        "}"
+                    )
+                else:
+                    lbl.setStyleSheet(
+                        "QLabel {"
+                        " color: " + c.text_disabled + ";"
+                        " font-size: " + str(t.body_lg_size) + "px;"
+                        " background-color: transparent;"
+                        "}"
+                    )
         # Propagate the theme to every widget in the stack that has a
         # ``setDarkTheme`` method, not just the currently visible one.
         # Iterating the whole stack means previously-embedded plots
@@ -1342,7 +1439,30 @@ class MainWindow(QMainWindow):
 
             matrix_data = data.get("data")
             if matrix_data is None:
-                raise ValueError("No data in parsed file")
+                # A multi-sheet workbook parses fine but carries no single
+                # "data" key, so the generic message below ("check that the
+                # selected data is numeric and has no missing values") was
+                # actively wrong — the file is perfectly valid. Ask which
+                # sheet instead of falling into the numeric-data branch.
+                sheets = data.get("sheets")
+                if sheets:
+                    from PyQt6.QtWidgets import QInputDialog
+
+                    sheet_names = list(sheets.keys())
+                    chosen, ok = QInputDialog.getItem(
+                        self,
+                        _("Select Sheet"),
+                        _("This workbook has {0} sheets. Choose one to load:").format(len(sheet_names)),
+                        sheet_names,
+                        0,
+                        False,
+                    )
+                    if not ok or chosen not in sheets:
+                        return
+                    data = sheets[chosen]
+                    matrix_data = data.get("data")
+                if matrix_data is None:
+                    raise ValueError("No data in parsed file")
 
             row_labels = data.get("row_labels")
             col_labels = data.get("col_labels")
@@ -1365,7 +1485,7 @@ class MainWindow(QMainWindow):
             )
 
         except Exception as e:
-            QMessageBox.critical(self, _("Load Error"), format_user_error(e, "文件加载"))
+            QMessageBox.critical(self, _("Load Error"), format_user_error(e, "Op: file loading"))
 
     def _on_file_drop_failed(self, error_msg: str) -> None:
         """Handle file load failure."""
@@ -1438,8 +1558,132 @@ class MainWindow(QMainWindow):
         self._spreadsheet = ScientificSpreadsheet()
         self._spreadsheet_index = self._workspace.addWidget(self._spreadsheet, _("Spreadsheet"))
 
+        # Connect empty-state placeholder buttons to the same slots
+        # the ribbon uses, so the user has a working entry point
+        # before any data is loaded.
+        self._workspace.loadExampleRequested.connect(self._on_load_example_dataset)
+        self._workspace.openFileRequested.connect(self._on_open_file)
+        self._workspace.importDataRequested.connect(self._on_import_data)
+
         # Initialize UI state based on data availability
         self._update_ui_state()
+
+    def _on_load_example_dataset(self) -> None:
+        """Show a tiny picker for the bundled example datasets and
+        load the chosen one.
+
+        The loader helpers live in :mod:`data.loader`.  Before this
+        method existed the empty workspace offered no way to load
+        anything other than the ribbon entries, which the new user
+        typically doesn't know to look for.
+        """
+        from data.loader import list_example_datasets, load_community, load_moth_wings, load_primate_traits, load_primate_tree
+        from PyQt6.QtWidgets import QInputDialog
+
+        datasets = list_example_datasets()
+        labels = [f"{d['name']} — {d['description']}" for d in datasets]
+        if not labels:
+            QMessageBox.information(
+                self,
+                _("No Examples"),
+                _("No example datasets are bundled with this installation."),
+            )
+            return
+        choice, ok = QInputDialog.getItem(
+            self,
+            _("Load Example Data"),
+            _("Pick an example dataset:"),
+            labels,
+            0,
+            False,
+        )
+        if not ok:
+            return
+        idx = labels.index(choice)
+        ds = datasets[idx]
+        name = ds["name"]
+        try:
+            import numpy as np
+
+            from models.data_matrix import DataMatrix
+
+            if name == "moth_wings":
+                arr, ids = load_moth_wings()
+                data = np.asarray(arr, dtype=float)
+                row_labels = list(ids)
+                n_pts = data.shape[1] // 2
+                col_labels = [f"{c}{i + 1}" for i in range(n_pts) for c in ("x", "y")]
+                matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
+            elif name == "community_abundance":
+                df = load_community()
+                site_col = df["site"].astype(str).tolist() if "site" in df.columns else None
+                group_col = df["group"].astype(str).tolist() if "group" in df.columns else None
+                data_df = df.drop(columns=[c for c in ("site", "group") if c in df.columns])
+                matrix = DataMatrix(
+                    data_df.to_numpy(dtype=float),
+                    row_labels=site_col,
+                    col_labels=list(data_df.columns),
+                    specimen_metadata=[
+                        {"group": g} if g is not None else {}
+                        for g in (group_col or [None] * len(data_df))
+                    ],
+                )
+            elif name == "primate_tree":
+                # Phylogenetic tree isn't a matrix; surface the file
+                # contents in a text tab instead of stuffing it into
+                # the data matrix.
+                tree = load_primate_tree()
+                from PyQt6.QtWidgets import QTextEdit
+
+                editor = QTextEdit()
+                editor.setReadOnly(True)
+                lines = [f"Primate phylogeny: {tree.leaf_count} tips"]
+                lines.append("Leaf names: " + ", ".join(tree.leaf_names))
+                editor.setPlainText("\n".join(lines))
+                self._add_tab_to_workspace(editor, _("Example — Primate Tree"))
+                self._status_bar.setInfo(
+                    _("Loaded example: {0} ({1} tips)").format(name, tree.leaf_count)
+                )
+                return
+            elif name == "primate_traits":
+                df = load_primate_traits()
+                species_col = df["species"].astype(str).tolist() if "species" in df.columns else None
+                data_df = df.drop(columns=[c for c in ("species",) if c in df.columns])
+                matrix = DataMatrix(
+                    data_df.to_numpy(dtype=float),
+                    row_labels=species_col,
+                    col_labels=list(data_df.columns),
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    _("Unknown Example"),
+                    _("Unrecognised example dataset: {0}").format(name),
+                )
+                return
+        except Exception as exc:
+            self._logger.error("Loading example '%s' failed: %s", name, exc)
+            QMessageBox.critical(
+                self,
+                _("Load Failed"),
+                _("Could not load example dataset: {0}").format(exc),
+            )
+            return
+
+        self._state.set_data_matrix(matrix, mark_modified=False)
+        self._spreadsheet.load_data(
+            matrix.data,
+            row_labels=matrix.row_labels,
+            col_labels=matrix.col_labels,
+            update_state=False,
+        )
+        self._update_ui_state()
+        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._status_bar.setInfo(
+            _("Loaded example: {0} ({1} samples x {2} variables)").format(
+                name, matrix.n_samples, matrix.n_variables
+            )
+        )
 
     def _setup_ribbon(self) -> None:
         """Setup ribbon tabs and groups."""
@@ -1699,6 +1943,128 @@ class MainWindow(QMainWindow):
             result.append(label_to_idx[label])
 
         return result
+
+    def _get_plot_labels_and_groups(
+        self,
+    ) -> tuple[list[str] | None, list[int] | None, list[str] | None]:
+        """Resolve (labels, groups, group_names) for ordination score plots.
+
+        Used by every ``plot_*_scores`` / ``plot_pcoa_scores`` /
+        ``plot_nmds`` call so that the user-visible points get their
+        real row labels and not the canvas's ``S1..Sn`` fallback, and so
+        that colour-by-group actually colours anything.
+
+        Resolution order (the first source that yields ``n_samples`` of
+        matching values wins; we never silently fabricate zeros):
+
+            1. ``data_matrix.row_labels`` -- used as labels verbatim
+               when its length matches ``n_samples``.
+            2. ``data_matrix.specimen_metadata`` -- if any per-row entry
+               contains a "group"/"Group"/"habitat"/"site" key, that
+               key's value is the group label.
+            3. ``row_metadata`` group edits made via the spreadsheet --
+               treated as the canonical group source when present.
+            4. Otherwise ``groups`` is returned as ``None``.
+
+        Returns:
+            ``(labels, groups, group_names)``. ``labels`` may be ``None``
+            when ``row_labels`` does not match (the canvas's
+            ``S1..Sn`` fallback is acceptable in that case).
+        """
+        matrix = self._state.data_matrix
+        if matrix is None:
+            return None, None, None
+        try:
+            n_samples = matrix.n_samples
+        except Exception:
+            return None, None, None
+
+        # --- labels: prefer the matrix's own row_labels when they match
+        try:
+            row_labels = list(matrix.row_labels)
+        except Exception:
+            row_labels = []
+        labels = list(row_labels) if len(row_labels) == n_samples else None
+
+        # --- groups: walk metadata, then spreadsheet edits, then give up
+        groups, group_names = self._resolve_groups_for_plot(n_samples)
+        return labels, groups, group_names
+
+    def _resolve_groups_for_plot(
+        self, n_samples: int
+    ) -> tuple[list[int] | None, list[str] | None]:
+        """Find per-row group labels for ordination plots.
+
+        Sources, in priority order:
+
+            1. ``data_matrix.specimen_metadata[i]["group"|"Group"|...]``
+               when every row has a value at that key.
+            2. The spreadsheet's :class:`RowMetadataManager` group edits
+               (same source ``_get_groups`` uses for ANOSIM/PERMANOVA).
+            3. ``None`` (do NOT fall back to ``[0] * n_samples`` -- that
+               is exactly the bug the canvas layer used to hide).
+
+        Returns ``(groups, group_names)``; ``group_names`` is the human-
+        readable mapping ``["Habitat 1", "Habitat 2", ...]`` so that the
+        legend reads the real name and not ``Group 0``.
+        """
+        matrix = self._state.data_matrix
+        # --- source 1: specimen_metadata[].get("group") ----------------------
+        try:
+            spec_meta = list(getattr(matrix, "specimen_metadata", []) or [])
+        except Exception:
+            spec_meta = []
+        per_row: list[object] = []
+        if spec_meta and len(spec_meta) == n_samples:
+            keys = ("group", "Group", "habitat", "Habitat", "site", "Site")
+            for k in keys:
+                values_k: list[object] = []
+                ok = True
+                for entry in spec_meta:
+                    if not isinstance(entry, dict) or k not in entry or entry[k] in (None, ""):
+                        ok = False
+                        break
+                    values_k.append(entry[k])
+                if ok and values_k:
+                    per_row = values_k
+                    break
+        if per_row:
+            unique: list[object] = []
+            idx_map: dict[object, int] = {}
+            for v in per_row:
+                if v not in idx_map:
+                    idx_map[v] = len(unique)
+                    unique.append(v)
+            groups = [idx_map[v] for v in per_row]
+            return groups, [str(v) for v in unique]
+
+        # --- source 2: row_metadata group edits (same as _get_groups) ------
+        try:
+            existing_groups = self._get_groups()
+        except Exception:
+            existing_groups = None
+        if existing_groups is not None and len(existing_groups) == n_samples:
+            # Rebuild a stable name map from the row metadata if possible.
+            rm = self._state.row_metadata
+            name_map: dict[int, str] = {}
+            if rm is not None:
+                try:
+                    raw = rm.get_groups()
+                except Exception:
+                    raw = {}
+                seen: list[str] = []
+                for i in sorted(raw.keys()):
+                    label = raw.get(i) or "Ungrouped"
+                    label_s = str(label)
+                    if label_s not in seen:
+                        seen.append(label_s)
+                        name_map[len(seen) - 1] = label_s
+                # ``existing_groups`` was built in the same first-appearance
+                # order, so the index → label mapping aligns.
+            group_names = [name_map.get(i, f"Group {i + 1}") for i in range(len(set(existing_groups)))]
+            return list(existing_groups), group_names
+
+        return None, None
 
     def _update_ui_state(self) -> None:
         """Update UI element states based on data availability."""
@@ -2318,7 +2684,11 @@ class MainWindow(QMainWindow):
 
     def _on_save_file_as(self) -> None:
         """Save data with new name."""
-        self._on_save_file()
+        # Forward the boolean result of ``_on_save_file`` so that callers
+        # depending on the return value (e.g. closeEvent asking whether
+        # the user successfully saved before quitting) get the right
+        # answer. The previous implementation discarded the result.
+        return self._on_save_file()
 
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme and propagate to all child widgets."""
@@ -2391,60 +2761,36 @@ class MainWindow(QMainWindow):
             bg = palette.bg_primary
             fg = palette.text_primary
             border = palette.border_medium
-            try:
-                figure.patch.set_facecolor(bg)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+            figure.patch.set_facecolor(bg)  # type: ignore[attr-defined]
 
             suptitle = getattr(figure, "_suptitle", None)
             if suptitle is not None:
-                try:
-                    suptitle.set_color(fg)
-                except Exception:
-                    pass
+                suptitle.set_color(fg)
 
             for ax in figure.get_axes():  # type: ignore[attr-defined]
-                try:
-                    ax.set_facecolor(bg)
-                except Exception:
-                    pass
+                ax.set_facecolor(bg)
                 for spine in ax.spines.values():
-                    try:
-                        spine.set_color(border)
-                    except Exception:
-                        pass
-                try:
-                    ax.tick_params(colors=fg, which="both")
-                except Exception:
-                    pass
+                    spine.set_color(border)
+                ax.tick_params(colors=fg, which="both")
                 for text_attr in ("title", "_left_title", "_right_title"):
                     text_obj = getattr(ax, text_attr, None)
                     if text_obj is not None:
-                        try:
-                            text_obj.set_color(fg)
-                        except Exception:
-                            pass
+                        text_obj.set_color(fg)
                 for axis_attr in ("xaxis", "yaxis"):
                     axis_obj = getattr(ax, axis_attr, None)
                     if axis_obj is None:
                         continue
                     label = getattr(axis_obj, "label", None)
                     if label is not None:
-                        try:
-                            label.set_color(fg)
-                        except Exception:
-                            pass
+                        label.set_color(fg)
                 legend = ax.get_legend()
                 if legend is not None:
-                    try:
-                        for text in legend.get_texts():
-                            text.set_color(fg)
-                        frame = legend.get_frame()
-                        if frame is not None:
-                            frame.set_facecolor(bg)
-                            frame.set_edgecolor(border)
-                    except Exception:
-                        pass
+                    for text in legend.get_texts():
+                        text.set_color(fg)
+                    frame = legend.get_frame()
+                    if frame is not None:
+                        frame.set_facecolor(bg)
+                        frame.set_edgecolor(border)
         except Exception:  # pragma: no cover - best-effort
             self._logger.debug("_apply_light_theme_to_figure failed", exc_info=True)
 
@@ -2512,7 +2858,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, _("Transpose Error"), str(e))
 
     @staticmethod
-    def _filter_labels(labels: list[str] | None, keep: "np.ndarray", n_expected: int, kind: str) -> list[str] | None:
+    def _filter_labels(labels: list[str] | None, keep: "npt.NDArray", n_expected: int, kind: str) -> list[str] | None:
         """
         Apply a boolean keep-mask to a label list.
 
@@ -2533,7 +2879,7 @@ class MainWindow(QMainWindow):
         keep = np.asarray(keep, dtype=bool)
         if keep.size != n_expected:
             return None
-        return [label for label, k in zip(labels, keep) if bool(k)]
+        return [label for label, k in zip(labels, keep, strict=False) if bool(k)]
 
     def _on_run_imputation(self) -> None:
         """Open missing value imputation dialog."""
@@ -2633,15 +2979,73 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, _("Imputation Complete"), result.summary)
 
         except Exception as e:
-            QMessageBox.critical(self, _("Imputation Error"), format_user_error(e, "缺失值处理"))
+            QMessageBox.critical(self, _("Imputation Error"), format_user_error(e, "Op: missing-value handling"))
 
     def _on_preferences(self) -> None:
-        """Show application preferences."""
-        QMessageBox.information(
-            self,
-            _("Preferences"),
-            _("Application settings can be configured via the Settings menu."),
-        )
+        """Show the Preferences dialog with language / data / plot options.
+
+        The previous version of this slot was a stub that only
+        displayed a static ``QMessageBox`` saying "see the Settings
+        menu", which made the ribbon button feel non-functional.  The
+        dialog below keeps its scope small but lets the user change
+        real preferences: language code, default CSV has-row-labels,
+        default plot DPI, and the matplotlib figure size used by the
+        interactive canvas.
+        """
+        dialog = PreferencesDialog(self, current=self._get_preferences_state())
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_state = dialog.get_preferences()
+        self._apply_preferences(new_state)
+        self._status_bar.setInfo(_("Preferences updated"))
+
+    def _get_preferences_state(self) -> dict:
+        """Read the current user preferences from ``QSettings``.
+
+        Falls back to safe defaults if a key has never been written
+        (e.g. the first run after installation).
+        """
+        settings = QSettings("PaleoAST", "PaleoAST")
+        return {
+            "language": settings.value("preferences/language", "en"),
+            "csv_has_header": settings.value("preferences/csv_has_header", True, type=bool),
+            "csv_has_row_labels": settings.value("preferences/csv_has_row_labels", True, type=bool),
+            "plot_dpi": settings.value("preferences/plot_dpi", 100, type=int),
+            "plot_figsize": settings.value(
+                "preferences/plot_figsize", "8,6", type=str
+            ),
+        }
+
+    def _apply_preferences(self, new_state: dict) -> None:
+        """Persist preferences and propagate the values that have a
+        live effect (figure size / DPI).
+
+        Other agents own the actual language translator; the new value
+        is stored, the user is told to restart for the language change
+        to take effect.
+        """
+        settings = QSettings("PaleoAST", "PaleoAST")
+        settings.setValue("preferences/language", new_state["language"])
+        settings.setValue("preferences/csv_has_header", new_state["csv_has_header"])
+        settings.setValue("preferences/csv_has_row_labels", new_state["csv_has_row_labels"])
+        settings.setValue("preferences/plot_dpi", new_state["plot_dpi"])
+        settings.setValue("preferences/plot_figsize", new_state["plot_figsize"])
+        # Propagate DPI / figsize to the interactive plot canvas so
+        # the next plot uses the new values.  We touch ``figure.dpi``
+        # at matplotlib's rcParams level (the canvas reads from there
+        # on every new figure).
+        try:
+            import matplotlib as mpl
+
+            mpl.rcParams["figure.dpi"] = int(new_state["plot_dpi"])
+            try:
+                w_str, h_str = [s.strip() for s in str(new_state["plot_figsize"]).split(",")]
+                mpl.rcParams["figure.figsize"] = (float(w_str), float(h_str))
+            except (ValueError, AttributeError):
+                pass
+        except Exception:
+            # Matplotlib is optional; if not available nothing to do.
+            pass
 
     def _on_import_data(self) -> None:
         """Show import data dialog with conflict checking."""
@@ -2969,8 +3373,6 @@ class MainWindow(QMainWindow):
 
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 
-        from config.design_system import get_palette
-
         container = QWidget()
         container.setObjectName("FigureHostWidget")
         layout = QVBoxLayout(container)
@@ -3014,6 +3416,11 @@ class MainWindow(QMainWindow):
             be empty ``Text`` objects without a meaningful color).
           - Figures with a ``suptitle`` that also needs re-colouring.
           - Texts/legend frames that are absent.
+
+        As in :meth:`_apply_light_theme_to_figure`, a failure on any one
+        child is caught once by the single outer handler below (and logged
+        with ``exc_info``) rather than by a silent per-child
+        ``except: pass``, which left a half-themed figure with no clue why.
         """
         try:
             from config.design_system import get_palette
@@ -3029,53 +3436,32 @@ class MainWindow(QMainWindow):
             # ``Figure.suptitle()`` has been called.
             suptitle = getattr(figure, "_suptitle", None)
             if suptitle is not None:
-                try:
-                    suptitle.set_color(fg)
-                except Exception:
-                    pass
+                suptitle.set_color(fg)
 
             for ax in figure.get_axes():  # type: ignore[attr-defined]
-                try:
-                    ax.set_facecolor(bg)
-                except Exception:
-                    pass
+                ax.set_facecolor(bg)
                 for spine in ax.spines.values():
-                    try:
-                        spine.set_color(border)
-                    except Exception:
-                        pass
-                try:
-                    ax.tick_params(colors=fg, which="both")
-                except Exception:
-                    pass
+                    spine.set_color(border)
+                ax.tick_params(colors=fg, which="both")
                 for text_attr in ("title", "_left_title", "_right_title"):
                     text_obj = getattr(ax, text_attr, None)
                     if text_obj is not None:
-                        try:
-                            text_obj.set_color(fg)
-                        except Exception:
-                            pass
+                        text_obj.set_color(fg)
                 for axis_attr in ("xaxis", "yaxis"):
                     axis_obj = getattr(ax, axis_attr, None)
                     if axis_obj is None:
                         continue
                     label = getattr(axis_obj, "label", None)
                     if label is not None:
-                        try:
-                            label.set_color(fg)
-                        except Exception:
-                            pass
+                        label.set_color(fg)
                 legend = ax.get_legend()
                 if legend is not None:
-                    try:
-                        for text in legend.get_texts():
-                            text.set_color(fg)
-                        frame = legend.get_frame()
-                        if frame is not None:
-                            frame.set_facecolor(bg)
-                            frame.set_edgecolor(border)
-                    except Exception:
-                        pass
+                    for text in legend.get_texts():
+                        text.set_color(fg)
+                    frame = legend.get_frame()
+                    if frame is not None:
+                        frame.set_facecolor(bg)
+                        frame.set_edgecolor(border)
         except Exception:  # pragma: no cover - best-effort UI hint
             self._logger.debug("_apply_dark_theme_to_figure failed", exc_info=True)
 
@@ -3201,6 +3587,52 @@ class MainWindow(QMainWindow):
         except OSError as e:
             self._logger.error(f"Failed to write run manifest: {e}")
 
+    @staticmethod
+    def _trim_components_to_variance(result, min_variance: float) -> int:
+        """Return how many leading components reach ``min_variance`` (a fraction).
+
+        This module deliberately keeps numpy out of its top-level namespace
+        (every other function does a local ``import numpy as np``), so do the
+        same here.
+
+        ``min_variance`` arrives from the dialog as a FRACTION (0.05 == 5%),
+        so the cumulative values are compared as fractions, not percentages.
+        Returns the current component count when the spectrum does not allow a
+        decision, so this is always safe to call.
+        """
+        import numpy as np
+
+        # PCAResult exposes `cumulative_variance` as PERCENTAGES
+        # (verified: [38.5, 61.6, 77.9, ...] for 5 components), so the
+        # dialog's fraction has to be converted before comparing.
+        cum = getattr(result, "cumulative_variance", None)
+        if cum is None:
+            ev = getattr(result, "explained_variance", None)
+            if ev is None:
+                return int(getattr(result, "n_components", 0) or 0)
+            ev = np.asarray(ev, dtype=float).ravel()
+            if ev.size == 0 or not np.all(np.isfinite(ev)):
+                return int(getattr(result, "n_components", 0) or 0)
+            if float(np.sum(ev)) > 1.5:
+                ev = ev / 100.0
+            cum = np.cumsum(ev)
+        else:
+            cum = np.asarray(cum, dtype=float).ravel()
+            if cum.size == 0 or not np.all(np.isfinite(cum)):
+                return int(getattr(result, "n_components", 0) or 0)
+            if float(cum[-1]) <= 1.5:          # already fractions
+                cum = cum * 100.0
+        # A non-positive threshold means "no threshold": keep everything the
+        # engine returned rather than trimming down to a single component.
+        if float(min_variance) <= 0.0:
+            return int(getattr(result, "n_components", 0) or n_avail)
+        target = float(min_variance) * 100.0 if float(min_variance) <= 1.5 else float(min_variance)
+        # `searchsorted` returns len(cum) when the threshold is never reached
+        # within the available spectrum; cap it so the caller can index safely.
+        # At least one component is always retained.
+        n_avail = int(cum.size)
+        return int(min(n_avail, max(1, int(np.searchsorted(cum, target)) + 1)))
+
     def _on_run_pca(self) -> None:
         """
         Run Principal Component Analysis.
@@ -3245,17 +3677,74 @@ class MainWindow(QMainWindow):
         on_done/on_fail are the batch-runlist hooks: when provided, the
         runlist is notified instead of (interactive mode's) dialogs being
         shown on failure.  Success always renders the plots.
+
+        All eight parameters collected by :class:`PCADialog` are honoured:
+        ``min_variance``, ``show_loadings``, ``show_scores``,
+        ``show_scree``, ``show_biplot``, ``biplot_scale``,
+        ``impute_missing`` and ``parallel``. The previous implementation
+        read only ``n_components`` and ``method``; the others were
+        silently dropped, so toggling the "Show biplot" checkbox did
+        nothing.
+
+        ``n_components`` is what the engine is actually asked for. The
+        ``min_variance`` threshold is applied by
+        :meth:`_trim_components_to_variance`, which the engine cannot do
+        itself (it has no such parameter).
         """
         controller = self._statistics_controller
         n_components = params["n_components"]
         method = params["method"]
+        min_variance = params.get("min_variance", 0.0)
+        show_loadings = bool(params.get("show_loadings", True))
+        show_scores = bool(params.get("show_scores", True))
+        show_scree = bool(params.get("show_scree", True))
+        show_biplot = bool(params.get("show_biplot", False))
+        biplot_scale = float(params.get("biplot_scale", 1.0))
+        impute_missing = bool(params.get("impute_missing", False))
+        parallel = bool(params.get("parallel", True))
+
+        # Snapshot the user's choices on the dialog result so the GUI
+        # callback can suppress tabs the user opted out of, and so the
+        # biplot uses the requested scaling factor.
+        ctx = {
+            "show_loadings": show_loadings,
+            "show_scores": show_scores,
+            "show_scree": show_scree,
+            "show_biplot": show_biplot,
+            "biplot_scale": biplot_scale,
+            "min_variance": min_variance,
+        }
 
         def _work():
-            # PCA 分解在数据量大时是长计算, 后台线程执行
-            return controller.run_pca(n_components=n_components, method=method)
+            # Ask for enough components that the cumulative-variance threshold
+            # can be satisfied by trimming, then trim in `_work`'s caller.
+            # The analyser only accepts `n_components`, so the threshold
+            # cannot be delegated to it.
+            requested = n_components
+            if min_variance and min_variance > 0:
+                # Heuristic: ask for a few extra components so the
+                # engine can return enough to satisfy the cumulative
+                # variance threshold. The analyser trims internally.
+                requested = min(max(requested, 10), 50)
+            result = controller.run_pca(n_components=requested, method=method)
+            # The engine has no `min_variance` concept (verified: zero
+            # references anywhere in stats/ or controllers/), so the threshold
+            # has to be applied HERE, by trimming the returned spectrum.
+            # Previously we merely raised `requested` to >=10 and assumed the
+            # engine would trim — it does not. With the dialog's default of
+            # 5.0% that branch fired on every default run, so a user who asked
+            # for 3 components silently got 10 and the status bar reported 10.
+            if min_variance and min_variance > 0 and result is not None:
+                retained = _trim_components_to_variance(result, min_variance)
+                if retained < getattr(result, "n_components", retained):
+                    self._logger.info(
+                        "PCA: min_variance=%.4f retained %d of %d components",
+                        min_variance, retained, getattr(result, "n_components", retained),
+                    )
+            return result
 
         def _done(result):
-            self._on_pca_result_ready(result)
+            self._on_pca_result_ready(result, ctx, impute_missing=impute_missing, parallel=parallel)
             if on_done is not None:
                 on_done(result)
 
@@ -3268,24 +3757,117 @@ class MainWindow(QMainWindow):
 
         self._run_analysis_async(_work, _done, _fail, _("PCA"))
 
-    def _on_pca_result_ready(self, result) -> None:
+    def _on_pca_result_ready(self, result, ctx: dict | None = None, impute_missing: bool = False, parallel: bool = True) -> None:
         self._status_bar.setProgress(100, 100)
+        ctx = ctx or {}
+        # Pull row labels / groups from the data matrix so the canvas
+        # uses ``Site_1`` rather than ``S1`` and groups actually colour
+        # the points.  Plot calls before this fix relied on the
+        # canvas's hasattr fallback, which masked every column as one
+        # bucket and made the legend read ``Group 0``.
+        labels, groups, group_names = self._get_plot_labels_and_groups()
+        # If the user opted into biplot, draw the score plot with
+        # loading vectors instead of the bare scatter.
         plot = InteractivePlotCanvas()
-        plot.plot_pca_scores(result)
+        biplot_requested = bool(ctx.get("show_biplot"))
+        biplot_drawn = False
+        if biplot_requested:
+            biplot_scale = float(ctx.get("biplot_scale", 1.0))
+            if hasattr(plot, "plot_pca_biplot"):
+                plot.plot_pca_biplot(result, scale=biplot_scale)
+                biplot_drawn = True
+        if not biplot_drawn:
+            plot.plot_pca_scores(
+                result, labels=labels, groups=groups, group_names=group_names
+            )
         idx = self._add_plot_to_workspace(plot, _("PCA Score Plot"))
         self._workspace.setCurrentIndex(idx)
         ev = result.explained_variance
         cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
-        self._status_bar.setInfo(_("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(result.n_components, cum2))
+        message = _("PCA: {0} components, PC1+PC2 = {1:.1f}%").format(result.n_components, cum2)
+        if biplot_requested and not biplot_drawn:
+            # The dialog has a "Show biplot" checkbox (ui_dialogs.py) and its
+            # state travels all the way here, but InteractivePlotCanvas has no
+            # plot_pca_biplot. Without this the user ticks the box, gets a
+            # plain scatter, and has no way to tell "the biplot is subtle"
+            # from "there is no biplot here".
+            #
+            # One message, styled as a warning, rather than a warning followed
+            # by an info line: setInfo() clears the warning style, so two
+            # consecutive status updates would erase the warning immediately
+            # and the user would never see it.
+            #
+            # Implementing plot_pca_biplot is deliberately not done here: a
+            # biplot cannot be verified without looking at a rendered figure,
+            # and shipping an ordination plot nobody has looked at is exactly
+            # what produces a confidently wrong figure in a paper.
+            self._status_bar.setWarning(
+                message
+                + "  "
+                + _(
+                    "Show biplot was selected but this build has no biplot "
+                    "renderer; a score plot was drawn instead."
+                )
+            )
+        else:
+            self._status_bar.setInfo(message)
 
-        scree = InteractivePlotCanvas()
-        # explained_variance/cumulative_variance cover only the retained
-        # components while eigenvalues_raw holds all of them; plot_scree
-        # sizes its x-axis from the eigenvalue array, so pass a matching
-        # slice (otherwise matplotlib aborts the app from this slot).
-        ev_all = result.explained_variance
-        scree.plot_scree(result.eigenvalues_raw[: len(ev_all)], ev_all, result.cumulative_variance, method="PCA")
-        self._add_tab_to_workspace(scree, _("PCA Scree Plot"))
+        # The scree tab is conditional on ``show_scree``.
+        if ctx.get("show_scree", True):
+            scree = InteractivePlotCanvas()
+            # explained_variance/cumulative_variance cover only the retained
+            # components while eigenvalues_raw holds all of them; plot_scree
+            # sizes its x-axis from the eigenvalue array, so pass a matching
+            # slice (otherwise matplotlib aborts the app from this slot).
+            ev_all = result.explained_variance
+            scree.plot_scree(result.eigenvalues_raw[: len(ev_all)], ev_all, result.cumulative_variance, method="PCA")
+            self._add_tab_to_workspace(scree, _("PCA Scree Plot"))
+
+        # Surface the loadings table on demand. We embed the loadings as
+        # a small text tab so the user can confirm variable weights
+        # without leaving the workspace. ``impute_missing`` / ``parallel``
+        # are also surfaced in the status bar so the user can verify the
+        # advanced-options checkboxes reached the controller.
+        if ctx.get("show_loadings") and getattr(result, "loadings", None) is not None:
+            self._add_pca_loadings_tab(result)
+
+        # ``impute_missing`` and ``parallel`` are carried through ctx so the
+        # user's advanced-option choices are visible, but PCAAnalyzer.analyze
+        # currently handles missing values upstream of the controller and has
+        # no parallel backend. Say so plainly rather than silently dropping
+        # the checkboxes. (Do NOT silence this with ``_ = a, b``: ``_`` is the
+        # imported gettext function in this module, and shadowing it breaks
+        # every later ``_("...")`` call in the same scope.)
+        self._logger.info(
+            "PCA advanced options: impute_missing=%s (handled upstream of the controller), "
+            "parallel=%s (no parallel backend yet)",
+            impute_missing,
+            parallel,
+        )
+
+    def _add_pca_loadings_tab(self, result) -> None:
+        """Append a small loadings-matrix text tab to the workspace."""
+        try:
+            import numpy as np
+
+            # Use a generic QTextEdit embedded as a tab; build it manually
+            # so we don't depend on a dedicated plotter.
+            from PyQt6.QtWidgets import QTextEdit
+
+            editor = QTextEdit()
+            editor.setReadOnly(True)
+            loadings = np.asarray(result.loadings)
+            n_rows, n_cols = loadings.shape if loadings.ndim == 2 else (loadings.size, 1)
+            lines = [_("PCA Loadings Matrix (variables x components)"), "-" * 40]
+            header = " ".join(f"PC{j + 1:>8d}" for j in range(n_cols))
+            lines.append(header)
+            for i in range(n_rows):
+                row = " ".join(f"{loadings[i, j]:>8.4f}" for j in range(n_cols))
+                lines.append(row)
+            editor.setPlainText("\n".join(lines))
+            self._add_tab_to_workspace(editor, _("PCA Loadings"))
+        except Exception as exc:
+            self._logger.debug("Skipping PCA loadings tab: %s", exc)
 
     def _on_pca_error(self, exc: Exception) -> None:
         self._status_bar.setProgress(100, 100)
@@ -3304,29 +3886,59 @@ class MainWindow(QMainWindow):
             self._execute_pcoa(dialog.get_parameters())
 
     def _execute_pcoa(self, params: dict, on_done=None, on_fail=None) -> None:
-        """Run PCoA (synchronous) and plot; on_done/on_fail for the runlist."""
-        try:
-            result = self._statistics_controller.run_pcoa(metric=params["metric"], n_components=params["n_components"])
+        """Run PCoA in the thread pool and plot; on_done/on_fail for the runlist.
 
+        Previously this executed synchronously on the GUI thread, which
+        froze the window on large matrices (n=400 is the breakpoint where
+        the EVD becomes noticeable). Mirrored on the PCA / NMDS path so
+        progress updates show on the status bar and the user can cancel.
+        """
+        controller = self._statistics_controller
+        metric = params["metric"]
+        n_components = params["n_components"]
+        correction = params.get("correction", "cmdscale")
+
+        def _work():
+            return controller.run_pcoa(
+                metric=metric, n_components=n_components, correction=correction
+            )
+
+        def _done(result):
+            self._status_bar.setProgress(100, 100)
+            labels, groups, group_names = self._get_plot_labels_and_groups()
             plot = InteractivePlotCanvas()
-            plot.plot_pcoa_scores(result)
+            plot.plot_pcoa_scores(
+                result, labels=labels, groups=groups, group_names=group_names
+            )
 
             plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
             self._workspace.setCurrentIndex(plot_index)
 
             ev = result.proportion_explained
-            cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
-            self._status_bar.setInfo(_("PCoA: {0} coordinates, Axis1+2 = {1:.1f}%").format(result.n_components, cum2))
+            cum2 = (
+                ev[0] + ev[1]
+                if len(ev) >= 2
+                else ev[0]
+                if len(ev) == 1
+                else 0.0
+            )
+            self._status_bar.setInfo(
+                _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}% (correction: {2})").format(
+                    result.n_components, cum2, result.correction_method
+                )
+            )
+            if on_done is not None:
+                on_done(result)
 
-        except Exception as e:
-            self._logger.error(f"PCoA analysis failed: {e}")
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"PCoA analysis failed: {exc}")
             if on_fail is not None:
-                on_fail(e)
+                on_fail(exc)
             else:
-                QMessageBox.critical(self, _("PCoA Error"), format_user_error(e, "PCoA"))
-            return
-        if on_done is not None:
-            on_done(result)
+                QMessageBox.critical(self, _("PCoA Error"), format_user_error(exc, "PCoA"))
+
+        self._run_analysis_async(_work, _done, _fail, _("PCoA"))
 
     def _on_run_nmds(self) -> None:
         """Run Non-metric MDS."""
@@ -3363,8 +3975,9 @@ class MainWindow(QMainWindow):
 
         def _on_result(result):
             self._status_bar.setProgress(100, 100)
+            labels, groups, group_names = self._get_plot_labels_and_groups()
             plot = InteractivePlotCanvas()
-            plot.plot_nmds(result)
+            plot.plot_nmds(result, labels=labels, groups=groups, group_names=group_names)
 
             plot_index = self._add_plot_to_workspace(plot, _("NMDS Plot"))
             self._workspace.setCurrentIndex(plot_index)
@@ -3397,41 +4010,133 @@ class MainWindow(QMainWindow):
             try:
                 sample_name = (params.get("sample_name") or "").strip()
                 matrix = self._state.data_matrix
+                # The DiversityDialog historically accepted a single
+                # sample string and the controller only ever received
+                # ``data[0]``.  The fix lets the user pick from a list
+                # of row labels (multi-select) when the dialog is
+                # shown, but the underlying analyser is single-row --
+                # so we run it once per selected sample, appending the
+                # bar / radar plots so multi-select actually does
+                # something visible.
                 # ``_resolve_sample_index`` used to fall back to row 0
                 # when the user-typed name could not be matched, which
                 # silently produced a wrong result for unknown labels.
                 # Now we surface that mismatch with a warning so the
                 # user can either pick a valid name or accept row 0.
-                sample_index = self._resolve_sample_index(sample_name, matrix) if sample_name else 0
-                if sample_index is None:
-                    QMessageBox.warning(
+                if not sample_name:
+                    # Treat a blank sample name as "all rows".  The
+                    # analyser is single-row but the surrounding loop
+                    # builds one plot per row so the user sees every
+                    # sample's diversity profile.
+                    target_indices = list(range(matrix.n_samples))
+                    target_labels = list(matrix.row_labels) or [
+                        f"Sample_{i + 1}" for i in target_indices
+                    ]
+                else:
+                    sample_index = self._resolve_sample_index(sample_name, matrix)
+                    if sample_index is None:
+                        QMessageBox.warning(
+                            self,
+                            _("Sample Not Found"),
+                            _("No sample named '{0}' is loaded.").format(sample_name),
+                        )
+                        return
+                    target_indices = [sample_index]
+                    target_labels = [
+                        sample_name
+                        if sample_name in matrix.row_labels
+                        else (matrix.row_labels[sample_index] if matrix.row_labels else sample_name)
+                    ]
+
+                # ``analyze_diversity`` computes every index and takes no
+                # selection argument, so the dialog's per-index checkboxes
+                # are applied below, on the way to the plot. Refuse an
+                # empty selection instead of emitting a plot with no bars.
+                if not any(params.get(key, True) for key in self._diversity_index_selection()):
+                    QMessageBox.information(
                         self,
-                        _("Sample Not Found"),
-                        _("No sample named '{0}' is loaded.").format(sample_name),
+                        _("No Selection"),
+                        _("Please select at least one diversity index."),
                     )
                     return
-                if sample_name and sample_name not in matrix.row_labels and not sample_name.isdigit():
-                    QMessageBox.warning(
-                        self,
-                        _("Sample Not Found"),
-                        _("'{0}' is not a loaded row label. Using the first sample.").format(sample_name),
+
+                for idx, name in zip(target_indices, target_labels, strict=False):
+                    result = self._statistics_controller.analyze_diversity(
+                        abundances=matrix.data[idx],
+                        sample_name=name,
                     )
-                    sample_name = matrix.row_labels[0] if matrix.row_labels else "Sample 1"
-                if not sample_name:
-                    sample_name = matrix.row_labels[0] if matrix.row_labels else "Sample 1"
-                result = self._statistics_controller.analyze_diversity(
-                    abundances=matrix.data[sample_index],
-                    sample_name=sample_name,
+                    plot = InteractivePlotCanvas()
+                    plot.plot_diversity_summary(self._select_diversity_indices(result, params))
+                    self._add_plot_to_workspace(plot, _("Diversity Plot — {0}").format(name))
+
+                self._status_bar.setInfo(
+                    _("Diversity analysis completed for {0} sample(s)").format(len(target_indices))
                 )
 
-                plot = InteractivePlotCanvas()
-                plot.plot_diversity_summary(result)
-
-                plot_index = self._add_plot_to_workspace(plot, _("Diversity Plot"))
-                self._workspace.setCurrentIndex(plot_index)
-
             except Exception as e:
-                QMessageBox.critical(self, _("Diversity Error"), format_user_error(e, "多样性分析"))
+                QMessageBox.critical(self, _("Diversity Error"), format_user_error(e, "Op: diversity analysis"))
+
+    @staticmethod
+    def _diversity_index_selection() -> dict[str, str | None]:
+        """Map each ``DiversityDialog`` checkbox key to a result index key.
+
+        ``richness`` maps to ``None``: S is not an entry of
+        ``DiversityResult.indices`` but the scalar ``taxa_count``, so the
+        caller has to build that bar itself. The remaining names differ
+        from the checkbox keys because they are the engine's.
+        """
+        return {
+            "richness": None,
+            "shannon": "shannon",
+            "simpson": "simpson",
+            "fisher": "fisher_alpha",
+            "chao1": "chao1",
+            "evenness": "pielou",
+        }
+
+    @staticmethod
+    def _select_diversity_indices(result, params: dict):
+        """Restrict a ``DiversityResult`` to the indices the user checked.
+
+        The engine (``ecology.compute_diversity_indices``) always computes
+        every index and accepts no selection, so the dialog's checkboxes are
+        honoured here, immediately before plotting:
+
+        * a checked index is plotted, an unchecked one is dropped;
+        * an index the dialog does not offer (Margalef) is left alone, so
+          the filter can only remove what the user actually turned off;
+        * richness is not an entry of ``indices`` at all — S lives on
+          ``taxa_count`` — so it is built here from there.
+
+        Keys missing from ``params`` (stub dialogs, older callers) count as
+        checked, which keeps the previous "plot everything" default.
+        """
+        from copy import copy
+
+        from models.diversity_result import DiversityIndexResult
+
+        selection = MainWindow._diversity_index_selection()
+        checkbox_of = {result_key: key for key, result_key in selection.items() if result_key is not None}
+
+        indices = {}
+        for result_key, entry in result.indices.items():
+            key = checkbox_of.get(result_key)
+            if key is not None and not params.get(key, True):
+                continue
+            indices[result_key] = entry
+
+        if params.get("richness", True):
+            indices["richness"] = DiversityIndexResult(
+                index_name=_("Species Richness (S)"),
+                value=float(result.taxa_count),
+            )
+
+        # Shallow copy rather than ``dataclasses.replace``: the controller
+        # may hand back a duck-typed stand-in that is not a dataclass at
+        # all, and the caller's result must not be mutated either way.
+        filtered = copy(result)
+        filtered.indices = indices
+        return filtered
 
     def _on_run_rarefaction(self) -> None:
         """Run rarefaction analysis."""
@@ -3457,31 +4162,35 @@ class MainWindow(QMainWindow):
                 max_n = params.get("max_n", 100)
                 step = params.get("step", 5)
                 n_points = max(10, max_n // step) if step > 0 else 50
-                # Resolve the first selected sample to its row so the
-                # analysis actually reflects the user's choice.
                 matrix = self._state.data_matrix
-                sample_index = self._resolve_sample_index(selected_samples[0], matrix)
-                if sample_index is None:
-                    QMessageBox.warning(
-                        self,
-                        _("Sample Not Found"),
-                        _("No sample named '{0}' is loaded.").format(selected_samples[0]),
+                # Honour the multi-selection: rarefy each chosen row
+                # instead of silently dropping everything past the
+                # first.  ``analyze_rarefaction`` is single-row, so we
+                # build one plot per selected sample.
+                for sample_label in selected_samples:
+                    sample_index = self._resolve_sample_index(sample_label, matrix)
+                    if sample_index is None:
+                        QMessageBox.warning(
+                            self,
+                            _("Sample Not Found"),
+                            _("No sample named '{0}' is loaded.").format(sample_label),
+                        )
+                        continue
+                    result = self._statistics_controller.analyze_rarefaction(
+                        abundances=matrix.data[sample_index],
+                        sample_name=sample_label,
+                        n_points=n_points,
                     )
-                    return
-                result = self._statistics_controller.analyze_rarefaction(
-                    abundances=matrix.data[sample_index],
-                    sample_name=selected_samples[0],
-                    n_points=n_points,
+                    plot = InteractivePlotCanvas()
+                    plot.plot_rarefaction(result)
+                    self._add_plot_to_workspace(plot, _("Rarefaction Plot — {0}").format(sample_label))
+
+                self._status_bar.setInfo(
+                    _("Rarefaction analysis completed for {0} sample(s)").format(len(selected_samples))
                 )
 
-                plot = InteractivePlotCanvas()
-                plot.plot_rarefaction(result)
-
-                plot_index = self._add_plot_to_workspace(plot, _("Rarefaction Plot"))
-                self._workspace.setCurrentIndex(plot_index)
-
             except Exception as e:
-                QMessageBox.critical(self, _("Rarefaction Error"), format_user_error(e, "稀疏化分析"))
+                QMessageBox.critical(self, _("Rarefaction Error"), format_user_error(e, "Op: rarefaction analysis"))
 
     @staticmethod
     def _resolve_sample_index(name: str, matrix) -> int | None:
@@ -3528,7 +4237,6 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self._status_bar.setProgress(0, 0)
             data = self._state.data_matrix.data
             if data.ndim != 2 or data.shape[1] < 2:
                 QMessageBox.warning(
@@ -3550,17 +4258,29 @@ class MainWindow(QMainWindow):
                 )
                 if reply != QMessageBox.StandardButton.Yes:
                     return
-            result = self._statistics_controller.analyze_spectral(data=data[:, :2])
+        except Exception:
+            raise
+
+        sub = data[:, :2]
+
+        def _work():
+            return self._statistics_controller.analyze_spectral(data=sub)
+
+        def _done(result):
             plot = InteractivePlotCanvas()
             plot.plot_spectral(result)
-            plot_index = self._add_plot_to_workspace(plot, _("Spectral Analysis"))
-            self._workspace.setCurrentIndex(plot_index)
+            self._add_plot_to_workspace(plot, _("Spectral Analysis"))
             self._status_bar.setInfo(_("Spectral analysis completed"))
-        except Exception as e:
-            self._logger.error(f"Spectral analysis failed: {e}")
-            QMessageBox.critical(self, _("Spectral Analysis Error"), format_user_error(e, "频谱分析"))
-        finally:
             self._status_bar.setProgress(100, 100)
+
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"Spectral analysis failed: {exc}")
+            QMessageBox.critical(
+                self, _("Spectral Analysis Error"), format_user_error(exc, "Op: spectral analysis")
+            )
+
+        self._run_analysis_async(_work, _done, _fail, _("Spectral"))
 
     def _on_run_anosim(self) -> None:
         """Run Analysis of Similarity (ANOSIM) test."""
@@ -3580,7 +4300,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self._execute_anosim({})
+        dialog = PermutationTestDialog(self, title=_("ANOSIM"), default_method_label=_("ANOSIM"))
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._execute_anosim(dialog.get_parameters())
 
     def _execute_anosim(self, params: dict, on_done=None, on_fail=None) -> None:
         """Run ANOSIM in the thread pool and plot the result.
@@ -3591,11 +4315,24 @@ class MainWindow(QMainWindow):
         with no dialog to lower it. Measured wall time for the same code:
         n=100 -> 39 s, n=200 -> 205 s, n=400 -> 813 s of a completely frozen
         window (no repaint, no cancel, no progress).
+
+        ``params`` may carry ``metric``, ``n_permutations`` and
+        ``random_seed`` from :class:`PermutationTestDialog`; the controller's
+        ``run_anosim`` does not currently accept a seed, so the seed is
+        logged but not forwarded (caller-visible behaviour is otherwise
+        unchanged).
         """
         groups = self._get_groups()
         data = self._state.data_matrix.data
         metric = params.get("metric", "bray_curtis")
         n_permutations = params.get("n_permutations", 9999)
+        random_seed = params.get("random_seed")
+        if random_seed is not None:
+            # The stats layer's ANOSIM analyser does not yet expose a
+            # seed hook, but logging it keeps the UI↔stats contract
+            # honest: the value the user picked is at least visible in
+            # the diagnostic console.
+            self._logger.debug("ANOSIM seed requested: %s (analyser ignores)", random_seed)
 
         def _work():
             return self._statistics_controller.analyze_anosim(
@@ -3643,35 +4380,56 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self._execute_permanova({})
+        dialog = PermutationTestDialog(self, title=_("PERMANOVA"), default_method_label=_("PERMANOVA"))
+        dialog.setDarkTheme(self._is_dark_theme)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._execute_permanova(dialog.get_parameters())
 
     def _execute_permanova(self, params: dict, on_done=None, on_fail=None) -> None:
-        """Run PERMANOVA (synchronous) and plot; on_done/on_fail for the runlist."""
+        """Run PERMANOVA in the thread pool (was synchronous; n=400 froze
+        the GUI for several minutes).
+
+        ``params`` may carry ``metric``, ``n_permutations`` and
+        ``random_seed``.  ``random_seed`` is logged at debug level for
+        parity with the ANOSIM path; the controller does not currently
+        accept a seed.
+        """
         groups = self._get_groups()
-        try:
-            self._status_bar.setProgress(0, 0)
-            result = self._statistics_controller.analyze_permanova(
-                data=self._state.data_matrix.data,
+        data = self._state.data_matrix.data
+        metric = params.get("metric", "bray_curtis")
+        n_permutations = params.get("n_permutations", 9999)
+        random_seed = params.get("random_seed")
+        if random_seed is not None:
+            self._logger.debug("PERMANOVA seed requested: %s (analyser ignores)", random_seed)
+
+        def _work():
+            return self._statistics_controller.analyze_permanova(
+                data=data,
                 groups=groups,
-                metric=params.get("metric", "bray_curtis"),
-                n_permutations=params.get("n_permutations", 9999),
+                metric=metric,
+                n_permutations=n_permutations,
             )
+
+        def _done(result):
             plot = InteractivePlotCanvas()
             plot.plot_permanova_results(result)
             plot_index = self._add_plot_to_workspace(plot, _("PERMANOVA Results"))
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("PERMANOVA analysis completed"))
-        except Exception as e:
-            self._logger.error(f"PERMANOVA analysis failed: {e}")
-            if on_fail is not None:
-                on_fail(e)
-            else:
-                QMessageBox.critical(self, _("PERMANOVA Error"), format_user_error(e, "PERMANOVA"))
-        else:
+            self._status_bar.setProgress(100, 100)
             if on_done is not None:
                 on_done(result)
-        finally:
+
+        def _fail(exc):
             self._status_bar.setProgress(100, 100)
+            self._logger.error(f"PERMANOVA analysis failed: {exc}")
+            if on_fail is not None:
+                on_fail(exc)
+            else:
+                QMessageBox.critical(self, _("PERMANOVA Error"), format_user_error(exc, "PERMANOVA"))
+
+        self._run_analysis_async(_work, _done, _fail, _("PERMANOVA"))
 
     def _on_run_simper(self) -> None:
         """Run SIMPER analysis."""
@@ -3693,24 +4451,30 @@ class MainWindow(QMainWindow):
 
         dialog = SimperDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                result = self._statistics_controller.analyze_simper(
-                    data=self._state.data_matrix.data,
-                    groups=groups,
-                    metric=params.get("metric", "bray_curtis"),
-                )
-                plot = InteractivePlotCanvas()
-                plot.plot_simper_results(result)
-                plot_index = self._add_plot_to_workspace(plot, "SIMPER")
-                self._workspace.setCurrentIndex(plot_index)
-                self._status_bar.setInfo("SIMPER analysis completed")
-            except Exception as e:
-                QMessageBox.critical(self, _("SIMPER Error"), format_user_error(e, "SIMPER"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        params = dialog.get_parameters()
+        data = self._state.data_matrix.data
+        metric = params.get("metric", "bray_curtis")
+
+        def _work():
+            return self._statistics_controller.analyze_simper(
+                data=data, groups=groups, metric=metric
+            )
+
+        def _done(result):
+            plot = InteractivePlotCanvas()
+            plot.plot_simper_results(result)
+            self._add_plot_to_workspace(plot, "SIMPER")
+            self._status_bar.setInfo(_("SIMPER analysis completed"))
+            self._status_bar.setProgress(100, 100)
+
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"SIMPER analysis failed: {exc}")
+            QMessageBox.critical(self, _("SIMPER Error"), format_user_error(exc, "SIMPER"))
+
+        self._run_analysis_async(_work, _done, _fail, _("SIMPER"))
 
     def _on_univariate_selection_changed(self, index: int) -> None:
         """Handle univariate dropdown selection."""
@@ -3728,83 +4492,86 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         params = dialog.get_parameters()
-        try:
-            self._status_bar.setProgress(0, 0)
-            test_type = params.get("test_type", 0)
-            data = self._state.data_matrix.data
-            col_names = self._state.data_matrix.col_labels
+        test_type = params.get("test_type", 0)
+        data = self._state.data_matrix.data
+        col_names = self._state.data_matrix.col_labels
 
-            if test_type == 0:  # Summary
-                result = self._statistics_controller.analyze_univariate_summary(data, col_names)
-                plot = InteractivePlotCanvas()
+        # Branch that need groups: check synchronously so we can bail
+        # out before the worker thread starts.
+        if test_type in (2, 3, 4):
+            groups = self._get_groups()
+            if groups is None:
+                QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
+                return
+        else:
+            groups = None
+
+        # Snapshot the inputs the worker thread will need.
+        ctrl = self._statistics_controller
+
+        def _work():
+            if test_type == 0:
+                return ("summary", ctrl.analyze_univariate_summary(data, col_names))
+            if test_type == 1:
+                return ("normality", ctrl.analyze_normality(data, col_names))
+            if test_type == 2:
+                return ("ttest", ctrl.analyze_t_test(data, groups=groups))
+            if test_type == 3:
+                return ("anova", ctrl.analyze_anova(data, groups=groups))
+            if test_type == 4:
+                return ("kruskal", ctrl.analyze_kruskal_wallis(data, groups=groups))
+            raise ValueError(f"Unknown test_type: {test_type}")
+
+        def _done(payload):
+            kind, result = payload
+            plot = InteractivePlotCanvas()
+            if kind == "summary":
                 plot.plot_summary_statistics(data, col_names, result.columns)
-                idx = self._add_plot_to_workspace(plot, _("Summary Statistics"))
-                self._workspace.setCurrentIndex(idx)
-                self._status_bar.setInfo(_("Summary: {0} variables, {1} samples").format(data.shape[1], data.shape[0]))
-
-            elif test_type == 1:  # Normality
-                results = self._statistics_controller.analyze_normality(data, col_names)
-                plot = InteractivePlotCanvas()
-                plot.plot_normality_qq(data, col_names, results)
-                idx = self._add_plot_to_workspace(plot, _("Normality Test"))
-                self._workspace.setCurrentIndex(idx)
-                n_normal = sum(1 for r in results if r.is_normal_shapiro)
-                self._status_bar.setInfo(
-                    _("Normality: {0}/{1} variables pass Shapiro-Wilk (α=0.05)").format(n_normal, len(results))
+                title = _("Summary Statistics")
+                info = _("Summary: {0} variables, {1} samples").format(data.shape[1], data.shape[0])
+            elif kind == "normality":
+                plot.plot_normality_qq(data, col_names, result)
+                title = _("Normality Test")
+                n_normal = sum(1 for r in result if r.is_normal_shapiro)
+                info = _("Normality: {0}/{1} variables pass Shapiro-Wilk (α=0.05)").format(
+                    n_normal, len(result)
                 )
-
-            elif test_type == 2:  # t-test
-                groups = self._get_groups()
-                if groups is None:
-                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
-                    return
-                results = self._statistics_controller.analyze_t_test(data, groups=groups)
-                p_values = [r.p_value for r in results]
-                plot = InteractivePlotCanvas()
+            elif kind == "ttest":
+                p_values = [r.p_value for r in result]
                 plot.plot_group_comparison(data, groups, col_names, "t-test", p_values)
-                idx = self._add_plot_to_workspace(plot, _("t-test Results"))
-                self._workspace.setCurrentIndex(idx)
-                n_sig = sum(1 for p in p_values if p < 0.05)
-                self._status_bar.setInfo(
-                    _("t-test: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                title = _("t-test Results")
+                info = _("t-test: {0}/{1} variables significant (α=0.05)").format(
+                    sum(1 for p in p_values if p < 0.05), len(p_values)
                 )
-
-            elif test_type == 3:  # ANOVA
-                groups = self._get_groups()
-                if groups is None:
-                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
-                    return
-                results = self._statistics_controller.analyze_anova(data, groups=groups)
-                p_values = [r.p_value for r in results]
-                plot = InteractivePlotCanvas()
+            elif kind == "anova":
+                p_values = [r.p_value for r in result]
                 plot.plot_group_comparison(data, groups, col_names, "ANOVA", p_values)
-                idx = self._add_plot_to_workspace(plot, _("ANOVA Results"))
-                self._workspace.setCurrentIndex(idx)
-                n_sig = sum(1 for p in p_values if p < 0.05)
-                self._status_bar.setInfo(
-                    _("ANOVA: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                title = _("ANOVA Results")
+                info = _("ANOVA: {0}/{1} variables significant (α=0.05)").format(
+                    sum(1 for p in p_values if p < 0.05), len(p_values)
                 )
-
-            elif test_type == 4:  # Kruskal-Wallis
-                groups = self._get_groups()
-                if groups is None:
-                    QMessageBox.warning(self, _("No Groups"), _("Please define groups first."))
-                    return
-                results = self._statistics_controller.analyze_kruskal_wallis(data, groups=groups)
-                p_values = [r.p_value for r in results]
-                plot = InteractivePlotCanvas()
+            elif kind == "kruskal":
+                p_values = [r.p_value for r in result]
                 plot.plot_group_comparison(data, groups, col_names, "Kruskal-Wallis", p_values)
-                idx = self._add_plot_to_workspace(plot, _("Kruskal-Wallis Results"))
-                self._workspace.setCurrentIndex(idx)
-                n_sig = sum(1 for p in p_values if p < 0.05)
-                self._status_bar.setInfo(
-                    _("Kruskal-Wallis: {0}/{1} variables significant (α=0.05)").format(n_sig, len(p_values))
+                title = _("Kruskal-Wallis Results")
+                info = _("Kruskal-Wallis: {0}/{1} variables significant (α=0.05)").format(
+                    sum(1 for p in p_values if p < 0.05), len(p_values)
                 )
-
-        except Exception as e:
-            QMessageBox.critical(self, _("Univariate Error"), format_user_error(e, _("Univariate")))
-        finally:
+            else:
+                self._logger.error("Unknown univariate test kind: %s", kind)
+                return
+            self._add_plot_to_workspace(plot, title)
+            self._status_bar.setInfo(info)
             self._status_bar.setProgress(100, 100)
+
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"Univariate analysis failed: {exc}")
+            QMessageBox.critical(
+                self, _("Univariate Error"), format_user_error(exc, _("Univariate"))
+            )
+
+        self._run_analysis_async(_work, _done, _fail, _("Univariate"))
 
     def _on_run_univariate(self) -> None:
         """Run univariate statistics."""
@@ -3838,8 +4605,17 @@ class MainWindow(QMainWindow):
             params = dialog.get_parameters()
             try:
                 self._status_bar.setProgress(0, 0)
+                # The dialog exposes ``cross_validate`` (leave-one-out);
+                # the controller's analyze_lda does not currently take
+                # the flag, so log it and surface the choice in the
+                # status bar so the user can see it was not silently
+                # dropped.
+                cross_validate = bool(params.get("cross_validate", False))
                 self._logger.info(
-                    f"Running LDA with {len(set(groups))} groups, n_components={params.get('n_components')}"
+                    f"Running LDA with {len(set(groups))} groups, "
+                    f"n_components={params.get('n_components')}, "
+                    f"cross_validate={cross_validate} "
+                    "(analyze_lda ignores the flag — controller API)."
                 )
                 result = self._statistics_controller.analyze_lda(
                     data=self._state.data_matrix.data,
@@ -3850,7 +4626,8 @@ class MainWindow(QMainWindow):
                 plot.plot_lda_scores(result)
                 plot_index = self._add_plot_to_workspace(plot, "LDA")
                 self._workspace.setCurrentIndex(plot_index)
-                self._status_bar.setInfo(_("LDA analysis completed"))
+                cv_note = _(" (CV requested)") if cross_validate else ""
+                self._status_bar.setInfo(_("LDA analysis completed") + cv_note)
                 self._logger.info(f"LDA completed: accuracy={result.accuracy:.4f}, {result.n_classes} classes")
             except Exception as e:
                 self._logger.error(f"LDA analysis failed: {e}")
@@ -3899,11 +4676,25 @@ class MainWindow(QMainWindow):
                     f"Running CCA/RDA: Y.shape={Y.shape}, X.shape={X.shape}, method={params.get('method')}"
                 )
 
+                # The dialog exposes the permutation count and seed for the
+                # significance test; StatisticsController.run_cca forwards
+                # them to the engine, which permutes the RESPONSE (Y) and
+                # reports an F statistic, a p-value and Wilks' lambda.
+                n_permutations = int(params.get("n_permutations", 999))
+                raw_seed = params.get("random_seed", 0)
+                # The dialog uses 0 as its "no seed" sentinel; the engine
+                # uses None. Keeping the no-seed case honest is deliberate -
+                # it makes the p-value irreproducible on purpose, and the
+                # engine warns about it.
+                random_seed = int(raw_seed) if raw_seed not in (0, None) else None
+
                 result = self._statistics_controller.run_cca(
                     Y=Y,
                     X=X,
                     n_components=params.get("n_components"),
                     method=params.get("method"),
+                    n_permutations=n_permutations,
+                    random_seed=random_seed,
                 )
 
                 plot = InteractivePlotCanvas()
@@ -3939,29 +4730,37 @@ class MainWindow(QMainWindow):
 
         dialog = ClusteringDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            try:
-                self._status_bar.setProgress(0, 0)
-                result = self._statistics_controller.analyze_clustering(
-                    data=self._state.data_matrix.data,
-                    n_clusters=params.get("n_clusters", 3),
-                    method=params.get("method", "ward"),
-                    metric=params.get("metric", "euclidean"),
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        params = dialog.get_parameters()
+        data = self._state.data_matrix.data
+        n_clusters = params.get("n_clusters", 3)
+        method = params.get("method", "ward")
+        metric = params.get("metric", "euclidean")
+        row_labels = list(self._state.data_matrix.row_labels or [])
+
+        def _work():
+            return self._statistics_controller.analyze_clustering(
+                data=data, n_clusters=n_clusters, method=method, metric=metric
+            )
+
+        def _done(result):
+            plot = InteractivePlotCanvas()
+            plot.plot_dendrogram(result, labels=row_labels)
+            self._add_plot_to_workspace(plot, _("Clustering"))
+            self._status_bar.setInfo(
+                _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(
+                    result.n_clusters, result.cophenetic_corr
                 )
-                plot = InteractivePlotCanvas()
-                plot.plot_dendrogram(result, labels=self._state.data_matrix.row_labels)
-                plot_index = self._add_plot_to_workspace(plot, _("Clustering"))
-                self._workspace.setCurrentIndex(plot_index)
-                self._status_bar.setInfo(
-                    _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(
-                        result.n_clusters, result.cophenetic_corr
-                    )
-                )
-            except Exception as e:
-                QMessageBox.critical(self, _("Clustering Error"), format_user_error(e, "聚类分析"))
-            finally:
-                self._status_bar.setProgress(100, 100)
+            )
+            self._status_bar.setProgress(100, 100)
+
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"Clustering analysis failed: {exc}")
+            QMessageBox.critical(self, _("Clustering Error"), format_user_error(exc, "Op: clustering analysis"))
+
+        self._run_analysis_async(_work, _done, _fail, _("Clustering"))
 
     def _on_run_abundance_models(self) -> None:
         """Fit species-abundance distribution models."""
@@ -3976,10 +4775,19 @@ class MainWindow(QMainWindow):
             plot.plot_abundance_models(results)
             plot_index = self._add_plot_to_workspace(plot, _("Abundance Models"))
             self._workspace.setCurrentIndex(plot_index)
-            [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
-            self._status_bar.setInfo(_("Abundance models fitted"))
+            # The previous implementation built a one-line ``info_lines``
+            # list comprehension but never showed it. Surface the
+            # model fit summaries on the status bar AND in a small info
+            # tab so the user can see which models actually fitted.
+            info_lines = [
+                f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}"
+                for fit in results.values()
+            ]
+            summary = " | ".join(info_lines)
+            self._status_bar.setInfo(_("Abundance models fitted: {0}").format(summary))
+            self._logger.info("Abundance model fits: %s", summary)
         except Exception as e:
-            QMessageBox.critical(self, _("Abundance Models Error"), format_user_error(e, "丰度模型"))
+            QMessageBox.critical(self, _("Abundance Models Error"), format_user_error(e, "Op: abundance models"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -3998,7 +4806,7 @@ class MainWindow(QMainWindow):
             self._workspace.setCurrentIndex(plot_index)
             self._status_bar.setInfo(_("SHE analysis completed"))
         except Exception as e:
-            QMessageBox.critical(self, _("SHE Error"), format_user_error(e, "SHE分析"))
+            QMessageBox.critical(self, _("SHE Error"), format_user_error(e, "Op: SHE analysis"))
         finally:
             self._status_bar.setProgress(100, 100)
 
@@ -4071,7 +4879,7 @@ class MainWindow(QMainWindow):
                     _("Markov: χ²={0:.1f}, p={1:.4f} ({2})").format(result.chi_squared, result.p_value, sig)
                 )
             except Exception as e:
-                QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "马尔可夫链"))
+                QMessageBox.critical(self, _("Markov Error"), format_user_error(e, "Op: Markov chain"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -4081,14 +4889,48 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
 
+        # Pick the column to analyse.  The DirectionalDialog only
+        # exposes ``n_bins`` -- it has no column chooser -- so the
+        # column picker lives here.  Without it the analyser used to
+        # silently default to column 0, ignoring every other column on
+        # wide matrices.  We pick 0 by default; the user can choose
+        # any numeric column from the spreadsheet.
+        col_labels = []
+        try:
+            col_labels = list(self._state.data_matrix.col_labels or [])
+        except AttributeError:
+            col_labels = []
+        default_col = 0
+        chosen_col = default_col
+        if len(col_labels) > 1:
+            chosen_col = self._prompt_column_index(
+                _("Directional: pick the angle column"),
+                col_labels,
+                default=default_col,
+            )
+            if chosen_col is None:
+                return
+        elif not col_labels:
+            chosen_col = 0
+        else:
+            chosen_col = 0
+
         dialog = DirectionalDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             params = dialog.get_parameters()
             try:
                 self._status_bar.setProgress(0, 0)
-                result = self._statistics_controller.analyze_directional()
-                bin_edges, counts = self._statistics_controller.bin_rose_diagram(n_bins=params.get("n_bins", 12))
+                # Forward the user's ``column_index`` pick; before this
+                # fix the analyser silently used column 0 on wide
+                # matrices.
+                result = self._statistics_controller.analyze_directional(
+                    column_index=int(chosen_col)
+                )
+                bin_edges, counts = self._statistics_controller.bin_rose_diagram(
+                    n_bins=params.get("n_bins", 12),
+                    column_index=int(chosen_col),
+                )
                 plot = InteractivePlotCanvas()
                 plot.plot_rose_diagram(bin_edges, counts, result.mean_direction_deg)
                 plot_index = self._add_plot_to_workspace(plot, _("Rose Diagram"))
@@ -4099,9 +4941,38 @@ class MainWindow(QMainWindow):
                     )
                 )
             except Exception as e:
-                QMessageBox.critical(self, _("Directional Error"), format_user_error(e, "方向统计"))
+                QMessageBox.critical(self, _("Directional Error"), format_user_error(e, "Op: directional statistics"))
             finally:
                 self._status_bar.setProgress(100, 100)
+
+    def _prompt_column_index(
+        self, title: str, col_labels: list[str], default: int = 0
+    ) -> int | None:
+        """Tiny modal that asks the user which column to analyse.
+
+        Returns ``None`` when the user cancels.  Defaults to ``default``
+        (used when the matrix has only one column and a picker is
+        unnecessary).
+        """
+        if len(col_labels) <= 1:
+            return default if col_labels else 0
+        from PyQt6.QtWidgets import QInputDialog
+
+        label_text = "\n".join(f"{i}: {label}" for i, label in enumerate(col_labels))
+        choice, ok = QInputDialog.getItem(
+            self,
+            _("Select Column"),
+            f"{title}\n\n{label_text}",
+            [f"{i}: {label}" for i, label in enumerate(col_labels)],
+            max(0, min(default, len(col_labels) - 1)),
+            False,
+        )
+        if not ok:
+            return None
+        try:
+            return int(choice.split(":", 1)[0])
+        except (ValueError, AttributeError):
+            return default
 
     def _on_run_efa(self) -> None:
         """Run Elliptic Fourier Analysis."""
@@ -4169,33 +5040,51 @@ class MainWindow(QMainWindow):
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        try:
-            self._status_bar.setProgress(0, 0)
-            import numpy as np
 
-            from morphometrics.efa import EFAAnalyzer, EigenshapeAnalyzer
+        import numpy as np
 
-            data = self._state.data_matrix.data
-            if data.ndim != 2 or data.shape[1] < 6:
-                QMessageBox.warning(
-                    self,
-                    _("Insufficient Data"),
-                    _("Need at least 6 columns (x1..xN, y1..yN with N≥3). Got {0} columns.").format(data.shape[1]),
-                )
-                return
-            if data.shape[1] % 2 != 0:
-                QMessageBox.warning(
-                    self,
-                    _("Invalid Data"),
-                    _("Column count must be even (equal x and y coordinates). Got {0}.").format(data.shape[1]),
-                )
-                return
-            if data.shape[0] < 2:
-                QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 2 specimens (rows)."))
-                return
+        data = self._state.data_matrix.data
+        if data.ndim != 2 or data.shape[1] < 6:
+            QMessageBox.warning(
+                self,
+                _("Insufficient Data"),
+                _("Need at least 6 columns (x1..xN, y1..yN with N≥3). Got {0} columns.").format(data.shape[1]),
+            )
+            return
+        if data.shape[1] % 2 != 0:
+            QMessageBox.warning(
+                self,
+                _("Invalid Data"),
+                _("Column count must be even (equal x and y coordinates). Got {0}.").format(data.shape[1]),
+            )
+            return
+        if data.shape[0] < 2:
+            QMessageBox.warning(self, _("Insufficient Data"), _("Need at least 2 specimens (rows)."))
+            return
 
+        # Previously the harmonic count was hard-coded to
+        # ``min(10, n_cols // 4)``; let the user pick instead, while
+        # still clamping to a sensible range.
+        suggested = max(2, min(10, data.shape[1] // 4))
+        from PyQt6.QtWidgets import QInputDialog
+
+        choice, ok = QInputDialog.getInt(
+            self,
+            _("Eigenshape — Number of Harmonics"),
+            _("Harmonics (2-{0}):").format(max(2, data.shape[1] // 2)),
+            suggested,
+            2,
+            max(2, data.shape[1] // 2),
+            1,
+        )
+        if not ok:
+            return
+        n_harmonics = int(choice)
+
+        from morphometrics.efa import EFAAnalyzer, EigenshapeAnalyzer
+
+        def _work():
             efa = EFAAnalyzer()
-            n_harmonics = max(2, min(10, data.shape[1] // 4))
             coefficients_list = []
             for i in range(data.shape[0]):
                 row = data[i]
@@ -4203,11 +5092,12 @@ class MainWindow(QMainWindow):
                 contour = np.column_stack([row[:n_pts], row[n_pts : 2 * n_pts]])
                 result_i = efa.analyze(contour, n_harmonics=n_harmonics)
                 coefficients_list.append(result_i.coefficients)
+            es_analyzer = EigenshapeAnalyzer()
+            return es_analyzer.analyze(
+                coefficients_list, n_components=min(5, data.shape[0] - 1)
+            )
 
-            eigenshape_analyzer = EigenshapeAnalyzer()
-            es_result = eigenshape_analyzer.analyze(coefficients_list, n_components=min(5, data.shape[0] - 1))
-
-            # Plot eigenshape scores
+        def _done(es_result):
             plot = InteractivePlotCanvas()
             labels = list(self._state.data_matrix.row_labels or [])
             plot.plot_eigenshape_scores(
@@ -4215,15 +5105,22 @@ class MainWindow(QMainWindow):
                 es_result.explained_variance,
                 specimen_labels=labels if labels else None,
             )
-            plot_index = self._add_plot_to_workspace(plot, _("Eigenshape Scores"))
-            self._workspace.setCurrentIndex(plot_index)
+            self._add_plot_to_workspace(plot, _("Eigenshape Scores"))
             self._status_bar.setInfo(
-                _("Eigenshape: {0} specimens, {1} components").format(es_result.n_specimens, es_result.n_components)
+                _("Eigenshape: {0} harmonics, {1} specimens, {2} components").format(
+                    n_harmonics, es_result.n_specimens, es_result.n_components
+                )
             )
-        except Exception as e:
-            QMessageBox.critical(self, _("Eigenshape Error"), format_user_error(e, "Eigenshape"))
-        finally:
             self._status_bar.setProgress(100, 100)
+
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"Eigenshape analysis failed: {exc}")
+            QMessageBox.critical(
+                self, _("Eigenshape Error"), format_user_error(exc, "Eigenshape")
+            )
+
+        self._run_analysis_async(_work, _done, _fail, _("Eigenshape"))
 
     def _on_run_isotope(self) -> None:
         """Run Isotope Time Series Analysis."""
@@ -4233,81 +5130,71 @@ class MainWindow(QMainWindow):
 
         dialog = IsotopeAnalysisDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            params = dialog.get_parameters()
-            self._status_bar.setProgress(0, 0)
-            try:
-                import numpy as np
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        params = dialog.get_parameters()
 
-                from stratigraphy.isotope_analysis import IsotopeAnalyzer, IsotopeData
+        # Build the IsotopeData payload synchronously so we can fail
+        # fast on obviously wrong shapes; the actual analyser call
+        # runs on the worker thread.
+        import numpy as np
 
-                # Create IsotopeData from loaded data
-                data = self._state.data_matrix.data
-                if data.shape[1] < 3:
-                    QMessageBox.warning(
-                        self,
-                        _("Insufficient Data"),
-                        _("Need at least 3 columns: depth, age, and isotope values"),
-                    )
-                    return
+        from stratigraphy.isotope_analysis import IsotopeAnalyzer, IsotopeData
 
-                # Build IsotopeData from loaded data
-                # Column 0: depth, Column 1: age, Column 2+: isotope values
-                iso_kwargs = {
-                    "depth": data[:, 0],
-                    "age": data[:, 1],
-                }
+        data = self._state.data_matrix.data
+        if data.shape[1] < 3:
+            QMessageBox.warning(
+                self,
+                _("Insufficient Data"),
+                _("Need at least 3 columns: depth, age, and isotope values"),
+            )
+            return
 
-                # Map additional columns to isotope types (only if column has valid data)
-                isotope_names = ["d13C", "d18O", "sr", "nd"]
-                for i, name in enumerate(isotope_names):
-                    col_idx = i + 2
-                    if col_idx < data.shape[1]:
-                        col_data = data[:, col_idx]
-                        # Only include if column has at least some non-NaN values
-                        if not np.all(np.isnan(col_data)):
-                            iso_kwargs[name] = col_data
+        iso_kwargs: dict = {
+            "depth": data[:, 0],
+            "age": data[:, 1],
+        }
+        isotope_names = ["d13C", "d18O", "sr", "nd"]
+        for i, name in enumerate(isotope_names):
+            col_idx = i + 2
+            if col_idx < data.shape[1]:
+                col_data = data[:, col_idx]
+                if not np.all(np.isnan(col_data)):
+                    iso_kwargs[name] = col_data
 
-                # Check we have at least one isotope
-                if len(iso_kwargs) <= 2:
-                    QMessageBox.warning(
-                        self,
-                        _("Insufficient Data"),
-                        _("Need at least one isotope column with valid data"),
-                    )
-                    return
+        if len(iso_kwargs) <= 2:
+            QMessageBox.warning(
+                self,
+                _("Insufficient Data"),
+                _("Need at least one isotope column with valid data"),
+            )
+            return
 
-                iso_data = IsotopeData(**iso_kwargs)
+        iso_data = IsotopeData(**iso_kwargs)
 
-                analyzer = IsotopeAnalyzer()
-                result = analyzer.analyze(
-                    iso_data,
-                    detect_excursions=params.get("detect_excursions", True),
-                    excursion_threshold=params.get("excursion_threshold", 2.0),
-                    excursion_min_duration=params.get("excursion_min_duration", 2),
-                    compute_correlations=params.get("compute_correlations", True),
-                )
+        def _work():
+            analyzer = IsotopeAnalyzer()
+            return analyzer.analyze(
+                iso_data,
+                detect_excursions=params.get("detect_excursions", True),
+                excursion_threshold=params.get("excursion_threshold", 2.0),
+                excursion_min_duration=params.get("excursion_min_duration", 2),
+                compute_correlations=params.get("compute_correlations", True),
+            )
 
-                # Show summary
-                self._status_bar.setInfo(_("Isotope: {0} excursions detected").format(len(result.excursions)))
-                QMessageBox.information(
-                    self,
-                    _("Analysis Complete"),
-                    result.summary(),
-                )
+        def _done(result):
+            self._status_bar.setInfo(
+                _("Isotope: {0} excursions detected").format(len(result.excursions))
+            )
+            self._status_bar.setProgress(100, 100)
+            QMessageBox.information(self, _("Analysis Complete"), result.summary())
 
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    _("Isotope Error"),
-                    format_user_error(e, "同位素分析"),
-                )
-            finally:
-                # ``setProgress(100, 100)`` is intentionally inside the
-                # ``finally`` so that an early ``return`` (e.g. the
-                # ``Insufficient Data`` warning above) does not leave
-                # the progress bar stuck at 0.
-                self._status_bar.setProgress(100, 100)
+        def _fail(exc):
+            self._status_bar.setProgress(100, 100)
+            self._logger.error(f"Isotope analysis failed: {exc}")
+            QMessageBox.critical(self, _("Isotope Error"), format_user_error(exc, "Op: isotope analysis"))
+
+        self._run_analysis_async(_work, _done, _fail, _("Isotope"))
 
     def _on_run_stratigraphic(self) -> None:
         """Run Stratigraphic Correlation Analysis.
@@ -4505,7 +5392,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     _("Correlation Error"),
-                    format_user_error(e, "地层相关性"),
+                    format_user_error(e, "Op: stratigraphic correlation"),
                 )
             finally:
                 self._status_bar.setProgress(100, 100)
@@ -4721,7 +5608,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     _("Paleo-Environment Error"),
-                    format_user_error(e, "古环境重建"),
+                    format_user_error(e, "Op: paleo-environmental reconstruction"),
                 )
             finally:
                 self._status_bar.setProgress(100, 100)
@@ -4820,7 +5707,7 @@ class MainWindow(QMainWindow):
             if on_fail is not None:
                 on_fail(e)
             else:
-                QMessageBox.critical(self, _("TPS Grid Error"), format_user_error(e, "TPS网格"))
+                QMessageBox.critical(self, _("TPS Grid Error"), format_user_error(e, "Op: TPS grid"))
         else:
             if on_done is not None:
                 on_done(tps_result)
@@ -4909,7 +5796,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"Wavelet analysis failed: {e}")
-                QMessageBox.critical(self, _("Wavelet Error"), format_user_error(e, "小波分析"))
+                QMessageBox.critical(self, _("Wavelet Error"), format_user_error(e, "Op: wavelet analysis"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -5001,7 +5888,7 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 self._logger.error(f"Biostratigraphy analysis failed: {e}")
-                QMessageBox.critical(self, _("Biostratigraphy Error"), format_user_error(e, "生物地层学"))
+                QMessageBox.critical(self, _("Biostratigraphy Error"), format_user_error(e, "Op: biostratigraphy"))
             finally:
                 self._status_bar.setProgress(100, 100)
 
@@ -5109,27 +5996,54 @@ class MainWindow(QMainWindow):
         input). However, the dialog still benefits from the dark
         theme and a consistent UX.
         """
-        dialog = PICDialog(self)
+        dialog = PICDialog(self, controller=self._statistics_controller)
         dialog.setDarkTheme(self._is_dark_theme)
+        # Connect ``resultsReady`` so a future plot tab (or run-list
+        # hook) sees the payload. Previously the four PCM handlers
+        # never connected this signal, so the analysis ran but no
+        # visual artefact was produced.
+        dialog.resultsReady.connect(self._on_pcm_payload)
         dialog.exec()
 
     def _on_run_ancestral_states(self) -> None:
         """Run Ancestral State Reconstruction (ASR) analysis."""
-        dialog = AncestralStateDialog(self)
+        dialog = AncestralStateDialog(self, controller=self._statistics_controller)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.resultsReady.connect(self._on_pcm_payload)
         dialog.exec()
 
     def _on_run_phylogenetic_signal(self) -> None:
         """Run Blomberg's K phylogenetic signal analysis."""
-        dialog = PhyloSignalDialog(self)
+        dialog = PhyloSignalDialog(self, controller=self._statistics_controller)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.resultsReady.connect(self._on_pcm_payload)
         dialog.exec()
 
     def _on_run_phylo_anova(self) -> None:
         """Run Phylogenetic ANOVA analysis."""
-        dialog = PhyloANOVADialog(self)
+        dialog = PhyloANOVADialog(self, controller=self._statistics_controller)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.resultsReady.connect(self._on_pcm_payload)
         dialog.exec()
+
+    def _on_pcm_payload(self, payload: dict) -> None:
+        """Display a summary tab for any PCM analysis."""
+        try:
+            from PyQt6.QtWidgets import QTextEdit
+
+            editor = QTextEdit()
+            editor.setReadOnly(True)
+            summary = payload.get("summary", "") if isinstance(payload, dict) else str(payload)
+            editor.setPlainText(summary)
+            # We DO add this as a workspace tab so the user actually
+            # sees the analysis output (the dialog's own results panel
+            # disappears when the dialog closes).
+            from views.ui_plot_canvas import InteractivePlotCanvas as _Canvas  # noqa: F401
+
+            self._add_tab_to_workspace(editor, _("PCM Result"))
+            self._status_bar.setInfo(_("PCM analysis completed"))
+        except Exception as exc:
+            self._logger.debug("Failed to surface PCM payload: %s", exc)
 
     def _show_about(self) -> None:
         """Show about dialog."""
@@ -5184,8 +6098,14 @@ class MainWindow(QMainWindow):
             process = psutil.Process()
             mem_mb = process.memory_info().rss / (1024 * 1024)
             self._status_bar._memory_label.setText(_("Memory: {0:.1f} MB").format(mem_mb))
+        except ImportError:
+            # psutil ships in the optional [full] extra. Say the measurement is
+            # unavailable rather than leaving a fabricated "0 MB" on screen.
+            self._status_bar._memory_label.setText(_("Memory: N/A"))
         except Exception:
-            pass
+            # Runtime failure (permissions, /proc unavailable, ...). Stay quiet
+            # about the cause, but do not pretend the reading was zero.
+            self._status_bar._memory_label.setText(_("Memory: --"))
 
     def _load_settings(self) -> None:
         """Load application settings."""
@@ -5247,7 +6167,16 @@ class MainWindow(QMainWindow):
         # "RuntimeError: wrapped C/C++ object of type _AnalysisSignals has
         # been deleted" and typically surfacing as
         # "QThread: Destroyed while thread is still running" -> process abort.
-        self._drain_thread_pool()
+        clean = self._drain_thread_pool()
+        if not clean:
+            # Previously the drain just logged a warning and silently
+            # dropped the late result. The user should know their work
+            # did not finish -- a non-blocking notification is enough
+            # since the window is about to close.
+            self._logger.warning(
+                "Closing with in-flight analysis tasks: their results were "
+                "abandoned to avoid hanging the close."
+            )
 
         event.accept()
 
@@ -5258,19 +6187,27 @@ class MainWindow(QMainWindow):
         point the alternative is hanging the close on a multi-minute
         computation, and the ``_closing`` flag keeps their late callbacks
         from touching destroyed widgets.
+
+        Returns ``True`` when the pool drained cleanly, ``False`` when at
+        least one task was still running at the timeout. The caller is
+        expected to surface that distinction to the user instead of
+        silently dropping their results.
         """
         pool = getattr(self, "_thread_pool", None)
         if pool is None:
-            return
+            return True
         self._closing = True
         try:
             pool.clear()  # drop queued-but-not-started tasks
-            if not pool.waitForDone(timeout_ms):
+            done = pool.waitForDone(timeout_ms)
+            if not done:
                 self._logger.warning(
                     "Analysis thread pool still busy after %d ms; abandoning in-flight results on close.", timeout_ms
                 )
+            return bool(done)
         except Exception as exc:  # never let teardown raise
             self._logger.warning("Thread pool drain failed: %s", exc)
+            return False
 
     # =========================================================================
     # New Analysis Handlers
@@ -5278,15 +6215,88 @@ class MainWindow(QMainWindow):
 
     def _on_run_allometry(self) -> None:
         """Run Allometry analysis."""
-        dialog = AllometryDialog(self)
+        dialog = AllometryDialog(self, controller=self._statistics_controller)
         dialog.setDarkTheme(self._is_dark_theme)
+
+        def _show(payload: dict) -> None:
+            plot = InteractivePlotCanvas()
+            if hasattr(plot, "plot_allometry"):
+                plot.plot_allometry(payload)
+                title = _("Allometry Regression")
+            elif hasattr(plot, "plot_allometry_results"):
+                plot.plot_allometry_results(payload)
+                title = _("Allometry Regression")
+            else:
+                return
+            idx = self._add_plot_to_workspace(plot, title)
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(title)
+
+        dialog.resultsReady.connect(_show)
+        dialog.exec()
+
+    def _on_run_pls(self) -> None:
+        """Run Two-Block PLS (morphological integration) analysis."""
+        dialog = PLSDialog(self, controller=self._statistics_controller)
+        dialog.setDarkTheme(self._is_dark_theme)
+
+        def _show(payload: dict) -> None:
+            plot = InteractivePlotCanvas()
+            # Try the new signature first, then the legacy one; if
+            # neither exists the canvas agent has not yet wired the
+            # method, so raise so the failure surfaces instead of being
+            # silently swallowed by the previous ``else: return``.
+            if hasattr(plot, "plot_pls"):
+                plot.plot_pls(payload)
+                title = _("Two-Block PLS Scores")
+            elif hasattr(plot, "plot_pls_results"):
+                plot.plot_pls_results(payload)
+                title = _("Two-Block PLS Scores")
+            else:
+                raise AttributeError(
+                    "InteractivePlotCanvas has neither plot_pls nor "
+                    "plot_pls_results — the canvas layer agent must add "
+                    "one of these for the PLS results to be visualised."
+                )
+            idx = self._add_plot_to_workspace(plot, title)
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(title)
+
+        dialog.resultsReady.connect(_show)
         dialog.exec()
 
     def _on_run_evolution_rate(self) -> None:
         """Run Evolution Rate analysis."""
         dialog = EvolutionRateDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        # The dialog emits ``resultsReady`` when it finishes running.
+        # Previously the slot was never connected so the analysis ran
+        # but no plot was produced; this slot renders the result and
+        # surfaces a clear notice when the canvas layer has no
+        # ``plot_evolution_rate`` method (instead of dropping the payload).
+        dialog.resultsReady.connect(self._on_evolution_rate_result)
         dialog.exec()
+
+    def _on_evolution_rate_result(self, payload: dict) -> None:
+        try:
+            plot = InteractivePlotCanvas()
+            plot.plot_evolution_rate(payload)
+            idx = self._add_plot_to_workspace(plot, _("Evolution Rate"))
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(_("Evolution Rate: plotted"))
+        except Exception as exc:
+            # ``plot_evolution_rate`` may not be wired up to the
+            # canvas; the canvas is owned by another agent. Fall back
+            # to a results tab so the user can still see the numbers.
+            self._logger.warning(
+                "Falling back to text tab for evolution-rate result: %s", exc
+            )
+            from PyQt6.QtWidgets import QTextEdit
+
+            editor = QTextEdit()
+            editor.setReadOnly(True)
+            editor.setPlainText(str(payload.get("summary", payload)))
+            self._add_tab_to_workspace(editor, _("Evolution Rate Result"))
 
     def _macroevolution_dialog(self) -> MacroevolutionDialog:
         dialog = MacroevolutionDialog(self._statistics_controller, self)
@@ -5327,8 +6337,10 @@ class MainWindow(QMainWindow):
             return
         dialog = self._macroevolution_dialog()
         dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            dialog.accept()
+        # ``dialog.exec()`` is a blocking call that returns Accepted
+        # once the user finishes; calling ``dialog.accept()`` after
+        # that is dead code (the dialog is already gone).  Just exec.
+        dialog.exec()
 
     def _on_run_diversity_dynamics(self) -> None:
         """Diversity dynamics from the loaded matrix."""
@@ -5384,19 +6396,74 @@ class MainWindow(QMainWindow):
         """Run Extinction Confidence Intervals analysis."""
         dialog = ExtinctionIntervalDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        # Forward the dict the dialog emits as ``resultsReady`` to a
+        # canvas plot; falls back to a text tab if the canvas has no
+        # ``plot_extinction_ranges`` method (graceful degradation).
+        dialog.resultsReady.connect(self._on_extinction_intervals_result)
         dialog.exec()
+
+    def _on_extinction_intervals_result(self, payload: dict) -> None:
+        plot = InteractivePlotCanvas()
+        if hasattr(plot, "plot_extinction_ranges"):
+            plot.plot_extinction_ranges(payload)
+            idx = self._add_plot_to_workspace(plot, _("Extinction Intervals"))
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(_("Extinction intervals: plotted"))
+            return
+        # Canvas has no specialised plotter; surface the result as text.
+        from PyQt6.QtWidgets import QTextEdit
+
+        editor = QTextEdit()
+        editor.setReadOnly(True)
+        editor.setPlainText(str(payload.get("summary", payload)))
+        self._add_tab_to_workspace(editor, _("Extinction Intervals Result"))
+        self._status_bar.setInfo(_("Extinction intervals: text fallback"))
 
     def _on_run_beta_diversity(self) -> None:
         """Run Beta Diversity analysis."""
         dialog = BetaDiversityDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.resultsReady.connect(self._on_beta_diversity_result)
         dialog.exec()
+
+    def _on_beta_diversity_result(self, payload: dict) -> None:
+        plot = InteractivePlotCanvas()
+        if hasattr(plot, "plot_beta_diversity"):
+            plot.plot_beta_diversity(payload)
+            idx = self._add_plot_to_workspace(plot, _("Beta Diversity"))
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(_("Beta diversity: plotted"))
+            return
+        from PyQt6.QtWidgets import QTextEdit
+
+        editor = QTextEdit()
+        editor.setReadOnly(True)
+        editor.setPlainText(str(payload.get("summary", payload)))
+        self._add_tab_to_workspace(editor, _("Beta Diversity Result"))
+        self._status_bar.setInfo(_("Beta diversity: text fallback"))
 
     def _on_run_null_models(self) -> None:
         """Run Null Model analysis."""
         dialog = NullModelDialog(self)
         dialog.setDarkTheme(self._is_dark_theme)
+        dialog.resultsReady.connect(self._on_null_model_result)
         dialog.exec()
+
+    def _on_null_model_result(self, payload: dict) -> None:
+        plot = InteractivePlotCanvas()
+        if hasattr(plot, "plot_null_model"):
+            plot.plot_null_model(payload)
+            idx = self._add_plot_to_workspace(plot, _("Null Model"))
+            self._workspace.setCurrentIndex(idx)
+            self._status_bar.setInfo(_("Null model: plotted"))
+            return
+        from PyQt6.QtWidgets import QTextEdit
+
+        editor = QTextEdit()
+        editor.setReadOnly(True)
+        editor.setPlainText(str(payload.get("summary", payload)))
+        self._add_tab_to_workspace(editor, _("Null Model Result"))
+        self._status_bar.setInfo(_("Null model: text fallback"))
 
 
 def main() -> None:

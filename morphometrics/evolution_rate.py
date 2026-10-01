@@ -218,6 +218,8 @@ class EvolutionRateAnalyzer:
         time_intervals: npt.NDArray | None = None,
         models: list[str] | None = None,
         confidence_level: float = 0.95,
+        seed: int | None = None,
+        n_bootstrap: int = 199,
     ) -> EvolutionRateResult:
         """
         Analyze morphological evolution rates.
@@ -227,14 +229,24 @@ class EvolutionRateAnalyzer:
                         in stratigraphic/time order
             time_intervals: Time/depth intervals between measurements
                           If None, assumes unit intervals
-            models: List of models to fit ["random_walk", "directional", "stasis"]
+            models: List of models to fit, using the
+                    :class:`EvolutionModel` values ``["random_walk",
+                    "directional", "stasis"]`` (default: all three).
+                    Any other name -- including the legacy labels
+                    ``"BM"`` / ``"OU"`` and misspelled variants -- is
+                    rejected rather than silently ignored.
             confidence_level: Confidence level for rate CI
+            seed: Optional RNG seed for the bootstrap CI.  When ``None``
+                the CI is non-reproducible across runs (the previous
+                behaviour was to hit the global numpy state).
+            n_bootstrap: Number of bootstrap replicates (default 199).
 
         Returns:
             EvolutionRateResult with best model and statistics
 
         Raises:
-            ValidationError: If input data is invalid
+            ValidationError: If input data is invalid, or if ``models``
+                contains a name that is not an :class:`EvolutionModel` value
         """
         with self._lock:
             self._logger.info(f"Analyzing evolution rate: n={len(trait_series)}")
@@ -256,8 +268,30 @@ class EvolutionRateAnalyzer:
                     )
                 )
 
+            # ``EvolutionModel`` is the single source of truth for the model
+            # names.  The three ``if ... in models`` guards below silently
+            # skipped every unknown name, so a legacy label ("BM", "OU") or
+            # a typo either blew up later at ``min()`` on an empty
+            # sequence, or was dropped without a word while still being
+            # reported as a successful fit.  Reject unknown names up front.
+            supported_models = tuple(model.value for model in EvolutionModel)
+
             if models is None:
-                models = ["random_walk", "directional", "stasis"]
+                models = list(supported_models)
+
+            unknown_models = [name for name in models if name not in supported_models]
+            if unknown_models:
+                raise ValidationError(
+                    _("Unknown evolution model(s): {0}. Valid models are: {1}").format(
+                        ", ".join(repr(name) for name in unknown_models),
+                        ", ".join(supported_models),
+                    )
+                )
+
+            if not models:
+                raise ValidationError(
+                    _("At least one model must be selected. Valid models are: {0}").format(", ".join(supported_models))
+                )
 
             # First differences
             dx = np.diff(trait_series)
@@ -271,25 +305,25 @@ class EvolutionRateAnalyzer:
             log_liks: dict[str, float] = {}
             params: dict[str, dict[str, float]] = {}
 
-            if "random_walk" in models:
+            if EvolutionModel.RANDOM_WALK.value in models:
                 ll, rate = self._fit_random_walk(dx, dt)
-                log_liks["random_walk"] = ll
-                params["random_walk"] = {"rate": rate}
+                log_liks[EvolutionModel.RANDOM_WALK.value] = ll
+                params[EvolutionModel.RANDOM_WALK.value] = {"rate": rate}
 
-            if "directional" in models:
+            if EvolutionModel.DIRECTIONAL.value in models:
                 ll, rate, trend, trend_se, trend_p = self._fit_directional(trait_series, dx, dt)
-                log_liks["directional"] = ll
-                params["directional"] = {
+                log_liks[EvolutionModel.DIRECTIONAL.value] = ll
+                params[EvolutionModel.DIRECTIONAL.value] = {
                     "rate": rate,
                     "trend": trend,
                     "trend_se": trend_se,
                     "trend_p": trend_p,
                 }
 
-            if "stasis" in models:
+            if EvolutionModel.STASIS.value in models:
                 ll, rate, theta, alpha = self._fit_stasis(trait_series, dx, dt)
-                log_liks["stasis"] = ll
-                params["stasis"] = {
+                log_liks[EvolutionModel.STASIS.value] = ll
+                params[EvolutionModel.STASIS.value] = {
                     "rate": rate,
                     "optimum": theta,
                     "alpha": alpha,
@@ -297,7 +331,11 @@ class EvolutionRateAnalyzer:
 
             # Compute AIC values
             len(trait_series)
-            k = {"random_walk": 1, "directional": 2, "stasis": 3}
+            k = {
+                EvolutionModel.RANDOM_WALK.value: 1,
+                EvolutionModel.DIRECTIONAL.value: 2,
+                EvolutionModel.STASIS.value: 3,
+            }
 
             aic_values = {}
             for model in log_liks:
@@ -320,7 +358,12 @@ class EvolutionRateAnalyzer:
 
             # Compute rate CI via bootstrap
             rate_ci_lower, rate_ci_upper = self._bootstrap_rate_ci(
-                trait_series, time_intervals, best_model, confidence_level
+                trait_series,
+                time_intervals,
+                best_model,
+                confidence_level,
+                n_bootstrap=n_bootstrap,
+                seed=seed,
             )
 
             result = EvolutionRateResult(
@@ -510,9 +553,28 @@ class EvolutionRateAnalyzer:
         model: str,
         confidence_level: float,
         n_bootstrap: int = 199,
+        seed: int | None = None,
     ) -> tuple[float | None, float | None]:
         """
-        Bootstrap confidence interval for rate estimate.
+        Bootstrap confidence interval for the rate estimate.
+
+        The residuals are resampled with replacement and the bootstrap
+        trait series is reconstructed by integrating the resampled
+        residuals.  The residuals MUST be model-specific (the previous
+        implementation used the random-walk first-difference residuals
+        for every model, which silently broke the CI for the directional
+        and stasis models — its own comment admitted this).
+
+        Parameters:
+            trait_series: (n,) trait values in stratigraphic / time order.
+            time_intervals: (n-1,) inter-sample intervals.
+            model: ``"random_walk"``, ``"directional"``, or ``"stasis"``.
+            confidence_level: e.g. 0.95 for a 95% percentile CI.
+            n_bootstrap: number of bootstrap replicates.
+            seed: optional RNG seed for reproducibility.  When ``None``,
+                a fresh ``np.random.default_rng`` is used; the previous
+                ``np.random.choice`` call hit the global numpy state and
+                made the CIs non-reproducible across runs.
 
         Returns:
             (ci_lower, ci_upper)
@@ -521,18 +583,42 @@ class EvolutionRateAnalyzer:
         if n < 5:
             return None, None
 
-        rates = []
-        for _ in range(n_bootstrap):
-            # Resample increments with replacement to build a bootstrap
-            # surrogate of the trait series. We use the raw first-differences
-            # (``dx - mean(dx)``) as the empirical residual distribution.
-            # Note: this is a generic residualisation that is appropriate for
-            # the random-walk model; for the directional/stasis models the
-            # residuals should be model-specific. We keep the generic version
-            # here for simplicity and consistency with the original code.
-            dx = np.diff(trait_series)
+        rng = np.random.default_rng(seed)
+        dx = np.diff(trait_series)
+
+        # Model-specific residuals (centred so the bootstrap surrogate has
+        # the same mean drift as the data).  Random-walk uses the
+        # first-difference residuals; directional uses the residuals
+        # around the fitted linear trend (same expression as in
+        # ``_fit_directional``); stasis uses the residuals around the OU
+        # optimum (same expression as in ``_fit_stasis``).
+        if model == EvolutionModel.RANDOM_WALK.value:
             residuals = dx - np.mean(dx)
-            boot_residuals = np.random.choice(residuals, size=len(residuals), replace=True)
+        elif model == EvolutionModel.DIRECTIONAL.value:
+            dt2_sum = float(np.sum(time_intervals**2))
+            if dt2_sum > 0:
+                beta = float(np.sum(dx * time_intervals)) / dt2_sum
+            else:
+                beta = 0.0
+            residuals = dx - beta * time_intervals
+        elif model == EvolutionModel.STASIS.value:
+            theta = float(np.mean(trait_series))
+            trait_var = float(np.var(trait_series))
+            if n > 2 and trait_var > 0:
+                autocorr = 0.0
+                for i in range(n - 1):
+                    autocorr += (trait_series[i] - theta) * (trait_series[i + 1] - theta)
+                autocorr = autocorr / ((n - 1) * trait_var)
+                alpha = -math.log(max(0.01, min(0.99, autocorr))) if autocorr > 0 else 0.1
+            else:
+                alpha = 0.1
+            residuals = dx + alpha * (trait_series[:-1] - theta) * time_intervals
+        else:
+            raise ValidationError(_("Unknown bootstrap model '{0}'").format(model))
+
+        rates = []
+        for _draw in range(n_bootstrap):
+            boot_residuals = rng.choice(residuals, size=len(residuals), replace=True)
 
             # Reconstruct bootstrap trait series
             boot_trait = np.zeros(n)
@@ -542,13 +628,13 @@ class EvolutionRateAnalyzer:
 
             # Fit model
             boot_dx = np.diff(boot_trait)
-            if model == "random_walk":
+            if model == EvolutionModel.RANDOM_WALK.value:
                 _, rate = self._fit_random_walk(boot_dx, time_intervals)
                 rates.append(rate)
-            elif model == "directional":
+            elif model == EvolutionModel.DIRECTIONAL.value:
                 _, rate, _, _, _ = self._fit_directional(boot_trait, boot_dx, time_intervals)
                 rates.append(rate)
-            elif model == "stasis":
+            elif model == EvolutionModel.STASIS.value:
                 _, rate, _, _ = self._fit_stasis(boot_trait, boot_dx, time_intervals)
                 rates.append(rate)
 
@@ -556,8 +642,8 @@ class EvolutionRateAnalyzer:
             return None, None
 
         rates = np.array(rates)
-        alpha = 1 - confidence_level
-        ci_lower = float(np.percentile(rates, alpha / 2 * 100))
-        ci_upper = float(np.percentile(rates, (1 - alpha / 2) * 100))
+        alpha_tail = 1 - confidence_level
+        ci_lower = float(np.percentile(rates, alpha_tail / 2 * 100))
+        ci_upper = float(np.percentile(rates, (1 - alpha_tail / 2) * 100))
 
         return ci_lower, ci_upper

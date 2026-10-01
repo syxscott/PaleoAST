@@ -134,6 +134,7 @@ N_fl/N_t (区间内灭绝份额)，见 Foote (2000) 的简式。
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -253,11 +254,69 @@ class CohortSurvivorshipAnalysis:
             SurvivorshipResult对象
 
         注: 时间从新到老递减，如 5.0 Ma 表示5百万年前
+
+        半开区间约定 (与本模块 docstring 第 2 节一致):
+
+            区间 ``(t_start, t_end)`` 采用 ``[t_start, t_end)``，相邻区间
+            共享的边界点只属于较老那个。一个 FAD 恰等于最老 bin 的 ``t_end``
+            的类群在所有 bin 下三个谓词 (``started_before``、``started_in``、
+            ``started_after``) 全为假，被静默丢弃。``analyze`` 现在会在
+            出现该情况时发出 ``UserWarning``，列出受影响的记录号和数值，
+            以便调用方补全 bin 网格或微调 FAD；改用 ``>=`` 会引入重叠
+            区间上的重复计数，因此**不**直接放宽谓词。
         """
         records = [(float(o), float(L)) for o, L in fossil_records]
         intervals = [(float(t1), float(t2)) for t1, t2 in intervals]
 
         self._logger.info(f"Analyzing {len(records)} records across {len(intervals)} intervals")
+
+        # Detect taxa silently dropped by the boundary convention. A taxon
+        # whose FAD lies *outside* every bin is invisible: ``FAD >= max(t_end)``
+        # would otherwise be silently dropped, including the equality case
+        # that the half-open convention assigns to the (non-existent) next
+        # bin.  The same is true for LAD on the other boundary.  Switching
+        # to ``>=`` would double-count on overlapping bins, so we instead
+        # surface the issue with a warning that names the offending
+        # records and tells the caller to widen their bin grid.
+        if intervals:
+            max_t_end = max(t_end for _t_start, t_end in intervals)
+            min_t_start = min(t_start for t_start, _t_end in intervals)
+            for idx, (o, L) in enumerate(records):
+                # FAD invisible when no bin's [t_start, t_end) covers it and
+                # FAD > min_t_start. The first condition is ``o >= max_t_end``
+                # OR there's a literal gap in the bin grid; we approximate
+                # the gap check by ensuring FAD > min_t_start (otherwise the
+                # taxon would belong to the youngest bin by construction).
+                if o >= max_t_end and o > min_t_start:
+                    warnings.warn(
+                        f"record #{idx} has FAD={o} at or beyond the "
+                        f"oldest bin boundary t_end={max_t_end}; it falls "
+                        f"on the closed boundary and is invisible to every "
+                        f"bin under the half-open convention. Add a wider "
+                        f"interval or shift its FAD slightly to recover it.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._logger.warning(
+                        "record #%d has FAD=%g beyond the oldest bin "
+                        "(t_end=%g); it will not appear in any bin",
+                        idx, o, max_t_end,
+                    )
+                # LAD invisible when L == max_t_end with no absorbing bin.
+                if max_t_end <= L and min_t_start < L:
+                    warnings.warn(
+                        f"record #{idx} has LAD={L} at or beyond the "
+                        f"oldest bin boundary t_end={max_t_end}; it is "
+                        f"invisible to every bin under the half-open "
+                        f"convention.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._logger.warning(
+                        "record #%d has LAD=%g beyond the oldest bin "
+                        "(t_end=%g); it will not appear in any bin",
+                        idx, L, max_t_end,
+                    )
 
         interval_data_list = []
         survival_rates = np.zeros(len(intervals))
@@ -398,6 +457,36 @@ class CohortSurvivorshipAnalysis:
                     # 主率输出与 Foote cohort 估计保持一致
                     origination_rates[i] = foote97_origination[i]
                     extinction_rates[i] = foote97_extinction[i]
+                else:
+                    # 非正宽度区间 (t_end - t_start <= 0)：per-capita 率是
+                    # 「概率 / 时间跨度」，分母为 0 或负时无定义。旧实现没有
+                    # 这个 else，origination_rates / extinction_rates 保留
+                    # 预设的 0.0，于是 [(5, 5)] 这样的零宽 bin 里一个真实
+                    # cohort (surv = 1.0, CI = (0.342, 1.0)) 被报告成
+                    # 「零起源、零灭绝」。与同函数 n_total == 0 的分支
+                    # (下面) 用同一个约定：写 NaN，不写 0.0 —— NaN 表示
+                    # 「未定义」，与 438-441 行的边界语义
+                    # (Nt=0 → nan; Nbt=0 或 Nft=0 → inf) 不冲突，因为
+                    # inf 只在分子计数为 0 的可计算情形出现。
+                    warnings.warn(
+                        f"interval {i} (t_start={t_start}, t_end={t_end}) has "
+                        f"non-positive width dt={t_end - t_start}; per-capita "
+                        "origination/extinction rates are undefined (nan) for "
+                        "this bin. survivorship is still reported.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._logger.warning(
+                        "interval %d [%g, %g] has non-positive width dt=%g; "
+                        "per-capita rates are undefined (nan)",
+                        i, t_start, t_end, t_end - t_start,
+                    )
+                    origination_rates[i] = np.nan
+                    extinction_rates[i] = np.nan
+                    foote97_origination[i] = np.nan
+                    foote97_extinction[i] = np.nan
+                    foote00_origination[i] = np.nan
+                    foote00_extinction[i] = np.nan
             else:
                 survival_rates[i] = np.nan
                 extinction_probs[i] = np.nan
@@ -460,15 +549,22 @@ class CohortSurvivorshipAnalysis:
         #   μ = -ln(p)     / Δt   (灭绝率)
         # 旧实现把两式互换，导致返回字典里的 "origination_rate"
         # 实为 μ、"extinction_rate" 实为 λ。
+        #
+        # 边界语义（与 analyze() 的 Foote 97 公式、本模块 docstring 第 116
+        # 行「为 0 时速率无界，记为 +inf」以及 per_capita_rates() 统一）:
+        #   Δt <= 0  → 未定义 (nan)，时间跨度为 0/负时率无意义
+        #   p = 1     → λ 无界 (+inf)：1 - p = 0，-ln(0) = +inf
+        #   p = 0     → μ 无界 (+inf)：p = 0，-ln(0) = +inf
+        # 选 +inf 而不是 nan：这是同一族公式两个镜像分支的极限值，模块里
+        # analyze() 对 Nbt = 0 / Nft = 0 已经这么记（有测试固定），而把
+        # 「无界」混进 nan 会把一个可计算的极限说成「未定义」。旧实现把
+        # p = 1 写成 0.0「无人起源」，那是在纯生存 cohort 上凭空断言一个
+        # 零速率 —— 既与自身公式 (=-ln(0)/Δt=+inf) 矛盾，也与镜像的
+        # p = 0 分支 (+inf) 不对称，还和 per_capita_rates 的 nan 打架，
+        # 同一个 p 因此有三个答案。
         if dt > 0:
-            if p < 1:
-                lambda_rate = -np.log(1 - p) / dt
-            else:
-                lambda_rate = 0.0  # p=1 ⇒ 无人起源
-            if p > 0:
-                extinction_rate = -np.log(p) / dt
-            else:
-                extinction_rate = float("inf")  # p=0 ⇒ 全部灭绝
+            lambda_rate = -np.log(1 - p) / dt if p < 1 else float("inf")
+            extinction_rate = -np.log(p) / dt if p > 0 else float("inf")
         else:
             lambda_rate = np.nan
             extinction_rate = np.nan
@@ -492,14 +588,26 @@ class CohortSurvivorshipAnalysis:
 
         返回:
             (λ, μ)
+
+            边界语义与 :meth:`foote_analysis` 和 :meth:`analyze` 的
+            Foote 97 公式统一: Δt <= 0 或 p 越界 → (nan, nan)（真正未定义）；
+            p = 1 → (inf, 0)；p = 0 → (0, inf)（速率无界，记 +inf）。
+            旧实现是一个统一守卫 ``p <= 0 or p >= 1 → (nan, nan)``，把
+            「无界」和「未定义」混为一谈，使同一个 p 在三个入口给出三个
+            不同的答案。
         """
-        if dt <= 0 or survival_rate <= 0 or survival_rate >= 1:
+        if dt <= 0 or not (0.0 <= survival_rate <= 1.0):
             return np.nan, np.nan
 
         # Foote (1999) per-capita rates, swapped to correct labels.
         #   λ (origination) = -ln(1 - p) / Δt
         #   μ (extinction)  = -ln(p)     / Δt
         # 旧实现的两式相互颠倒，调用方拿到 (λ, μ) 时实际收到的是 (μ, λ)。
+        if survival_rate >= 1.0:
+            return float("inf"), 0.0
+        if survival_rate <= 0.0:
+            return 0.0, float("inf")
+
         lambda_rate = -np.log(1 - survival_rate) / dt
         extinction_rate = -np.log(survival_rate) / dt
 

@@ -48,7 +48,9 @@ from typing import Any, Union
 import numpy as np
 import numpy.typing as npt
 
+from config.constants import DataType, DistanceMetric
 from utils.exceptions import (
+    DataValidationError,
     MatrixDimensionError,
 )
 from utils.validators import check_missing_values, validate_data_array
@@ -913,6 +915,143 @@ class DataMatrix:
             return np.nanmean(self._data, axis=1)
 
     # =========================================================================
+    # Type-aware analysis dispatch
+    # =========================================================================
+
+    def column_data_types(self) -> list[str]:
+        """Return the declared data type for every column.
+
+        Falls back to :data:`config.constants.DataType.CONTINUOUS` when the
+        per-column metadata does not declare a type — the legacy default.
+        """
+        with self._lock:
+            return [
+                self._column_metadata.get(label, {}).get("data_type", DataType.CONTINUOUS)
+                for label in self._col_labels
+            ]
+
+    def _column_type_set(self) -> set[str]:
+        """Set of distinct column data types in this matrix."""
+        return set(self.column_data_types())
+
+    def recommended_distance(self) -> str:
+        """Suggest a distance metric given the columns' declared data types.
+
+        The suggestion is based on the dominant type composition:
+
+        * all columns are numeric (``binary`` only)        → ``Jaccard``.
+        * at least one column is ``continuous`` / ``count`` → ``Euclidean``
+          (the morphometrics default).
+        * mixed numeric + categorical (the Gower case)     → ``Euclidean``
+          with a warning: PaleoAST does not implement Gower yet, so the
+          caller should drop the categorical columns (or one-hot encode
+          them) before feeding the matrix to a metric that expects numbers.
+        * every column is categorical                       → ``Jaccard``.
+
+        Returns:
+            One of the string constants in
+            :class:`config.constants.DistanceMetric`.
+
+        Note:
+            This is a *suggestion* — :meth:`validate_for` will refuse a
+            requested metric that doesn't match the data, but no caller is
+            forced to follow the recommendation. We never silently rewrite
+            a metric the caller picked.
+        """
+        with self._lock:
+            types = self._column_type_set()
+            has_categorical = bool(types & {DataType.NOMINAL, DataType.ORDINAL})
+            has_continuous = bool(types & {DataType.CONTINUOUS, DataType.COUNT})
+            only_binary = bool(types) and types <= {DataType.BINARY}
+
+            if has_categorical and not has_continuous:
+                # All categorical → Jaccard on the indicator matrix
+                return DistanceMetric.JACCARD
+            if only_binary:
+                return DistanceMetric.JACCARD
+            if has_continuous or not types:
+                return DistanceMetric.EUCLIDEAN
+            # Mixed numeric + categorical: the textbook answer is Gower,
+            # but PaleoAST has no Gower implementation. Surface that
+            # honestly instead of pretending we have one.
+            self._logger.warning(
+                "Mixed numeric+categorical matrix: PaleoAST has no Gower "
+                "metric; Euclidean is suggested as a fallback. Encode the "
+                "categorical columns or drop them before distance-based "
+                "analyses."
+            )
+            return DistanceMetric.EUCLIDEAN
+
+    def validate_for(self, method: str) -> None:
+        """Refuse analyses whose required data types don't match this matrix.
+
+        Raises :class:`utils.exceptions.DataValidationError` when the
+        requested ``method`` is fundamentally incompatible with the
+        declared column types. The check is conservative: if a metric
+        could conceivably work (e.g. Euclidean on a binary-only matrix) we
+        allow it.
+
+        Parameters:
+            method: One of:
+                - ``"pca"``         — continuous/count only.
+                - ``"pcoa"``        — numeric only (continuous/binary/count).
+                - ``"nmds"``        — numeric only (continuous/binary/count).
+                - ``"permanova"``   — numeric only (continuous/binary/count).
+                - ``"diversity"``   — count only.
+                - ``"clustering"``  — numeric only.
+
+        Raises:
+            DataValidationError: If any column type is incompatible with
+                the requested method.
+
+        Note:
+            Validation is type-aware only — it does NOT inspect the values
+            (e.g. a "continuous" column containing integers is fine; a
+            "binary" column containing values outside {0, 1} is also fine
+            from this check's point of view). That second check is the
+            caller's responsibility.
+        """
+        allowed: dict[str, set[str]]
+        try:
+            allowed = {
+                "pca": {DataType.CONTINUOUS, DataType.COUNT},
+                "pcoa": {DataType.CONTINUOUS, DataType.BINARY, DataType.COUNT},
+                "nmds": {DataType.CONTINUOUS, DataType.BINARY, DataType.COUNT},
+                "permanova": {DataType.CONTINUOUS, DataType.BINARY, DataType.COUNT},
+                "diversity": {DataType.COUNT},
+                "clustering": {DataType.CONTINUOUS, DataType.BINARY, DataType.COUNT},
+            }
+        except NameError:  # pragma: no cover — defensive fallback
+            allowed = {
+                "pca": {"continuous", "count"},
+                "pcoa": {"continuous", "binary", "count"},
+                "nmds": {"continuous", "binary", "count"},
+                "permanova": {"continuous", "binary", "count"},
+                "diversity": {"count"},
+                "clustering": {"continuous", "binary", "count"},
+            }
+
+        if method not in allowed:
+            raise DataValidationError(
+                f"Unknown analysis method: '{method}'",
+                details={"known_methods": sorted(allowed.keys())},
+            )
+
+        with self._lock:
+            types = set(self.column_data_types())
+            incompatible = types - allowed[method]
+            if incompatible:
+                raise DataValidationError(
+                    f"Method '{method}' does not support columns of type "
+                    f"{sorted(incompatible)}",
+                    details={
+                        "method": method,
+                        "incompatible_columns": sorted(incompatible),
+                        "allowed_column_types": sorted(allowed[method]),
+                    },
+                )
+
+    # =========================================================================
     # Imputation Methods
     # =========================================================================
 
@@ -926,25 +1065,36 @@ class DataMatrix:
 
         Returns:
             DataMatrix: Matrix with imputed values
+
+        Raises:
+            DataValidationError: If any column is entirely NaN. The old
+                implementation silently fell back to 0 in that case, which
+                polluted every downstream mean / PCA / PERMANOVA result
+                with values that look like real measurements but are
+                actually a placeholder for "we have no data here".
         """
         with self._lock:
             result = self._data.copy()
-            col_means = np.nanmean(result, axis=0)
-
-            # Find NaN positions and fill with column means
             nan_mask = np.isnan(result)
-            missing_count = int(np.sum(nan_mask))
-            self._logger.info(f"impute_mean: imputing {missing_count} missing values with column means")
 
-            # Handle all-NaN columns explicitly: nanmean returns NaN for them
-            # (with a RuntimeWarning), which would leave the column untouched.
-            # Fall back to 0 for those columns.
+            # Reject all-NaN columns BEFORE nanmean so we get a clean error
+            # instead of a RuntimeWarning + the silently-zeroed fallback.
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
-                self._logger.warning(
-                    f"impute_mean: {int(np.sum(all_nan_cols))} all-NaN column(s) detected, falling back to 0"
+                bad_labels = [
+                    self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan
+                ]
+                raise DataValidationError(
+                    f"impute_mean: {len(bad_labels)} column(s) are entirely "
+                    f"NaN and have no defined mean to impute with: "
+                    f"{bad_labels}. Drop them (or fix the source data) "
+                    f"before imputing.",
+                    details={"all_nan_columns": bad_labels},
                 )
-                col_means = np.where(all_nan_cols, 0.0, col_means)
+
+            col_means = np.nanmean(result, axis=0)
+            missing_count = int(np.sum(nan_mask))
+            self._logger.info(f"impute_mean: imputing {missing_count} missing values with column means")
 
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_means[j]
@@ -968,22 +1118,32 @@ class DataMatrix:
 
         Returns:
             DataMatrix: Matrix with imputed values
+
+        Raises:
+            DataValidationError: If any column is entirely NaN. Same
+                rationale as :meth:`impute_mean`: 0 is not a valid
+                imputation for a column with no observations.
         """
         with self._lock:
             result = self._data.copy()
-            col_medians = np.nanmedian(result, axis=0)
-
             nan_mask = np.isnan(result)
-            missing_count = int(np.sum(nan_mask))
-            self._logger.info(f"impute_median: imputing {missing_count} missing values with column medians")
 
-            # Handle all-NaN columns: nanmedian returns NaN for them.
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
-                self._logger.warning(
-                    f"impute_median: {int(np.sum(all_nan_cols))} all-NaN column(s) detected, falling back to 0"
+                bad_labels = [
+                    self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan
+                ]
+                raise DataValidationError(
+                    f"impute_median: {len(bad_labels)} column(s) are "
+                    f"entirely NaN and have no defined median to impute "
+                    f"with: {bad_labels}. Drop them (or fix the source "
+                    f"data) before imputing.",
+                    details={"all_nan_columns": bad_labels},
                 )
-                col_medians = np.where(all_nan_cols, 0.0, col_medians)
+
+            col_medians = np.nanmedian(result, axis=0)
+            missing_count = int(np.sum(nan_mask))
+            self._logger.info(f"impute_median: imputing {missing_count} missing values with column medians")
 
             for j in range(result.shape[1]):
                 result[nan_mask[:, j], j] = col_medians[j]
@@ -1048,10 +1208,26 @@ class DataMatrix:
                 # Get non-NaN values for this row
                 valid_cols = ~row_nan
                 if np.sum(valid_cols) == 0:
-                    # All values missing, use mean of complete rows
+                    # All values missing for this row. We can still impute
+                    # from complete-case columns — only raise if a column
+                    # is also entirely missing across the complete rows.
                     for j in np.where(row_nan)[0]:
-                        col_mean = np.nanmean(complete_data[:, j]) if complete_data.size > 0 else 0.0
-                        result[idx, j] = col_mean if not np.isnan(col_mean) else 0.0
+                        col_observed = complete_data[:, j]
+                        col_observed = col_observed[~np.isnan(col_observed)]
+                        if col_observed.size == 0:
+                            label = self._col_labels[j]
+                            raise DataValidationError(
+                                f"impute_knn: column '{label}' has no "
+                                f"observed value anywhere in the data, so "
+                                f"row {idx} cannot be imputed. Drop the "
+                                f"column or fix the source data.",
+                                details={
+                                    "row_index": idx,
+                                    "column_index": j,
+                                    "column_label": label,
+                                },
+                            )
+                        result[idx, j] = float(np.mean(col_observed))
                     continue
 
                 # Compute distances using valid columns only
@@ -1061,10 +1237,27 @@ class DataMatrix:
                 neighbor_indices = np.argsort(dists)[:k]
                 neighbors = complete_data[neighbor_indices]
 
-                # Impute each missing column
+                # Impute each missing column. Leaving a column as NaN
+                # when no neighbour observed it would silently propagate,
+                # so we explicitly raise — 0 is not a valid imputation
+                # (same red-line as impute_mean / impute_median).
                 for j in np.where(row_nan)[0]:
-                    col_mean = np.nanmean(neighbors[:, j])
-                    result[idx, j] = col_mean if not np.isnan(col_mean) else 0.0
+                    col_values = neighbors[:, j]
+                    col_values = col_values[~np.isnan(col_values)]
+                    if col_values.size == 0:
+                        label = self._col_labels[j]
+                        raise DataValidationError(
+                            f"impute_knn: column '{label}' has no observed "
+                            f"value among the {k} nearest neighbours of "
+                            f"row {idx}, so it cannot be imputed. Drop the "
+                            f"column or fix the source data.",
+                            details={
+                                "row_index": idx,
+                                "column_index": j,
+                                "column_label": label,
+                            },
+                        )
+                    result[idx, j] = float(np.mean(col_values))
 
             return DataMatrix(
                 data=result,

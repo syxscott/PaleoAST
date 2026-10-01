@@ -50,7 +50,7 @@ import logging
 import re
 from enum import Enum, auto
 
-from .lexer import BaseLexer, Token
+from .lexer import BaseLexer, LexerError, Token
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,11 @@ class NexusLexer(BaseLexer):
         # 嵌套注释状态 (用于tokenize循环优化)
         self._in_nested_comment = False
 
+        # (line, column) of an unterminated '[' seen during the current
+        # tokenize() call, or None. Populated by _scan_comment and turned into
+        # a LexerError at the end of tokenize().
+        self._unterminated_comment: tuple[int, int] | None = None
+
         # NEXUS关键字集合 (大小写不敏感)
         self._keywords = {
             "BEGIN",
@@ -228,19 +233,40 @@ class NexusLexer(BaseLexer):
         self.add_rule(NexusTokenType.NEXUS_HEADER, r"^#NEXUS", priority=1)
 
         # 浮点数
-        self.add_rule(NexusTokenType.FLOAT, r"-?\d+\.\d+([eE][+-]?\d+)?", priority=10)
+        # The exponent must be allowed INDEPENDENTLY of the fractional part:
+        # `1E-5` is a perfectly ordinary CONTINUOUS value, but a rule that
+        # requires `\.\d+` split it into INTEGER(1) + IDENTIFIER(e) +
+        # INTEGER(-5), i.e. three tokens and a shredded number.
+        self.add_rule(
+            NexusTokenType.FLOAT,
+            r"-?\d+(?:\.\d+)?[eE][+-]?\d+|-?\d+\.\d+(?:[eE][+-]?\d+)?",
+            priority=10,
+        )
 
         # 整数
         self.add_rule(NexusTokenType.INTEGER, r"-?\d+", priority=20)
 
         # 标识符 (包括关键字)
-        self.add_rule(NexusTokenType.IDENTIFIER, r"[A-Za-z_][A-Za-z0-9_]*", priority=30)
+        # NEXUS taxon labels are frequently non-ASCII (`Félix cánidé`), so the
+        # class must be Unicode-aware. An ASCII-only class turned every such
+        # character into an UNKNOWN token, shredding the name with no error.
+        # The leading class deliberately stays ASCII-ish so a name cannot START
+        # with a digit (which is INTEGER's job).
+        self.add_rule(
+            NexusTokenType.IDENTIFIER,
+            r"[^\W\d][\w.]*",
+            priority=30,
+        )
 
         # 字符串 (双引号)
         self.add_rule(NexusTokenType.STRING, r'"[^"]*"', priority=5)
 
         # 字符串 (单引号)
-        self.add_rule(NexusTokenType.STRING, r"'[^']*'", priority=5)
+        # NEXUS escapes an embedded apostrophe by doubling it (''), which is
+        # exactly what `NexusWriter._quote_taxon` emits. Without accepting the
+        # doubling here, the writer's own output for `O'Brien sp.` round-tripped
+        # into two tokens ('O' + 'Brien sp.'), silently truncating the name.
+        self.add_rule(NexusTokenType.STRING, r"'(?:[^']|'')*'", priority=5)
 
         # 符号
         self.add_rule(NexusTokenType.LBRACKET, r"\[", priority=40)
@@ -289,6 +315,7 @@ class NexusLexer(BaseLexer):
         self._line = 1
         self._column = 1
         self._in_nested_comment = False
+        self._unterminated_comment = None
 
         self._logger.debug(f"Tokenizing NEXUS source of length {length}")
 
@@ -368,6 +395,32 @@ class NexusLexer(BaseLexer):
         # 添加EOF token
         tokens.append(Token(type=NexusTokenType.EOF, value="", line=self._line, column=self._column))
 
+        # An unterminated '[' consumed the remainder of the file (MATRIX, rows,
+        # END;), so the token stream looks structurally valid while carrying
+        # none of the data. Returning it silently produced an empty/partial
+        # parse with NO diagnostic at all. Raise only when there is real data
+        # downstream to have lost: a comment that runs to end-of-input is
+        # harmless on its own and is pinned by
+        # tests/parsers/test_nexus_lexer.py::test_unclosed_comment, so an
+        # input that is nothing but a comment must still tokenize.
+        if self._unterminated_comment is not None:
+            u_line, u_col = self._unterminated_comment
+            self._unterminated_comment = None
+            content_tokens = [
+                t for t in tokens
+                if t.type not in (NexusTokenType.EOF, NexusTokenType.NEWLINE,
+                                  NexusTokenType.WHITESPACE, NexusTokenType.COMMENT)
+            ]
+            if content_tokens:
+                raise LexerError(
+                    "Unterminated comment: no matching ']' for the '[' at "
+                    f"line {u_line}, column {u_col}; the rest of the file was "
+                    "consumed as comment text",
+                    line=u_line,
+                    column=u_col,
+                    char="[",
+                )
+
         self._logger.info(f"NEXUS Tokenization complete: {len(tokens)} tokens")
         return tokens
 
@@ -425,6 +478,20 @@ class NexusLexer(BaseLexer):
         # 检查是否未关闭
         if depth > 0:
             self._in_nested_comment = False
+            # An unterminated '[' swallows everything that follows (the MATRIX,
+            # the rows, even END;) into this one COMMENT token, and tokenize()
+            # used to return SUCCESS with no diagnostic — so a single missing
+            # ']' produced an empty/partial structure and no error. `tokenize()`
+            # records `_unterminated_comment` for exactly this, so signal the
+            # caller while still returning the token (tests/parsers/
+            # test_nexus_lexer.py::test_unclosed_comment pins that shape).
+            self._unterminated_comment = (start_line, start_column)
+            self._logger.warning(
+                "Unterminated comment opened at line %d, column %d; "
+                "consumed the rest of the input",
+                start_line,
+                start_column,
+            )
             return (
                 Token(type=NexusTokenType.COMMENT, value=value, line=start_line, column=start_column),
                 end_pos,

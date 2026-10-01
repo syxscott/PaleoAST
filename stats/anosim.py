@@ -50,35 +50,54 @@ class ANOSIMResult:
     Container for ANOSIM analysis results.
 
     Attributes:
-        statistic: R statistic value
+        statistic: Raw R statistic (Clarke 1993) - biased upward when
+            group sizes are unequal.
+        r_pai: PAI-corrected R statistic. Equal to ``statistic`` when
+            ``pai=False`` was passed to ``analyze``. With the default
+            ``pai=True``, ``r_pai = (R - E[R|H0]) / (1 - E[R|H0])``
+            where ``E[R|H0] = -1 / (n - 1)`` is Clarke's null
+            expectation (matches ``vegan::anosim``).
         p_value: Permutation-based p-value
         n_permutations: Number of permutations used
         groups: List of unique group identifiers
         n_groups: Number of groups
         n_samples: Total number of samples
         metric: Distance metric used
+        pai: Whether the PAI correction was applied (the value of the
+            ``pai`` argument to ``analyze``).
     """
 
     statistic: float
+    r_pai: float
     p_value: float
     n_permutations: int
     groups: list[Any]
     n_groups: int
     n_samples: int
     metric: str
+    pai: bool = True
 
     def summary(self) -> str:
         """Generate summary text."""
         sig_marker = "**" if self.p_value < 0.01 else ("*" if self.p_value < 0.05 else "")
-        return (
-            f"{_('Analysis of Similarities (ANOSIM)')}\n"
-            f"{'=' * 45}\n"
-            f"{_('Test statistic (R): {0}').format(f'{self.statistic:.4f}')}\n"
-            f"{_('P-value: {0}').format(f'{self.p_value:.4f} {sig_marker}')}\n"
-            f"{_('Permutations: {0}').format(self.n_permutations)}\n"
-            f"{_('Groups: {0}').format(self.n_groups)}\n"
-            f"{_('Distance metric: {0}').format(self.metric)}"
+        lines = [
+            f"{_('Analysis of Similarities (ANOSIM)')}",
+            f"{'=' * 45}",
+            f"{_('Test statistic (R): {0}').format(f'{self.statistic:.4f}')}",
+        ]
+        if self.pai:
+            lines.append(
+                f"{_('R (PAI-corrected): {0}').format(f'{self.r_pai:.4f}')}",
+            )
+        lines.extend(
+            [
+                f"{_('P-value: {0}').format(f'{self.p_value:.4f} {sig_marker}')}",
+                f"{_('Permutations: {0}').format(self.n_permutations)}",
+                f"{_('Groups: {0}').format(self.n_groups)}",
+                f"{_('Distance metric: {0}').format(self.metric)}",
+            ]
         )
+        return "\n".join(lines)
 
 
 class ANOSIMAnalyzer:
@@ -104,6 +123,7 @@ class ANOSIMAnalyzer:
         n_permutations: int | None = None,
         metric: str = "euclidean",
         random_seed: int | None = None,
+        pai: bool = True,
     ) -> ANOSIMResult:
         """
         Perform ANOSIM analysis.
@@ -118,6 +138,16 @@ class ANOSIMAnalyzer:
                 ``np.random`` state is used, which means successive
                 calls with identical inputs may return slightly
                 different p-values.
+            pai: If True (default), apply the PAI correction
+                (``R_PAI = (R - E[R|H0]) / (1 - E[R|H0])`` with
+                ``E[R|H0] = -1/(n-1)``) to the raw R statistic. This
+                matches R's ``vegan::anosim`` and corrects the upward
+                bias of the original Clarke (1993) R statistic when
+                group sizes are unequal. The raw R is always preserved
+                in ``result.statistic``; the corrected value is in
+                ``result.r_pai``. Pass ``pai=False`` for backward
+                compatibility with reports that quote the original
+                Clarke statistic.
 
         Returns:
             ANOSIMResult: ANOSIM analysis results
@@ -178,6 +208,24 @@ class ANOSIMAnalyzer:
             if random_seed is not None:
                 rng = np.random.default_rng(random_seed)
             else:
+                # Without a seed the global ``np.random`` state is used.
+                # Two calls with identical inputs may return slightly
+                # different p-values; warn the caller so they can decide
+                # whether to pass a seed for a publishable result.
+                import warnings as _warnings
+
+                _warnings.warn(
+                    "ANOSIM: no ``random_seed`` supplied; the permutation p-value "
+                    "uses the global ``np.random`` state and is not reproducible "
+                    "across runs. Pass ``random_seed=`` to make the result "
+                    "deterministic.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self._logger.warning(
+                    "ANOSIM: no random_seed supplied; p-value uses global np.random state "
+                    "and is not reproducible."
+                )
                 rng = np.random
 
             permuted_R = np.zeros(n_permutations)
@@ -192,14 +240,26 @@ class ANOSIMAnalyzer:
             # Calculate p-value
             p_value = float((1 + np.sum(permuted_R >= R_obs)) / (n_permutations + 1))
 
+            # PAI correction: R_PAI = (R - E[R|H0]) / (1 - E[R|H0])
+            # with E[R|H0] = -1/(n-1) (Clarke 1993; matches vegan::anosim).
+            # When pai=False the corrected value equals the raw R (kept
+            # alongside so downstream code never has to compute it).
+            if pai and n > 1:
+                e_r = -1.0 / (n - 1)
+                r_pai = (R_obs - e_r) / (1.0 - e_r)
+            else:
+                r_pai = R_obs
+
             result = ANOSIMResult(
                 statistic=R_obs,
+                r_pai=r_pai,
                 p_value=p_value,
                 n_permutations=n_permutations,
                 groups=unique_groups,
                 n_groups=len(unique_groups),
                 n_samples=n,
                 metric=metric,
+                pai=pai,
             )
 
             self._last_result = result

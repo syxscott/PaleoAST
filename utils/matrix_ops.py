@@ -456,17 +456,30 @@ def mahalanobis_distance(x: npt.NDArray, mean: npt.NDArray, cov: npt.NDArray, in
         >>> mean = np.array([1, 2])
         >>> cov = np.array([[1, 0.5], [0.5, 1]])
         >>> mahalanobis_distance(x, mean, cov)
-        2.0
+        1.1547005383792515
     """
     logger.debug(f"Computing Mahalanobis distance: point shape={np.asarray(x).shape}, inverted={inverted}")
-    x = ensure_matrix(x)
+    # A single point is the flat (p,) form or a 1-row (1, p) block. The flag
+    # has to be taken from the *pre-reshape* shape: ensure_matrix turns the
+    # flat form into a (p, 1) column, so the old `x.ndim == 1` test was dead
+    # code and every flat point was rejected with "Point dimension must match
+    # mean dimension" -- including the docstring example above.
+    x_input = np.asarray(x)
+    single_point = x_input.ndim == 1 or (x_input.ndim == 2 and x_input.shape[0] == 1)
+    x = ensure_matrix(x_input)
     mean = ensure_matrix(mean).flatten()
     cov = ensure_matrix(cov)
 
-    # Handle single point case
-    single_point = x.ndim == 1 or x.shape[0] == 1
-    if x.ndim == 1:
+    if single_point:
         x = x.reshape(1, -1)
+    elif x.ndim == 2 and x.shape[1] == 1 and x.shape[0] == mean.shape[0]:
+        # (p, 1) column -- the shape ensure_matrix itself returns for a flat
+        # vector, so callers that normalise their input before calling hit the
+        # same rejection. Only reachable when the strict (n, p) reading would
+        # already be a dimension error, so no valid multi-point input is
+        # reinterpreted as a single one.
+        x = x.reshape(1, -1)
+        single_point = True
 
     if x.shape[1] != mean.shape[0]:
         raise MatrixDimensionError(

@@ -485,6 +485,21 @@ class DFA(FiniteAutomaton):
 
         return minimized_dfa
 
+    def minimize(self) -> DFA:
+        """
+        最小化DFA —— 基类文档里的那个名字, 在这里可用
+
+        :meth:`~state_machine.base.StateMachine.minimize` 的文档承诺了
+        Hopcroft 最小化, 但基类本身不能实现它: Hopcroft 需要确定性结构,
+        而 ``_find_transition`` 只存在于 DFA。DFA 是真正支持最小化的
+        那个具体类, 所以在这里把基类的 API 名落实为
+        :meth:`minimize_hopcroft` 的委托, 两个名字等价。
+
+        返回:
+            最小化的DFA
+        """
+        return self.minimize_hopcroft()
+
     def _find_partition(self, state: State, partitions: list[set[State]]) -> frozenset[State]:
         """找到状态所在的分区"""
         for partition in partitions:

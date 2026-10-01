@@ -1171,14 +1171,18 @@ class StatisticsController:
     # the engines stay the single source of truth.
     # =========================================================================
 
-    def _records_from_matrix(self, fad_col: int, lad_col: int) -> list[tuple[float, float]]:
-        """Read (FAD, LAD) ranges for each row from the loaded matrix.
+    def _records_from_matrix(self, fad_col: int, lad_col: int, data: npt.NDArray | None = None) -> list[tuple[float, float]]:
+        """Read (FAD, LAD) ranges for each row from ``data`` or the loaded matrix.
 
         FAD = first appearance date, LAD = last appearance date, both in Ma
         (older = larger), matching the convention used by
         stratigraphy.time_bins and macroevolution.cohort.
+
+        ``data`` is read directly: a caller-supplied array must not become
+        the application's global dataset just because an analysis was run
+        on it. Must be called with the controller lock held.
         """
-        data = self._ensure_data(None)
+        data = self._ensure_data(data)
         n_vars = data.shape[1]
         for col, name in ((fad_col, "FAD"), (lad_col, "LAD")):
             if not 0 <= col < n_vars:
@@ -1198,13 +1202,15 @@ class StatisticsController:
         The taxon ranges are read from two columns of the loaded matrix
         (FAD, LAD); time intervals are derived from the observed age span so
         the caller does not have to invent bin edges.
+
+        ``data`` is analysed as given and never written back to the
+        application state, so a run against an explicit array leaves the
+        user's loaded dataset, metadata and undo history untouched.
         """
         from macroevolution.cohort import analyze_cohort_survivorship
 
         with self._lock:
-            if data is not None:
-                self._state.set_data_matrix(data)
-            records = self._records_from_matrix(fad_column, lad_column)
+            records = self._records_from_matrix(fad_column, lad_column, data)
             if not records:
                 raise ValidationError("No taxon ranges available for cohort analysis")
 
@@ -1226,13 +1232,15 @@ class StatisticsController:
         lad_column: int = 1,
         n_intervals: int = 8,
     ) -> Any:
-        """Foote per-capita diversity / origination / extinction over time bins."""
+        """Foote per-capita diversity / origination / extinction over time bins.
+
+        ``data`` is analysed as given and never written back to the
+        application state.
+        """
         from macroevolution.diversity import DiversityDynamics
 
         with self._lock:
-            if data is not None:
-                self._state.set_data_matrix(data)
-            records = self._records_from_matrix(fad_column, lad_column)
+            records = self._records_from_matrix(fad_column, lad_column, data)
             if not records:
                 raise ValidationError("No taxon ranges available for diversity dynamics")
 
@@ -1253,13 +1261,15 @@ class StatisticsController:
         time_column: int = 0,
         event_column: int = 1,
     ) -> Any:
-        """Kaplan-Meier survival curve from a duration + event-indicator pair."""
+        """Kaplan-Meier survival curve from a duration + event-indicator pair.
+
+        ``data`` is analysed as given and never written back to the
+        application state.
+        """
         from macroevolution.survival import KaplanMeierAnalyzer
 
         with self._lock:
-            if data is not None:
-                self._state.set_data_matrix(data)
-            matrix = self._ensure_data(None)
+            matrix = self._ensure_data(data)
             n_vars = matrix.shape[1]
             for col, name in ((time_column, "duration"), (event_column, "event")):
                 if not 0 <= col < n_vars:
@@ -1283,13 +1293,15 @@ class StatisticsController:
         time_b: int = 2,
         event_b: int = 3,
     ) -> Any:
-        """Log-rank test between two duration/event column pairs."""
+        """Log-rank test between two duration/event column pairs.
+
+        ``data`` is analysed as given and never written back to the
+        application state.
+        """
         from macroevolution.survival import log_rank_test
 
         with self._lock:
-            if data is not None:
-                self._state.set_data_matrix(data)
-            matrix = self._ensure_data(None)
+            matrix = self._ensure_data(data)
             n_vars = matrix.shape[1]
             for col, name in ((time_a, "A duration"), (event_a, "A event"), (time_b, "B duration"), (event_b, "B event")):
                 if not 0 <= col < n_vars:
@@ -1343,14 +1355,50 @@ class StatisticsController:
             self._state.cache_result("gpa3d_result", result)
             return result
 
-    def run_tps3d(self, source: Any, target: Any, **kwargs: Any) -> Any:
-        """Thin-plate spline in 3-D with a Jacobian and deformation grid."""
+    def run_tps3d(
+        self,
+        source: Any,
+        target: Any,
+        grid_range: tuple[float, float, float, float, float, float] | None = None,
+        resolution: tuple[int, int, int] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Thin-plate spline in 3-D with a Jacobian and deformation grid.
+
+        ``TPS3D.create_deformation_grid`` REQUIRES ``grid_range`` and
+        ``resolution``; calling it with no arguments raised
+        ``TypeError: create_deformation_grid() missing 2 required
+        positional arguments``, so this path could never succeed. When they
+        are not supplied, derive them from the target landmark cloud.
+        """
         from morpho3d.tps3d import TPS3D
+
+        import numpy as _np
 
         with self._lock:
             tps = TPS3D(**kwargs)
             tps.fit(source, target)
-            result = tps.create_deformation_grid()
+
+            if grid_range is None:
+                arr = _np.asarray(target, dtype=float)
+                if arr.ndim != 2 or arr.shape[1] != 3:
+                    raise ValueError(
+                        "run_tps3d needs 3-D landmarks (n, 3) to derive a "
+                        f"deformation grid, got shape {arr.shape}"
+                    )
+                lo = arr.min(axis=0)
+                hi = arr.max(axis=0)
+                # a zero-extent axis would collapse the axis to a single plane
+                pad = _np.where(hi - lo > 0, 0.0, 1.0)
+                grid_range = (
+                    float(lo[0]), float(hi[0]),
+                    float(lo[1]), float(hi[1]),
+                    float(lo[2]), float(hi[2] + pad[2]) if hi[2] - lo[2] <= 0 else float(hi[2]),
+                )
+            if resolution is None:
+                resolution = (10, 10, 10)
+
+            result = tps.create_deformation_grid(grid_range, resolution)
             self._state.cache_result("tps3d_result", result)
             return result
 
@@ -1418,6 +1466,40 @@ class StatisticsController:
             )
         return np.asarray(aligned_attr, dtype=float)
 
+    def _resolve_pre_gpa_centroid_sizes(self, aligned: npt.NDArray | None) -> npt.NDArray | None:
+        """Return the PRE-GPA centroid sizes of the cached GPA result.
+
+        GPA scales every specimen to a common centroid size, so sizes
+        recomputed from ``GPAResult.aligned_configurations`` are all
+        equal and log(CS) carries no information -- the allometry
+        regression against them is undefined. ``GPAResult.centroid_sizes``
+        holds the sizes measured *before* that scaling, so the cached
+        path hands them to the analyzer. The caller must hold
+        ``self._lock``.
+
+        Returns ``None`` -- meaning "let the analyzer recompute" -- when an
+        explicit array was passed by the caller, when nothing is cached, or
+        when the cached sizes do not match the configurations' specimen
+        count (a stale cache must not corrupt a new analysis).
+        """
+        if aligned is not None:
+            return None
+
+        cached = self._state.get_cached_result("gpa_result")
+        sizes = getattr(cached, "centroid_sizes", None)
+        if sizes is None:
+            return None
+
+        sizes = np.asarray(sizes, dtype=float)
+        aligned_attr = getattr(cached, "aligned_configurations", None)
+        if aligned_attr is not None and sizes.size != np.asarray(aligned_attr).shape[0]:
+            self._logger.warning(
+                f"Cached gpa_result has {sizes.size} centroid sizes for "
+                f"{np.asarray(aligned_attr).shape[0]} configurations; ignoring them"
+            )
+            return None
+        return sizes
+
     def analyze_allometry(
         self,
         aligned_configurations: npt.NDArray | None = None,
@@ -1446,12 +1528,17 @@ class StatisticsController:
 
         with self._lock:
             configurations = self._resolve_aligned_configurations(aligned_configurations, n_dims=n_dims)
+            # Sizes taken before GPA scaling; see _resolve_pre_gpa_centroid_sizes.
+            centroid_sizes = self._resolve_pre_gpa_centroid_sizes(aligned_configurations)
             self._logger.info(
                 f"analyze_allometry called with shape {configurations.shape}, "
-                f"n_components={n_components}, n_dims={n_dims}"
+                f"n_components={n_components}, n_dims={n_dims}, "
+                f"pre_gpa_centroid_sizes={'yes' if centroid_sizes is not None else 'no'}"
             )
             analyzer = AllometryAnalyzer()
-            result = analyzer.analyze_allometry(configurations, n_components=n_components)
+            result = analyzer.analyze_allometry(
+                configurations, n_components=n_components, centroid_sizes=centroid_sizes
+            )
             self._state.cache_result("allometry_result", result)
             return result
 

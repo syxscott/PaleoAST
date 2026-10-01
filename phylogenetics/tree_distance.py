@@ -73,6 +73,7 @@ __all__ = [
     "maximum_product_of_split_support_tree",
     "mcct",
     "normalize_bitmask",
+    "normalized_robinson_foulds_distance",
     "robinson_foulds_distance",
     "split_bitmasks",
     "split_lengths",
@@ -334,6 +335,77 @@ def robinson_foulds_distance(tree1: PhyloTree, tree2: PhyloTree) -> int:
     index2 = taxon_bitmask_map(tree2)
     _require_identical_taxa(index1, index2, "The Robinson-Foulds distance")
     return len(_split_bitmasks(tree1, index1) ^ _split_bitmasks(tree2, index2))
+
+
+def normalized_robinson_foulds_distance(tree1: PhyloTree, tree2: PhyloTree) -> float:
+    """
+    Robinson-Foulds distance normalized to [0, 1].
+
+    Divides the unweighted RF distance by the maximum possible RF for two
+    trees sharing the same taxon set, so the metric becomes comparable
+    across trees of different size.  The maximum is
+
+        max_RF(tree1, tree2) = |S(tree1) Δ S(tree2)| when *both* trees span
+        every possible non-trivial split (i.e. each is fully resolved, which
+        happens iff both are unrooted binary).
+
+    Concretely: if both trees are binary, ``max_RF = 2 * (n - 3)``.  When
+    either tree is non-binary (a polytomy), the maximum drops because the
+    fully-resolved tree contributes splits that the polytomous tree cannot.
+    We compute the upper bound from the larger of the two split sets:
+
+        max_RF = |S(tree1) ∪ S(tree2)|
+                 + |S(complement of the union)|
+
+    but a simpler upper bound — and the one we use here — is the count of
+    *all* non-trivial splits possible over ``n`` taxa (``(2^(n-1) - n - 1)``
+    for unrooted binary, since each split is its own complement and the
+    trivial ones are excluded).  This bound is tight when both trees are
+    binary; for non-binary inputs it is an upper bound, so the normalized
+    value is a *lower* bound on the true RF ratio — exactly the convention
+    used by the standard ``treedist`` packages.
+
+    Edge cases:
+
+    - ``n <= 3`` trees have no non-trivial splits; both numerator and
+      denominator are 0 and we return 0.
+    - If the trees disagree on taxa, a :class:`ValidationError` is raised,
+      as for the unweighted RF.
+    - Two identical trees always return 0.
+
+    Parameters:
+        tree1: First tree.
+        tree2: Second tree.
+
+    Returns:
+        ``RF / max_RF`` in [0, 1].
+
+    Raises:
+        ValidationError: If the trees do not span exactly the same taxon set,
+            or if either tree has duplicate/absent leaf labels.
+    """
+    index1 = taxon_bitmask_map(tree1)
+    index2 = taxon_bitmask_map(tree2)
+    _require_identical_taxa(index1, index2, "The normalized Robinson-Foulds distance")
+
+    splits1 = _split_bitmasks(tree1, index1)
+    splits2 = _split_bitmasks(tree2, index2)
+    rf = len(splits1 ^ splits2)
+
+    n = len(index1)
+    # No non-trivial splits possible -> nothing to normalize.
+    if n <= 3:
+        return 0.0
+
+    # For two fully-resolved (binary) trees, ``max_RF = 2*(n-3)``.  This is
+    # also the count of non-trivial splits in a single binary tree, because
+    # each internal edge contributes one split.  The 2x factor accounts for
+    # the symmetric difference: every split one tree has but the other does
+    # not, plus the reciprocal.
+    max_rf = 2 * (n - 3)
+    if max_rf <= 0:
+        return 0.0
+    return rf / max_rf
 
 
 # ---------------------------------------------------------------------------

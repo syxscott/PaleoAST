@@ -199,11 +199,6 @@ def qapp():
     return app
 
 
-@pytest.mark.skip(
-    reason="顺序依赖: 独立运行通过; 全量套件中因 tests/models 无头 "
-    "event-bus mock 与全局单例的隔离缺陷而失败 (HEAD 同样复现)。"
-    "需要测试隔离重构: 每测试重建 StateManager/EventBus。"
-)
 def test_spreadsheet_transform_pushes_into_state_manager_undo_stack(qapp):
     """Regression: Spreadsheet undo was decoupled from StateManager undo.
 

@@ -716,7 +716,7 @@ class HeuristicSearch:
 
                 # 检查是否等长
                 elif abs(best_neighbor_score - self._optimal_score) < 1e-10:
-                    self._optimal_trees.append(self._deep_copy_tree(best_neighbor))
+                    self._append_optimal_tree(best_neighbor)
 
             # 冷却
             self._temperature *= self._cooling_rate
@@ -742,6 +742,43 @@ class HeuristicSearch:
             time_elapsed=elapsed,
             neighbors_evaluated=self._neighbors_evaluated,
         )
+
+    def _append_optimal_tree(self, tree: PhyloTree) -> bool:
+        """把 tree 加入等长树列表，按无根拓扑去重。
+
+        此前每一轮遇到并列最优就直接 append，而去重只发生在
+        ``_generate_neighbors`` 的单轮内部（867-880 行那段）。于是同一个
+        拓扑会在多轮之间被反复记入：``search()`` 可能返回上百棵
+        "等长树"，而它们的 Newick 字符串完全一样，
+        ``find_most_parsimonious_trees(max_trees=100)`` 会宣称找到了
+        100 棵最优树，实则只有一棵，``consensus_tree`` 再对这堆
+        重复项求一致性，得到的是一棵无意义的平凡树。
+
+        用 ``_unrooted_topology`` 而不是 Newick 字符串比较：新ick 对
+        同一棵无根树的不同子节点顺序会写出不同字符串（姐妹交换
+        ``(C,(D,B))`` 与 ``(D,(C,B))`` 就是同一棵无根树），按字符串
+        比较仍会把它们当成两棵不同的树。
+
+        Args:
+            tree: 与当前最优分数并列的候选树
+
+        Returns:
+            True 表示已加入；False 表示拓扑重复，未加入。
+        """
+        try:
+            key = _unrooted_topology(tree)
+        except Exception:  # pragma: no cover - 退化路径：宁可保留也不丢树
+            self._optimal_trees.append(self._deep_copy_tree(tree))
+            return True
+
+        for existing in self._optimal_trees:
+            try:
+                if _unrooted_topology(existing) == key:
+                    return False
+            except Exception:  # pragma: no cover
+                continue
+        self._optimal_trees.append(self._deep_copy_tree(tree))
+        return True
 
     def _evaluate_tree(self, tree: PhyloTree, sequences: dict[str, str]) -> float:
         """

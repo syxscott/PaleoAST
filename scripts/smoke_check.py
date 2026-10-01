@@ -1,5 +1,16 @@
 """Full regression test for PaleoAST after bug fixes."""
 
+import sys
+from pathlib import Path
+
+# Put the project root on sys.path. Without this the script only works when
+# the CWD happens to be the repo root AND '' is still on sys.path -- run it
+# from anywhere else (or via an absolute path from another directory) and
+# every single check fails with "No module named 'stats'/'ecology'/...",
+# which reads like a catastrophic packaging break rather than a path
+# problem. The other scripts in this directory do this already.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import matplotlib
 import numpy as np
 from scipy.spatial.distance import pdist, squareform

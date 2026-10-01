@@ -579,11 +579,24 @@ class UnivariateAnalyzer:
                     # Compute q-statistic from p-value approximation
                     all_vals = np.concatenate(group_data)
                     df_within = len(all_vals) - n_groups
-                    ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
-                    # scipy's tukey_hsd uses stand_err = sqrt(MSE * (1/ni + 1/nj) / 2)
-                    # and the statistic is |mean_diff| / stand_err. Match the
-                    # fallback path below exactly so the reported q_stat is on
-                    # the studentized-range scale.
+                    # Use Python ``sum`` over per-group SSE scalars so the
+                    # formula works for unequal group sizes too (the previous
+                    # ``np.sum([array, array, ...])`` only worked when every
+                    # group had the same length).
+                    ms_within = sum(float(np.sum((g - np.mean(g)) ** 2)) for g in group_data) / df_within
+                    # Tukey q-statistic, matching R's ``TukeyHSD`` and
+                    # ``scipy.stats.tukey_hsd`` exactly:
+                    #     q = |mean_diff| / sqrt(MSE * (1/ni + 1/nj) / 2)
+                    # The ``/ 2`` inside the sqrt is required. It is what
+                    # scipy computes (``stand_err = sqrt(normalize * mse / 2)``,
+                    # scipy/stats/_hypotests.py) and is the convention the
+                    # studentized-range distribution is parameterised for.
+                    # Omitting it inflates q by exactly sqrt(2) and deflates
+                    # the reported p-value: on scipy's own documented example
+                    # (the headache-medicine data, p = 0.014448 / 0.980311 /
+                    # 0.020331) the q was 3.3630 / 0.1901 / 3.1729 instead of
+                    # 4.7560 / 0.2688 / 4.4872, reporting every pair as far
+                    # more significant than the data support.
                     se = np.sqrt(ms_within * (1.0 / len(group_data[i]) + 1.0 / len(group_data[j])) / 2.0)
                     q_stat = abs(mean_diff) / se if se > 0 else 0.0
 
@@ -616,17 +629,20 @@ class UnivariateAnalyzer:
             all_vals = np.concatenate(group_data)
             n_total = len(all_vals)
             df_within = n_total - n_groups
-            ms_within = np.sum([(g - np.mean(g)) ** 2 for g in group_data]) / df_within
+            # Use Python ``sum`` over per-group SSE scalars so the formula
+            # works for unequal group sizes (the previous ``np.sum([...])``
+            # only worked when every group had the same length).
+            ms_within = sum(float(np.sum((g - np.mean(g)) ** 2)) for g in group_data) / df_within
 
             for i in range(n_groups):
                 for j in range(i + 1, n_groups):
                     ni = len(group_data[i])
                     nj = len(group_data[j])
                     mean_diff = np.mean(group_data[i]) - np.mean(group_data[j])
-                    # scipy's tukey_hsd uses stand_err = sqrt(MSE * (1/ni + 1/nj) / 2)
-                    # and the statistic is |mean_diff| / stand_err. We use
-                    # exactly the same formula here so the fallback agrees
-                    # with sp_stats.tukey_hsd to numerical precision.
+                    # Same convention as the primary branch above (and as
+                    # ``scipy.stats.tukey_hsd``): the ``/ 2`` belongs INSIDE
+                    # the sqrt. Without it q is inflated by sqrt(2) and the
+                    # studentized-range p-value is correspondingly too small.
                     se = np.sqrt(ms_within * (1.0 / ni + 1.0 / nj) / 2.0)
                     q_stat = abs(mean_diff) / se if se > 0 else 0.0
                     try:

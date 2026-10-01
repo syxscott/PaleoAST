@@ -8,6 +8,13 @@ background, colour mode and JPEG quality.
 The facade is intentionally format-agnostic so callers (PlotCanvas,
 FloatingToolbar, MainWindow status-bar menu, batch export) all share
 the same validation, error reporting and preset pipeline.
+
+All four formats are written by Matplotlib's own ``savefig``, which
+brings its own raster backend; no third-party imaging library is
+imported here. (An earlier version imported Pillow "for raster
+formats" and then never used it -- Pillow appears in neither
+requirements.txt nor pyproject.toml, and the import was reachable only
+as an unused module attribute.)
 """
 
 from __future__ import annotations
@@ -19,14 +26,6 @@ from typing import Any, Callable, Literal
 
 import matplotlib
 from matplotlib.figure import Figure
-
-# Optional Pillow backend. Pillow is only required when exporting to
-# raster formats; for vector formats we can skip the import. We import
-# it lazily to keep the module import-time low.
-try:  # pragma: no cover - exercised when Pillow is installed
-    from PIL import Image  # noqa: F401
-except ImportError:  # pragma: no cover
-    Image = None  # type: ignore[assignment]
 
 
 ExportFormat = Literal["svg", "pdf", "png", "jpg"]
@@ -252,6 +251,15 @@ def export_figure(figure: Figure, path: str, options: PlotExportOptions) -> str:
     fmt = options.format
 
     out_path = os.path.abspath(_normalize_path(path, fmt))
+
+    # Ensure the parent directory exists. ``savefig`` itself raises a
+    # bare ``FileNotFoundError`` when the directory is missing, which is
+    # a poor experience for a GUI exporter ("Save As..." → the user
+    # picked a folder, the dialog silently failed). Create the folder
+    # tree here so the user can type any writable path.
+    parent = os.path.dirname(out_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
     # Snapshot figure state BEFORE any mutation — in particular before
     # the optional ``set_size_inches`` below. The previous code took the

@@ -587,7 +587,7 @@ def partial_gpa(
                       slid with one-sided tangents).
         surface_indices: Legacy form of ``surfaces``.
         n_dims: Number of dimensions (2 for 2D, 3 for 3D).
-        n_iterations: Maximum number of sliding iterations.
+        n_iterations: Maximum number of sliding iterations (must be >= 1).
         tolerance: Convergence tolerance for sliding.
         n_landmarks: Number of landmarks (required if ambiguous from shape).
 
@@ -620,6 +620,14 @@ def partial_gpa(
     if isinstance(fixed_landmarks, list):
         fixed_landmarks = np.array(fixed_landmarks)
     fixed_landmarks = fixed_landmarks.astype(int)
+
+    # `aligned`/`consensus` are produced by the sliding loop below and consumed
+    # after it, so zero iterations left both unbound (UnboundLocalError at the
+    # final `gpa.analyze(aligned)`). Reject the request instead: a partial GPA
+    # with no sliding pass is not a meaningful result, and `sliding_iterations`
+    # would have to be reported as a lie.
+    if n_iterations < 1:
+        raise MorphometricsError(f"n_iterations must be >= 1, got {n_iterations}")
 
     # Determine the configuration size up front so curve topology can be
     # validated against it.
@@ -811,43 +819,59 @@ def _compute_surface_tangents_and_normals(
     """
     Compute surface normals and tangent basis for surface semilandmarks.
 
-    For a triangulated surface, uses the normal to the tangent plane.
-    Returns normals and two tangent vectors spanning the plane.
+    For each surface point we estimate the local surface normal via
+    *local PCA* over a neighbourhood of points (Hoppe et al. 1992,
+    used in Meshlab / geomorph's ``slidingsemilandmarks3d`` when no
+    mesh adjacency is supplied).  The smallest eigenvector of the
+    3×3 covariance matrix of the neighbourhood is the surface normal;
+    the two largest eigenvectors span the tangent plane.
+
+    The earlier implementation averaged ``cross(p_j - p_c, p_surface[0]
+    - p_c)`` for j in neighbours[:3], reusing a constant v2.  By
+    linearity that collapses to ``cross(Σ(p_j - p_c), v2_const)`` —
+    a single arbitrary face cross product, NOT the mean of independent
+    face normals — so the resulting normal was unrelated to the local
+    geometry.  The bug was invisible on flat surfaces (cross of
+    in-plane vectors is constant) and gave completely wrong directions
+    on curved surfaces (e.g. a sphere cap normal pointed tangentially
+    rather than radially).
     """
     n_points = len(surface)
     normals = np.zeros((n_points, 3))
     tangent_basis = np.zeros((n_points, 2, 3))
 
     for i, idx in enumerate(surface):
-        # Find neighbors in the surface (simplified: use all other surface points)
-        neighbors = [j for j in surface if j != idx]
-
-        if len(neighbors) < 2:
-            normals[i] = np.array([0, 0, 1])
-            tangent_basis[i, 0] = np.array([1, 0, 0])
-            tangent_basis[i, 1] = np.array([0, 1, 0])
+        center = consensus[idx]
+        # Build the local neighbourhood: the other points on the same
+        # surface (or fall back to a single-point default if there are
+        # not enough distinct neighbours).
+        if len(surface) < 3:
+            normals[i] = np.array([0.0, 0.0, 1.0])
+            tangent_basis[i, 0] = np.array([1.0, 0.0, 0.0])
+            tangent_basis[i, 1] = np.array([0.0, 1.0, 0.0])
             continue
 
-        # Compute normal as average cross product of neighbor vectors
-        normal = np.zeros(3)
-        for j in neighbors[:3]:  # Use first 3 neighbors
-            v1 = consensus[j] - consensus[idx]
-            v2 = consensus[surface[0]] - consensus[idx] if surface[0] != idx else consensus[surface[1]] - consensus[idx]
-            normal += np.cross(v1, v2)
+        neighbours = np.stack([consensus[j] for j in surface if j != idx])
+        offsets = neighbours - center
 
-        norm = np.linalg.norm(normal)
-        if norm > 1e-10:
-            normals[i] = normal / norm
-        else:
-            normals[i] = np.array([0, 0, 1])
+        # 3×3 covariance of the local patch.
+        cov = offsets.T @ offsets / max(offsets.shape[0], 1)
+        # Symmetrise to keep eigh numerically stable.
+        cov = 0.5 * (cov + cov.T)
+        _eigvals, eigvecs = np.linalg.eigh(cov)
+        # eigh returns ascending eigenvalues: the SMALLEST eigenvector
+        # is the surface normal (the two largest span the tangent
+        # plane).  The sign of the eigenvector is arbitrary; we choose
+        # the sign whose dot product with the offset sum (the local
+        # outward direction of the patch) is positive.
+        n_vec = eigvecs[:, 0]
+        if float(n_vec @ offsets.mean(axis=0)) < 0:
+            n_vec = -n_vec
+        normals[i] = n_vec
 
-        # Compute orthonormal basis in tangent plane
-        if abs(normals[i, 2]) < 0.9:
-            tangent_basis[i, 0] = np.cross(normals[i], np.array([0, 0, 1]))
-        else:
-            tangent_basis[i, 0] = np.cross(normals[i], np.array([0, 1, 0]))
-        tangent_basis[i, 0] = tangent_basis[i, 0] / np.linalg.norm(tangent_basis[i, 0])
-        tangent_basis[i, 1] = np.cross(normals[i], tangent_basis[i, 0])
+        # Orthonormal tangent basis from the two largest eigenvectors.
+        tangent_basis[i, 0] = eigvecs[:, 1]
+        tangent_basis[i, 1] = eigvecs[:, 2]
 
     return normals, tangent_basis
 

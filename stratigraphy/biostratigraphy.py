@@ -808,6 +808,22 @@ class RASCAnalyzer:
         """
         Perform RASC analysis.
 
+        Optimisation
+        ------------
+        The event ordering is improved by **adjacent-swap local search** over
+        the total-ranking cost: repeatedly swap positions i and i+1 whenever
+        the swap lowers the cost, until a full pass makes no improvement.
+
+        This is a hill climb, not the dynamic programming the literature
+        describes, and it is **not guaranteed to reach the global optimum**
+        for n_events >= 4. The swap loop used to start at ``i = 1``, which
+        pinned whatever event happened to start the ranking: position 0 was
+        never a candidate for a swap, so the search could only ever explore
+        permutations that kept the first event first. On a 4-event matrix
+        whose optimum cost is 52 the search returned 101. Starting at
+        ``i = 0`` restores the reachability that was missing; the residual
+        local-optimum risk is inherent to the algorithm, not a defect.
+
         Parameters:
             distance_matrix: Pairwise distance matrix between events (n_events, n_events)
             event_names: Names of events
@@ -838,7 +854,7 @@ class RASCAnalyzer:
             for iteration in range(n_iterations):
                 improved = False
 
-                for i in range(1, n_events - 1):
+                for i in range(n_events - 1):
                     # Try swapping i and i+1
                     current_score = self._compute_ranking_score(ranking, dist)
                     ranking[i], ranking[i + 1] = ranking[i + 1], ranking[i]

@@ -128,13 +128,18 @@ class RunQueue:
             self._notify(item)
             return item
 
+        # Validate the executor BEFORE the RUNNING transition. Raising after it
+        # left the item stuck in RUNNING forever: every later run_next() then hit
+        # the is_busy() guard above, so the queue was only recoverable through
+        # clear_results(). Placed after the guard so a guard-skip still works
+        # without an executor, exactly as before.
+        if self._executor is None:
+            raise RuntimeError("RunQueue has no executor configured")
+
         item.status = RUNNING
         item.error = None
         item.started_at = time.time()
         self._notify(item)
-
-        if self._executor is None:
-            raise RuntimeError("RunQueue has no executor configured")
 
         finished = {"done": False}
 

@@ -286,6 +286,14 @@ class PaleoEnvironmentReconstructor:
                 was_flipped = True
                 self._logger.info(_("Polarity auto-calibrated: sign of axis 1 flipped to match height monotonicity"))
 
+            # ``corr`` was measured against ``row_axis_raw``. The calibration
+            # above negates the axis, so the correlation of the axis the caller
+            # actually receives is the negated one. Storing the pre-flip value
+            # made the reported r have the opposite sign to the returned axis
+            # (and to the biplot the caller draws from it).
+            if was_flipped:
+                corr = -corr
+
             total_inertia = float(np.sum(s_vals**2))
             axis_inertia = float(s_vals[0] ** 2)
             explained = axis_inertia / total_inertia if total_inertia > 0 else 0.0

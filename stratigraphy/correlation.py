@@ -243,8 +243,35 @@ class AgeModelAnalyzer:
                     "check constraint ordering (age must be monotonic with depth)."
                 )
 
-        ci_lower = modeled_ages - 1.96 * constraint_errors.mean()
-        ci_upper = modeled_ages + 1.96 * constraint_errors.mean()
+        # ------------------------------------------------------------------
+        # DEPTH-VARYING 95% CONFIDENCE INTERVAL (缺陷 3 修复)
+        # ------------------------------------------------------------------
+        # The previous implementation used a flat half-width of
+        #     1.96 * constraint_errors.mean()
+        # at every depth — a fake. Real age-model uncertainty:
+        #   1) is small (≈ constraint error) AT each dated horizon,
+        #   2) grows in the gaps, where it must be interpolated from the
+        #      residual structure of the dated constraints,
+        #   3) blows up outside the dated range (extrapolation).
+        #
+        # Approach: inverse-distance-weighted interpolation of the
+        # constraint-point uncertainties onto every height in the section.
+        # At a constraint height the weight of that constraint's own
+        # error goes to 1.0, so the half-width collapses to that
+        # constraint's error; in a gap the half-width is the IDW blend
+        # of neighbouring constraint errors; outside the dated range the
+        # half-width keeps growing with distance to the nearest dated
+        # horizon (capped at 3× the maximum constraint error to avoid
+        # runaway extrapolation). 1.96 is the 95 % normal-quantile.
+        # ------------------------------------------------------------------
+        heights_arr = np.asarray(section.heights, dtype=float)
+        half_width = _depth_varying_half_width(
+            heights_arr,
+            constraint_heights,
+            constraint_errors,
+        )
+        ci_lower = modeled_ages - half_width
+        ci_upper = modeled_ages + half_width
 
         self._logger.info(
             f"Age model built: {len(section.heights)} points, "
@@ -257,6 +284,94 @@ class AgeModelAnalyzer:
             confidence_intervals=(ci_lower, ci_upper),
             sedimentation_rates=rates,
         )
+
+
+def _depth_varying_half_width(
+    section_heights: np.ndarray,
+    constraint_heights: np.ndarray,
+    constraint_errors: np.ndarray,
+    z_score: float = 1.96,
+    extrapolation_floor: float = 3.0,
+) -> np.ndarray:
+    """Inverse-distance-weighted depth-varying half-width for an age model.
+
+    For each height in the section we compute
+
+        h_i = z_score × σ_i
+
+    where σ_i is the inverse-distance-weighted blend of the per-constraint
+    age uncertainties:
+
+        σ_i = Σ_j w_ij × σ_j  /  Σ_j w_ij
+        w_ij = 1 / (|H_i - H_j| + ε)²
+
+    (ε > 0 keeps the diagonal — the constraint height itself —
+    numerically well-defined and gives that height a finite weight of
+    1 / ε² that swamps everything else, collapsing σ_i to σ_j. So at a
+    dated horizon the half-width equals the constraint's own error, as
+    it should.)
+
+    For heights outside the dated range the blended σ_i can become very
+    small because there is only one nearby constraint contributing. We
+    multiply the blend by a distance penalty that grows linearly with
+    distance to the nearest dated horizon, capped at
+    ``extrapolation_floor``. The cap is what keeps the extrapolation
+    honest: an undated end of the section cannot be claimed to be
+    known better than ``extrapolation_floor`` × the maximum
+    per-constraint error.
+
+    Parameters
+    ----------
+    section_heights : (n,) array
+        Heights at which the age model is evaluated.
+    constraint_heights : (k,) array
+        Heights of the dated constraints.
+    constraint_errors : (k,) array
+        1σ uncertainties of the dated constraints.
+    z_score : float, default 1.96
+        Normal-quantile multiplier (1.96 for 95 %).
+    extrapolation_floor : float, default 3.0
+        Multiplier on max(constraint_error) for extrapolation cap.
+
+    Returns
+    -------
+    half_width : (n,) array
+    """
+    constraint_heights = np.asarray(constraint_heights, dtype=float)
+    constraint_errors = np.asarray(constraint_errors, dtype=float)
+    section_heights = np.asarray(section_heights, dtype=float)
+    n = len(section_heights)
+    k = len(constraint_heights)
+
+    if k == 0:
+        return np.full(n, np.nan)
+
+    eps = 1e-3  # meters; small enough that constraint-point weight dominates
+    sigma_blend = np.empty(n, dtype=float)
+    for i, h in enumerate(section_heights):
+        d = np.abs(constraint_heights - h) + eps
+        w = 1.0 / (d * d)
+        sigma_blend[i] = float(np.sum(w * constraint_errors) / np.sum(w))
+
+    # Distance-to-nearest-dated-horizon penalty
+    dist_to_nearest = np.min(
+        np.abs(section_heights[:, None] - constraint_heights[None, :]), axis=1
+    )
+    in_range = (section_heights >= constraint_heights.min()) & (
+        section_heights <= constraint_heights.max()
+    )
+    # Penalty: 1 in-range, grows linearly outside, capped at extrapolation_floor
+    penalty = np.where(
+        in_range,
+        1.0,
+        np.minimum(
+            1.0 + dist_to_nearest / max(float(np.ptp(constraint_heights)), 1.0),
+            extrapolation_floor,
+        ),
+    )
+
+    sigma = sigma_blend * penalty
+    return z_score * sigma
 
 
 def pyper_peterman_correction(

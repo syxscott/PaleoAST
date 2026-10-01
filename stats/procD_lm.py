@@ -238,17 +238,31 @@ def procD_lm(
 
     # Permutation test: "residual" permutation in the sense of the
     # permutations package (geomorph default) — for each term the residuals
-    # of the model WITHOUT that term (delete-one reduced model) are shuffled
-    # among error units and added back to the reduced fit.  Permuting the
-    # *full*-model residuals instead would keep the tested effect locked in
-    # the fitted values and make every p-value ≈ 1.
+    # of the model's SEQUENTIAL reduced fit (the columns present before this
+    # term) are shuffled among error units and added back to that fit.
+    # Permuting the *full*-model residuals instead would keep the tested
+    # effect locked in the fitted values and make every p-value ≈ 1.
     if n_permutations and n_permutations > 0:
         rng = np.random.default_rng(seed)
         units = np.arange(n) if error_labels is None else np.asarray(error_labels)
         unit_ids = np.unique(units)
-        all_cols = list(range(D.shape[1]))
-        # per-term delete-one setup: reduced fit, reduced residuals, observed F
-        test_stat: dict[int, tuple[npt.NDArray, npt.NDArray, float]] = {}
+        # Positional lookup for the shuffle. Permutation units are LABELS
+        # (specimen IDs, site codes, ...), not array indices, so each unit
+        # value is mapped to the first observation index carrying it. Using
+        # the label values themselves as indices raised IndexError for
+        # string IDs and silently read the wrong rows for non-contiguous
+        # integer IDs.
+        unit_first_pos: dict[object, int] = {}
+        for pos, unit in enumerate(units.tolist()):
+            unit_first_pos.setdefault(unit, pos)
+        # per-term setup: reduced columns, reduced fit, reduced residuals and
+        # the observed F. The reduced COLUMN SET travels with the statistic so
+        # the permuted refit below measures the same sequential contrast as
+        # f_obs — recomputing a delete-one column set inside the loop made
+        # p = P(delete-one F_perm >= sequential F_obs), i.e. two different
+        # hypotheses (the null sat at F ≈ 1 while f_obs was a sequential
+        # statistic on a completely different scale).
+        test_stat: dict[int, tuple[list[int], npt.NDArray, npt.NDArray, float]] = {}
         for term_idx, tname in enumerate(term_names):
             if term_idx == 0 and tname == "Intercept":
                 continue
@@ -264,16 +278,19 @@ def procD_lm(
             rss_red = float(np.sum(_proc_ss(X, fit_red)))
             df_j = max(1, term_df.get(term_idx, 1))
             f_obs = ((rss_red - residual_ss) / (df_j * resid_ms)) if resid_ms > 0 else 0.0
-            test_stat[term_idx] = (fit_red, X - fit_red, f_obs)
+            test_stat[term_idx] = (red_cols, fit_red, X - fit_red, f_obs)
         counts = {term_names[j]: 0 for j in test_stat}
         for _step in range(n_permutations):
             perm_units = rng.permutation(unit_ids)
-            mapping = dict(zip(unit_ids, perm_units))
-            perm_idx = np.array([mapping[u] for u in units])
-            for term_idx, (fit_red, resid_red, f_obs) in test_stat.items():
+            # each unit takes over the residual block of the unit it was
+            # swapped with; unit values -> first observation index
+            mapping = {
+                u: unit_first_pos[swap] for u, swap in zip(unit_ids.tolist(), perm_units.tolist(), strict=True)
+            }
+            perm_idx = np.array([mapping[u] for u in units.tolist()], dtype=int)
+            for term_idx, (red_cols, fit_red, resid_red, f_obs) in test_stat.items():
                 y_perm = fit_red + resid_red[perm_idx]
                 # refit both models on the permuted data (fixed design)
-                red_cols = [c for c in all_cols if c != term_idx]
                 if red_cols:
                     fit_red_p = _fit_flat(y_perm.reshape(n, p * k), D[:, red_cols]).reshape(n, p, k)
                 else:

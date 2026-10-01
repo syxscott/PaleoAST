@@ -19,7 +19,6 @@ import logging
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QGroupBox,
@@ -52,10 +51,19 @@ class PCMBaseDialog(QDialog):
 
     resultsReady = pyqtSignal(dict)
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
         super().__init__(parent)
         self._logger = logging.getLogger(f"{__name__}.{title}")
         self._is_dark_theme = False
+        # Reuse the main-window's controller so the analyzers share the
+        # same locked state. ``None`` falls back to a private
+        # ``StatisticsController`` for headless tests.
+        self._controller = controller
 
         self.setWindowTitle(title)
         self.setMinimumSize(700, 600)
@@ -212,6 +220,23 @@ class PCMBaseDialog(QDialog):
         """Run the analysis. Subclasses implement specific logic."""
         raise NotImplementedError
 
+    def _get_controller(self):
+        """Return the inherited controller or build a fresh one for tests."""
+        if self._controller is not None:
+            return self._controller
+        from controllers.statistics_controller import StatisticsController
+
+        return StatisticsController()
+
+    def _show_error(self, exc: Exception, label: str) -> None:
+        self._logger.error("%s failed: %s", label, exc)
+        try:
+            from views.ui_main_window import format_user_error
+        except Exception:
+            format_user_error = None
+        msg = format_user_error(exc, label) if format_user_error is not None else str(exc)
+        QMessageBox.critical(self, _("Error"), msg)
+
 
 class PICDialog(PCMBaseDialog):
     """
@@ -221,21 +246,36 @@ class PICDialog(PCMBaseDialog):
         IC = (x_child1 - x_child2) / sqrt(v1 + v2)
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Phylogenetic Independent Contrasts (PIC)"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Phylogenetic Independent Contrasts (PIC)"),
+            parent,
+            controller=controller,
+        )
 
-        # Method-specific options
+        # Method-specific options. The "Use branch lengths" checkbox used
+        # to live here, but the underlying ``PCMAnalyzer.compute_contrasts``
+        # (stats/pcm.py) has no such switch — the PIC formula *requires*
+        # branch lengths to standardize the contrast. A ``Validate`` check
+        # in the engine already refuses zero-length edges. Exposing a
+        # checkbox that is hard-coded true on the UI was misleading, so
+        # the control has been removed and an info note replaces it.
+
         method_layout = self._method_widget.layout()
 
-        opts_group = QGroupBox(_("Options"))
-        opts_layout = QHBoxLayout(opts_group)
-
-        self._check_branch_lengths = QCheckBox(_("Use branch lengths"))
-        self._check_branch_lengths.setChecked(True)
-        opts_layout.addWidget(self._check_branch_lengths)
-
-        opts_layout.addStretch()
-        method_layout.addWidget(opts_group)
+        info_label = QLabel(
+            _(
+                "PIC always standardizes contrasts by branch length "
+                "(Felsenstein 1985); branch lengths are required."
+            )
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
+        method_layout.addWidget(info_label)
 
     def _on_run(self) -> None:
         """Run PIC analysis."""
@@ -250,12 +290,15 @@ class PICDialog(PCMBaseDialog):
             return
 
         try:
-            from controllers.statistics_controller import StatisticsController
-
-            ctrl = StatisticsController()
+            # Use the controller inherited from the main window so the
+            # analyzers share the locked state. ``_get_controller`` falls
+            # back to a fresh ``StatisticsController`` only for headless
+            # tests where ``parent`` is None.
+            ctrl = self._get_controller()
             result = ctrl.analyze_pic(tree_text, trait_values)
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"PIC completed: {result.n_contrasts} contrasts")
+            self.resultsReady.emit(result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()})
         except Exception as e:
             self._logger.error(f"PIC failed: {e}")
             from views.ui_main_window import format_user_error
@@ -270,8 +313,16 @@ class AncestralStateDialog(PCMBaseDialog):
     Reconstructs trait values at internal nodes via weighted squared-change parsimony.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Ancestral State Reconstruction (ASR)"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Ancestral State Reconstruction (ASR)"),
+            parent,
+            controller=controller,
+        )
 
         method_layout = self._method_widget.layout()
 
@@ -280,7 +331,7 @@ class AncestralStateDialog(PCMBaseDialog):
 
         model_layout.addWidget(QLabel(_("Model:")))
         self._model_combo = QComboBox()
-        self._model_combo.addItems(["Brownian Motion (BM)", "Ornstein-Uhlenbeck (OU)"])
+        self._model_combo.addItems([_("Brownian Motion (BM)"), _("Ornstein-Uhlenbeck (OU)")])
         model_layout.addWidget(self._model_combo)
         model_layout.addStretch()
 
@@ -301,9 +352,7 @@ class AncestralStateDialog(PCMBaseDialog):
         model = "bm" if self._model_combo.currentIndex() == 0 else "ou"
 
         try:
-            from controllers.statistics_controller import StatisticsController
-
-            ctrl = StatisticsController()
+            ctrl = self._get_controller()
             result = ctrl.analyze_ancestral_states(tree_text, trait_values, model=model)
 
             # Format results
@@ -312,11 +361,14 @@ class AncestralStateDialog(PCMBaseDialog):
                 lines.append(f"  {node_name}: {state:.4f}")
             self._results_text.setPlainText("\n".join(lines))
             self._logger.info(f"ASR completed: {len(result.node_states)} nodes")
+            self.resultsReady.emit(
+                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
+            )
         except Exception as e:
             self._logger.error(f"ASR failed: {e}")
             from views.ui_main_window import format_user_error
 
-            QMessageBox.critical(self, _("Error"), format_user_error(e, "祖先状态重建"))
+            QMessageBox.critical(self, _("Error"), format_user_error(e, _("Ancestral State Reconstruction")))
 
 
 class PhyloSignalDialog(PCMBaseDialog):
@@ -329,8 +381,16 @@ class PhyloSignalDialog(PCMBaseDialog):
         K > 1: phylogenetic niche conservatism
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Phylogenetic Signal (Blomberg's K)"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Phylogenetic Signal (Blomberg's K)"),
+            parent,
+            controller=controller,
+        )
 
         method_layout = self._method_widget.layout()
 
@@ -361,19 +421,20 @@ class PhyloSignalDialog(PCMBaseDialog):
             return
 
         try:
-            from controllers.statistics_controller import StatisticsController
-
-            ctrl = StatisticsController()
+            ctrl = self._get_controller()
             result = ctrl.analyze_phylogenetic_signal(
                 tree_text, trait_values, n_randomizations=self._n_perm_spin.value()
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Blomberg's K = {result.k:.4f}")
+            self.resultsReady.emit(
+                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
+            )
         except Exception as e:
             self._logger.error(f"Phylogenetic signal failed: {e}")
             from views.ui_main_window import format_user_error
 
-            QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育信号"))
+            QMessageBox.critical(self, _("Error"), format_user_error(e, _("Phylogenetic Signal")))
 
 
 class PhyloANOVADialog(PCMBaseDialog):
@@ -384,8 +445,16 @@ class PhyloANOVADialog(PCMBaseDialog):
     phylogenetic non-independence.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Phylogenetic ANOVA"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Phylogenetic ANOVA"),
+            parent,
+            controller=controller,
+        )
 
         method_layout = self._method_widget.layout()
 
@@ -406,7 +475,9 @@ class PhyloANOVADialog(PCMBaseDialog):
         group_layout.addWidget(group_info)
 
         self._group_input = QTextEdit()
-        self._group_input.setPlaceholderText("Homo_sapiens=Human\nPan_troglodytes=GreatApes\nGorilla_gorilla=GreatApes")
+        self._group_input.setPlaceholderText(
+            _("Homo_sapiens=Human\nPan_troglodytes=GreatApes\nGorilla_gorilla=GreatApes")
+        )
         self._group_input.setMaximumHeight(100)
         group_layout.addWidget(self._group_input)
 
@@ -465,16 +536,17 @@ class PhyloANOVADialog(PCMBaseDialog):
             return
 
         try:
-            from controllers.statistics_controller import StatisticsController
-
-            ctrl = StatisticsController()
+            ctrl = self._get_controller()
             result = ctrl.analyze_phylo_anova(
                 tree_text, trait_values, group_labels, n_permutations=self._n_perm_spin.value()
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Phylo-ANOVA: F={result.f_statistic:.4f}")
+            self.resultsReady.emit(
+                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
+            )
         except Exception as e:
             self._logger.error(f"Phylo-ANOVA failed: {e}")
             from views.ui_main_window import format_user_error
 
-            QMessageBox.critical(self, _("Error"), format_user_error(e, "系统发育方差分析"))
+            QMessageBox.critical(self, _("Error"), format_user_error(e, _("Phylogenetic ANOVA")))

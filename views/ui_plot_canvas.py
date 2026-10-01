@@ -538,7 +538,17 @@ class InteractivePlotCanvas(QWidget):
     # PCA Plotting Methods
     # =========================================================================
 
-    def plot_pca_scores(self, result: Any, pc1: int = 0, pc2: int = 1) -> None:
+    def plot_pca_scores(
+        self,
+        result: Any,
+        pc1: int = 0,
+        pc2: int = 1,
+        groups: list[int] | np.ndarray | None = None,
+        labels: list[str] | None = None,
+        group_names: list[str] | None = None,
+        annotate_offset: bool = True,
+        show_ellipses: bool | None = None,
+    ) -> None:
         """
         Plot PCA scores.
 
@@ -554,8 +564,40 @@ class InteractivePlotCanvas(QWidget):
             - Y-axis: PC2 scores
             - Points colored by group
             - Eigenvalue percentages on axes
+
+        Parameters:
+            result: PCAResult (or any object with ``scores`` /
+                ``explained_variance`` attributes) or a raw ``(n, k)`` score
+                matrix.
+            pc1, pc2: Principal-component indices to plot (0-indexed).
+            groups: Optional per-sample group labels. When supplied, the
+                points are coloured and (with ``>=2`` distinct groups) a
+                95% confidence ellipse is drawn around each group. When
+                ``None``, the canvas looks for ``result.groups``; failing
+                that, every point is treated as group 0.
+            labels: Optional per-sample text labels. When ``None``, falls
+                back to ``result.labels``; otherwise to ``S1..Sn``.
+            group_names: Optional human-readable group names (one per
+                distinct value in ``groups``). Falls back to ``Group <n>``.
+            annotate_offset: When True, dodge overlapping point labels
+                vertically (cheap iterative repel). Pass False to keep the
+                historic straight-above placement.
+            show_ellipses: ``True`` forces ellipses, ``False`` suppresses
+                them. ``None`` (default) draws them automatically when
+                there are >=2 groups OR when the toolbar ellipse toggle
+                is on.
         """
-        self._record_plot_call("plot_pca_scores", result, pc1=pc1, pc2=pc2)
+        self._record_plot_call(
+            "plot_pca_scores",
+            result,
+            pc1=pc1,
+            pc2=pc2,
+            groups=groups,
+            labels=labels,
+            group_names=group_names,
+            annotate_offset=annotate_offset,
+            show_ellipses=show_ellipses,
+        )
         self._ax.clear()
         self._current_plot_type = "pca"
 
@@ -570,15 +612,8 @@ class InteractivePlotCanvas(QWidget):
         else:
             eigenvalues = np.ones(scores.shape[1])
 
-        if hasattr(result, "labels"):
-            labels = result.labels
-        else:
-            labels = [f"S{i + 1}" for i in range(scores.shape[0])]
-
-        if hasattr(result, "groups"):
-            groups = result.groups
-        else:
-            groups = np.zeros(scores.shape[0], dtype=int)
+        labels, groups = self._resolve_metadata(result, labels, groups, scores)
+        group_names = self._resolve_group_names(groups, group_names)
 
         # Store data. NOTE: use the clamped dimensions for the actual
         # drawing below, not the raw arguments. ``_clamp_dims`` exists
@@ -615,6 +650,7 @@ class InteractivePlotCanvas(QWidget):
             idx = self._groups[group]
             color = self.COLORS[i % len(self.COLORS)]
 
+            display_name = group_names.get(group, f"Group {group + 1}")
             self._ax.scatter(
                 scores[idx, pc1],
                 scores[idx, pc2],
@@ -623,17 +659,22 @@ class InteractivePlotCanvas(QWidget):
                 alpha=0.7,
                 edgecolors="white",
                 linewidths=0.5,
-                label=f"Group {group + 1}" if len(unique_groups) > 1 else None,
+                label=display_name if len(unique_groups) > 1 else None,
                 picker=True,
             )
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(scores[:, pc1], scores[:, pc2], strict=False)):
-                self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
+            xs = scores[:, pc1]
+            ys = scores[:, pc2]
+            if annotate_offset:
+                self._annotate_with_offset(xs, ys, labels)
+            else:
+                for i, (x, y) in enumerate(zip(xs, ys, strict=False)):
+                    self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
 
-        # Add ellipses if enabled
-        if self._show_ellipses_check.isChecked():
+        # Add ellipses if enabled (auto-on when >=2 groups).
+        if self._should_draw_ellipses(show_ellipses, unique_groups):
             self._add_confidence_ellipses(scores, groups, pc1, pc2)
 
         # Labels and title
@@ -652,7 +693,17 @@ class InteractivePlotCanvas(QWidget):
     # PCoA Plotting Methods
     # =========================================================================
 
-    def plot_pcoa_scores(self, result: Any, coord1: int = 0, coord2: int = 1) -> None:
+    def plot_pcoa_scores(
+        self,
+        result: Any,
+        coord1: int = 0,
+        coord2: int = 1,
+        groups: list[int] | np.ndarray | None = None,
+        labels: list[str] | None = None,
+        group_names: list[str] | None = None,
+        annotate_offset: bool = True,
+        show_ellipses: bool | None = None,
+    ) -> None:
         """
         Plot PCoA scores.
 
@@ -662,8 +713,21 @@ class InteractivePlotCanvas(QWidget):
             where:
                 U = eigenvector matrix
                 Λ = diagonal eigenvalue matrix
+
+        Parameters: see :meth:`plot_pca_scores` for ``groups``, ``labels``,
+            ``group_names``, ``annotate_offset`` and ``show_ellipses``.
         """
-        self._record_plot_call("plot_pcoa_scores", result, coord1=coord1, coord2=coord2)
+        self._record_plot_call(
+            "plot_pcoa_scores",
+            result,
+            coord1=coord1,
+            coord2=coord2,
+            groups=groups,
+            labels=labels,
+            group_names=group_names,
+            annotate_offset=annotate_offset,
+            show_ellipses=show_ellipses,
+        )
         self._ax.clear()
         self._current_plot_type = "pcoa"
 
@@ -678,15 +742,8 @@ class InteractivePlotCanvas(QWidget):
         else:
             eigenvalues = np.ones(coords.shape[1])
 
-        if hasattr(result, "labels"):
-            labels = result.labels
-        else:
-            labels = [f"S{i + 1}" for i in range(coords.shape[0])]
-
-        if hasattr(result, "groups"):
-            groups = result.groups
-        else:
-            groups = np.zeros(coords.shape[0], dtype=int)
+        labels, groups = self._resolve_metadata(result, labels, groups, coords)
+        group_names = self._resolve_group_names(groups, group_names)
 
         # Store data
         self._scores = coords
@@ -698,8 +755,8 @@ class InteractivePlotCanvas(QWidget):
 
         # Calculate variance explained
         total_var = np.sum(np.abs(eigenvalues))
-        var_1 = np.abs(eigenvalues[coord1]) / total_var * 100
-        var_2 = np.abs(eigenvalues[coord2]) / total_var * 100
+        var_1 = np.abs(eigenvalues[coord1]) / total_var * 100 if total_var > 0 else 0.0
+        var_2 = np.abs(eigenvalues[coord2]) / total_var * 100 if total_var > 0 else 0.0
 
         # Setup groups
         unique_groups = np.unique(groups)
@@ -710,6 +767,7 @@ class InteractivePlotCanvas(QWidget):
             idx = self._groups[group]
             color = self.COLORS[i % len(self.COLORS)]
 
+            display_name = group_names.get(group, f"Group {group + 1}")
             self._ax.scatter(
                 coords[idx, coord1],
                 coords[idx, coord2],
@@ -718,17 +776,22 @@ class InteractivePlotCanvas(QWidget):
                 alpha=0.7,
                 edgecolors="white",
                 linewidths=0.5,
-                label=f"Group {group + 1}" if len(unique_groups) > 1 else None,
+                label=display_name if len(unique_groups) > 1 else None,
                 picker=True,
             )
 
         # Labels
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(coords[:, coord1], coords[:, coord2], strict=False)):
-                self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
+            xs = coords[:, coord1]
+            ys = coords[:, coord2]
+            if annotate_offset:
+                self._annotate_with_offset(xs, ys, labels)
+            else:
+                for i, (x, y) in enumerate(zip(xs, ys, strict=False)):
+                    self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
-        # Ellipses
-        if self._show_ellipses_check.isChecked():
+        # Ellipses (auto-on when >=2 groups).
+        if self._should_draw_ellipses(show_ellipses, unique_groups):
             self._add_confidence_ellipses(coords, groups, coord1, coord2)
 
         # Axis labels
@@ -738,6 +801,8 @@ class InteractivePlotCanvas(QWidget):
 
         # Style
         self._apply_axis_style()
+        if len(unique_groups) > 1:
+            self._ax.legend(**self._legend_kwargs("upper right"))
 
         self._canvas.draw()
 
@@ -745,7 +810,16 @@ class InteractivePlotCanvas(QWidget):
     # CCA/RDA Plotting Methods (Triplot)
     # =========================================================================
 
-    def plot_cca_triplot(self, result: Any, ax1: int = 0, ax2: int = 1) -> None:
+    def plot_cca_triplot(
+        self,
+        result: Any,
+        ax1: int = 0,
+        ax2: int = 1,
+        groups: list[int] | np.ndarray | None = None,
+        labels: list[str] | None = None,
+        group_names: list[str] | None = None,
+        annotate_offset: bool = True,
+    ) -> None:
         """
         Plot CCA/RDA triplot showing samples, species, and environmental vectors.
 
@@ -758,8 +832,20 @@ class InteractivePlotCanvas(QWidget):
             Site scores: Y_centered @ U
             Species scores: U * sqrt(Λ)
             Biplot scores: X_centered' @ site_scores
+
+        Parameters: see :meth:`plot_pca_scores` for ``groups``, ``labels``,
+            ``group_names`` and ``annotate_offset``.
         """
-        self._record_plot_call("plot_cca_triplot", result, ax1=ax1, ax2=ax2)
+        self._record_plot_call(
+            "plot_cca_triplot",
+            result,
+            ax1=ax1,
+            ax2=ax2,
+            groups=groups,
+            labels=labels,
+            group_names=group_names,
+            annotate_offset=annotate_offset,
+        )
         self._ax.clear()
         self._current_plot_type = "cca"
 
@@ -789,15 +875,8 @@ class InteractivePlotCanvas(QWidget):
         else:
             method = "CCA"
 
-        if hasattr(result, "groups"):
-            groups = result.groups
-        else:
-            groups = np.zeros(site_scores.shape[0], dtype=int)
-
-        if hasattr(result, "labels"):
-            labels = result.labels
-        else:
-            labels = [f"S{i + 1}" for i in range(site_scores.shape[0])]
+        labels, groups = self._resolve_metadata(result, labels, groups, site_scores)
+        group_label_map = self._resolve_group_names(groups, group_names)
 
         # Store data for selection
         self._scores = site_scores
@@ -821,6 +900,7 @@ class InteractivePlotCanvas(QWidget):
             idx = self._groups[group]
             color = self.COLORS[i % len(self.COLORS)]
 
+            display_name = group_label_map.get(group, f"Group {group + 1}")
             self._ax.scatter(
                 site_scores[idx, ax1],
                 site_scores[idx, ax2],
@@ -830,7 +910,7 @@ class InteractivePlotCanvas(QWidget):
                 edgecolors="white",
                 linewidths=0.5,
                 marker="o",
-                label=f"Group {group + 1}" if len(unique_groups) > 1 else _("Samples"),
+                label=display_name if len(unique_groups) > 1 else _("Samples"),
                 picker=True,
             )
 
@@ -888,8 +968,13 @@ class InteractivePlotCanvas(QWidget):
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(site_scores[:, ax1], site_scores[:, ax2], strict=False)):
-                self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
+            xs = site_scores[:, ax1]
+            ys = site_scores[:, ax2]
+            if annotate_offset:
+                self._annotate_with_offset(xs, ys, labels)
+            else:
+                for i, (x, y) in enumerate(zip(xs, ys, strict=False)):
+                    self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
         # Axis labels
         self._ax.set_xlabel(_("{0}1 ({1:.1f}% variance)").format(method, var_ax1))
@@ -901,13 +986,7 @@ class InteractivePlotCanvas(QWidget):
 
         # Legend
         if len(unique_groups) > 1 or species_scores is not None or biplot_scores is not None:
-            self._ax.legend(
-                loc="upper right",
-                framealpha=0.95,
-                facecolor=self.theme_colors()["figure_bg"],
-                edgecolor=self.theme_colors()["border"],
-                labelcolor=self.theme_colors()["text"],
-            )
+            self._ax.legend(**self._legend_kwargs("upper right"))
 
         # Reference lines
         self._ax.axhline(y=0, color=self.theme_colors()["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
@@ -1072,7 +1151,15 @@ class InteractivePlotCanvas(QWidget):
     # NMDS Plotting Methods
     # =========================================================================
 
-    def plot_nmds(self, result: Any) -> None:
+    def plot_nmds(
+        self,
+        result: Any,
+        groups: list[int] | np.ndarray | None = None,
+        labels: list[str] | None = None,
+        group_names: list[str] | None = None,
+        annotate_offset: bool = True,
+        show_ellipses: bool | None = None,
+    ) -> None:
         """
         Plot NMDS ordination.
 
@@ -1084,8 +1171,19 @@ class InteractivePlotCanvas(QWidget):
             where:
                 d_ij = original dissimilarity
                 d̂_ij = ordination distance
+
+        Parameters: see :meth:`plot_pca_scores` for ``groups``, ``labels``,
+            ``group_names``, ``annotate_offset`` and ``show_ellipses``.
         """
-        self._record_plot_call("plot_nmds", result)
+        self._record_plot_call(
+            "plot_nmds",
+            result,
+            groups=groups,
+            labels=labels,
+            group_names=group_names,
+            annotate_offset=annotate_offset,
+            show_ellipses=show_ellipses,
+        )
         self._ax.clear()
         self._current_plot_type = "nmds"
 
@@ -1097,15 +1195,8 @@ class InteractivePlotCanvas(QWidget):
 
         stress = getattr(result, "stress", 0)
 
-        if hasattr(result, "labels"):
-            labels = result.labels
-        else:
-            labels = [f"S{i + 1}" for i in range(coords.shape[0])]
-
-        if hasattr(result, "groups"):
-            groups = result.groups
-        else:
-            groups = np.zeros(coords.shape[0], dtype=int)
+        labels, groups = self._resolve_metadata(result, labels, groups, coords)
+        group_label_map = self._resolve_group_names(groups, group_names)
 
         # Store data
         self._scores = coords
@@ -1122,6 +1213,7 @@ class InteractivePlotCanvas(QWidget):
             idx = self._groups[group]
             color = self.COLORS[i % len(self.COLORS)]
 
+            display_name = group_label_map.get(group, f"Group {group + 1}")
             self._ax.scatter(
                 coords[idx, 0],
                 coords[idx, 1],
@@ -1130,17 +1222,22 @@ class InteractivePlotCanvas(QWidget):
                 alpha=0.7,
                 edgecolors="white",
                 linewidths=0.5,
-                label=f"Group {group + 1}" if len(unique_groups) > 1 else None,
+                label=display_name if len(unique_groups) > 1 else None,
                 picker=True,
             )
 
         # Labels
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(coords[:, 0], coords[:, 1], strict=False)):
-                self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
+            xs = coords[:, 0]
+            ys = coords[:, 1]
+            if annotate_offset:
+                self._annotate_with_offset(xs, ys, labels)
+            else:
+                for i, (x, y) in enumerate(zip(xs, ys, strict=False)):
+                    self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8)
 
-        # Ellipses
-        if self._show_ellipses_check.isChecked():
+        # Ellipses (auto-on when >=2 groups).
+        if self._should_draw_ellipses(show_ellipses, unique_groups):
             self._add_confidence_ellipses(coords, groups, 0, 1)
 
         # Axis labels and title
@@ -1150,6 +1247,8 @@ class InteractivePlotCanvas(QWidget):
 
         # Style
         self._apply_axis_style()
+        if len(unique_groups) > 1:
+            self._ax.legend(**self._legend_kwargs("upper right"))
 
         self._canvas.draw()
 
@@ -1748,19 +1847,42 @@ class InteractivePlotCanvas(QWidget):
         self._figure.tight_layout()
         self._canvas.draw()
 
-    def plot_lda_scores(self, result: Any) -> None:
-        """Plot LDA scatter plot with confidence ellipses."""
-        self._record_plot_call("plot_lda_scores", result)
+    def plot_lda_scores(
+        self,
+        result: Any,
+        groups: list[int] | np.ndarray | None = None,
+        labels: list[str] | None = None,
+        group_names: list[str] | None = None,
+        annotate_offset: bool = True,
+        show_ellipses: bool | None = None,
+    ) -> None:
+        """Plot LDA scatter plot with confidence ellipses.
+
+        Parameters: see :meth:`plot_pca_scores` for ``groups``, ``labels``,
+            ``group_names``, ``annotate_offset`` and ``show_ellipses``.
+        """
+        self._record_plot_call(
+            "plot_lda_scores",
+            result,
+            groups=groups,
+            labels=labels,
+            group_names=group_names,
+            annotate_offset=annotate_offset,
+            show_ellipses=show_ellipses,
+        )
         self._current_plot_type = "lda"
         self._ax = self._reset_axes()
 
         scores = result.scores
         n_dims = scores.shape[1]
 
+        labels, groups = self._resolve_metadata(result, labels, groups, scores)
+        group_label_map = self._resolve_group_names(groups, group_names)
+
         # Store data for replotting
         self._scores = scores
-        self._group_labels = result.groups if hasattr(result, "groups") else np.zeros(len(scores), dtype=int)
-        self._labels = getattr(result, "labels", [f"S{i}" for i in range(len(scores))])
+        self._group_labels = groups
+        self._labels = labels
 
         if n_dims >= 2:
             x_data = scores[:, 0]
@@ -1775,12 +1897,12 @@ class InteractivePlotCanvas(QWidget):
             y_label = ""
             pc1, pc2 = 0, 0
 
-        groups = self._group_labels
         unique_groups = np.unique(groups)
 
         for i, g in enumerate(unique_groups):
             mask = groups == g
             color = self.COLORS[i % len(self.COLORS)]
+            display_name = group_label_map.get(int(g), f"Group {int(g) + 1}")
             self._ax.scatter(
                 x_data[mask],
                 y_data[mask],
@@ -1789,16 +1911,19 @@ class InteractivePlotCanvas(QWidget):
                 alpha=0.7,
                 edgecolors="white",
                 linewidth=0.5,
-                label=f"Group {g + 1}",
+                label=display_name,
             )
 
         # Add labels if enabled
         if self._show_labels_check.isChecked():
-            for i, (x, y) in enumerate(zip(x_data, y_data, strict=False)):
-                self._ax.annotate(self._labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
+            if annotate_offset:
+                self._annotate_with_offset(x_data, y_data, labels)
+            else:
+                for i, (x, y) in enumerate(zip(x_data, y_data, strict=False)):
+                    self._ax.annotate(labels[i], (x, y), fontsize=8, alpha=0.8, ha="center", va="bottom")
 
-        # Add ellipses if enabled
-        if self._show_ellipses_check.isChecked() and n_dims >= 2:
+        # Add ellipses if enabled (auto-on when >=2 groups).
+        if n_dims >= 2 and self._should_draw_ellipses(show_ellipses, unique_groups):
             self._add_confidence_ellipses(scores, groups, pc1, pc2)
 
         if hasattr(result, "explained_variance_ratio") and len(result.explained_variance_ratio) >= 2:
@@ -1813,13 +1938,7 @@ class InteractivePlotCanvas(QWidget):
         self._apply_axes_theme()
 
         if len(unique_groups) > 1:
-            self._ax.legend(
-                loc="upper right",
-                framealpha=0.95,
-                facecolor=self.theme_colors()["figure_bg"],
-                edgecolor=self.theme_colors()["border"],
-                labelcolor=self.theme_colors()["text"],
-            )
+            self._ax.legend(**self._legend_kwargs("upper right"))
 
         self._figure.tight_layout()
         self._canvas.draw()
@@ -2166,6 +2285,212 @@ class InteractivePlotCanvas(QWidget):
         self._ax.axhline(y=0, color=t["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
         self._ax.axvline(x=0, color=t["reference"], linestyle="--", linewidth=0.5, alpha=0.5)
 
+    # ------------------------------------------------------------------
+    # Shared metadata resolution (labels, groups, group_names)
+    #
+    # The four ordination-style plotters (PCA, PCoA, NMDS, CCA, LDA) used
+    # to read ``result.labels`` / ``result.groups`` and otherwise drop the
+    # real sample names (``S1..Sn``) and the habitat groups (single
+    # colour, no 95% ellipses). The legacy fallback order was also hidden
+    # inside each method. These helpers make the resolution a single
+    # source of truth so the call site ``plot_pca_scores(result, groups=g,
+    # labels=l)`` wins, the dataclass ``result.groups`` wins next, and the
+    # ugly ``S1..Sn`` placeholder is only reached as a last resort.
+    # ------------------------------------------------------------------
+
+    def _resolve_metadata(
+        self,
+        result: Any,
+        labels: list[str] | None,
+        groups: list[int] | np.ndarray | None,
+        scores: np.ndarray | None = None,
+    ) -> tuple[list[str], np.ndarray]:
+        """Return ``(labels, groups)`` with the same length as ``scores``.
+
+        Priority:
+            1. explicit ``labels`` / ``groups`` argument
+            2. ``result.labels`` / ``result.groups``
+            3. synthetic defaults (``S1..Sn`` and a single group).
+
+        The returned ``groups`` is always an ``np.ndarray`` of ints.
+
+        ``scores`` is the (n, k) score matrix the caller is about to
+        plot — passed in explicitly so this helper does not have to
+        rely on ``self._scores_storage`` being populated *before* the
+        call (the plotting method sets it *after* resolving metadata).
+        """
+        n = None
+        if scores is not None and getattr(scores, "ndim", 0) == 2:
+            n = scores.shape[0]
+        if n is None:
+            stored = getattr(self, "_scores_storage", None)
+            if stored is not None and getattr(stored, "ndim", 0) == 2:
+                n = stored.shape[0]
+
+        if labels is None:
+            labels = getattr(result, "labels", None)
+        if labels is None:
+            if n is None:
+                labels = []
+            else:
+                labels = [f"S{i + 1}" for i in range(n)]
+        if isinstance(labels, np.ndarray):
+            labels = [str(x) for x in labels.tolist()]
+
+        if groups is None:
+            raw_groups = getattr(result, "groups", None)
+            if raw_groups is None:
+                if n is None:
+                    raw_groups = []
+                else:
+                    raw_groups = np.zeros(n, dtype=int)
+        else:
+            raw_groups = groups
+        groups_arr = np.asarray(raw_groups, dtype=int).ravel()
+        if n is not None and groups_arr.size != n:
+            # Mismatched length: degrade to a single group rather than
+            # silently dropping samples or crashing on a downstream
+            # ``np.unique(groups)`` call.
+            groups_arr = np.zeros(n, dtype=int)
+        return list(labels), groups_arr
+
+    def _resolve_group_names(
+        self,
+        groups: np.ndarray,
+        group_names: list[str] | None,
+    ) -> dict[int, str]:
+        """Map each distinct group id to a display name.
+
+        If ``group_names`` was passed (one name per unique group, in
+        sorted-id order) it wins. Otherwise every group falls back to
+        ``Group <n+1>``.
+        """
+        unique = sorted(np.unique(groups).tolist())
+        names: dict[int, str] = {}
+        if group_names is not None and len(group_names) >= len(unique):
+            for i, g in enumerate(unique):
+                names[g] = str(group_names[i])
+            return names
+        for g in unique:
+            names[g] = f"Group {int(g) + 1}"
+        return names
+
+    def _should_draw_ellipses(
+        self,
+        show_ellipses: bool | None,
+        unique_groups: np.ndarray,
+    ) -> bool:
+        """Decide whether 95% confidence ellipses should be drawn.
+
+        ``show_ellipses`` wins if it is not ``None``. Otherwise the new
+        default — "auto" — draws them whenever there are >=2 groups, OR
+        whenever the toolbar toggle is on (preserves the historic
+        one-group ellipse use case).
+        """
+        if show_ellipses is not None:
+            return bool(show_ellipses)
+        if len(unique_groups) >= 2:
+            return True
+        return bool(self._show_ellipses_check.isChecked())
+
+    def _annotate_with_offset(
+        self,
+        xs: np.ndarray,
+        ys: np.ndarray,
+        labels: list[str],
+    ) -> None:
+        """Annotate points with a cheap iterative repel.
+
+        ``adjustText`` is intentionally NOT a dependency. The algorithm
+        works in *pixel* space — every point is projected through the
+        axes transform, pairs whose bounding boxes overlap get pushed
+        apart vertically, and the pixel offsets are converted back to
+        data units so the annotation's ``xytext`` lands where the
+        viewport shows it. A handful of passes is enough to disentangle
+        the dense-cluster artefacts that broke the historic straight-
+        above placement (S19/S20/S21 stacking).
+
+        ``ha="center"`` so the offset stays symmetric.
+        """
+        if len(xs) == 0:
+            return
+        n = len(xs)
+
+        # Project every (finite) point to display pixels. Skip non-finite
+        # points — they cannot be hit-tested anyway and would crash the
+        # transform.
+        finite_mask = np.isfinite(xs) & np.isfinite(ys)
+        if not np.any(finite_mask):
+            return
+        pix = self._ax.transData.transform
+        inv = self._ax.transData.inverted().transform
+        pts_pix: list[tuple[float, float]] = []
+        for i in range(n):
+            if finite_mask[i]:
+                pts_pix.append(pix((float(xs[i]), float(ys[i]))))
+            else:
+                pts_pix.append((0.0, 0.0))
+
+        # Pixel-space repel. Threshold is roughly "two labels worth of
+        # vertical space" (12 px) and "a short label's width" (30 px).
+        offsets_px = np.zeros((n, 2), dtype=float)
+        for _pass in range(8):
+            moved = False
+            for i in range(n):
+                if not finite_mask[i]:
+                    continue
+                for j in range(i + 1, n):
+                    if not finite_mask[j]:
+                        continue
+                    dx = pts_pix[j][0] - pts_pix[i][0] + (offsets_px[j, 0] - offsets_px[i, 0])
+                    dy = pts_pix[j][1] - pts_pix[i][1] + (offsets_px[j, 1] - offsets_px[i, 1])
+                    if abs(dx) > 30:
+                        continue
+                    if abs(dy) < 12:
+                        # Push j above i (downward in screen space).
+                        offsets_px[j, 1] = offsets_px[i, 1] + 12
+                        moved = True
+            if not moved:
+                break
+
+        for i in range(n):
+            if not finite_mask[i]:
+                continue
+            x = float(xs[i])
+            y = float(ys[i])
+            if offsets_px[i, 0] == 0 and offsets_px[i, 1] == 0:
+                # No dodge needed — keep the historic "straight above"
+                # placement so a single label looks identical to the
+                # pre-fix canvas.
+                self._ax.annotate(
+                    labels[i],
+                    (x, y),
+                    fontsize=8,
+                    alpha=0.8,
+                    ha="center",
+                    va="bottom",
+                    xytext=(0, 4),
+                    textcoords="offset points",
+                )
+                continue
+            # Convert the pixel dodge back into data units. Annotate's
+            # ``xytext`` is in data coords here so the offset stays put
+            # even when the user zooms or pans.
+            target_x, target_y = inv(
+                (pts_pix[i][0] + offsets_px[i, 0], pts_pix[i][1] + offsets_px[i, 1])
+            )
+            va = "center"
+            self._ax.annotate(
+                labels[i],
+                (target_x, target_y),
+                fontsize=8,
+                alpha=0.8,
+                ha="center",
+                va=va,
+                xytext=(0, 0),
+                textcoords="data",
+            )
+
     # =========================================================================
     # Interaction Methods
     # =========================================================================
@@ -2464,6 +2789,153 @@ class InteractivePlotCanvas(QWidget):
         # Repaint: without this the canvas keeps showing the previous plot
         # even though the axes objects were rewritten.
         self._canvas.draw()
+
+    # ------------------------------------------------------------------
+    # Two-Block PLS (morphological integration)
+    #
+    # Pre-fix the canvas silently swallowed the payload: ``ui_main_window``
+    # sent ``result.to_dict()`` to ``plot.plot_pls``, the canvas had no
+    # such method, the ``else: return`` branch ran, and the analysis
+    # vanished with no warning. The fix is twofold:
+    #   1. ``plot_pls`` here accepts either a ``PLSResult`` dataclass OR a
+    #      ``dict`` (so the existing dialog payload works without
+    #      rewriting the controller).
+    #   2. ``plot_pls_results`` is registered as an alias so the legacy
+    #      ``hasattr(plot, "plot_pls_results")`` branch in the main window
+    #      stops falling through to ``return``.
+    # Rendering is delegated to ``AllometryPlotter.plot_pls_scores`` (the
+    # standalone publication plotter) so the canvas and the script path
+    # stay visually consistent.
+    # ------------------------------------------------------------------
+
+    def plot_pls(
+        self,
+        result: Any,
+        groups: list[int] | np.ndarray | None = None,
+        group_names: list[str] | None = None,
+    ) -> None:
+        """Plot 2-Block PLS (morphological integration) scores.
+
+        Parameters:
+            result: ``PLSResult`` dataclass, OR a ``dict`` produced by
+                ``PLSResult.to_dict()`` (the PLSDialog payload). Lists of
+                arrays round-trip back to ``np.ndarray`` automatically.
+            groups: Optional per-specimen group labels for colouring. When
+                ``None``, all specimens are drawn in a single colour.
+            group_names: Optional display names for each unique group
+                (sorted-id order). Falls back to ``Group <n>``.
+        """
+        self._record_plot_call("plot_pls", result, groups=groups, group_names=group_names)
+        self._current_plot_type = "pls"
+        self._ax = self._reset_axes()
+
+        payload = self._normalise_pls_payload(result)
+        left_scores = np.asarray(payload["left_scores"], dtype=np.float64)
+        right_scores = np.asarray(payload["right_scores"], dtype=np.float64)
+        correlations = np.asarray(payload["pls_correlations"], dtype=np.float64)
+        integration_index = float(payload["integration_index"])
+
+        n_specimens = left_scores.shape[0]
+        if groups is None:
+            groups_arr = np.zeros(n_specimens, dtype=int)
+        else:
+            groups_arr = np.asarray(groups, dtype=int).ravel()
+            if groups_arr.size != n_specimens:
+                groups_arr = np.zeros(n_specimens, dtype=int)
+        unique_groups = np.unique(groups_arr)
+        group_label_map = self._resolve_group_names(groups_arr, group_names)
+
+        # Reuse the AllometryPlotter just for visual consistency — we
+        # then draw our own copy on ``self._ax`` because matplotlib
+        # artists belong to exactly one figure, and the canvas must own
+        # them for the zoom / reset / lasso toolbar buttons to work.
+        # Rendering matches ``AllometryPlotter.plot_pls_scores`` 1:1
+        # (scatter by group + regression line + integration title).
+        x = left_scores[:, 0]
+        y = right_scores[:, 0]
+
+        if len(unique_groups) <= 1:
+            self._ax.scatter(
+                x, y,
+                c="#2C3E50", s=80, alpha=0.7,
+                edgecolors="white", linewidths=0.5,
+            )
+        else:
+            sorted_groups = sorted(unique_groups.tolist())
+            for i, group_id in enumerate(sorted_groups):
+                mask = groups_arr == group_id
+                self._ax.scatter(
+                    x[mask], y[mask],
+                    c=[self.COLORS[i % len(self.COLORS)]],
+                    label=group_label_map.get(int(group_id), f"Group {group_id + 1}"),
+                    s=80, alpha=0.7,
+                    edgecolors="white", linewidths=0.5,
+                )
+
+        # Regression line: numpy raises if x has only one unique value,
+        # but that case cannot occur for a PLS result with n>=3 specimens.
+        if x.size >= 2 and np.unique(x).size >= 2:
+            coef = np.polyfit(x, y, 1)
+            x_line = np.linspace(float(x.min()), float(x.max()), 100)
+            self._ax.plot(x_line, np.polyval(coef, x_line), "r--", linewidth=1.5, alpha=0.7)
+
+        r1 = float(correlations[0]) if correlations.size > 0 else 0.0
+        self._ax.set_xlabel(_("Block A PLS Score (Comp 1)"))
+        self._ax.set_ylabel(_("Block B PLS Score (Comp 1)"))
+        self._ax.set_title(
+            _("Two-Block PLS (r₁ = {0:.4f}, integration = {1:.4f})").format(r1, integration_index)
+        )
+
+        self._apply_axes_theme()
+        if len(unique_groups) > 1:
+            self._ax.legend(**self._legend_kwargs("best"))
+        self._ax.grid(True, linestyle="--", alpha=0.3, color=self.theme_colors()["grid"])
+
+        # Stash the metadata so the hover tooltip / selectors stay useful.
+        if left_scores.shape[1] >= 2:
+            self._scores = left_scores[:, :2]
+        else:
+            self._scores = left_scores[:, :1]
+        self._labels = [f"S{i + 1}" for i in range(n_specimens)]
+        self._group_labels = groups_arr
+
+        self._figure.tight_layout()
+        self._canvas.draw()
+
+    # Back-compat alias — ``ui_main_window._on_run_pls`` checks for either
+    # name before giving up on the result. Keeping both stops that branch
+    # from falling through to ``return``.
+    plot_pls_results = plot_pls
+
+    @staticmethod
+    def _normalise_pls_payload(result: Any) -> dict[str, Any]:
+        """Coerce a ``PLSResult`` (or its ``to_dict()``) into a plain dict.
+
+        The PLSDialog payload is already a dict, but the controller
+        may also pass the dataclass (e.g. from automated tests). The
+        PLSResult carries ``left_scores`` / ``right_scores`` as
+        ``np.ndarray``s; the dict carries Python lists. Both shapes
+        must reach the plotter intact.
+        """
+        if isinstance(result, dict):
+            payload = dict(result)
+        elif hasattr(result, "to_dict") and callable(result.to_dict):
+            payload = result.to_dict()
+        else:
+            payload = {
+                k: getattr(result, k)
+                for k in (
+                    "left_scores", "right_scores", "pls_correlations",
+                    "integration_index", "rv_coefficient", "pls1_pvalue",
+                    "pls1_z", "singular_values", "covariance_explained",
+                    "cumulative_covariance", "n_components", "n_specimens",
+                )
+                if hasattr(result, k)
+            }
+        # Some old payloads serialise correlations under ``rv_coefficients``.
+        if "pls_correlations" not in payload and "rv_coefficients" in payload:
+            payload["pls_correlations"] = payload["rv_coefficients"]
+        return payload
 
     def plot_evolution_rate(self, result: Any) -> None:
         """
@@ -2772,18 +3244,17 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.draw()
 
     # ------------------------------------------------------------------
-    # Public tool API used by FloatingToolBar. These are thin aliases for
-    # the private helpers above; keeping the public names explicit lets
-    # the toolbar depend on a stable contract that does not silently
-    # disappear when the private implementation is renamed.
+    # Public tool API. These are thin aliases for the private helpers
+    # above; keeping the public names explicit gives callers a stable
+    # contract that does not silently disappear when the private
+    # implementation is renamed.
     # ------------------------------------------------------------------
 
     def export_plot(self, options: object | None = None) -> None:
         """Public entry point for the Save action.
 
-        When ``options`` is ``None`` (legacy call sites or the
-        FloatingToolBar Save button) the canvas falls back to the
-        legacy "ask for path + write at default DPI" flow. When
+        When ``options`` is ``None`` (legacy call sites) the canvas falls
+        back to the legacy "ask for path + write at default DPI" flow. When
         ``options`` is provided (typically a
         :class:`plot_export.PlotExportOptions` instance) the canvas
         delegates to :func:`plot_export.export_figure` so callers
@@ -2836,7 +3307,7 @@ class InteractivePlotCanvas(QWidget):
         Modern callers should use :meth:`export_plot` with a
         :class:`plot_export.PlotExportOptions` instance.
         """
-        from plot_export import PlotExportOptions, export_figure
+        from plot_export import export_figure
 
         from views.ui_plot_export_dialog import PlotExportDialog
 
@@ -2994,7 +3465,6 @@ class InteractivePlotCanvas(QWidget):
 
         groups_arr = np.asarray(groups)
         unique_groups = sorted(set(groups_arr.tolist()))
-        n_groups = len(unique_groups)
         n_vars = min(data.shape[1], 9)
         ncols = min(3, n_vars)
         nrows = (n_vars + ncols - 1) // ncols
@@ -3079,7 +3549,6 @@ class InteractivePlotCanvas(QWidget):
 
         # Draw zone boundaries
         if zone_boundaries:
-            y_max = ax.get_ylim()[1]
             for zb in zone_boundaries:
                 ax.axhline(y=zb, color="#E74C3C", linestyle="--", linewidth=1.5, alpha=0.7)
 

@@ -73,7 +73,6 @@ if TYPE_CHECKING:
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 from scipy import stats

@@ -781,18 +781,32 @@ class StateMachine(ABC):
 
     def minimize(self) -> StateMachine:
         """
-        最小化状态机 (Hopcroft算法)
+        最小化状态机 —— 基类不提供实现
 
-        数学原理:
-            1. 移除不可达状态
-            2. 构建初始划分 Π = {F, Q - F}
-            3. 迭代细化划分直到稳定
+        本方法此前挂着完整的 Hopcroft 算法文档, 却没有实现 (直接
+        raise NotImplementedError), 而同一类树里可用的实现叫另一个
+        名字且在子类上。这会让按基类文档写代码的调用方拿到
+        NotImplementedError, 尽管最小化其实可用。
 
-        返回:
-            最小化的新状态机
+        为什么不做成"基类直接委托": Hopcroft 最小化要求确定型结构 ——
+        每个 (状态, 符号) 至多一条转移, 且结果是一个 DFA。
+        ``_find_transition`` 只定义在 :class:`~state_machine.automaton.DFA`
+        上, 一般的 StateMachine / NFA 没有这个保证, 强行委托会把
+        "不支持" 变成更难诊断的 AttributeError。
+
+        可用实现:
+            - :meth:`state_machine.automaton.DFA.minimize` /
+              :meth:`state_machine.automaton.DFA.minimize_hopcroft`
+              (Hopcroft 最小化, 确定性自动机)
+
+        异常:
+            NotImplementedError: 总是抛出, 并指向上面的可用实现
         """
-        # TODO: 实现Hopcroft最小化算法
-        raise NotImplementedError("Minimization not yet implemented")
+        raise NotImplementedError(
+            "StateMachine.minimize() is not implemented: Hopcroft minimisation "
+            "requires a deterministic automaton. Use DFA.minimize() "
+            "(alias: DFA.minimize_hopcroft()) instead."
+        )
 
     def to_dot(self) -> str:
         """

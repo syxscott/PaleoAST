@@ -8,8 +8,15 @@ Provides dialogs for:
     - Trait evolution model comparison (Random Walk, Directional, OU)
     - Rate estimation and model selection via AIC
 
+Note on phylogenetic trees: the underlying
+``morphometrics.evolution_rate.EvolutionRateAnalyzer`` only operates on
+a 1-D trait series ordered in time (Foote's stratigraphic framework).
+It does NOT consume a phylogenetic tree. The dialog therefore does
+not collect a Newick string — adding one would silently drop it on the
+floor and trick the user into thinking the analysis is phylogenetic.
+
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.2.0
 """
 
 import logging
@@ -19,15 +26,16 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from config.design_system import Typography, get_palette
@@ -40,21 +48,29 @@ class EvolutionRateDialog(QDialog):
     """
     Evolution Rate Analysis Dialog.
 
-    Fits and compares trait evolution models:
-        - Random Walk (Brownian Motion)
-        - Directional (biased random walk)
-        - Ornstein-Uhlenbeck (stasis with attraction)
+    Fits and compares trait evolution models on a stratigraphically (or
+    otherwise temporally) ordered trait series. The three models map
+    directly to :class:`morphometrics.evolution_rate.EvolutionModel`:
+
+        - ``random_walk`` (Brownian Motion): trait diffuses away from
+          its initial value with variance growing linearly in time
+          ``Var[x(t)] = sigma^2 * t``.
+        - ``directional`` (biased random walk): the series drifts with
+          a constant trend ``beta`` plus random walk.
+        - ``stasis`` (Ornstein-Uhlenbeck): mean-reverting Ornstein-
+          Uhlenbeck process with equilibrium ``theta`` and attraction
+          strength ``alpha``.
     """
 
     resultsReady = pyqtSignal(dict)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._logger = logging.getLogger(f"{__name__}.EvolutionRateDialog")
         self._is_dark_theme = False
 
         self.setWindowTitle(_("Evolutionary Rate Analysis"))
-        self.setMinimumSize(600, 550)
+        self.setMinimumSize(620, 600)
         self.setModal(True)
 
         self._setup_ui()
@@ -91,36 +107,40 @@ class EvolutionRateDialog(QDialog):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        # Phylogenetic tree input
-        tree_group = QGroupBox(_("Phylogenetic Tree (Newick)"))
-        tree_layout = QVBoxLayout(tree_group)
-
-        tree_info = QLabel(
-            _("Enter a phylogenetic tree in Newick format.\nTip: Connect to PCM analysis to import a tree.")
+        # Notice: this analyzer does NOT take a phylogenetic tree.
+        notice = QLabel(
+            _(
+                "Note: this analyzer fits Foote-style models to a temporally "
+                "ordered trait series. Phylogenetic trees are not used here; "
+                "use the PCM (PIC / ASR / Blomberg's K) dialogs for tree-based "
+                "comparative methods."
+            )
         )
-        tree_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
-        tree_layout.addWidget(tree_info)
-
-        self._tree_input = QTextEdit()
-        self._tree_input.setMaximumHeight(80)
-        self._tree_input.setPlaceholderText(_("(species1:0.5,species2:0.3):0.2;"))
-        tree_layout.addWidget(self._tree_input)
-
-        layout.addWidget(tree_group)
+        notice.setWordWrap(True)
+        notice.setStyleSheet(
+            f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;"
+        )
+        layout.addWidget(notice)
 
         # Trait data input
         trait_group = QGroupBox(_("Trait Values"))
         trait_layout = QVBoxLayout(trait_group)
 
         trait_info = QLabel(
-            _("Enter trait values for each species (one per line, tab-separated).\nFormat: species_name\\tvalue")
+            _(
+                "Enter trait values in stratigraphic / temporal order (one per line). "
+                "Format: value  (optionally prefixed by  name<tab>value)"
+            )
         )
-        trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
+        trait_info.setWordWrap(True)
+        trait_info.setStyleSheet(
+            f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;"
+        )
         trait_layout.addWidget(trait_info)
 
         self._trait_input = QTextEdit()
-        self._trait_input.setMaximumHeight(100)
-        self._trait_input.setPlaceholderText(_("species1\t2.5\nspecies2\t3.8\n..."))
+        self._trait_input.setMaximumHeight(120)
+        self._trait_input.setPlaceholderText(_("2.5\n3.8\n3.2\n4.1\n..."))
         trait_layout.addWidget(self._trait_input)
 
         layout.addWidget(trait_group)
@@ -132,22 +152,41 @@ class EvolutionRateDialog(QDialog):
         self._models_combo = QComboBox()
         self._models_combo.addItems(
             [
-                _("All models (BM, Directional, OU)"),
-                _("Brownian Motion only"),
+                _("All models (Random walk, Directional, Stasis)"),
+                _("Random walk only"),
                 _("Directional only"),
-                _("Ornstein-Uhlenbeck only"),
+                _("Stasis only"),
             ]
         )
         model_layout.addRow(_("Models to fit:"), self._models_combo)
 
-        self._aic_weight_check = QComboBox()
-        self._aic_weight_check.addItems(
-            [
-                _("No (compare AIC directly)"),
-                _("Yes (compute AICc weights)"),
-            ]
-        )
-        model_layout.addRow(_("Compute AICc weights:"), self._aic_weight_check)
+        # AIC weights are always computed by the underlying engine
+        # (``EvolutionRateAnalyzer.analyze`` returns AIC weights for
+        # every fitted model unconditionally). The old "Yes/No (AICc
+        # weights)" combo was misleading — it implied a switch that
+        # the engine does not expose. The AIC weights are always shown
+        # in the model-comparison table; nothing to toggle here.
+        # Keeping the field would invite the user to think their choice
+        # matters, so we remove it and rely on the summary text.
+
+        # Numerical settings
+        self._confidence_spin = QDoubleSpinBox()
+        self._confidence_spin.setRange(0.5, 0.999)
+        self._confidence_spin.setSingleStep(0.01)
+        self._confidence_spin.setValue(0.95)
+        self._confidence_spin.setDecimals(3)
+        model_layout.addRow(_("Confidence level for rate CI:"), self._confidence_spin)
+
+        self._bootstrap_spin = QSpinBox()
+        self._bootstrap_spin.setRange(0, 9999)
+        self._bootstrap_spin.setValue(199)
+        self._bootstrap_spin.setSingleStep(50)
+        model_layout.addRow(_("Bootstrap replicates (rate CI):"), self._bootstrap_spin)
+
+        self._seed_spin = QSpinBox()
+        self._seed_spin.setRange(0, 10**6)
+        self._seed_spin.setValue(42)
+        model_layout.addRow(_("Random seed:"), self._seed_spin)
 
         layout.addWidget(model_group)
 
@@ -157,7 +196,7 @@ class EvolutionRateDialog(QDialog):
 
         self._results_text = QTextEdit()
         self._results_text.setReadOnly(True)
-        self._results_text.setMaximumHeight(150)
+        self._results_text.setMaximumHeight(180)
         results_layout.addWidget(self._results_text)
 
         layout.addWidget(results_group)
@@ -176,41 +215,54 @@ class EvolutionRateDialog(QDialog):
 
         layout.addLayout(button_layout)
 
-    def _parse_tree(self) -> str:
-        """Parse tree from text input."""
-        text = self._tree_input.toPlainText().strip()
-        return text if text else None
+    def _parse_traits(self):
+        """Parse trait data from text input.
 
-    def _parse_traits(self) -> tuple:
-        """Parse trait data from text input."""
+        Accepts either ``value`` per line, ``name\\tvalue`` per line, or
+        ``name=value`` per line. Returns a 1-D ``numpy.ndarray`` of
+        values in the order given, or ``None`` when parsing fails or
+        fewer than 3 values are supplied.
+        """
         text = self._trait_input.toPlainText().strip()
         if not text:
-            return None, None
+            return None
 
         try:
             import numpy as np
 
-            lines = text.strip().split("\n")
-            names = []
+            lines = text.split("\n")
             values = []
-
             for line in lines:
-                parts = line.strip().split("\t")
-                if len(parts) >= 2:
-                    names.append(parts[0])
-                    values.append(float(parts[1]))
+                line = line.strip()
+                if not line:
+                    continue
+                # Accept tab-separated or equals-separated "name=value"
+                if "\t" in line:
+                    value_str = line.split("\t", 1)[1].strip()
+                elif "=" in line:
+                    value_str = line.split("=", 1)[1].strip()
+                else:
+                    value_str = line
+                values.append(float(value_str))
 
-            return names, np.array(values)
+            arr = np.asarray(values, dtype=float)
+            if arr.size < 3:
+                return None
+            return arr
         except Exception as e:
             self._logger.error(f"Trait parsing failed: {e}")
-            return None, None
+            return None
 
     def _on_run(self) -> None:
         """Run evolution rate analysis."""
         try:
-            names, traits = self._parse_traits()
-            if names is None or len(names) < 3:
-                QMessageBox.warning(self, _("Input Error"), _("Please enter trait values for at least 3 species."))
+            traits = self._parse_traits()
+            if traits is None:
+                QMessageBox.warning(
+                    self,
+                    _("Input Error"),
+                    _("Please enter trait values for at least 3 specimens in temporal order."),
+                )
                 return
 
             from morphometrics.evolution_rate import EvolutionRateAnalyzer
@@ -222,35 +274,28 @@ class EvolutionRateDialog(QDialog):
                 2: ["directional"],
                 3: ["stasis"],
             }
-            models = model_map.get(self._models_combo.currentIndex(), ["random_walk", "directional", "stasis"])
+            models = model_map.get(
+                self._models_combo.currentIndex(), ["random_walk", "directional", "stasis"]
+            )
 
             analyzer = EvolutionRateAnalyzer()
-
-            # Note: Phylogenetic tree analysis requires separate implementation
-            # For now, use time-series analysis
-            tree_newick = self._parse_tree()
-            if tree_newick:
-                QMessageBox.information(
-                    self,
-                    _("Information"),
-                    _(
-                        "Phylogenetic tree analysis will be available in a future update.\n"
-                        "Running trait time-series analysis instead."
-                    ),
-                )
-
-            # Trait-only analysis (time series)
+            n_bootstrap = int(self._bootstrap_spin.value())
             result = analyzer.analyze(
                 trait_series=traits,
                 time_intervals=None,  # Will use unit intervals
                 models=models,
+                confidence_level=float(self._confidence_spin.value()),
+                seed=int(self._seed_spin.value()),
+                n_bootstrap=n_bootstrap,
             )
 
             # Display results
             self._results_text.setPlainText(result.summary())
             self.resultsReady.emit(result.to_dict())
 
-            QMessageBox.information(self, _("Results"), _("Analysis complete. Results displayed above."))
+            QMessageBox.information(
+                self, _("Results"), _("Analysis complete. Results displayed above.")
+            )
 
         except ImportError as e:
             self._logger.error(f"Missing dependency: {e}")
@@ -259,4 +304,4 @@ class EvolutionRateDialog(QDialog):
             self._logger.error(f"Evolution rate failed: {e}")
             from views.ui_main_window import format_user_error
 
-            QMessageBox.critical(self, _("Error"), format_user_error(e, "演化速率分析"))
+            QMessageBox.critical(self, _("Error"), format_user_error(e, _("Evolution Rate Analysis")))

@@ -13,7 +13,6 @@ version: 1.0.1
 """
 
 from .diagnostic_console import ConsoleLogHandler, DiagnosticConsole
-from .floating_toolbar import FloatingToolBar
 from .ui_allometry_dialogs import AllometryDialog, PLSDialog
 from .ui_beta_diversity_dialogs import BetaDiversityDialog, CoverageRarefactionDialog
 from .ui_dialogs import (
@@ -49,7 +48,6 @@ __all__ = [
     "DiversityDialog",
     "EvolutionRateDialog",
     "ExtinctionIntervalDialog",
-    "FloatingToolBar",
     "ImportDialog",
     "ImputationDialog",
     "InteractivePlotCanvas",

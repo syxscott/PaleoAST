@@ -610,7 +610,12 @@ class PaleoASTApplication:
 
         modules = [
             ("models", _("Data models")),
-            ("statistics", _("Statistics engine")),
+            # "stats" is the project package. "statistics" is the Python
+            # STDLIB module, so __import__("statistics") always succeeded
+            # against the stdlib and the splash cheerfully reported the
+            # Statistics engine as loaded while the real `stats` package was
+            # never validated at all.
+            ("stats", _("Statistics engine")),
             ("morphometrics", _("Morphometrics")),
             ("ecology", _("Ecology engine")),
             ("stratigraphy", _("Stratigraphy")),
@@ -744,8 +749,55 @@ def main() -> int:
     app = PaleoASTApplication()
     exit_code = app.run()
 
-    logger.info(f"PaleoAST exiting with code {exit_code}")
+    # ``app.run()`` has returned, so the QApplication and every QObject it
+    # owned are gone — but the DiagnosticConsole's logging handler is a
+    # QObject still attached to the ROOT logger. Logging it here, and letting
+    # the interpreter's own ``logging.shutdown()`` walk that handler
+    # afterwards, touches a deleted C++ object and raises
+    # ``RuntimeError: wrapped C/C++ object ... has been deleted`` out of a
+    # path (``logging.shutdown``) that only guards OSError/ValueError. The
+    # result is a traceback printed on every otherwise-clean exit.
+    #
+    # Detach the Qt-backed handlers explicitly, while the logging machinery is
+    # still under our control, and make the final message best-effort.
+    _detach_qt_log_handlers()
+    try:
+        logger.info(f"PaleoAST exiting with code {exit_code}")
+    except RuntimeError:  # pragma: no cover - a Qt-backed handler survived
+        pass
+    logging.shutdown()
     return exit_code
+
+
+def _detach_qt_log_handlers() -> None:
+    """Close QObject-based logging handlers before interpreter teardown.
+
+    ``ConsoleLogHandler`` (views/diagnostic_console.py) is a QObject that
+    registers itself on the root logger. Once ``app.run()`` returns, Qt has
+    destroyed the C++ side but the Python wrapper survives.
+
+    The subtlety: ``logging.shutdown()`` does NOT iterate the root logger's
+    handlers. It walks the module-global ``logging._handlerList`` -- a weakref
+    list that every ``logging.Handler.__init__`` appends to, and that
+    ``Handler.close()`` removes from. So detaching from the root logger is not
+    enough on its own: the entry stays in ``_handlerList`` and is still visited
+    at atexit, where ``getattr(h, "flushOnClose", True)`` touches the deleted
+    QObject and raises ``RuntimeError``. ``logging.shutdown`` only guards
+    ``OSError``/``ValueError``, so it escapes and prints a traceback on every
+    otherwise-clean exit.
+
+    Closing the handler is what actually removes it from ``_handlerList``.
+    """
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        # QObject subclasses route __getattr__ through sip, so probing them
+        # after teardown can itself raise. Match on the class instead.
+        if type(handler).__name__ in ("ConsoleLogHandler", "StatusBarLogHandler"):
+            try:
+                root.removeHandler(handler)
+                handler.close()  # also unregisters from logging._handlerList
+            except Exception:  # pragma: no cover - Qt may already be gone
+                pass
 
 
 if __name__ == "__main__":

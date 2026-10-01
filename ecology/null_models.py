@@ -387,7 +387,7 @@ class NullModelAnalyzer:
 
         counts = []
         remaining = int(n_permutations)
-        for _ in range(n_chunks):
+        for _chunk in range(n_chunks):
             count = min(chunk_size, remaining)
             counts.append(count)
             remaining -= count
@@ -515,19 +515,38 @@ class NullModelAnalyzer:
 
     def _compute_combo_score(self, matrix: npt.NDArray) -> float:
         """
-        Compute combined score = normalized C-score + checkerboard.
+        Compute combined score = normalized C-score + normalized checkerboard.
 
         Combines both metrics for a more robust test.
+
+        Scale-mixing fix (缺陷 6): the raw C-score is the mean of
+        ``C_ij = (r_i - S_ij)(r_j - S_ij)`` over species pairs, which
+        scales as ``O(n_sites²)`` — typically ≫ 1 for any real matrix.
+        The previous implementation averaged it with a checkerboard
+        fraction in [0, 1], so the combo score was dominated by the
+        C-score component. We now normalize C-score to [0, 1] by
+        dividing by the maximum possible ``C_ij`` (``n_sites²`` — the
+        value when two species never co-occur and both fill all
+        sites), so the two components sit on the same scale.
         """
         c_score = self._compute_c_score(matrix)
         checkerboard = self._compute_checkerboard(matrix)
 
-        # Normalize checkerboard to similar scale as C-score
         n_species, n_sites = matrix.shape
+        # Normalise checkerboard count by its theoretical max
         max_checkerboard = n_species * (n_species - 1) / 2 * n_sites * (n_sites - 1) / 2
         norm_checkerboard = checkerboard / max_checkerboard if max_checkerboard > 0 else 0
 
-        return (c_score + norm_checkerboard) / 2
+        # Normalise C-score by the per-pair maximum (n_sites²).
+        # (r_i - S_ij)(r_j - S_ij) ≤ n_sites × n_sites, with equality
+        # only when both species occupy every site but never overlap,
+        # which is impossible — so the effective max is even smaller,
+        # but n_sites² is the standard theoretical bound and the
+        # resulting score is still in [0, 1].)
+        max_c_score = float(n_sites * n_sites)
+        norm_c_score = c_score / max_c_score if max_c_score > 0 else 0
+
+        return (norm_c_score + norm_checkerboard) / 2
 
 
 # =============================================================================
@@ -555,7 +574,7 @@ def _swap_matrix_impl(matrix: npt.NDArray, rng: np.random.Generator | None = Non
 
     n_swaps = max(1, int(n_species * n_sites * 0.1))
 
-    for _ in range(n_swaps):
+    for _swap in range(n_swaps):
         if rng is not None:
             rows = rng.choice(n_species, 2, replace=False)
             cols = rng.choice(n_sites, 2, replace=False)
@@ -718,6 +737,12 @@ def _compute_score_worker(matrix: npt.NDArray, metric: str) -> float:
         max_checkerboard = n_species * (n_species - 1) / 2 * n_sites * (n_sites - 1) / 2
         checkerboard = _compute_checkerboard_worker(matrix)
         norm_checkerboard = checkerboard / max_checkerboard if max_checkerboard > 0 else 0
-        return (c_score + norm_checkerboard) / 2
+        # The C-score MUST be normalised by the same n_sites^2 bound that
+        # _compute_combo_score applies. Omitting it here left the worker on a
+        # raw-count scale while the sequential path was on a [0, 1] scale, so
+        # the same data gave opposite verdicts depending on n_workers.
+        max_c_score = float(n_sites * n_sites)
+        norm_c_score = c_score / max_c_score if max_c_score > 0 else 0
+        return (norm_c_score + norm_checkerboard) / 2
     else:
         return _compute_c_score_worker(matrix)

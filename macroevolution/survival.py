@@ -705,7 +705,22 @@ def _cox_ph_scipy(
     if np.any(t < 0):
         raise ComputationError("Durations must be non-negative")
 
-    logger.info(f"Fitting Cox PH model: n={n}, p={p}")
+    n_events = int(np.sum(e == 1))
+    if n_events == 0:
+        # The partial log-likelihood only sums over EVENT times, so with no
+        # events it is the constant 0.0 at every beta. L-BFGS-B then
+        # "converges" at beta = [0.] and this function used to hand back a
+        # confident-looking model (p = 1, C = 0.5, ll = 0, AIC = 2p) for data
+        # that is 100% censored. log_rank_test in this module returns a
+        # degenerate result with a warning for the same case; a Cox model has
+        # no hazard ratio at all to report, so refuse the fit instead of
+        # inventing one. (Same message idiom: "<test>: <what is undefined>".)
+        raise ComputationError(
+            f"Cox PH: no events among n={n} observations (all censored); the partial "
+            "log-likelihood is constant and no hazard ratio is estimable"
+        )
+
+    logger.info(f"Fitting Cox PH model: n={n}, p={p}, events={n_events}")
 
     # Standardize covariates
     X_mean = X.mean(axis=0)
@@ -802,6 +817,23 @@ def _cox_ph_scipy(
                     + neg_partial_log_likelihood(beta_mm)
                 ) / (4 * eps**2)
                 hessian[j, i] = hessian[i, j]
+
+    # Complete / quasi-complete separation guard. A finite MLE for the Cox
+    # partial likelihood exists only where the observed information is
+    # positive definite; when the likelihood is unbounded (a covariate
+    # perfectly predicts the event, or a single event drives one direction)
+    # the information has a non-positive eigenvalue, inv(Hessian) has no
+    # meaning, and the returned beta is merely where the optimiser stopped
+    # (measured: |beta| = 12.9 with p = 0.97 and a plausible-looking C-index).
+    # This is a structural test on the information matrix, not a threshold on
+    # beta or se, so it cannot be tuned into or out of existence.
+    eig_min = float(np.min(np.linalg.eigvalsh(hessian)))
+    if eig_min <= 0.0:
+        raise ComputationError(
+            f"Cox PH: observed information is not positive definite (min eigenvalue "
+            f"{eig_min:.6g}); the partial log-likelihood is unbounded (complete "
+            "separation or a degenerate risk set) and no finite hazard ratio exists"
+        )
 
     try:
         info_inv = np.linalg.inv(hessian)

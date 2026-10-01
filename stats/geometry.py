@@ -224,13 +224,18 @@ class GeometryAnalyzer:
             points: Point coordinates (n_points, n_dims)
 
         Returns:
-            Hypervolume of convex hull
+            Hypervolume of convex hull. For ``n_dims == 2`` this is the hull
+            AREA (scipy's ``ConvexHull.volume`` is the area in the plane);
+            there is no 1-D special case -- a one-dimensional "hull" is the
+            range, and it is not computed here.
 
-        Note:
-            For n_dims > len(points) - 1, returns inf
-            For n_dims = 1, returns range (length)
-            For n_dims = 2, returns area
-            For n_dims >= 3, returns nD hypervolume via QHull
+        Raises:
+            ComputationError: If the points cannot span a full-dimensional
+                hull. The previous code returned ``inf`` for fewer than
+                ``n_dims + 1`` points while raising for a coplanar cloud --
+                two different answers to the same question, and neither was
+                right: an infinite morphospace is not a measurement, and it
+                flows into every disparity statistic computed from it.
         """
         pts = validate_data_array(points, allow_nan=False, name="points")
 
@@ -239,11 +244,17 @@ class GeometryAnalyzer:
 
         n, dim = pts.shape
 
-        if n <= dim:
-            self._logger.warning(
-                f"Cannot compute convex hull: {n} points in {dim}D (need n > dims for non-degenerate hull)"
+        if dim < 2:
+            raise ComputationError(
+                f"Convex hull volume needs at least 2 dimensions, got {dim}"
             )
-            return np.inf
+
+        if n <= dim:
+            raise ComputationError(
+                f"Convex hull needs more points than dimensions: got {n} points "
+                f"in {dim}D (need n >= {dim + 1} for a full-dimensional hull). "
+                "The points are collinear, coplanar, or otherwise degenerate."
+            )
 
         try:
             hull = ConvexHull(pts)

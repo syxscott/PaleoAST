@@ -88,6 +88,8 @@ from enum import Enum, auto
 import numpy as np
 from scipy import stats
 
+from phylogenetics.tree import PhyloTree
+
 logger = logging.getLogger(__name__)
 
 
@@ -633,8 +635,6 @@ class FossilizedBirthDeathProcess:
           与未处理该参数时的历史行为一致。
         """
         # 解析树
-        from ..phylogenetics.tree import PhyloTree
-
         if isinstance(tree, str):
             tree_obj = PhyloTree.from_newick(tree)
         else:
@@ -649,72 +649,74 @@ class FossilizedBirthDeathProcess:
             return np.log(x) if x > 0 else NEG_INF
 
         # 1. 树拓扑似然：遍历所有分支
-        # BUG FIX: Node age direction was reversed. The original code computed
-        # node_age as cumulative branch length from node to root (which gives
-        # smaller values for older nodes), but we need actual node age (time
-        # from present to node), which should be larger for older nodes.
-        # For a properly calibrated tree: actual_node_age = tree_height - node_age_to_root.
+        #
+        # BUG FIX (the O(N²) parent-chain + ``tree_height - x`` formula):
+        # that arithmetic works on ultrametric trees but FBD trees are
+        # defined to include sampled ancestors and are NOT ultrametric -- a
+        # sampled-ancestor tip sits *above* its parent's branching point, so
+        # ``tree_height`` is no longer a single number and the subtraction
+        # produced negative ages for those tips.  The corrected convention
+        # is to descend from the root carrying the absolute time
+        # (``parent_time + branch_length``) in a single preorder pass.  This
+        # is also O(N) instead of O(N²) per node.
         if tree_obj.root is not None:
-            # First pass: compute tree height (age of root) by finding maximum node_age_to_root
-            # node_age_to_root is the cumulative branch length from node to root
-            tree_height = 0.0
+            # Single preorder pass: parent_time[root] = 0 (present),
+            # child_time = parent_time + branch_length.  Internal nodes use
+            # the time AT their branching point; tips use the time at the
+            # tip itself (i.e. the sum of all branch lengths from the root).
+            node_time: dict = {}
             for node in tree_obj.root.preorder_traverse():
-                node_age_to_root = 0.0
-                cursor = node
-                while cursor is not None and cursor.parent is not None:
-                    node_age_to_root += cursor.branch_length or 0.0
-                    cursor = cursor.parent
-                if node_age_to_root > tree_height:
-                    tree_height = node_age_to_root
+                if node is tree_obj.root:
+                    node_time[node] = 0.0
+                    continue
+                branch_length = node.branch_length if node.branch_length is not None else 0.0
+                node_time[node] = node_time[node.parent] + branch_length
 
-            # Second pass: compute likelihood using correct node ages
             for node in tree_obj.root.preorder_traverse():
+                branch_length = node.branch_length if node.branch_length is not None else 0.0
+                node_age = node_time[node]
+
                 if node.parent is None:
                     # 根节点：物种形成事件本身。旧实现直接跳过，导致
                     # n 个叶节点的树只计入 n−2 个 λ 事件；n 个叶节点
                     # 共有 n−1 次物种形成，根事件贡献 ``log λ``。根的
                     # 两个子谱系都在树中被观测到，因此没有 E 因子。
                     log_lik += safe_log(self._lambda)
-                    continue  # 根节点无入射分支，无存活项
-                branch_length = node.branch_length if node.branch_length is not None else 0.0
+                    continue
+
                 if branch_length > 0:
                     # 分支存活项: exp(-(λ + μ + ψ) × Δt)
                     log_lik += -(self._lambda + self._mu + self._psi) * branch_length
 
-                    # BUG FIX: Compute node_age_to_root (cumulative from node to root),
-                    # then convert to actual node age from present: tree_height - node_age_to_root
-                    # This ensures parent.age > child.age (parent is older)
-                    node_age_to_root = 0.0
-                    cursor = node
-                    while cursor is not None and cursor.parent is not None:
-                        node_age_to_root += cursor.branch_length or 0.0
-                        cursor = cursor.parent
-                    # node_age is actual age from present (larger for older nodes)
-                    node_age = tree_height - node_age_to_root
-
-                    if node.is_leaf:
-                        # 叶节点：现存采样或灭绝终止
-                        if node.metadata.get("is_extant", True):
-                            # 现存采样叶：贡献 ρ（λ 已在父节点分支事件计入）
-                            log_lik += safe_log(rho)
-                        else:
-                            # 灭绝叶：死亡事件
-                            log_lik += safe_log(self._mu)
-                            if not complete_tree:
-                                # 重建树：该侧支未被观测，需要 E 因子
-                                # 表示其未留下其他采样后代。
-                                log_lik += safe_log(self._E(node_age))
-                            # complete_tree=True：死亡事件已被直接观测，
-                            # 不再乘 E 因子（见方法 docstring）。
+                if node.is_leaf:
+                    # 叶节点：现存采样或灭绝终止
+                    if node.metadata.get("is_extant", True):
+                        # 现存采样叶：贡献 ρ（λ 已在父节点分支事件计入）
+                        log_lik += safe_log(rho)
                     else:
-                        # 内部分支节点：物种形成事件 + 侧支无采样后代
-                        log_lik += safe_log(self._lambda) + safe_log(self._E(node_age))
+                        # 灭绝叶：死亡事件
+                        log_lik += safe_log(self._mu)
+                        if not complete_tree:
+                            # 重建树：该侧支未被观测，需要 E 因子
+                            # 表示其未留下其他采样后代。
+                            log_lik += safe_log(self._E(node_age))
+                        # complete_tree=True：死亡事件已被直接观测，
+                        # 不再乘 E 因子（见方法 docstring）。
+                else:
+                    # 内部分支节点：物种形成事件 + 侧支无采样后代
+                    log_lik += safe_log(self._lambda) + safe_log(self._E(node_age))
 
         # 2. 化石保存似然
         for fossil_group in fossils:
             for age in fossil_group:
                 if age < 0:
-                    continue
+                    # 负年龄说明时间轴方向弄反或单位搞错。旧实现直接
+                    # ``continue``，该化石项被静默丢弃：log_likelihood 与
+                    # 传入空化石列表返回完全相同的值，调用方丢掉全部化石
+                    # 信息却拿到一个"正常"的似然（实测 (‑5.0,) 与 [] 同为
+                    # ‑11.312746865901994）。与同文件的
+                    # :meth:`survival_probability` 保持一致，直接报错。
+                    raise ValueError(f"Fossil age must be non-negative, got {age}")
                 # 化石项: ψ × E(age)（该时刻被采样 + 此后无其他采样后代）
                 log_lik += safe_log(self._psi) + safe_log(self._E(age))
 

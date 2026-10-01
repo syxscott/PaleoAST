@@ -165,6 +165,7 @@ class ProcessPool:
         chunk_size: int = 1,
         callback: Callable[[R], None] | None = None,
         raise_on_error: bool = True,
+        timeout: float | None = 300.0,
     ) -> list[R]:
         """
         并行映射
@@ -177,6 +178,16 @@ class ProcessPool:
             raise_on_error: 默认 True。任一 item 失败即抛错。
                 设为 False 则返回带 ``None`` 空洞、部分 chunk 可能缺失的
                 列表（仅在你确实要"尽力而为"时使用）。
+            timeout: 单个 chunk 的等待上限（秒）。默认 300 秒，
+                即此前的硬编码值；传 ``None`` 表示一直等待。
+                此前没有这个参数：bootstrap 重复抽样只要跑得慢，
+                就会被 300 秒的硬上限判成"chunk 失败"，一个只是
+                慢的重复和真正报错的重复在调用方看来完全一样。
+                超时会单独记录（``mp.TimeoutError``，而非
+                ``concurrent.futures.TimeoutError``）并写进最终错误
+                信息，同时仍按失败 chunk 计入；能取消就取消，
+                取消不了（``ApplyResult`` 没有 ``cancel()``）会
+                在日志里明说。
 
         返回:
             结果列表
@@ -211,6 +222,7 @@ class ProcessPool:
 
         total = len(chunks)
         failed_chunks: list[int] = []
+        timed_out_chunks: list[int] = []
 
         # (chunk_index, chunk, future) triples rather than a bare list of
         # futures. A bare list desynchronises from `chunks` as soon as one
@@ -233,7 +245,7 @@ class ProcessPool:
         failed_items: list[Any] = []
         for i, chunk, result in submitted:
             try:
-                chunk_result = result.get(timeout=300)
+                chunk_result = result.get(timeout=timeout)
                 output.extend(chunk_result)
 
                 if callback:
@@ -248,15 +260,46 @@ class ProcessPool:
                 progress = (i + 1) / total
                 self._report_progress(progress, f"Processed chunk {i + 1}/{total}")
 
+            except mp.TimeoutError:
+                # A chunk that merely ran long is not a chunk that failed.
+                # The exception here is multiprocessing's own TimeoutError
+                # (what ApplyResult.get raises) -- it is unrelated to
+                # concurrent.futures.TimeoutError, and letting it fall
+                # through to the generic handler below is exactly how a
+                # slow replicate came to be reported as a failing chunk.
+                # Try to stop the work: the result object is asked to
+                # cancel if it supports it. multiprocessing's ApplyResult
+                # has no cancel() (that is concurrent.futures), so the
+                # chunk keeps running there and we say so in the log
+                # rather than pretending it was stopped.
+                items_preview = f"{chunk[:5]}{' ...' if len(chunk) > 5 else ''}"
+                cancel = getattr(result, "cancel", None)
+                if callable(cancel):
+                    cancel()
+                    self._logger.error(
+                        f"Chunk {i} timed out after {timeout}s (items: {items_preview}); future cancelled"
+                    )
+                else:
+                    self._logger.error(
+                        f"Chunk {i} timed out after {timeout}s (items: {items_preview}); this pool's "
+                        f"result object cannot cancel a running chunk, so it keeps occupying a worker "
+                        f"until it finishes. Raise the timeout, or shrink the chunk, if it is genuinely slow."
+                    )
+                timed_out_chunks.append(i)
+                failed_chunks.append(i)
+                failed_items.extend(chunk)
+
             except Exception as e:
                 self._logger.error(f"Chunk {i} failed: {e}")
                 failed_chunks.append(i)
                 failed_items.extend(chunk)
 
         if (failed_items or failed_chunks) and raise_on_error:
+            detail = f"{len(timed_out_chunks)} of them timed out after {timeout}s" if timed_out_chunks else ""
             raise ComputationError(
                 f"map() had {len(failed_items)} failing item(s) "
-                f"and {len(failed_chunks)} failing chunk(s); returning the "
+                f"and {len(failed_chunks)} failing chunk(s)"
+                f"{'; ' + detail if detail else ''}; returning the "
                 f"survivors would silently misrepresent which inputs were "
                 f"processed. Failing items: {failed_items[:10]}"
                 f"{' ...' if len(failed_items) > 10 else ''}. Pass "

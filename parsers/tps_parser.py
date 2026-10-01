@@ -245,6 +245,10 @@ class TPSParser:
         # Reset instance state variables for re-use
         self.n_landmarks = 0
         self.n_dimensions = 0
+        # SCALE is a per-FILE setting. It used to survive between parse() calls
+        # on the same instance, so parsing a "SCALE=2.5" file and then a file
+        # with no SCALE left the second file's specimens at scale=2.5.
+        self._current_scale = None
         self._parse_errors = TPSParseErrorSummary(file_path=file_path)
 
         # Read raw bytes to detect BOM

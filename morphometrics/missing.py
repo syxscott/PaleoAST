@@ -74,6 +74,16 @@ def _similarity_fit(source: npt.NDArray, target: npt.NDArray):
     Least-squares similarity mapping source -> target (row-vector form):
     ``target ~ (source - c) * s @ R``.
 
+    The similarity scale ``s`` is recovered from the SVD of the
+    cross-covariance H = A.T @ B (Schönemann 1966; Bookstein 1989):
+
+        s = trace(D · Σ) / trace(A_origᵀ A_orig)
+
+    where ``D = diag(1,...,1, ±1)`` is the sign matrix used to flip the
+    smallest singular vector when the optimal similarity fit is an
+    improper rotation, and A_orig is the centred source WITHOUT the
+    rescaling-to-B step.
+
     Returns (c, s, R); inverse: ``source = (mapped @ R.T) / s + c``.
     """
     c = source.mean(axis=0)
@@ -83,6 +93,11 @@ def _similarity_fit(source: npt.NDArray, target: npt.NDArray):
     norm_a = float(np.sqrt(np.sum(A**2)))
     if norm_a <= np.finfo(float).eps:
         raise MorphometricsError(_("Cannot align a specimen whose observed landmarks coincide"))
+    # IMPORTANT: use the ORIGINAL (centred only) A in the SVD.  Earlier
+    # versions rescaled A to B's norm first, which biased the scale
+    # estimate by ||A||² / ||B||² and broke the missing-landmark
+    # estimator's scale equivariance (the filled coordinates drifted with
+    # the absolute scale of the input).
     H = A.T @ B
     try:
         U, S, Vt = np.linalg.svd(H)
@@ -91,6 +106,9 @@ def _similarity_fit(source: npt.NDArray, target: npt.NDArray):
     d = np.sign(np.linalg.det(Vt.T @ U.T))
     D = np.diag([1.0] * (A.shape[1] - 1) + [d])
     R = Vt.T @ D @ U.T
+    # Textbook formula: s = trace(D · Σ) / trace(Aᵀ A), evaluated on the
+    # un-rescaled A so the scale factor is correct relative to the
+    # user's original coordinate frame.
     s = float(np.sum(S * np.diag(D)) / np.sum(A**2))
     return c, s, R
 

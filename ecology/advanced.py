@@ -217,22 +217,37 @@ class AbundanceModelFitter:
                 return 1e10
             return N / S - x / ((1 - x) * (-np.log(1 - x)))
 
-        lower_bound = equation(0.001)
-        if N / S <= lower_bound:
-            # N/S 的下界就是 g(0) = 1（等所有个体都是单只时 N/S = 1）。
-            # 此时不存在 [0.001, 0.999] 内的根：真解是 x -> 0、alpha -> inf。
-            # 静默回退到 x=0.5 会给出一个毫无依据的拟合值。
+        # g(x) = x / ((1 - x) * (-ln(1 - x))) is strictly increasing on (0, 1)
+        # with range (1, infinity): as x -> 0, -ln(1 - x) ~ x so g -> 1. So a
+        # solution exists only when N / S > 1, and N / S == 1 (every species a
+        # singleton) is the unidentifiable limit where the true solution is
+        # x -> 0, alpha -> infinity.
+        #
+        # The previous guard compared N/S against ``equation(0.001)``, which
+        # is the *residual* of the equation at that point (about 0.995), not
+        # the limit of g. That off-by-a-hair test let N/S = 1.0 slip past, the
+        # solver then found no root, and the except-branch quietly installed
+        # x = 0.5 -- returning parameters that imply N/S = 1.44 for data whose
+        # true N/S is 1.0.
+        if N / S <= 1.0:
             raise ValueError(
-                f"Log-series fit requires N/S > {lower_bound:.4f} "
-                f"(got N/S={N / S:.4f} for S={S}, N={N:.0f}). "
-                f"Abundances this uniform are not identifiable under a log-series model."
+                f"Log-series fit requires N/S > 1 (got N/S={N / S:.4f} for "
+                f"S={S}, N={N:.0f}). Abundances this uniform are not "
+                f"identifiable under a log-series model; the fitted alpha "
+                f"would diverge."
             )
 
         try:
-            x = optimize.brentq(equation, 0.001, 0.999)
-        except ValueError:
-            self._logger.warning(f"Log-series brentq solver failed for S={S}, N={N}, using fallback x=0.5")
-            x = 0.5
+            x = optimize.brentq(equation, 1e-9, 1 - 1e-9)
+        except ValueError as exc:
+            # No fabrication. A fitted parameter that contradicts the data is
+            # worse than an error, because a downstream goodness-of-fit number
+            # would then be computed against a model that never held.
+            raise ValueError(
+                f"Log-series fit found no root in (0, 1) for N/S={N / S:.6f} "
+                f"(S={S}, N={N:.0f}). The abundances are not identifiable "
+                f"under a log-series model."
+            ) from exc
 
         # S = alpha * (-ln(1-x))  =>  alpha = S / (-ln(1-x))
         # (等价于 N = alpha*x/(1-x) => alpha = N*(1-x)/x；两者由上面的
@@ -267,7 +282,7 @@ class AbundanceModelFitter:
         result = []
         for octave_idx, count in enumerate(octave_counts):
             abundance = 2**octave_idx
-            for _ in range(round(count)):
+            for _draw in range(round(count)):
                 result.append(abundance)
         result = sorted(result, reverse=True)[:n_species]
         while len(result) < n_species:

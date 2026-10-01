@@ -4,8 +4,10 @@ PaleoAST Build Script
 使用 PyInstaller 打包 PaleoAST 为独立可执行文件
 
 使用方法:
-    conda activate past
+    conda activate <你用于开发的环境>   # 例如 dev
     python build_exe.py
+
+构建用的解释器由 get_conda_python() 解析,可用 $PALEOAST_BUILD_PYTHON 覆盖。
 
 或者双击运行:
     build.bat
@@ -19,22 +21,79 @@ from pathlib import Path
 
 
 def get_conda_python():
-    """获取 conda past 环境的 python 路径"""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("CONDA_PREFIX", r"D:\Program Files\ananconda3"))
-        return base / "envs" / "past" / "python.exe"
-    else:
-        base = Path(os.environ.get("CONDA_PREFIX", "/opt/anaconda3"))
-        return base / "envs" / "past" / "bin" / "python"
+    """Resolve the Python interpreter to build with.
+
+    The target environment is overridable because the build used to be hardcoded
+    to a conda env named ``past``, which is not the environment this project is
+    developed in (``dev`` on this machine) -- so a build could silently use an
+    interpreter with the wrong dependencies, or fail outright.
+
+    Resolution order:
+      1. ``$PALEOAST_BUILD_PYTHON`` (explicit, wins outright)
+      2. the currently active interpreter, when it already has PyQt6 and numpy
+      3. ``$CONDA_DEFAULT_ENV`` / ``$CONDA_PREFIX``'s env
+      4. ``past`` then ``dev`` under the conda base, if they exist
+    """
+    override = os.environ.get("PALEOAST_BUILD_PYTHON")
+    if override:
+        candidate = Path(override)
+        if candidate.exists():
+            return candidate
+        raise FileNotFoundError(
+            f"PALEOAST_BUILD_PYTHON points at {override!r}, which does not exist"
+        )
+
+    # Prefer whatever interpreter is running this script, provided it can
+    # actually import the project's own dependencies.
+    if _has_build_deps(sys.executable):
+        return Path(sys.executable)
+
+    env_name = os.environ.get("CONDA_DEFAULT_ENV")
+    prefix = os.environ.get("CONDA_PREFIX")
+    candidates: list[Path] = []
+    if env_name and prefix:
+        candidates.append(Path(prefix) / ("python.exe" if sys.platform == "win32" else "bin/python"))
+    base = Path(os.environ.get("CONDA_PREFIX") or (r"D:\Program Files\ananconda3" if sys.platform == "win32" else "/opt/anaconda3"))
+    for name in ("past", "dev"):
+        if sys.platform == "win32":
+            candidates.append(base / "envs" / name / "python.exe")
+        else:
+            candidates.append(base / "envs" / name / "bin" / "python")
+    for cand in candidates:
+        if cand.exists() and _has_build_deps(str(cand)):
+            return cand
+
+    # Nothing verified; hand back the first candidate that merely EXISTS so the
+    # error surfaces from PyInstaller with real diagnostics.
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    return Path(sys.executable)
+
+
+def _has_build_deps(python: str | Path) -> bool:
+    """True when this interpreter can import what the app needs at runtime."""
+    try:
+        probe = "import PyQt6, numpy, scipy, pandas, matplotlib, sklearn"
+        return subprocess.run(
+            [str(python), "-c", probe], capture_output=True, text=True
+        ).returncode == 0
+    except (OSError, ValueError):
+        return False
 
 
 def check_pyinstaller():
     """检查 pyinstaller 是否安装"""
     python = get_conda_python()
+    print(f"构建解释器: {python}")
     result = subprocess.run([str(python), "-m", "pip", "show", "pyinstaller"], capture_output=True, text=True)
     if result.returncode != 0:
         print("正在安装 PyInstaller...")
-        subprocess.run([str(python), "-m", "pip", "install", "pyinstaller"], check=True)
+        # Pin >=6: PaleoAST.spec uses the 6.x Analysis() signature. The 5.x-era
+        # kwargs (win_no_prefer_redirects, cipher, ...) were removed in 6.0.
+        subprocess.run(
+            [str(python), "-m", "pip", "install", "pyinstaller>=6"], check=True
+        )
         print("PyInstaller 安装完成!")
     else:
         print("PyInstaller 已安装")

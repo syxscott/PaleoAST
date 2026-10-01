@@ -104,9 +104,11 @@ class TestPERMANOVA(unittest.TestCase):
 
         result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
 
-        # SS_T computed from full matrix (upper triangle scaled by n)
+        # SS_T computed from full matrix (upper triangle scaled by n-1).
+        # Anderson (2001) uses (n-1) -- using n is the bug we're guarding
+        # against in tests/stats/test_permanova_ss.py.
         D_sq = D**2
-        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
+        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / (n - 1)
         # Allow small numerical error
         assert_allclose(SS_T, result.ss_between + result.ss_within, rtol=1e-10)
 
@@ -162,7 +164,7 @@ class TestPERMANOVA(unittest.TestCase):
             for i in range(len(grp_indices)):
                 for j in range(i + 1, len(grp_indices)):
                     grp_sum += D_sq[grp_indices[i], grp_indices[j]]
-            ss_within_ref += (1.0 / n_g) * grp_sum
+            ss_within_ref += (1.0 / (n_g - 1)) * grp_sum
 
         # Vectorized version
         result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)

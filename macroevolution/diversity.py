@@ -213,13 +213,21 @@ class DiversityDynamics:
         """
         模拟中性随机过程
 
+        dt 必须大于 0；duration 不足一个步长时仍返回 t=0 这一个采样点。
+
         返回:
             模拟的多样性曲线
         """
         self._logger.info(
             f"Simulating neutral process: {n_taxa} taxa, duration={duration}, speciation={speciation_rate}, extinction={extinction_rate}"
         )
-        n_steps = int(duration / dt)
+        if dt <= 0:
+            raise ValueError(f"dt must be > 0, got {dt}")
+
+        # A window shorter than one step used to produce an empty array and
+        # then crash on times[0]; the curve always carries at least the t=0
+        # sample.
+        n_steps = max(1, int(duration / dt))
 
         times = np.zeros(n_steps)
         richness = np.zeros(n_steps)

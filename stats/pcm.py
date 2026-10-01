@@ -793,6 +793,24 @@ class PCMAnalyzer:
         if random_seed is not None:
             rng = np.random.default_rng(random_seed)
         else:
+            # Without a seed the global ``np.random`` state is used.
+            # Two calls with identical inputs may return slightly
+            # different p-values; warn the caller so they can decide
+            # whether to pass a seed for a publishable result.
+            import warnings as _warnings
+
+            _warnings.warn(
+                "PCM (Blomberg K): no ``random_seed`` supplied; the permutation "
+                "p-value uses the global ``np.random`` state and is not "
+                "reproducible across runs. Pass ``random_seed=`` to make "
+                "the result deterministic.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._logger.warning(
+                "PCM (Blomberg K): no random_seed supplied; p-value uses global "
+                "np.random state and is not reproducible."
+            )
             rng = np.random
 
         perm_Ks: list[float] = []
@@ -1019,9 +1037,27 @@ class PCMAnalyzer:
         if random_seed is not None:
             rng = np.random.default_rng(random_seed)
         else:
+            # Without a seed the global ``np.random`` state is used.
+            # Two calls with identical inputs may return slightly
+            # different p-values; warn the caller so they can decide
+            # whether to pass a seed for a publishable result.
+            import warnings as _warnings
+
+            _warnings.warn(
+                "PCM (Phylogenetic ANOVA): no ``random_seed`` supplied; the "
+                "permutation p-value uses the global ``np.random`` state and "
+                "is not reproducible across runs. Pass ``random_seed=`` to "
+                "make the result deterministic.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._logger.warning(
+                "PCM (Phylogenetic ANOVA): no random_seed supplied; p-value "
+                "uses global np.random state and is not reproducible."
+            )
             rng = np.random
 
-        for _ in range(n_p):
+        for _perm in range(n_p):
             # Shuffle ONLY trait values, keep groups fixed
             perm_trait = rng.permutation(tip_array)
             perm_trait_dict = {tip_names_list[i]: perm_trait[i] for i in range(len(tip_names_list))}

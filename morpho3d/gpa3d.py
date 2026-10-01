@@ -98,6 +98,11 @@ class GPA3DResult:
         n_iterations: 迭代次数
         final_spread: 最终散布度
         procrustes_distances: 样本间Procrustes距离矩阵
+        converged: 是否在 tolerance 内收敛。为 False 时结果只是
+            ``max_iterations`` 轮迭代后的近似对齐, 不可与收敛结果
+            混为一谈 (与二维 GPAResult.converged 语义一致)。
+            默认 False: 未经迭代 (如半标志点滑动的重组) 的结果
+            不应自称已收敛。
     """
 
     aligned_configs: list[np.ndarray]
@@ -107,6 +112,7 @@ class GPA3DResult:
     n_iterations: int
     final_spread: float
     procrustes_distances: np.ndarray | None = None
+    converged: bool = False
 
     @property
     def aligned_configurations(self) -> np.ndarray:
@@ -154,7 +160,7 @@ class GPA3D:
         >>> gpa = GPA3D(tolerance=1e-8, max_iterations=100)
         >>> configs = [np.random.randn(20, 3) for _ in range(10)]
         >>> result = gpa.analyze(configs)
-        >>> print(f"Converged in {result.n_iterations} iterations")
+        >>> print(f"{result.n_iterations} iterations, converged={result.converged}")
         >>> print(f"Mean shape centroid size: {result.centroid_sizes.mean():.4f}")
     """
 
@@ -215,6 +221,9 @@ class GPA3D:
         # 迭代优化
         prev_mean = None
         n_iterations = 0
+        # 耗尽 max_iterations 时也要能被调用方区分: 循环正常走完
+        # 而未 break 就没有任何收敛证据。
+        converged = False
 
         for iteration in range(self._max_iter):
             n_iterations = iteration + 1
@@ -231,6 +240,7 @@ class GPA3D:
                     self._logger.debug(f"Iteration {iteration}: diff = {diff:.2e}, diff_norm = {diff_norm:.2e}")
 
                 if diff_norm < self._tolerance:
+                    converged = True
                     self._logger.info(f"Converged after {n_iterations} iterations")
                     break
 
@@ -284,7 +294,15 @@ class GPA3D:
         # 计算Procrustes距离矩阵
         procrustes_distances = self._compute_distance_matrix(aligned)
 
-        self._logger.info(f"GPA complete: {n_iterations} iterations, final spread = {final_spread:.4f}")
+        if not converged:
+            self._logger.warning(
+                f"GPA did NOT converge: stopped after {n_iterations} of {self._max_iter} iterations "
+                f"(tolerance={self._tolerance:g}, final spread={final_spread:.4f})"
+            )
+
+        self._logger.info(
+            f"GPA complete: {n_iterations} iterations, converged={converged}, final spread = {final_spread:.4f}"
+        )
 
         return GPA3DResult(
             aligned_configs=aligned,
@@ -294,6 +312,7 @@ class GPA3D:
             n_iterations=n_iterations,
             final_spread=final_spread,
             procrustes_distances=procrustes_distances,
+            converged=converged,
         )
 
     def _compute_centroid_size(self, config: np.ndarray) -> float:
@@ -374,20 +393,72 @@ class GPA3D:
 
         用于半标志点滑动的预处理步骤。
 
+        只对固定标志点做 GPA, 再把每个标本的**完整**构型用该标本固定
+        子集上得到的相似变换 (平移 + 缩放 + 旋转) 一起搬过去。半标志点
+        因此跟随各自标本的固定界标, 而不会被独立对齐。
+
         参数:
             configs: 构型列表
             fixed_indices: 固定标志点的索引
 
         返回:
-            GPA3DResult对象
+            GPA3DResult对象, ``aligned_configs`` / ``mean_config`` 为
+            **完整**构型 (n_samples, n_landmarks, 3) —— 与二维
+            ``morphometrics.partial_gpa`` 的返回范围一致。此前这里直接
+            返回固定子集的 GPA 结果, 调用方按完整标志点数索引时会拿到
+            长度正确但内容错误的数组。
         """
+        configs = [np.asarray(config, dtype=np.float64) for config in configs]
+
         # 提取固定点
         fixed_configs = [config[fixed_indices] for config in configs]
 
         # 执行标准GPA
         result = self.analyze(fixed_configs)
 
-        return result
+        # 把完整构型搬到固定子集的对齐坐标系。
+        #
+        # 不能复用 result.rotations: analyze 每轮都用当轮的 R 覆盖
+        # rotations[i], 存下来的只是最后一轮的旋转, 不是原始构型到
+        # 收敛构型的复合变换。这里对每个标本重新解一次最优相似变换
+        # (SVD 旋转 + 质心大小), 与 SemiLandmarkSlider 内部的做法一致,
+        # 逆变换 ``raw = aligned @ R * cs + centroid`` 精确成立。
+        aligned_fixed = result.aligned_configs
+        aligned_full: list[np.ndarray] = []
+        centroid_sizes = np.zeros(len(configs))
+        rotations: list[np.ndarray] = []
+
+        for i, config in enumerate(configs):
+            fixed = fixed_configs[i]
+            centroid = np.mean(fixed, axis=0)
+            centered = fixed - centroid
+            cs = float(np.sqrt(np.sum(centered**2)))
+            centroid_sizes[i] = cs if cs > 1e-12 else 1.0
+
+            # ``scale=False`` 时 analyze 不做等比缩放, 这里必须同样
+            # 只做平移+旋转, 否则完整构型与固定子集不在同一个坐标系。
+            scale_factor = centroid_sizes[i] if (self._scale and cs > 1e-12) else 1.0
+            scaled = centered / scale_factor
+
+            R = RotationMatrix.from_svd(scaled, aligned_fixed[i])
+            rotations.append(R)
+            aligned_full.append((config - centroid) / scale_factor @ R.T)
+
+        final_mean = np.mean(np.stack(aligned_full), axis=0)
+        final_spread = np.sum([np.linalg.norm(config - final_mean) ** 2 for config in aligned_full]) / len(
+            aligned_full
+        )
+
+        return GPA3DResult(
+            aligned_configs=aligned_full,
+            mean_config=final_mean,
+            centroid_sizes=centroid_sizes,
+            rotations=rotations,
+            n_iterations=result.n_iterations,
+            final_spread=final_spread,
+            procrustes_distances=self._compute_distance_matrix(aligned_full),
+            converged=result.converged,
+        )
 
 
 def compute_partial_gpa(configs: list[np.ndarray], fixed_indices: np.ndarray, tolerance: float = 1e-8) -> GPA3DResult:

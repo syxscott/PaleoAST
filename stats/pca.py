@@ -476,13 +476,21 @@ class PCAAnalyzer:
 
         n_eigenvalues = min(n_points, len(result.eigenvalues_raw))
 
+        # All-constant (or otherwise zero-variance) input is legal and analyze()
+        # already reports zero explained variance for it, but dividing by the
+        # zero total here turned every scree value into NaN and the plot into
+        # NaN geometry. Mirror analyze()'s `total > 0` guard.
+        total_variance = np.sum(result.eigenvalues_raw)
+        if total_variance > 0:
+            explained_variance = result.eigenvalues_raw[:n_eigenvalues] / total_variance * 100
+        else:
+            explained_variance = np.zeros(n_eigenvalues)
+
         return {
             "components": np.arange(1, n_eigenvalues + 1),
             "eigenvalues": result.eigenvalues_raw[:n_eigenvalues],
-            "explained_variance": (result.eigenvalues_raw[:n_eigenvalues] / np.sum(result.eigenvalues_raw) * 100),
-            "cumulative_variance": np.cumsum(
-                result.eigenvalues_raw[:n_eigenvalues] / np.sum(result.eigenvalues_raw) * 100
-            ),
+            "explained_variance": explained_variance,
+            "cumulative_variance": np.cumsum(explained_variance),
         }
 
     def get_loadings_data(self, result: PCAResult | None = None) -> dict[str, Any]:

@@ -9,7 +9,7 @@ Provides dialogs for:
     - Two-Block PLS analysis (morphological integration)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.2.0
 """
 
 import logging
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -48,10 +49,20 @@ class BaseAllometryDialog(QDialog):
 
     resultsReady = pyqtSignal(dict)
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
         super().__init__(parent)
         self._logger = logging.getLogger(f"{__name__}.{title}")
         self._is_dark_theme = False
+        # Inherit the controller from the main window so that the
+        # dialog shares the same analyzers / state cache. ``None`` is
+        # supported for headless tests; ``_on_run`` will fall back to
+        # building a private ``StatisticsController`` in that case.
+        self._controller = controller
 
         self.setWindowTitle(title)
         self.setMinimumSize(700, 600)
@@ -121,7 +132,7 @@ class BaseAllometryDialog(QDialog):
 
         self._results_text = QTextEdit()
         self._results_text.setReadOnly(True)
-        self._results_text.setMaximumHeight(150)
+        self._results_text.setMaximumHeight(220)
         results_layout.addWidget(self._results_text)
 
         layout.addWidget(results_group)
@@ -144,9 +155,56 @@ class BaseAllometryDialog(QDialog):
         """Set GPA result info label."""
         self._gpa_result_label.setText(info)
 
+    def _refresh_gpa_label(self) -> None:
+        """Show whether a GPA result is available in the cached state."""
+        controller = self._controller
+        if controller is None:
+            self._gpa_result_label.setText(_("No GPA result selected"))
+            return
+        try:
+            cached = controller.get_cached_result("gpa_result")
+        except Exception as e:  # defensive: state lookup must never raise into the UI
+            self._logger.debug("GPA cache lookup failed: %s", e)
+            cached = None
+        if cached is None:
+            self._gpa_result_label.setText(
+                _(
+                    "No cached GPA result. Run GPA first, or pass aligned "
+                    "configurations explicitly when calling the analyzer."
+                )
+            )
+        else:
+            n = getattr(cached, "aligned_configurations", None)
+            shape = getattr(n, "shape", None)
+            self._gpa_result_label.setText(
+                _("Cached GPA result available: shape = {0}").format(shape)
+            )
+
+    def showEvent(self, event) -> None:
+        """Refresh the GPA label every time the dialog is shown."""
+        self._refresh_gpa_label()
+        super().showEvent(event)
+
+    def _get_controller(self):
+        """Return the controller (inherited or a fresh one for headless tests)."""
+        if self._controller is not None:
+            return self._controller
+        from controllers.statistics_controller import StatisticsController
+
+        return StatisticsController()
+
     def _on_run(self) -> None:
         """Run the analysis. Subclasses implement specific logic."""
         raise NotImplementedError
+
+    def _show_error(self, exc: Exception, label: str) -> None:
+        self._logger.error(f"{label} failed: {exc}")
+        try:
+            from views.ui_main_window import format_user_error
+        except Exception:
+            format_user_error = None
+        msg = format_user_error(exc, label) if format_user_error is not None else str(exc)
+        QMessageBox.critical(self, _("Error"), msg)
 
 
 class AllometryDialog(BaseAllometryDialog):
@@ -157,53 +215,64 @@ class AllometryDialog(BaseAllometryDialog):
     multivariate regression of Procrustes coordinates on log centroid size.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Allometry Analysis (Size-Shape Relationship)"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Allometry Analysis (Size-Shape Relationship)"),
+            parent,
+            controller=controller,
+        )
 
         method_layout = self._method_widget.layout()
 
         # Options
         opts_group = QGroupBox(_("Options"))
-        opts_layout = QVBoxLayout(opts_group)
+        opts_layout = QFormLayout(opts_group)
 
         self._use_pca_check = QCheckBox(_("Reduce dimensionality with PCA"))
         self._use_pca_check.setChecked(False)
-        opts_layout.addWidget(self._use_pca_check)
+        opts_layout.addRow(self._use_pca_check)
 
-        pca_layout = QHBoxLayout()
-        pca_layout.addWidget(QLabel(_("Number of components:")))
         self._n_components_spin = QSpinBox()
         self._n_components_spin.setRange(2, 100)
         self._n_components_spin.setValue(10)
         self._n_components_spin.setEnabled(False)
-        pca_layout.addWidget(self._n_components_spin)
-        opts_layout.addLayout(pca_layout)
+        opts_layout.addRow(_("Number of components:"), self._n_components_spin)
+
+        # Regression method — currently exposed for transparency; the
+        # multivariate regression in AllometryAnalyzer is OLS (the
+        # size-shape regression is symmetric in X), but the option is
+        # kept here so a future RMA implementation slots in cleanly.
+        self._method_combo = QComboBox()
+        self._method_combo.addItems([_("OLS"), _("RMA (reduced major axis)")])
+        opts_layout.addRow(_("Regression method:"), self._method_combo)
+
+        # NOTE: the previous "Confidence level" spinner was a dead
+        # control — ``AllometryAnalyzer.analyze_allometry`` and
+        # ``StatisticsController.analyze_allometry`` both ignore a
+        # ``confidence_level`` argument, so any value typed here was
+        # silently dropped. The engine does not currently expose a
+        # bootstrap CI for the regression coefficients. The control is
+        # not re-added because that would invite the same silent
+        # failure; see the engine for a future CI implementation.
 
         self._use_pca_check.toggled.connect(self._n_components_spin.setEnabled)
 
-        opts_layout.addStretch()
         method_layout.addWidget(opts_group)
 
     def _on_run(self) -> None:
         """Run allometry analysis."""
         try:
-            # Get GPA data from state or use sample data
-            # In real usage, this would come from the current workspace
-            # For now, create sample data for testing
-
-            QMessageBox.information(
-                self,
-                _("Information"),
-                _(
-                    "Allometry analysis requires GPA-aligned configurations.\n"
-                    "Please run GPA analysis first and ensure data is loaded."
-                ),
-            )
+            controller = self._get_controller()
+            n_components = self._n_components_spin.value() if self._use_pca_check.isChecked() else None
+            result = controller.analyze_allometry(n_components=n_components)
+            self._results_text.setPlainText(result.summary())
+            self.resultsReady.emit(result.to_dict())
         except Exception as e:
-            self._logger.error(f"Allometry failed: {e}")
-            from views.ui_main_window import format_user_error
-
-            QMessageBox.critical(self, _("Error"), format_user_error(e, "异速生长分析"))
+            self._show_error(e, _("Allometry analysis"))
 
 
 class PLSDialog(BaseAllometryDialog):
@@ -214,8 +283,16 @@ class PLSDialog(BaseAllometryDialog):
     using 2B-PLS analysis.
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("Morphological Integration (2B-PLS)"), parent)
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        controller: object | None = None,
+    ) -> None:
+        super().__init__(
+            _("Morphological Integration (2B-PLS)"),
+            parent,
+            controller=controller,
+        )
 
         method_layout = self._method_widget.layout()
 
@@ -234,35 +311,48 @@ class PLSDialog(BaseAllometryDialog):
         division_layout.addWidget(QLabel(_("How to divide landmarks into two blocks:")))
         division_layout.addWidget(self._division_combo)
 
-        division_layout.addStretch()
         method_layout.addWidget(division_group)
 
         # PLS options
         pls_group = QGroupBox(_("PLS Options"))
-        pls_layout = QVBoxLayout(pls_group)
+        pls_layout = QFormLayout(pls_group)
 
-        n_comp_layout = QHBoxLayout()
-        n_comp_layout.addWidget(QLabel(_("Number of components:")))
         self._n_components_spin = QSpinBox()
         self._n_components_spin.setRange(1, 50)
         self._n_components_spin.setValue(5)
-        n_comp_layout.addWidget(self._n_components_spin)
-        pls_layout.addLayout(n_comp_layout)
+        pls_layout.addRow(_("Number of components:"), self._n_components_spin)
 
-        pls_layout.addStretch()
+        self._permutations_spin = QSpinBox()
+        self._permutations_spin.setRange(0, 9999)
+        self._permutations_spin.setValue(999)
+        self._permutations_spin.setSingleStep(100)
+        pls_layout.addRow(_("Permutations (r₁ test):"), self._permutations_spin)
+
+        self._seed_spin = QSpinBox()
+        self._seed_spin.setRange(0, 10**6)
+        self._seed_spin.setValue(42)
+        pls_layout.addRow(_("Random seed:"), self._seed_spin)
+
         method_layout.addWidget(pls_group)
 
     def _on_run(self) -> None:
         """Run PLS analysis."""
         try:
-            QMessageBox.information(
-                self,
-                _("Information"),
-                _(
-                    "PLS analysis requires two blocks of shape variables.\n"
-                    "Please ensure GPA analysis has been run with the data loaded."
-                ),
+            controller = self._get_controller()
+            division_map = {
+                0: "anterior_posterior",
+                1: "size_matched",
+                2: "random",
+            }
+            division = division_map.get(self._division_combo.currentIndex(), "anterior_posterior")
+            seed = self._seed_spin.value() if self._permutations_spin.value() > 0 else None
+            result = controller.analyze_pls(
+                division=division,
+                n_components=self._n_components_spin.value(),
+                permutations=self._permutations_spin.value(),
+                seed=seed,
             )
+            self._results_text.setPlainText(result.summary())
+            self.resultsReady.emit(result.to_dict())
         except Exception as e:
-            self._logger.error(f"PLS failed: {e}")
-            QMessageBox.critical(self, _("Error"), str(e))
+            self._show_error(e, _("PLS analysis"))

@@ -111,10 +111,11 @@ class TaskScheduler:
     def add_task(
         self,
         func: Callable,
+        /,
+        *args,
         task_id: str | None = None,
         dependencies: list[str] | None = None,
         priority: TaskPriority = TaskPriority.NORMAL,
-        *args,
         **kwargs,
     ) -> str:
         """
@@ -131,6 +132,16 @@ class TaskScheduler:
         返回:
             任务ID
         """
+        # Refuse work the scheduler can never run. After shutdown() the worker
+        # loop is gone, so a task accepted here would sit forever and the
+        # caller would get a plausible id back and then a timeout -- a silent
+        # black hole.
+        if self._shutdown_event.is_set():
+            raise RuntimeError(
+                "This scheduler has been shut down and cannot accept new "
+                "tasks; create a new TaskScheduler."
+            )
+
         if task_id is None:
             task_id = str(uuid.uuid4())
 
@@ -297,7 +308,7 @@ class TaskScheduler:
         返回:
             任务结果
         """
-        start_time = __import__("time").time()
+        start_time = time.time()
 
         while True:
             with self._lock:
@@ -306,6 +317,23 @@ class TaskScheduler:
 
                 if task_id in self._failed:
                     raise RuntimeError(f"Task {task_id} failed: {self._tasks[task_id].error}")
+
+                # Distinguish "still running" from "never heard of it". A
+                # caller who mistypes an id used to wait out the whole timeout
+                # and then get a TimeoutError that reads like the task was
+                # merely slow.
+                if task_id not in self._tasks:
+                    raise KeyError(
+                        f"Unknown task id {task_id!r}. "
+                        f"{len(self._tasks)} task(s) known to this scheduler."
+                    )
+
+                if not self._running and not self._shutdown_event.is_set():
+                    # The worker loop is gone, so this task can never finish.
+                    raise RuntimeError(
+                        f"Task {task_id} cannot complete: the scheduler was "
+                        f"never started. Call start() first."
+                    )
 
             if timeout and (time.time() - start_time) > timeout:
                 raise TimeoutError(f"Task {task_id} did not complete within {timeout}s")
@@ -330,6 +358,15 @@ class TaskScheduler:
 
                 if pending == 0:
                     return self._results.copy()
+
+                # Same guard get_result() uses. Without it a caller who never
+                # called start() spins here forever on the default
+                # timeout=None, and nothing will ever decrement `pending`.
+                if not self._running and not self._shutdown_event.is_set():
+                    raise RuntimeError(
+                        f"{pending} task(s) cannot complete: the scheduler was "
+                        f"never started. Call start() first."
+                    )
 
             if timeout and (time.time() - start_time) > timeout:
                 raise TimeoutError("Timeout waiting for all tasks")

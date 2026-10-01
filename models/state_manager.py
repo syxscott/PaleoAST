@@ -231,7 +231,31 @@ class StateManager:
                 that load fresh data should pass ``False``. When None
                 (default) the flag is set True, preserving the
                 historical behaviour for in-app edits and transforms.
+        Raises:
+            TypeError: If ``matrix`` is not a :class:`DataMatrix`. The
+                check runs before any field is written, so a rejected
+                argument leaves the state manager exactly as it was.
         """
+        # Validate BEFORE the first mutation, not after. Assigning
+        # ``self._data_matrix = matrix`` first meant the type error only
+        # surfaced on the *next* line (``matrix.n_samples``), by which time
+        # a wrong type was already the live global state: ``has_data``
+        # stayed True, ``data_matrix.data`` handed out a memoryview, the
+        # metadata managers still described the previous matrix, and
+        # ``_analysis_cache`` was never cleared (the raise skipped line 262)
+        # so stale analysis results stayed readable. Nothing could recover
+        # it but restarting the app.
+        #
+        # A bare ndarray is the shape every caller actually holds -- the
+        # ``npt.NDArray``-typed call sites pass one -- and the fix is to
+        # wrap it, not to adopt it: adopting would invent row/column labels
+        # and silently drop the caller's name, and would keep a
+        # caller-owned buffer alive as application state.
+        if not isinstance(matrix, DataMatrix):
+            raise TypeError(
+                f"set_data_matrix expects a DataMatrix, got {type(matrix).__name__}. "
+                f"Wrap the array first: state.set_data_matrix(DataMatrix(np.asarray(value)))."
+            )
         with self._read_write_lock:
             if _record_undo:
                 self._push_undo()

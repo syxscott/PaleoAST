@@ -953,8 +953,10 @@ class PhyloTree:
         计算所有叶节点对之间的距离矩阵
 
         Returns:
-            {(名称1, 名称2): 距离} 字典
+            {(名称1, 名称2): 距离} 字典; 无根树返回空字典
         """
+        if self.root is None:
+            return {}
         leaves = self.root.get_leaves()
         n_pairs = len(leaves) * (len(leaves) - 1) // 2
         logger.info(f"Computing distance matrix for {len(leaves)} leaves ({n_pairs} pairs)")

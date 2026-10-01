@@ -12,7 +12,7 @@ version: 1.0.1
 import logging
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QDockWidget,
@@ -260,6 +260,31 @@ class DiagnosticConsole(QDockWidget):
         # Add handler to root logger
         logging.getLogger().addHandler(self._handler)
 
+    def closeEvent(self, event) -> None:
+        """Detach the logging handler before the console is destroyed.
+
+        The handler is a QObject attached to the ROOT logger, so it outlives
+        this widget unless it is removed explicitly. At interpreter shutdown
+        ``logging.shutdown()`` walks the root logger's handlers and calls
+        ``getattr(h, "flushOnClose", True)`` on each; by then Qt has already
+        destroyed the C++ side, and that attribute lookup raises
+        ``RuntimeError: wrapped C/C++ object ... has been deleted``.
+        ``logging.shutdown`` only swallows ``OSError``/``ValueError``, so the
+        RuntimeError escaped and printed a traceback on every clean exit.
+
+        Removing the handler here keeps a live reference out of the root
+        logger's list, so shutdown never touches it.
+        """
+        handler = getattr(self, "_handler", None)
+        if handler is not None:
+            logging.getLogger().removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:  # pragma: no cover - Qt may already be gone
+                pass
+            self._handler = None
+        super().closeEvent(event)
+
     def append_message(self, level: str, message: str) -> None:
         """Append a log message to the console."""
         if self._is_paused:
@@ -324,6 +349,22 @@ class ConsoleLogHandler(QObject, logging.Handler):
     hit.
     """
 
+    # Do not flush this handler during ``logging.shutdown()``. That call ends
+    # up doing ``getattr(h, "flushOnClose", True)`` on every handler in the
+    # module-global ``logging._handlerList`` -- a weakref list that
+    # ``Handler.close()`` does NOT remove from, so this entry is still visited
+    # at atexit. By then Qt has destroyed the C++ side of this QObject, and the
+    # instance-dict lookup routes through sip and raises
+    # ``RuntimeError: wrapped C/C++ object ... has been deleted``.
+    # ``logging.shutdown`` only guards OSError/ValueError, so the traceback
+    # printed on every otherwise-clean exit.
+    #
+    # Declaring this as a CLASS attribute fixes it at the root: ``getattr``
+    # resolves it on the type and never touches the dead instance. Nothing is
+    # buffered here anyway -- ``emit`` hands each record straight to the Qt
+    # signal -- so there is nothing to flush.
+    flushOnClose = False
+
     # Signal emitted from worker threads; the slot lives on the GUI
     # thread, so QTextEdit mutations happen there.
     _message_signal = pyqtSignal(str, str)
@@ -332,6 +373,8 @@ class ConsoleLogHandler(QObject, logging.Handler):
         QObject.__init__(self)
         logging.Handler.__init__(self)
         self._console = console
+        # Set once the underlying QObject is gone; see flush()/close().
+        self._closed = False
         # Connect the signal with the default (auto) connection.
         # ``_console`` lives on the GUI thread, and because this
         # QObject also lives there, Qt picks ``Qt.DirectConnection``
@@ -348,8 +391,46 @@ class ConsoleLogHandler(QObject, logging.Handler):
             # Cross-thread safe: Qt queues the slot invocation on the
             # GUI thread when called from a worker.
             self._message_signal.emit(level, msg)
+        except RuntimeError:
+            # The C++ half of this QObject is gone (QApplication already
+            # destroyed, or the console was closed). Nothing to log to, and
+            # handleError() would re-enter the same dead object.
+            self._closed = True
         except Exception:
             self.handleError(record)
+
+    def flush(self) -> None:
+        """Flush defensively — the Qt object may already be destroyed.
+
+        This handler is attached to the ROOT logger, so ``logging.shutdown()``
+        calls ``flush()`` during interpreter teardown, which happens *after*
+        Qt has torn down the C++ objects. Touching the signal then raises
+        ``RuntimeError: wrapped C/C++ object ... has been deleted`` out of
+        logging's own shutdown path, printing a traceback on every clean exit.
+        """
+        if getattr(self, "_closed", False):
+            return
+        try:
+            super().flush()
+        except RuntimeError:
+            self._closed = True
+
+    def close(self) -> None:
+        """Detach from the logger and mark the Qt side dead.
+
+        Unregistering here means a later ``logging.shutdown()`` skips this
+        handler entirely, and ``_closed`` short-circuits the flush that would
+        otherwise touch the deleted QObject.
+        """
+        self._closed = True
+        try:
+            logging.getLogger().removeHandler(self)
+        except Exception:  # pragma: no cover - interpreter already tearing down
+            pass
+        try:
+            logging.Handler.close(self)
+        except Exception:  # pragma: no cover
+            pass
 
 
 class StatusBarLogHandler(logging.Handler):

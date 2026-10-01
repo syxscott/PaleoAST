@@ -45,6 +45,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from .tree import NodeType, PhyloNode, PhyloTree
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,37 @@ class StrictConsensusTree:
     def __init__(self):
         self._logger = logging.getLogger(f"{__name__}.StrictConsensus")
 
+    @staticmethod
+    def _require_shared_taxa(trees: list[PhyloTree]) -> set[str]:
+        """Every input tree must describe the same taxon set.
+
+        A consensus is only defined over a shared taxon set. Unioning the
+        taxa instead silently invents a tree that corresponds to no input at
+        all: two trees over {A,B,C,D} and {A,B,E,F} used to come back as
+        ``((A,B),C,D,E,F)``, which discards the only structure either input
+        carried (C,D and E,F are cherries in their own trees, and the result
+        has neither). That is a confidently wrong answer to a question the
+        user never asked, so it is refused rather than computed.
+
+        Returns:
+            The shared taxon set.
+        """
+        expected = set(trees[0].leaf_names)
+        for index, tree in enumerate(trees[1:], start=2):
+            found = set(tree.leaf_names)
+            if found != expected:
+                raise ValidationError(
+                    f"Input tree {index} has a different taxon set: missing "
+                    f"{sorted(expected - found)}, unexpected {sorted(found - expected)}. "
+                    "A consensus tree is only defined over a shared taxon set.",
+                    details={
+                        "tree_index": index,
+                        "missing": sorted(expected - found),
+                        "unexpected": sorted(found - expected),
+                    },
+                )
+        return expected
+
     def build(self, trees: list[PhyloTree]) -> PhyloTree:
         """
         构建严格一致性树
@@ -172,10 +204,7 @@ class StrictConsensusTree:
             # 返回深拷贝: 直接把入参别名返回会让调用方修改一致性树时改写原树
             return self._clone_tree(trees[0])
 
-        # 获取所有分类单元
-        all_taxa = set(trees[0].leaf_names)
-        for tree in trees[1:]:
-            all_taxa |= set(tree.leaf_names)
+        all_taxa = self._require_shared_taxa(trees)
 
         clade_counts = self._count_clades(trees)
         n_trees = len(trees)
@@ -213,9 +242,7 @@ class StrictConsensusTree:
         if len(trees) == 1:
             return self._clone_tree(trees[0])
 
-        all_taxa = set(trees[0].leaf_names)
-        for tree in trees[1:]:
-            all_taxa |= set(tree.leaf_names)
+        all_taxa = self._require_shared_taxa(trees)
 
         clade_counts = self._count_clades(trees)
         n_trees = len(trees)

@@ -69,7 +69,11 @@ hiddenimports = [
     "views.ui_null_model_dialogs",
 
     # Statistics
-    "statistics",
+    # NOTE: this was "statistics", which is a STDLIB module name -- there is no
+    # statistics/ package in this project (it is `stats/`, renamed precisely
+    # because the stdlib shadows it). The real analysis package was therefore
+    # never collected, and PyInstaller would have shipped the stdlib one.
+    "stats",
 
     # Ecology
     "ecology",

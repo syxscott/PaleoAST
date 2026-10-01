@@ -16,8 +16,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,8 +37,6 @@ from PyQt6.QtWidgets import (
 
 from config.i18n import _
 from plot_export import (
-    ColorMode,
-    ExportFormat,
     PlotExportOptions,
     apply_preset,
     parse_options_from_path,
@@ -112,7 +108,6 @@ class PlotExportDialog(QDialog):
         Called automatically on language change; can also be invoked
         manually after the dialog is first constructed.
         """
-        from config.i18n import get_translator
 
         # ``windowTitle`` and group-box titles accept ``str`` directly.
         self.setWindowTitle(_(self._window_title_key))

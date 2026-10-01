@@ -521,7 +521,9 @@ TRANSLATIONS = {
     "Min section occurrence (endemic filter): ": "最小剖面出现次数（地方种过滤）: ",
     "UAZ similarity threshold: ": "UAZ相似度阈值: ",
     "Detect cyclic FAD/LAD contradictions (recommended)": "检测FAD/LAD循环冲突（推荐）",
-    "Visualization": "可视化",
+    # NOTE: "Visualization" already declared at line 133 — second copy
+    # removed so the key set is unique (regression-tested by
+    # tests/test_translation_parity.py).
     "Render multi-section warping-path diagram": "渲染多剖面DTW规整路径图",
     "Max pairs to render: ": "最大剖面对数: ",
     "Similarity colormap:": "相似度颜色映射:",
@@ -557,10 +559,9 @@ TRANSLATIONS = {
     "CA axis 1 score": "CA主轴1得分",
     "no": "否",
     "yes": "是",
-    "Language Changed": "语言已更改",
-    "The language has been changed to {0}.": "语言已更改为{0}。",
-    "Restart now to apply the change?": "是否立即重启以应用更改？",
-    "Later": "稍后",
+    # NOTE: the entries below were duplicates of lines 116-118/122/133
+    # earlier in this file; the second copy is removed so that the
+    # key set is unique (regression-tested by tests/test_translation_parity.py).
     "Zone / UAZ": "带/UAZ",
     "Similarity": "相似度",
     "Paleo-environmental reconstruction (Correspondence Analysis)": "古环境重建（对应分析）",
@@ -575,7 +576,9 @@ TRANSLATIONS = {
     "Biozones identified: {0}": "识别出的生物带数: {0}",
     "Endemic species filtered: {0}": "已过滤的地方种数: {0}",
     "Cyclic contradictions detected: {0}": "检测到的循环冲突数: {0}",
-    "Method: {0}": "方法: {0}",
+    # NOTE: "Method: {0}" already declared at line 434 — second copy
+    # removed so the key set is unique (regression-tested by
+    # tests/test_translation_parity.py).
     "Event Ranking (RASC):": "事件排序 (RASC):",
     # Ribbon / nav-tree labels added in v1.0.1
     "Isotope": "同位素",
@@ -587,6 +590,80 @@ TRANSLATIONS = {
     "Isotope Error": "同位素分析错误",
     "Correlation Error": "相关性分析错误",
     "Need at least 3 columns: depth, age, and isotope values": "至少需要3列：深度、年龄和同位素值",
+    # =========================================================================
+    # Keys added in v1.2.0 for the UI-wiring fix. They are kept in the
+    # EN/ZH dict in lockstep so the parity test stays green.
+    # =========================================================================
+    "Negative eigenvalue correction: {0}": "负特征值校正: {0}",
+    "Allometry analysis": "异速生长分析",
+    "PLS analysis": "PLS 分析",
+    "Evolution Rate Analysis": "演化速率分析",
+    "PCM Result": "PCM 结果",
+    "PCM analysis completed": "PCM 分析已完成",
+    "Phylogenetic Signal": "系统发育信号",
+    "Phylogenetic ANOVA": "系统发育方差分析",
+    "Ancestral State Reconstruction": "祖先状态重建",
+    "Missing-value summary": "缺失值汇总",
+    "Missing-value summary: {0}": "缺失值汇总：{0}",
+    "Holocene": "全新世",
+    "Pleistocene": "更新世",
+    # =========================================================================
+    # format_user_error keys — see the EN file for the rationale.  Each
+    # English key below maps to the original Chinese text the function
+    # currently uses as its ``_(...)`` argument; the main-window agent
+    # replaces those literal ``_("中文...")`` calls with the English keys.
+    # =========================================================================
+    "Op: file loading": "文件加载",
+    "Op: missing-value handling": "缺失值处理",
+    "Op: diversity analysis": "多样性分析",
+    "Op: rarefaction analysis": "稀疏化分析",
+    "Op: clustering analysis": "聚类分析",
+    "Op: abundance models": "丰度模型",
+    "Op: SHE analysis": "SHE分析",
+    "Op: Markov chain": "马尔可夫链",
+    "Op: directional statistics": "方向统计",
+    "Op: spectral analysis": "频谱分析",
+    "Op: isotope analysis": "同位素分析",
+    "Op: stratigraphic correlation": "地层相关性",
+    "Op: paleo-environmental reconstruction": "古环境重建",
+    "Op: extinction confidence intervals": "灭绝置信区间",
+    "ErrMsg: phylogenetic tree parse failed": "{0}失败：系统发育树文件解析错误。\n\n{1}",
+    "ErrMsg: invalid characters in data": "{0}失败：数据包含无效字符。\n\n请检查以下几点：\n• 选中的数据仅包含数值，不含文字或符号\n• 不存在缺失值标记（如 NA、NaN、-、空格等）\n• 如有中文或特殊字符，请先删除或替换",
+    "ErrMsg: numeric computation failed": "{0}失败：数值计算错误。\n\n请检查以下几点：\n• 数据中是否存在负数（特别是对数运算前）\n• 是否存在零值（某些除法运算前）\n• 数值是否在有效范围内",
+    "ErrMsg: data dimension mismatch": "{0}失败：数据维度不匹配。\n\n请检查以下几点：\n• 数据的行数和列数符合分析要求\n• 不同数据集的样本数量是否一致\n• Landmark 数据是否为完整的 x,y 坐标对",
+    "ErrMsg: data is empty": "{0}失败：数据为空。\n\n请确保已选中有效的数据区域。",
+    "ErrMsg: data type error": "{0}失败：数据类型错误。\n\n错误信息：{1}\n\n请检查选中的数据是否为数值类型，并确保无缺失值。",
+    "ErrMsg: data validation failed": "{0}失败：数据验证未通过。\n\n{1}",
+    "ErrMsg: algorithm did not converge": "{0}警告：算法未收敛。\n\n这通常是由于数据质量问题或参数设置不当导致。\n建议：\n• 检查数据中是否存在异常值\n• 尝试增加迭代次数\n• 尝试使用不同的初始化参数",
+    "ErrMsg: matrix computation failed": "{0}失败：矩阵计算错误。\n\n这通常是由于数据中存在线性相关（多重共线性）导致。\n建议：\n• 检查并移除高度相关的变量\n• 标准化数据后再试\n• 减少变量数量",
+    "ErrMsg: generic error during operation": "{0}时发生错误：\n\n{1}\n\n如果问题持续存在，请检查数据格式是否正确。",
+    "Imputation method": "填充方法",
+    "Column-mean imputation (Mean)": "列均值填充（Mean）",
+    "Column-median imputation (Median)": "列中位数填充（Median）",
+    "K-Nearest-Neighbour imputation (KNN)": "K 近邻填充（KNN）",
+    "Remove rows containing NaN": "删除含 NaN 的行",
+    "Remove columns containing NaN": "删除含 NaN 的列",
+    "Preview processed result": "预览处理结果",
+    "Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}": "含 NaN 的行: {0}/{1} | 含 NaN 的列: {2}/{3}",
+    "NaN counts by row (first 10):": "逐行 NaN 数量（前 10 行）:",
+    "NaN counts by column:": "逐列 NaN 数量:",
+    "Missing-Value Centre": "缺失值处理中心",
+    "Processing preview": "处理预览",
+    'Press "Preview processed result" to view the projected data.': '点击"预览处理结果"查看处理后的数据预览',
+    "Mean imputation": "均值填充",
+    "Median imputation": "中位数填充",
+    "KNN imputation (k={0})": "KNN 填充 (k={0})",
+    "Remove rows": "删除行",
+    "Remove columns": "删除列",
+    "Will remove {0} rows, leaving {1}": "将删除 {0} 行，剩余 {1} 行",
+    "Will remove {0} columns, leaving {1}": "将删除 {0} 列，剩余 {1} 列",
+    "Will impute {0} NaN values": "将填充 {0} 个 NaN 值",
+    "Preview: row count will change from": "预览：行数将由",
+    "Preview: column count will change from": "预览：列数将由",
+    "Preview: first 3 rows containing NaN": "预览：前 3 个含 NaN 的行",
+    "Selected method": "选择的方法",
+    "Impact": "影响",
+    "Missing-Value Methods": "缺失值处理方法",
     "Need at least one isotope column with valid data": "至少需要一个包含有效数据的同位素列",
     "Need at least 1 numeric column to build a section.": "至少需要1个数值列来构建剖面。",
     "Isotope: {0} excursions detected": "同位素：检测到 {0} 个偏移事件",
@@ -601,4 +678,21 @@ TRANSLATIONS = {
     "SHE Error": "SHE分析错误",
     "CONISS Error": "CONISS错误",
     "EFA Error": "EFA错误",
-}
+
+    "Op: TPS grid": "TPS网格",
+    "Op: biostratigraphy": "生物地层学",
+    "Op: wavelet analysis": "小波分析",
+    "All models (Random walk, Directional, Stasis)": "所有模型（随机游走、定向、稳定）",
+    "Random walk only": "仅随机游走",
+    "Stasis only": "仅稳定",
+    "Random seed (0 = non-reproducible):": "随机种子（0 = 不可复现）：",
+    "Significance Test (permutation)": "显著性检验（置换法）",
+    "Permutations:": "置换次数：",
+    "Coverage levels (n_points):": "覆盖度层级数（n_points）：",
+    "Number of coverage levels to evaluate between 0.10 and 0.99 (n_points).": "在 0.10 至 0.99 之间评估的覆盖度层级数（n_points）。",
+    "Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap.": "置信区间的多项式 bootstrap 重复次数。0 表示跳过 bootstrap。",
+    "Facies Names": "相名称",
+    "Facies names (one per distinct code, in code order):": "相名称（按编码顺序，每个不同编码一个）：",
+    "Comma-separated names, e.g. Sandstone, Mudstone, Limestone": "以逗号分隔的名称，例如 Sandstone, Mudstone, Limestone",
+    "PIC always standardizes contrasts by branch length (Felsenstein 1985); branch lengths are required.": "PIC 始终按枝长标准化对比量（Felsenstein 1985）；枝长为必需输入。",
+    "Decomposition always uses presence/absence (the abundance matrix is thresholded at zero). The full per-pair turnover / nestedness / total table is always returned alongside the three matrices — there is no toggle for either.": "分解始终使用存在/缺失数据（丰度矩阵按零阈值化）。完整的逐对周转/嵌套/总变异表始终与三个矩阵一并返回——两者均无可切换项。",}

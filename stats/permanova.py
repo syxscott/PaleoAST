@@ -19,9 +19,13 @@ where:
     n = total number of samples
 
 SS_B and SS_W are computed from the distance matrix (Anderson 2001):
-    SS_T = (1/n) * Σ_{i<j} d²_ij          (upper triangle, unordered pairs)
-    SS_W = Σ_g (1/n_g) * Σ_{i<j in g} d²_ij
+    SS_T = (1/(n-1)) * Σ_{i<j} d²_ij          (upper triangle, unordered pairs)
+    SS_W = Σ_g (1/(n_g-1)) * Σ_{i<j in g} d²_ij
     SS_B = SS_T - SS_W
+
+The n-1 and n_g-1 denominators are essential: using n or
+n_g systematically inflates F whenever group sizes differ,
+because the two scaling factors do not cancel out.
 
 A design without replication (n - g <= 0) or with zero within-group
 dispersion has no defined F ratio; such tests raise ComputationError rather
@@ -170,6 +174,24 @@ class PERMANOVAAnalyzer:
             if random_seed is not None:
                 rng = np.random.default_rng(random_seed)
             else:
+                # Without a seed the global ``np.random`` state is used.
+                # Two calls with identical inputs may return slightly
+                # different p-values; warn the caller so they can decide
+                # whether to pass a seed for a publishable result.
+                import warnings as _warnings
+
+                _warnings.warn(
+                    "PERMANOVA: no ``random_seed`` supplied; the permutation "
+                    "p-value uses the global ``np.random`` state and is not "
+                    "reproducible across runs. Pass ``random_seed=`` to make "
+                    "the result deterministic.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self._logger.warning(
+                    "PERMANOVA: no random_seed supplied; p-value uses global "
+                    "np.random state and is not reproducible."
+                )
                 rng = np.random
 
             permuted_F = np.zeros(n_permutations)
@@ -240,14 +262,17 @@ class PERMANOVAAnalyzer:
         # Square distances
         D_sq = D**2
 
-        # Total sum of squares (Anderson 2001): sum over unordered
+        # Total sum of squares (Anderson 2001, eq. 3): sum over unordered
         # pairs only. The full squared distance matrix contains each
-        # pair twice, so use the upper triangle.
-        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
+        # pair twice, so use the upper triangle. The denominator is
+        # ``n - 1`` (NOT ``n``); the same off-by-one issue applies to the
+        # within-group term below. The two denominators do NOT cancel out
+        # when group sizes are unequal, so the bug biased ``F``.
+        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / (n - 1)
 
         # Within-group sum of squares (vectorized)
         # For each group g with n_g samples, compute sum of squared distances
-        # ss_within = sum_g (1/n_g) * sum_{i<j in g} d_ij^2
+        # ss_within = sum_g (1/(n_g-1)) * sum_{i<j in g} d_ij^2
         # Use upper triangle of distance matrix for unordered pairs
         ss_within = 0.0
         triu_idx = np.triu_indices(n, k=1)
@@ -266,7 +291,7 @@ class PERMANOVAAnalyzer:
             in_grp_j = grp_mask[idx_j]
             grp_pair_mask = in_grp_i & in_grp_j
             grp_sum = np.sum(D_sq_triu[grp_pair_mask])
-            ss_within += (1.0 / n_g) * grp_sum
+            ss_within += (1.0 / (n_g - 1)) * grp_sum
 
         # Between-group sum of squares
         ss_between = SS_T - ss_within

@@ -72,7 +72,17 @@ class SimperResult:
     Container for SIMPER analysis results.
 
     Attributes:
-        overall_dissimilarity: Overall average between-group dissimilarity
+        overall_dissimilarity: Overall average between-group dissimilarity.
+            For ``metric='bray_curtis'`` this is the average Bray-Curtis
+            dissimilarity (range [0, 1]).  For ``metric='euclidean'`` this
+            is the **plain Euclidean distance** (sqrt of the mean of the
+            squared distances), so users reading the field get a number
+            in the same units as their input data.
+        overall_squared_distance: For ``metric='euclidean'`` only, the raw
+            mean of the per-pair *squared* Euclidean distances (the
+            additively-decomposable quantity Clarke's per-variable
+            table is built on; sum of the per-variable ``average``s equals
+            this number).  ``None`` for ``metric='bray_curtis'``.
         contributions: Per-variable contribution details
         group_pairs: List of (group_a, group_b) pairs analyzed
         n_groups: Number of groups
@@ -86,6 +96,7 @@ class SimperResult:
     n_groups: int
     n_variables: int
     metric: str = "bray_curtis"
+    overall_squared_distance: float | None = None
 
     def top_contributors(self, n: int = 10) -> list[VariableContribution]:
         """Get top N contributors sorted by average contribution."""
@@ -233,6 +244,19 @@ class SimperAnalyzer:
 
             overall_dissimilarity = float(np.mean(pairwise_dissimilarities)) if pairwise_dissimilarities else 0.0
 
+            # For the squared-Euclidean path the additive per-variable
+            # decomposition is on the *squared* distances, but the
+            # ``overall_dissimilarity`` field conventionally reports the
+            # plain Euclidean distance.  Store both so callers that need
+            # the additive-decomposable quantity can read it under
+            # ``overall_squared_distance``; the sum of the per-variable
+            # ``average``s equals that field, NOT ``overall_dissimilarity``.
+            if metric_key == "euclidean":
+                overall_squared_distance = overall_dissimilarity
+                overall_dissimilarity = float(np.sqrt(overall_dissimilarity))
+            else:
+                overall_squared_distance = None
+
             # Per-variable stats. SD is taken across individual (i, j) pairs
             # (Clarke's Av/SD consistency measure), not across group pairs:
             # with the standard 2-group design there is only one group pair
@@ -293,6 +317,7 @@ class SimperAnalyzer:
 
             result = SimperResult(
                 overall_dissimilarity=overall_dissimilarity,
+                overall_squared_distance=overall_squared_distance,
                 contributions=result_contribs,
                 group_pairs=group_pairs,
                 n_groups=n_groups,

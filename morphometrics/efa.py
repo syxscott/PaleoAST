@@ -181,6 +181,11 @@ class EFAResult:
     n_points: int
     a0: float
     c0: float
+    # ``reconstructed`` and ``original`` are in the SAME frame (the input
+    # coordinate system, resampled to ``n_points``), so they can be
+    # overlaid. The Haines-Crampton normalization is applied to
+    # ``harmonics``/``coefficients``/``a0``/``c0`` only -- those are the
+    # scale-, rotation- and translation-free descriptors.
     reconstructed: npt.NDArray  # (n_points, 2) reconstructed contour
     original: npt.NDArray  # (n_points, 2) original contour
 
@@ -293,6 +298,15 @@ class EFAAnalyzer:
 
         coefficients = np.array(coefficients)
 
+        # Keep the pre-normalization coefficients: the Haines-Crampton
+        # transform below is a similarity (rotate + divide by |a1| + flip),
+        # so it destroys both the position and the scale of the contour.
+        # ``EFAResult.reconstructed`` is overlaid on ``original`` by the UI
+        # as "Reconstructed" vs "Original", so it has to be rebuilt in the
+        # input frame; the *reported* coefficients stay normalized, which is
+        # the whole point of Haines-Crampton (comparable across specimens).
+        raw_coefficients = coefficients.copy()
+
         # -------------------------------------------------------------------------
         # Apply Haines-Crampton starting point normalization (Rohlf & Archie 1984;
         # Haines & Crampton 2000). This makes EFD coefficients comparable across
@@ -301,14 +315,15 @@ class EFAAnalyzer:
         coefficients, a0_norm, c0_norm = normalize_starting_point(coefficients, a0, c0)
 
         # Update harmonics list with normalized coefficients
-        harmonics = []
-        for n in range(n_harmonics):
-            a_n, b_n, c_n, d_n = coefficients[n]
-            harmonics.append(EFAHarmonic(n=n + 1, a=a_n, b=b_n, c=c_n, d=d_n))
+        harmonics = self._to_harmonics(coefficients)
 
-        # Reconstruct contour using normalized coefficients and original T
-        # a0_norm and c0_norm are 0 after normalization (translation invariance)
-        reconstructed = self._reconstruct(a0_norm, c0_norm, harmonics, t, T, n_points)
+        # Reconstruct the contour in the ORIGINAL frame (pre-normalization
+        # coefficients, original DC offsets). a0_norm and c0_norm are 0
+        # after normalization (translation invariance), so reconstructing
+        # from them returned a centred, unit-first-harmonic copy of the
+        # shape: an ellipse centred at (5, -3) came back at (0.02, -0.0001)
+        # and the two contours the UI overlays were unrelated.
+        reconstructed = self._reconstruct(a0, c0, self._to_harmonics(raw_coefficients), t, T, n_points)
 
         return EFAResult(
             harmonics=harmonics,
@@ -387,6 +402,17 @@ class EFAAnalyzer:
 
         return np.column_stack([x_new, y_new])
 
+    @staticmethod
+    def _to_harmonics(coefficients: npt.NDArray) -> list[EFAHarmonic]:
+        """Wrap an (n_harmonics, 4) coefficient array in harmonic records.
+
+        Rows are ``(a_n, b_n, c_n, d_n)`` for n = 1..N, so the row index
+        carries the 1-based harmonic number.
+        """
+        return [
+            EFAHarmonic(n=n + 1, a=row[0], b=row[1], c=row[2], d=row[3]) for n, row in enumerate(coefficients)
+        ]
+
     def _reconstruct(
         self, a0: float, c0: float, harmonics: list, t: npt.NDArray, T: float, n_points: int
     ) -> npt.NDArray:
@@ -420,7 +446,8 @@ class EigenshapeResult:
             f"{_('Specimens')}: {self.n_specimens}",
         ]
         cum = 0.0
-        for i in range(min(self.n_components, 10)):
+        n_axes = min(self.n_components, int(self.explained_variance.size), 10)
+        for i in range(n_axes):
             cum += self.explained_variance[i]
             lines.append(f"ES{i + 1}: {self.explained_variance[i]:.2%} (cum: {cum:.2%})")
         return "\n".join(lines)
@@ -439,7 +466,9 @@ class EigenshapeAnalyzer:
 
         Parameters:
             efa_coefficients_list: List of (n_harmonics, 4) coefficient arrays
-            n_components: Number of eigenshape components
+            n_components: Number of eigenshape components. Clamped to
+                min(n_specimens - 1, n_vars), the rank of the centred
+                coefficient matrix; defaults to that bound.
 
         Returns:
             EigenshapeResult
@@ -448,8 +477,18 @@ class EigenshapeAnalyzer:
         vectors = np.array([c.flatten() for c in efa_coefficients_list])
         n_specimens, n_vars = vectors.shape
 
+        # The rank of the centred coefficient matrix is at most
+        # min(n_specimens - 1, n_vars): SVD returns at most
+        # min(centered.shape) singular values, so Vt[:n_components] silently
+        # yields a narrower score matrix than advertised. The explicit
+        # n_components used to bypass the clamp entirely (a request for 100
+        # components on 5 specimens reported n_components=100 with 5 scores
+        # and made summary() raise IndexError); clamp both branches to the
+        # same bound so the reported count is always the delivered one.
         if n_components is None:
             n_components = min(n_specimens - 1, n_vars)
+        else:
+            n_components = min(int(n_components), n_specimens - 1, n_vars)
 
         # Center the data
         mean_vec = np.mean(vectors, axis=0)

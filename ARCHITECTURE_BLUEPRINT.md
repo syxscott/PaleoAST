@@ -56,6 +56,24 @@ PaleoAST (Paleontological Advanced Statistical Toolkit) 是一款专为古生物
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+> **实现状态说明（2026-10-01 核实）——本节描述的是目标架构，不是现状。**
+>
+> - **上面这五个"引擎层"模块在仓库中并不存在。** 没有 `engines/` 目录，
+>   也没有任何 `*Engine*` 类。实际的编排点是
+>   `controllers/statistics_controller.py`（约 1600 行，52 个公开方法，
+>   接入 30 个分析模块），它承担了图中"引擎层"的角色。
+> - **MVC 图里的第三个控制器 `Plot Controller` 也不存在。**
+>   `controllers/__init__.py` 只导出 `DataController` 与
+>   `StatisticsController`；绘图职责实际落在视图层
+>   （`views/ui_plot_canvas.py`、`views/ui_plot_export_dialog.py`）。
+> - **该 MVC 边界目前没有被强制。** `views/` 里有 17 处直接 import 分析
+>   模块（`ui_main_window.py` 7 处、`file_drop_handler.py` 3 处，其余分散），
+>   而全 `views/` 只有 4 处 import controller。最刺眼的是
+>   `views/ui_main_window.py:4961` 直接调用 `morphometrics.efa`，
+>   而 `statistics_controller.py` 早已 import 该模块——引擎层被绕过了。
+> - 建议要么补齐引擎层并让视图一律走 controller，要么把本图改成如实描述
+>   现状。**当前这张图会误导读者以为存在一层并不存在的边界。**
+
 ### 2.2 线程安全状态管理
 
 采用单例模式+读写锁实现全局状态管理：

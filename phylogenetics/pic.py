@@ -168,7 +168,13 @@ def _resolve_pic_root(tree, traits: dict[str, float], root_variance: float = 0.0
         )
         working = root._copy_subtree()
         _drop_missing_tips(working, set(missing))
-        if not working.get_leaves():
+        # ``is_leaf`` is true for any childless node, so a pruned branch whose
+        # every tip lacked the trait is indistinguishable from a real tip.
+        # Select the surviving leaves by trait presence, not by is_leaf, so
+        # the "no data left" case reaches the empty-result path instead of
+        # crashing in _pic_core on traits[""].
+        remaining = [leaf.name for leaf in working.get_leaves() if leaf.name is not None and traits.get(leaf.name) is not None]
+        if not remaining:
             return None, missing
         return working, missing
 
@@ -176,13 +182,20 @@ def _resolve_pic_root(tree, traits: dict[str, float], root_variance: float = 0.0
 
 
 def _drop_missing_tips(node, missing: set[str]) -> None:
-    """就地从 (拷贝的) 树中移除性状缺失的叶。"""
+    """就地从 (拷贝的) 树中移除性状缺失的叶, 并收缩因此变空的内部节点。"""
     for child in list(node.children):
         if child.is_leaf:
             if child.name in missing:
                 node.remove_child(child)
         else:
             _drop_missing_tips(child, missing)
+            if not child.children:
+                # 整棵子树都缺性状, 该内部节点已变成空壳 (``remove_child``
+                # 还会把它标成 NodeType.LEAF)。若留着, is_leaf 会把它当成
+                # 真正的叶, _pic_core 便去查 traits[""] 并抛
+                # "Trait value not found for tip ''"。收缩掉它, 父节点少一个
+                # 子节点即可 -- 绝不回填性状值伪造对比。
+                node.remove_child(child)
 
 
 def _record_pic_diagnostics(tree, root, dropped, pairs, contrasts) -> None:

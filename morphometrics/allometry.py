@@ -76,7 +76,10 @@ class AllometryResult:
         log_centroid_sizes: Log-transformed centroid sizes
         regression_coefficients: Shape change per unit log(size)
         regression_intercept: Intercept of regression
-        r_squared: Proportion of shape variance explained by size
+        r_squared: Proportion of shape variance explained by size. ``NaN``
+            when the regression is undefined, i.e. the centroid sizes are
+            constant across specimens (see
+            :meth:`AllometryAnalyzer.analyze_allometry`).
         f_statistic: F-statistic for isometry test
         isometry_pvalue: P-value for isometry test
         residuals: Residual shape variation after removing size effect
@@ -120,6 +123,28 @@ class AllometryResult:
             sig = "*"
         else:
             sig = ""
+        degenerate = not np.isfinite(self.r_squared)
+        if degenerate:
+            r2_line = _("R²: undefined (centroid size is identical for every specimen)")
+            isometry_line = _("Isometry test: F={0:.4f}, p={1:.4f} {2}").format(
+                self.f_statistic, self.isometry_pvalue, sig
+            )
+            note = (
+                "\n"
+                + _(
+                    "Note: log(centroid size) is constant, so the size-shape regression "
+                    "has no explanatory power and R² is undefined (not 0). Supply the "
+                    "PRE-GPA centroid sizes via analyze_allometry(centroid_sizes=...), "
+                    "e.g. GPAResult.centroid_sizes, when the shapes come from GPA."
+                )
+                + "\n"
+            )
+        else:
+            r2_line = _("R²: {0}").format(f"{self.r_squared:.4f}")
+            isometry_line = _("Isometry test: F={0:.4f}, p={1:.4f} {2}").format(
+                self.f_statistic, self.isometry_pvalue, sig
+            )
+            note = ""
         mean_cs = np.mean(self.centroid_sizes)
         min_cs = np.min(self.centroid_sizes)
         max_cs = np.max(self.centroid_sizes)
@@ -127,10 +152,11 @@ class AllometryResult:
             f"{_('Allometry Analysis')}\n"
             f"{'=' * 50}\n"
             f"{_('Specimens: {0}, Landmarks: {1}, Dimensions: {2}').format(self.n_specimens, self.n_landmarks, self.n_dims)}\n"
-            f"{_('R²: {0}').format(f'{self.r_squared:.4f}')}\n"
-            f"{_('Isometry test: F={0:.4f}, p={1:.4f} {2}').format(self.f_statistic, self.isometry_pvalue, sig)}\n"
+            f"{r2_line}\n"
+            f"{isometry_line}\n"
             f"{_('Mean centroid size: {0}').format(f'{mean_cs:.4f}')}\n"
             f"{_('Size range: {0:.4f} to {1:.4f}').format(min_cs, max_cs)}"
+            f"{note}"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -269,7 +295,10 @@ class AllometryAnalyzer:
         >>> gpa = GPAAnalyzer()
         >>> gpa_result = gpa.align(configurations)
         >>> allometry = AllometryAnalyzer()
-        >>> result = allometry.analyze_allometry(gpa_result.aligned_configurations)
+        >>> result = allometry.analyze_allometry(
+        ...     gpa_result.aligned_configurations,
+        ...     centroid_sizes=gpa_result.centroid_sizes,
+        ... )
         >>> print(result.summary())
     """
 
@@ -289,6 +318,7 @@ class AllometryAnalyzer:
         self,
         aligned_configurations: npt.NDArray,
         n_components: int | None = None,
+        centroid_sizes: npt.NDArray | None = None,
     ) -> AllometryResult:
         """
         Analyze relationship between centroid size and shape.
@@ -297,9 +327,20 @@ class AllometryAnalyzer:
             aligned_configurations: 3D array (n_specimens, n_landmarks, n_dims)
                                   from GPAResult.aligned_configurations
             n_components: Number of PCs to use as shape variables (default: all)
+            centroid_sizes: Optional PRE-GPA centroid size per specimen
+                (n_specimens,), e.g. ``GPAResult.centroid_sizes``. Required
+                whenever ``aligned_configurations`` is GPA output, because
+                GPA scales every specimen to a common centroid size: the
+                sizes recomputed from such an array are all equal, so
+                log(CS) is a constant regressor and the regression is
+                undefined. When ``None`` (default) the sizes are recomputed
+                from ``aligned_configurations`` as before, which is correct
+                only for arrays that are not size-normalised.
 
         Returns:
-            AllometryResult with regression coefficients and statistics
+            AllometryResult with regression coefficients and statistics.
+            ``r_squared`` is ``NaN`` when log(CS) is constant, because the
+            variance explained by size is then undefined rather than 0.
 
         Raises:
             ValidationError: If input data is invalid
@@ -316,9 +357,29 @@ class AllometryAnalyzer:
             if n_specimens < 3:
                 raise ValidationError(_("Need at least 3 specimens for allometry analysis"))
 
-            # Step 1: Compute centroid size for each specimen
-            centroid_sizes = self._compute_centroid_sizes(aligned_configurations)
+            # Step 1: Centroid size for each specimen.  When the caller
+            # supplies the pre-GPA sizes (the only informative choice for
+            # GPA output) use them; otherwise fall back to recomputing from
+            # the array as before.
+            if centroid_sizes is None:
+                centroid_sizes = self._compute_centroid_sizes(aligned_configurations)
+            else:
+                centroid_sizes = self._validate_centroid_sizes(centroid_sizes, n_specimens)
             log_cs = np.log(centroid_sizes)
+            # A constant regressor makes the design matrix rank-deficient:
+            # log(CS) explains nothing, so R² is undefined and the F-test
+            # can only return F=0, p=1.  GPA does not produce *exactly*
+            # equal sizes -- it leaves a residue around 1e-16 -- so the
+            # test is relative: a spread that small is float noise, not
+            # biology (real specimens differ in size by a factor of ~2).
+            log_scale = max(float(np.max(np.abs(log_cs))), 1.0)
+            regressor_degenerate = bool(np.ptp(log_cs) <= 1e-12 * log_scale)
+            if regressor_degenerate:
+                self._logger.warning(
+                    "Centroid size is constant across specimens, so the size-shape "
+                    "regression is undefined; supply pre-GPA sizes via "
+                    "centroid_sizes=GPAResult.centroid_sizes"
+                )
 
             # Step 2: Flatten configurations to 2D
             # Shape: (n_specimens, n_landmarks * n_dims)
@@ -354,35 +415,56 @@ class AllometryAnalyzer:
             predicted = X @ beta
             residuals = shape_reduced - predicted
 
-            # Step 7: R-squared
+            # Step 7: R-squared (still computed in the reduced space
+            # because that is where the regression was fitted).
+            # A constant regressor yields whatever the rank-deficient
+            # lstsq happens to return, i.e. a number that can look like a
+            # real effect size while being pure floating-point noise
+            # (0.6, 0.0, -2e-16 ... depending on the data). Report NaN so
+            # the caller cannot mistake it for variance explained.
             ss_res = np.sum(residuals**2)
             ss_tot = np.sum(shape_reduced**2)
-            r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+            if regressor_degenerate or ss_tot <= 0:
+                r_squared = float("nan")
+            else:
+                r_squared = 1 - (ss_res / ss_tot)
 
-            # Step 8: F-test for isometry (coefficients == 0)
-            # Compare full model vs intercept-only model
+            # Step 8: F-test for isometry (coefficients == 0).
+            # The isometry hypothesis is "shape does not depend on log(CS)
+            # at all", which is a statement about the FULL shape space —
+            # not about the PCA-reduced axes.  Therefore the F-statistic
+            # MUST be computed on the FULL shape space: SS in the full
+            # shape and df1 = full shape dimension.  The previous
+            # implementation used ``df1 = shape_reduced.shape[1]``, which
+            # silently truncated the test to the retained PCs and was
+            # inconsistent with the function's docstring.
+            full_shape_dim = n_landmarks * n_dims
+            # Step 9 (reordered): we need predicted_full to compute the
+            # full-space SS.  The back-projection uses the orthonormal
+            # PCA loadings, so the back-projected regression reproduces
+            # the reduced regression on the retained axes and zeros on
+            # the discarded ones.
+            if n_components is not None and n_components < full_shape_dim:
+                predicted_full = predicted @ eigenvectors.T + mean_shape
+            else:
+                predicted_full = predicted + mean_shape
+
             X_null = np.ones((n_specimens, 1))
-            beta_null, _, _, _ = np.linalg.lstsq(X_null, shape_reduced, rcond=None)
-            predicted_null = X_null @ beta_null
-            ss_null = np.sum((shape_reduced - predicted_null) ** 2)
+            beta_null, _, _, _ = np.linalg.lstsq(X_null, shape_centered, rcond=None)
+            predicted_null_full = X_null @ beta_null + mean_shape
+            ss_null_full = float(np.sum((flattened - predicted_null_full) ** 2))
+            ss_res_full = float(np.sum((flattened - predicted_full) ** 2))
 
-            # Degrees of freedom
-            df1 = shape_reduced.shape[1]  # number of shape variables
+            df1 = full_shape_dim
             df2 = n_specimens - 2  # residual df
 
-            if ss_res > 0 and df2 > 0:
-                f_statistic = ((ss_null - ss_res) / df1) / (ss_res / df2)
+            if ss_res_full > 0 and df2 > 0:
+                f_statistic = ((ss_null_full - ss_res_full) / df1) / (ss_res_full / df2)
                 # P-value from F-distribution
                 isometry_pvalue = 1.0 - stats.f.cdf(f_statistic, df1, df2)
             else:
                 f_statistic = 0.0
                 isometry_pvalue = 1.0
-
-            # Step 9: Transform predictions back to full shape space if needed
-            if n_components is not None and n_components < n_landmarks * n_dims:
-                predicted_full = predicted @ eigenvectors.T + mean_shape
-            else:
-                predicted_full = predicted + mean_shape
 
             # Step 10: Common Allometric Component (CAC) and Residual Shape
             # Components (RSC) in the FULL shape space (Mitteroecker et al.
@@ -436,6 +518,46 @@ class AllometryAnalyzer:
             self._last_result = result
             self._logger.info(f"Allometry: R²={r_squared:.4f}, F={f_statistic:.4f}, p={isometry_pvalue:.4f}")
             return result
+
+    @staticmethod
+    def _validate_centroid_sizes(
+        centroid_sizes: npt.NDArray,
+        n_specimens: int,
+    ) -> npt.NDArray[np.float64]:
+        """
+        Validate externally supplied centroid sizes.
+
+        A wrong length silently misaligns specimens against their shapes and
+        a non-positive or non-finite size produces ``log(<= 0)``, so both are
+        rejected here rather than inside the regression.
+
+        Parameters:
+            centroid_sizes: Candidate sizes, e.g. ``GPAResult.centroid_sizes``
+            n_specimens: Number of specimens in the shape array
+
+        Returns:
+            1D float array of centroid sizes (n_specimens,)
+
+        Raises:
+            ValidationError: If the length is wrong, or any value is not
+                finite and strictly positive
+        """
+        sizes = np.asarray(centroid_sizes, dtype=np.float64).ravel()
+
+        if sizes.size != n_specimens:
+            raise ValidationError(
+                _("Centroid sizes must have one value per specimen: got {0} for {1} specimens").format(
+                    sizes.size, n_specimens
+                )
+            )
+
+        if not np.all(np.isfinite(sizes)):
+            raise ValidationError(_("Centroid sizes must all be finite numbers"))
+
+        if np.any(sizes <= 0):
+            raise ValidationError(_("Centroid sizes must all be greater than zero (log size is undefined otherwise)"))
+
+        return sizes
 
     def _compute_centroid_sizes(self, configurations: npt.NDArray) -> npt.NDArray[np.float64]:
         """

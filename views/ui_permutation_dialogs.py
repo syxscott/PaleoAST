@@ -1,0 +1,423 @@
+# =============================================================================
+# FILE: views/ui_permutation_dialogs.py
+# =============================================================================
+"""
+Permutation-test configuration dialogs.
+
+Provides a single, reusable :class:`PermutationTestDialog` for both
+ANOSIM and PERMANOVA.  Before this module existed the two handlers in
+``views.ui_main_window`` were called with an empty ``params`` dict, so
+neither distance metric nor permutation count was configurable and the
+only available value was the ``9999`` default.
+
+The dialog deliberately keeps the surface small so we don't fragment
+the contract between the four permutations tests the project supports
+(ANOSIM, PERMANOVA, SIMPER uses the same options, and the panel may be
+re-used for future additions):
+
+    * distance metric (ecology default: Bray-Curtis)
+    * permutation count (with a "may be slow" notice when large)
+    * random seed (blank = use ``None`` and emit a ``RuntimeWarning``
+      to match the convention in ``stats/``)
+
+A short statistical note is included so the user knows what the test
+does, not just how to set it up.
+"""
+from __future__ import annotations
+
+import warnings
+
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QSpinBox,
+    QVBoxLayout,
+)
+
+from config.design_system import BorderRadius, get_palette
+from config.i18n import _
+
+# Metric choices exposed in the dropdown.  The display strings map to
+# scipy / ``stats.distance_metrics`` keyword arguments via
+# ``str.lower().replace('-', '_')`` so ``Bray-Curtis`` -> ``bray_curtis``.
+_METRICS: tuple[tuple[str, str], ...] = (
+    ("Bray-Curtis", "bray_curtis"),
+    ("Euclidean", "euclidean"),
+    ("Jaccard", "jaccard"),
+    ("Manhattan", "manhattan"),
+)
+
+
+class PermutationTestDialog(QDialog):
+    """Configuration dialog for ANOSIM / PERMANOVA permutation tests.
+
+    Emits a ``RuntimeWarning`` when the user leaves the seed blank, so
+    downstream ``stats/`` code can keep its "no seed ⇒ non-reproducible"
+    contract without needing to inspect the dialog.
+
+    Signals:
+        parametersChanged(dict): emitted whenever the user changes any
+            parameter.  The main window does not rely on this, but it
+            keeps the surface identical to ::class:BaseAnalysisDialog.
+    """
+
+    parametersChanged = pyqtSignal(dict)
+
+    def __init__(self, parent=None, *, title: str, default_method_label: str = "ANOSIM") -> None:
+        super().__init__(parent)
+        self._default_method_label = default_method_label
+        self._setup_ui(title)
+        self._apply_stylesheet()
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self, title: str) -> None:
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(10)
+
+        # --- Explanatory label --------------------------------------------------
+        info = QLabel(
+            _(
+                "{0} tests whether groups differ in multivariate space by "
+                "comparing within-group vs between-group (dis)similarity "
+                "across many random label permutations.\n\n"
+                "Bray-Curtis is the default for community / abundance data. "
+                "More permutations give more precise p-values at the price of "
+                "wall-time."
+            ).format(self._default_method_label)
+        )
+        info.setWordWrap(True)
+        root.addWidget(info)
+
+        # --- Form layout --------------------------------------------------------
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(8)
+
+        # Distance metric
+        self._metric_combo = QComboBox()
+        for label, _value in _METRICS:
+            self._metric_combo.addItem(label)
+        self._metric_combo.setCurrentText("Bray-Curtis")
+        self._metric_combo.setToolTip(
+            _("Distance metric used to build the sample-sample dissimilarity matrix.")
+        )
+        form.addRow(_("Distance metric:"), self._metric_combo)
+
+        # Permutation count
+        n_perm_layout = QHBoxLayout()
+        n_perm_layout.setContentsMargins(0, 0, 0, 0)
+        self._n_perm_spin = QSpinBox()
+        self._n_perm_spin.setRange(99, 99999)
+        self._n_perm_spin.setSingleStep(100)
+        self._n_perm_spin.setValue(9999)
+        self._n_perm_spin.setToolTip(
+            _("Number of random permutations used to estimate the p-value.")
+        )
+        n_perm_layout.addWidget(self._n_perm_spin)
+        self._slow_warning_label = QLabel()
+        self._slow_warning_label.setStyleSheet("color: #c08020;")
+        self._n_perm_spin.valueChanged.connect(self._update_slow_warning)
+        n_perm_layout.addWidget(self._slow_warning_label, 1)
+        form.addRow(_("Permutations:"), self._make_form_row(n_perm_layout))
+
+        # Random seed
+        self._seed_spin = QSpinBox()
+        self._seed_spin.setRange(0, 2_147_483_647)
+        self._seed_spin.setValue(0)
+        # 0 in the UI stands in for "blank / unset" because QSpinBox has no
+        # dedicated "blank" sentinel.  get_parameters() translates it back
+        # to ``None`` so downstream code receives a real "no seed" value.
+        self._seed_spin.setSpecialValueText(_("(empty — random)"))
+        self._seed_spin.setToolTip(
+            _("Reproducibility seed. Leave empty for a fresh permutation draw.")
+        )
+        form.addRow(_("Random seed:"), self._seed_spin)
+
+        root.addLayout(form)
+
+        # --- Bottom row ---------------------------------------------------------
+        bottom = QHBoxLayout()
+        bottom.setContentsMargins(0, 8, 0, 0)
+        self._seed_warning_check = QCheckBox(_("Warn me when no seed is set"))
+        self._seed_warning_check.setChecked(True)
+        self._seed_warning_check.setToolTip(
+            _(
+                "If checked, a RuntimeWarning is raised when the dialog is "
+                "accepted with the seed blank — matches the convention in "
+                "the stats layer (results are not reproducible)."
+            )
+        )
+        bottom.addWidget(self._seed_warning_check)
+        bottom.addStretch(1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        bottom.addWidget(buttons)
+        root.addLayout(bottom)
+
+        # Initialise the "slow" notice.
+        self._update_slow_warning(self._n_perm_spin.value())
+
+    def _make_form_row(self, inner: QHBoxLayout):
+        from PyQt6.QtWidgets import QWidget
+
+        wrapper = QWidget()
+        wrapper.setLayout(inner)
+        return wrapper
+
+    def _update_slow_warning(self, value: int) -> None:
+        if value >= 9999:
+            self._slow_warning_label.setText(_("(may take a while)"))
+        else:
+            self._slow_warning_label.setText("")
+
+    def _apply_stylesheet(self) -> None:
+        palette = get_palette(getattr(self, "_is_dark_theme", False))
+        radii = BorderRadius()
+        # ``border_default`` is not in the palette (which only carries a small
+        # set of brand tokens); use the muted text colour as a subtle outline
+        # that matches the disabled-label contrast.
+        outline = getattr(palette, "text_disabled", "#94A3B8")
+        self.setStyleSheet(
+            f"""
+            QDialog {{
+                background-color: {palette.bg_primary};
+                color: {palette.text_primary};
+            }}
+            QLabel {{
+                color: {palette.text_primary};
+            }}
+            QComboBox, QSpinBox, QDoubleSpinBox {{
+                background-color: {palette.bg_secondary};
+                color: {palette.text_primary};
+                border: 1px solid {outline};
+                border-radius: {radii.sm}px;
+                padding: 4px 6px;
+            }}
+            QPushButton {{
+                background-color: {palette.bg_secondary};
+                color: {palette.text_primary};
+                border: 1px solid {outline};
+                border-radius: {radii.sm}px;
+                padding: 4px 12px;
+            }}
+            """
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        self._is_dark_theme = bool(is_dark)
+        self._apply_stylesheet()
+
+    def get_parameters(self) -> dict:
+        """Return the user-selected parameters.
+
+        Contract (consumed by ``_on_run_anosim`` / ``_on_run_permanova``):
+
+            ``metric``: scipy metric name (``bray_curtis``, …).
+            ``n_permutations``: integer >= 99.
+            ``random_seed``: integer, or ``None`` if the user left the
+                spinbox at the "empty" sentinel.
+        """
+        metric_label = self._metric_combo.currentText()
+        metric = metric_label.lower().replace("-", "_")
+        n_permutations = int(self._n_perm_spin.value())
+        seed_value = int(self._seed_spin.value())
+        random_seed: int | None = seed_value if seed_value != 0 else None
+
+        params = {
+            "metric": metric,
+            "n_permutations": n_permutations,
+            "random_seed": random_seed,
+        }
+        self._parameters = params
+        return params
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _on_accept(self) -> None:
+        params = self.get_parameters()
+        self.parametersChanged.emit(params)
+        if self._seed_warning_check.isChecked() and params["random_seed"] is None:
+            # Match the stats-layer convention: no seed ⇒ non-reproducible.
+            warnings.warn(
+                "PermutationTestDialog: random_seed is None — permutation "
+                "results are not reproducible.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        self.accept()
+
+
+__all__ = ["PermutationTestDialog", "PreferencesDialog"]
+
+
+class PreferencesDialog(QDialog):
+    """User preferences dialog.
+
+    Lets the user change:
+
+        * interface language code (takes effect on restart -- the
+          translator is owned by another agent)
+        * CSV loading defaults (whether the CSV has a header row and a
+          row-label column)
+        * matplotlib figure DPI / figsize used by the interactive plot
+          canvas
+
+    The dialog is intentionally simple: only options that have a
+    documentable effect, persisted via ``QSettings`` under
+    ``PaleoAST/PaleoAST``.
+    """
+
+    def __init__(self, parent=None, *, current: dict | None = None) -> None:
+        super().__init__(parent)
+        current = current or {}
+        self._current = {
+            "language": current.get("language", "en"),
+            "csv_has_header": bool(current.get("csv_has_header", True)),
+            "csv_has_row_labels": bool(current.get("csv_has_row_labels", True)),
+            "plot_dpi": int(current.get("plot_dpi", 100)),
+            "plot_figsize": str(current.get("plot_figsize", "8,6")),
+        }
+        self._setup_ui()
+        self._apply_stylesheet()
+
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
+        from PyQt6.QtWidgets import (
+            QDialogButtonBox,
+            QFormLayout,
+            QGroupBox,
+            QLineEdit,
+        )
+
+        self.setWindowTitle(_("Preferences"))
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+
+        # --- Language -----------------------------------------------------
+        lang_group = QGroupBox(_("Interface"))
+        lang_form = QFormLayout(lang_group)
+        self._language_edit = QLineEdit(self._current["language"])
+        self._language_edit.setPlaceholderText("en")
+        self._language_edit.setToolTip(
+            _("Language code (e.g. ``en``, ``zh``).  Takes effect on restart.")
+        )
+        lang_form.addRow(_("Language:"), self._language_edit)
+        root.addWidget(lang_group)
+
+        # --- CSV defaults -------------------------------------------------
+        csv_group = QGroupBox(_("CSV Loading Defaults"))
+        from PyQt6.QtWidgets import QCheckBox
+
+        csv_layout = QVBoxLayout(csv_group)
+        self._csv_header_check = QCheckBox(_("CSV files have a header row"))
+        self._csv_header_check.setChecked(self._current["csv_has_header"])
+        csv_layout.addWidget(self._csv_header_check)
+        self._csv_rowlabels_check = QCheckBox(_("First CSV column contains row labels"))
+        self._csv_rowlabels_check.setChecked(self._current["csv_has_row_labels"])
+        csv_layout.addWidget(self._csv_rowlabels_check)
+        root.addWidget(csv_group)
+
+        # --- Plot defaults ------------------------------------------------
+        plot_group = QGroupBox(_("Plot Defaults"))
+        plot_form = QFormLayout(plot_group)
+        self._dpi_spin = QSpinBox()
+        self._dpi_spin.setRange(50, 600)
+        self._dpi_spin.setValue(self._current["plot_dpi"])
+        plot_form.addRow(_("Figure DPI:"), self._dpi_spin)
+        self._figsize_edit = QLineEdit(self._current["plot_figsize"])
+        self._figsize_edit.setPlaceholderText("width,height (inches)")
+        self._figsize_edit.setToolTip(
+            _("Two comma-separated numbers, e.g. ``8,6`` for 8 inches wide.")
+        )
+        plot_form.addRow(_("Figure size:"), self._figsize_edit)
+        root.addWidget(plot_group)
+
+        # --- Bottom buttons -----------------------------------------------
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def _apply_stylesheet(self) -> None:
+        palette = get_palette(getattr(self, "_is_dark_theme", False))
+        radii = BorderRadius()
+        outline = getattr(palette, "text_disabled", "#94A3B8")
+        self.setStyleSheet(
+            f"""
+            QDialog {{
+                background-color: {palette.bg_primary};
+                color: {palette.text_primary};
+            }}
+            QLabel {{
+                color: {palette.text_primary};
+            }}
+            QLineEdit, QSpinBox {{
+                background-color: {palette.bg_secondary};
+                color: {palette.text_primary};
+                border: 1px solid {outline};
+                border-radius: {radii.sm}px;
+                padding: 4px 6px;
+            }}
+            QGroupBox {{
+                border: 1px solid {outline};
+                border-radius: {radii.sm}px;
+                margin-top: 8px;
+                padding-top: 12px;
+            }}
+            """
+        )
+
+    def setDarkTheme(self, is_dark: bool) -> None:
+        self._is_dark_theme = bool(is_dark)
+        self._apply_stylesheet()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_preferences(self) -> dict:
+        """Return the user-selected preferences."""
+        lang = (self._language_edit.text() or "en").strip()
+        if not lang:
+            lang = "en"
+        return {
+            "language": lang,
+            "csv_has_header": self._csv_header_check.isChecked(),
+            "csv_has_row_labels": self._csv_rowlabels_check.isChecked(),
+            "plot_dpi": int(self._dpi_spin.value()),
+            "plot_figsize": (self._figsize_edit.text() or "8,6").strip(),
+        }

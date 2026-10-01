@@ -98,12 +98,17 @@ class TestBrayCurtisEdgeCases:
         assert_allclose(D[0, 1], 4.0 / 12.0, atol=1e-6)
 
     def test_zero_abundances(self):
-        """All zeros should give zero distance (no information)."""
+        """All zeros should give NaN (undefined: 0/0).
+
+        Previously this returned 0 (treating two empty samples as
+        identical), which silently biased downstream PCoA / NMDS / cluster
+        analyses by treating "no information" as "perfectly identical".
+        See ``tests/stats/test_bray_curtis_nan.py``.
+        """
         X = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         D = _bray_curtis_distance_matrix(X)
-        # With all zeros, denominator is 0, so we use fallback of 1
-        # and numerator is also 0, so distance = 0
-        assert_allclose(D[0, 1], 0.0, atol=1e-6)
+        assert np.isnan(D[0, 1])
+        assert D[0, 0] == 0.0  # diagonal is zero by convention
 
     def test_mixed_zeros(self):
         """Test with some zero abundances."""
