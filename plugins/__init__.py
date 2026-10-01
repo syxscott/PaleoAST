@@ -13,7 +13,7 @@ version: 1.0.1
 
 from .base import AnalysisPlugin, AnalysisResult
 from .decorators import auto_register, register_analysis
-from .loader import discover_plugins_in_package, load_builtin_plugins
+from .loader import discover_plugins_in_package
 from .registry import AnalysisPluginRegistry, get_plugin_registry
 
 __all__ = [
@@ -23,6 +23,5 @@ __all__ = [
     "auto_register",
     "discover_plugins_in_package",
     "get_plugin_registry",
-    "load_builtin_plugins",
     "register_analysis",
 ]
