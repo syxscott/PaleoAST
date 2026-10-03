@@ -224,7 +224,12 @@ QMenu {{
     border: 1px solid {colors.border_light};
     border-radius: {radius.lg};
     padding: 4px 0;
-    box-shadow: {colors.shadow_md};
+    /* No `box-shadow` here on purpose -- Qt's style sheets have no shadow
+       property, so the declaration was dropped with "Unknown property
+       box-shadow" and the menu had no elevation. A real drop shadow needs a
+       QGraphicsDropShadowEffect on the widget, not QSS. See
+       tests/test_qss_supported_properties.py, which fails the build if an
+       unsupported property is reintroduced. */
 }}
 
 QMenu::item {{

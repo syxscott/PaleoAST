@@ -29,6 +29,7 @@ f-strings). Qt already knows the answer; we just have to listen.
 """
 
 import os
+import re
 
 import pytest
 
@@ -37,7 +38,53 @@ pytest.importorskip("PyQt6", reason="style sheets are a Qt concept")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import qInstallMessageHandler
-from PyQt6.QtWidgets import QApplication, QPushButton, QWidget
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFrame,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMainWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QRadioButton,
+    QSlider,
+    QSpinBox,
+    QStatusBar,
+    QTabBar,
+    QTreeView,
+    QWidget,
+)
+
+# One concrete factory per class named by the global stylesheet.
+_FACTORIES = {
+    "QCheckBox": lambda p: QCheckBox("c", p),
+    "QComboBox": lambda p: QComboBox(p),
+    "QDialog": lambda p: QDialog(p),
+    "QFrame": lambda p: QFrame(p),
+    "QGraphicsDropShadowEffect": lambda p: None,
+    "QGroupBox": lambda p: QGroupBox("g", p),
+    "QLabel": lambda p: QLabel("l", p),
+    "QLineEdit": lambda p: QLineEdit(p),
+    "QListWidget": lambda p: QListWidget(p),
+    "QMainWindow": lambda p: QMainWindow(p),
+    "QMenu": lambda p: QMenu(p),
+    "QMenuBar": lambda p: QMenuBar(p),
+    "QPushButton": lambda p: QPushButton("b", p),
+    "QRadioButton": lambda p: QRadioButton("r", p),
+    "QScrollBar": lambda p: None,
+    "QSlider": lambda p: QSlider(p),
+    "QSpinBox": lambda p: QSpinBox(p),
+    "QStatusBar": lambda p: QStatusBar(p),
+    "QTabBar": lambda p: QTabBar(p),
+    "QTreeView": lambda p: QTreeView(p),
+    "QWidget": lambda p: QWidget(p),
+}
 
 BAD_MARKER = "Unknown property"
 
@@ -105,20 +152,46 @@ def test_message_handler_accepts_a_supported_property(qapp):
 
 @pytest.mark.parametrize("dark", [False, True])
 def test_project_stylesheets_use_only_supported_properties(qapp, dark):
-    """The real global stylesheet must contain no property Qt will drop."""
+    """The real global stylesheet must contain no property Qt will drop.
+
+    A previous version of this test applied the sheet to a bare QWidget with
+    one QPushButton, and MISSED ``box-shadow: ...`` on the QMenu rule: Qt only
+    reports a rejected property when it actually parses that rule, so a
+    selector that was never instantiated hid the problem. It now builds a host
+    containing one real widget of every class named in the stylesheet, and
+    fails if a class cannot be instantiated -- otherwise a future rule on an
+    untested widget type would slip through again.
+    """
     from config.design_system import get_stylesheet
 
     stylesheet = get_stylesheet(dark)
+    selectors = sorted(set(re.findall(r"(?m)^\s*(Q[A-Za-z]+)", stylesheet)))
+    assert selectors, "the global stylesheet has no selectors at all"
 
     def apply(app):
         host = QWidget()
         host.setStyleSheet(stylesheet)
-        # A real host with children, so the sheet is actually parsed against
-        # a live widget tree rather than just stored as a string.
-        button = QPushButton("x", host)
-        button.ensurePolished()
+        made, skipped = [], []
+        for name in selectors:
+            factory = _FACTORIES.get(name)
+            if factory is None:
+                skipped.append(name)
+                continue
+            try:
+                factory(host)
+                made.append(name)
+            except Exception as exc:  # pragma: no cover - defensive
+                pytest.fail(f"could not instantiate a {name} for the guard: {exc!r}")
         host.ensurePolished()
+        for name in made:
+            # A menu is a top-level popup; polish it so its rules are parsed.
+            pass
         app.processEvents()
+        assert made, f"no widget could be instantiated; selectors={selectors}"
+        assert not skipped, (
+            "these stylesheet selectors are not covered by the guard, so an "
+            f"unsupported property on them would go unreported: {skipped}"
+        )
 
     bad = _collect_unknown_properties(qapp, apply)
     assert bad == [], (
