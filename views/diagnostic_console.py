@@ -173,9 +173,6 @@ class DiagnosticConsole(QDockWidget):
 
         if self._is_dark_theme:
             self.setStyleSheet(f"""
-                QDockWidget {{
-                    titleBarCloseButtonVisible: true;
-                }}
                 QTextEdit {{
                     background: {c.bg_primary};
                     color: {c.text_primary};
@@ -210,9 +207,6 @@ class DiagnosticConsole(QDockWidget):
             """)
         else:
             self.setStyleSheet(f"""
-                QDockWidget {{
-                    titleBarCloseButtonVisible: true;
-                }}
                 QTextEdit {{
                     background: {c.bg_primary};
                     color: {c.text_primary};

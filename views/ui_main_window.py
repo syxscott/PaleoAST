@@ -3330,17 +3330,24 @@ class MainWindow(QMainWindow):
         self._evict_excess_result_tabs()
         return self._workspace.addWidget(plot, name)
 
-    def _add_tab_to_workspace(self, widget: object, name: str) -> int:
+    def _add_tab_to_workspace(self, widget: object, name: str, focus: bool = True) -> int:
         """Add an additional result widget without evicting older tabs.
 
         Unlike :meth:`_add_plot_to_workspace`, this is for secondary
         result tabs (e.g. the PCA scree plot) that should appear next
-        to the primary result without triggering eviction. The widget is
-        added to the stack and the view is switched to the new tab so
-        the user actually sees the new content.
+        to the primary result without triggering eviction. By default the
+        view is switched to the new tab so the user sees the new content.
+
+        ``focus=False`` for secondary artefacts that should be reachable but
+        must not become the resting state -- notably the loadings TABLE, which
+        is a text reference rather than a result. Without it, a run that adds
+        two secondary tabs (scree, then loadings) leaves the user staring at the
+        last one added, which for PCA was a raw text matrix with both real
+        plots hidden behind it.
         """
         idx = self._workspace.addWidget(widget, name)
-        self._workspace.setCurrentIndex(idx)
+        if focus:
+            self._workspace.setCurrentIndex(idx)
         return idx
 
     def _embed_figure_in_workspace(
@@ -3624,13 +3631,16 @@ class MainWindow(QMainWindow):
                 cum = cum * 100.0
         # A non-positive threshold means "no threshold": keep everything the
         # engine returned rather than trimming down to a single component.
+        # NB: n_avail must be bound BEFORE this early return -- `... or n_avail`
+        # only evaluates the right side when n_components is falsy, so the
+        # ordering was previously hidden until that path was taken.
+        n_avail = int(cum.size)
         if float(min_variance) <= 0.0:
             return int(getattr(result, "n_components", 0) or n_avail)
         target = float(min_variance) * 100.0 if float(min_variance) <= 1.5 else float(min_variance)
         # `searchsorted` returns len(cum) when the threshold is never reached
         # within the available spectrum; cap it so the caller can index safely.
         # At least one component is always retained.
-        n_avail = int(cum.size)
         return int(min(n_avail, max(1, int(np.searchsorted(cum, target)) + 1)))
 
     def _on_run_pca(self) -> None:
@@ -3735,7 +3745,7 @@ class MainWindow(QMainWindow):
             # 5.0% that branch fired on every default run, so a user who asked
             # for 3 components silently got 10 and the status bar reported 10.
             if min_variance and min_variance > 0 and result is not None:
-                retained = _trim_components_to_variance(result, min_variance)
+                retained = self._trim_components_to_variance(result, min_variance)
                 if retained < getattr(result, "n_components", retained):
                     self._logger.info(
                         "PCA: min_variance=%.4f retained %d of %d components",
@@ -3845,6 +3855,16 @@ class MainWindow(QMainWindow):
             parallel,
         )
 
+        # Whatever secondary artefacts were appended above, the run must END on
+        # the primary result. Without this the resting page is simply the last
+        # one added -- with scree + loadings enabled that was the loadings TEXT
+        # table, so the user never saw the score plot they had just asked for.
+        # Idempotent, and independent of how many secondary tabs exist.
+        try:
+            self._workspace.setCurrentIndex(idx)
+        except Exception:  # pragma: no cover - defensive
+            self._logger.debug("Could not restore the primary PCA view", exc_info=True)
+
     def _add_pca_loadings_tab(self, result) -> None:
         """Append a small loadings-matrix text tab to the workspace."""
         try:
@@ -3865,7 +3885,9 @@ class MainWindow(QMainWindow):
                 row = " ".join(f"{loadings[i, j]:>8.4f}" for j in range(n_cols))
                 lines.append(row)
             editor.setPlainText("\n".join(lines))
-            self._add_tab_to_workspace(editor, _("PCA Loadings"))
+            # focus=False: a text reference table must not become the resting
+            # state of the workspace.
+            self._add_tab_to_workspace(editor, _("PCA Loadings"), focus=False)
         except Exception as exc:
             self._logger.debug("Skipping PCA loadings tab: %s", exc)
 

@@ -256,7 +256,13 @@ QPushButton {{
     min-height: 36px;
     font-size: {typo.body_size}px;
     font-weight: {typo.medium};
-    transition: all 200ms ease-out;
+    /* No `transition` here on purpose. Qt's style-sheet reference has no
+       transition property -- writing one makes Qt print
+       "Unknown property transition" and ignore it, so hover/press states
+       have always snapped instantly rather than eased. Animating them for
+       real needs a QPropertyAnimation on a widget property, not QSS; see
+       tests/test_qss_supported_properties.py, which fails the build if an
+       unsupported property is reintroduced here. */
 }}
 
 QPushButton:hover {{
