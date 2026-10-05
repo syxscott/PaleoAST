@@ -10,6 +10,7 @@ version: 1.0.1
 """
 
 import logging
+import sys
 from datetime import datetime
 
 from PyQt6 import sip
@@ -68,6 +69,28 @@ class ConsoleTextEdit(QTextEdit):
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme for colors."""
         self._is_dark_theme = is_dark
+
+    def append(self, text: str) -> None:
+        """Append, but never let a dead QTextEdit take the process with it.
+
+        The handler's signal lands on ``DiagnosticConsole.append_message``,
+        which forwards here. The dock can outlive this text widget, and during
+        interpreter teardown Qt destroys children first -- so the RECEIVER
+        has to tolerate being dead, not just the sender.
+
+        A Qt slot raising is not a normal Python exception path: PyQt6 can
+        abort the process (SIGABRT, exit 134) instead of propagating, which is
+        how a CI job died with ``Fatal Python error: Aborted`` inside
+        logging's own handler chain. Guarding the sender alone left this
+        reachable; the abort landed on ``super().append()`` here.
+        """
+        try:
+            if sip.isdeleted(self):
+                return
+            super().append(text)
+        except RuntimeError:
+            # C++ half is gone; nothing to render into.
+            self._line_count = 0
 
     def append_log(self, level: str, message: str, timestamp: bool = True) -> None:
         """Append a log message with color coding."""
@@ -396,21 +419,34 @@ class ConsoleLogHandler(QObject, logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         """Emit a log record to the console (worker thread safe).
 
-        The guard below is not paranoia. Emitting a Qt signal whose receiver
-        has been destroyed aborts the PROCESS from C++ (SIGABRT, exit 134) --
-        it is not a Python exception, so the ``except RuntimeError`` below
-        cannot catch it. That is exactly what killed the CI job for
-        9889a6d: a test destroyed the console, the handler stayed on the root
-        logger, and the next unrelated log record aborted pytest at 70%.
+        Two different death modes have to be covered, and neither is a Python
+        exception -- PyQt6 aborts the PROCESS from C++ when a signal reaches a
+        receiver whose QObject is gone, so nothing here can be caught after the
+        fact. This crashed a CI job twice:
+
+        1. Mid-session: the console was destroyed (dock closed) while the
+           handler was still on the ROOT logger, so the next unrelated log
+           record emitted into the void.
+        2. Interpreter teardown, which is what still aborted after case 1 was
+           fixed. ``sip.isdeleted()`` is the wrong tool here: during
+           finalisation the Python wrapper is still alive and the C++ half is
+           already going away, so it reports False and the guard lets the
+           emit through. ``sys.is_finalizing()`` is the signal that actually
+           matches, so that is checked first.
         """
         if getattr(self, "_closed", False):
             return
+        # Nothing is worth logging to once the interpreter is shutting down,
+        # and touching Qt from an atexit/exit path is exactly what aborts.
+        if sys.is_finalizing():
+            self._closed = True
+            return
         console = self._console
         try:
-            # Checked BEFORE emitting, because the emit itself is the
-            # uncatchable part. sip.isdeleted() is the only reliable test:
-            # attribute access on a deleted QObject does not raise, so
-            # probing `console.append_message` would not detect it.
+            # Mid-session case. Checked BEFORE emitting because the emit is
+            # the uncatchable part. Attribute access on a deleted QObject does
+            # not raise, so probing a method would not detect it;
+            # sip.isdeleted() is the only reliable test.
             if console is None or sip.isdeleted(console):
                 self.close()
                 return

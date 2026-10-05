@@ -184,3 +184,53 @@ class TestLoggingShutdown:
             "the handler should detach itself once the console is destroyed, "
             f"so later records are cheap no-ops:\n{combined[-1500:]}"
         )
+
+    def test_logging_during_interpreter_teardown_does_not_abort(self):
+        """A record emitted from atexit must not abort during finalisation.
+
+        This is the second death mode, and the one that survived the first
+        fix. ``sip.isdeleted()`` is the wrong tool during teardown: the Python
+        wrapper is still alive while the C++ half is already going away, so
+        it reports False and lets the emit through. The abort then lands
+        inside ``logging.shutdown`` and kills the whole runner, which is how
+        a CI job died at 81% with ``Fatal Python error: Aborted`` / exit 134.
+
+        The console here is NOT destroyed -- that is the point. Only the
+        interpreter is shutting down, so the guard has to be
+        ``sys.is_finalizing()``.
+        """
+        child = textwrap.dedent(
+            """
+            import os, sys, atexit, logging
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PyQt6.QtWidgets import QApplication
+
+            app = QApplication([])
+            from views.diagnostic_console import DiagnosticConsole, ConsoleLogHandler
+
+            root = logging.getLogger()
+            root.setLevel(logging.INFO)
+            console = DiagnosticConsole()          # kept alive on purpose
+            handler = ConsoleLogHandler(console)
+            root.addHandler(handler)
+            console.append_message("INFO", "startup")
+
+            def _on_exit():
+                # Runs during finalisation: Qt is already tearing down.
+                logging.getLogger("teardown").info("bye")
+
+            atexit.register(_on_exit)
+            print("SETUP_OK", flush=True)
+            """
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", child],
+            capture_output=True, text=True, timeout=120,
+            encoding="utf-8", errors="replace",
+        )
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        assert "SETUP_OK" in combined, combined[-1500:]
+        assert proc.returncode == 0, (
+            f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
+        )
+        assert "Fatal Python error" not in combined, combined[-1500:]
