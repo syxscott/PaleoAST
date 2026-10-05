@@ -49,6 +49,7 @@ from PyQt6.QtGui import (
     QDropEvent,
     QIcon,
     QKeySequence,
+    QFont,
     QPainter,
     QPainterPath,
     QPen,
@@ -79,7 +80,12 @@ from PyQt6.QtWidgets import (
 )
 
 from config.constants import APP_VERSION
-from config.design_system import BorderRadius, Typography, get_palette
+from config.design_system import (
+    BorderRadius,
+    ColorPalette,
+    Typography,
+    get_palette,
+)
 from config.i18n import _, get_translator
 from controllers.data_controller import DataController
 from controllers.statistics_controller import StatisticsController
@@ -215,16 +221,60 @@ class RibbonStyle(Enum):
     ICON_TEXT = 4
 
 
+# Icon types drawn as a mathematical operator rather than a shape.
+#
+# Chosen because the operator says something the button label does not. Log is
+# the exception: "log" repeats its own label, and there is no compact symbol
+# for it that is unambiguous at 24px, so it keeps the word.
+_GLYPH_ICONS = {
+    "tf_log": "log",
+    "tf_sqrt": "√",
+    "tf_hellinger": "√p",
+    "tf_zscore": "σ",
+    "tf_pct": "%",
+    "tf_wisconsin": "↔",
+}
+
+
+def _draw_glyph(
+    painter: QPainter, glyph: str, size: int, margin: int, color: str
+) -> None:
+    """Draw a centred single-glyph icon.
+
+    The font size is derived from the icon size rather than fixed, so the
+    same call works at 24px on a ribbon button and 32px anywhere else. A
+    symbol is optically lighter than a filled shape at the same nominal
+    size, so it is nudged up.
+    """
+    font = QFont()
+    font.setPointSizeF(max(7.0, size * 0.46))
+    font.setBold(True)
+    painter.setFont(font)
+    painter.setPen(QPen(QColor(color)))
+    painter.drawText(
+        QRect(margin, margin, size - 2 * margin, size - 2 * margin),
+        Qt.AlignmentFlag.AlignCenter,
+        glyph,
+    )
+
+
 class VectorIconEngine:
     """
     Vector Icon Engine using QPainter.
 
     Generates all application icons programmatically without external files.
     Each icon is drawn using primitive shapes and paths.
+
+    Colours come from the active palette, so icons follow the theme; see
+    ``create_icon``. Glyph-based icons are listed in ``_GLYPH_ICONS``.
     """
 
     @staticmethod
-    def create_icon(icon_type: str, size: int = 32) -> QPixmap:
+    def create_icon(
+        icon_type: str,
+        size: int = 32,
+        palette: ColorPalette | None = None,
+    ) -> QPixmap:
         """
         Create a vector icon of the specified type.
 
@@ -247,10 +297,25 @@ class VectorIconEngine:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-        # Set default pen and brush
-        pen = QPen(QColor("#2C3E50"))
+        # Colours come from the active palette, not from literals. The old
+        # defaults were flat-UI values chosen against a white button; the pen
+        # in particular (#2C3E50) disappeared entirely on a dark surface, so
+        # the icons never followed the theme.
+        p = palette if palette is not None else get_palette(False)
+        ink = p.text_secondary
+        fill = p.primary
+        green = p.success
+        red = p.error
+        amber = p.warning
+        hairline = p.border_light
+        paper = p.bg_tertiary
+        muted = p.text_disabled
+        violet = p.primary_light
+        teal = p.info
+        plum = p.secondary
+        pen = QPen(QColor(ink))
         pen.setWidth(max(1, size // 16))
-        brush = QBrush(QColor("#3498DB"))
+        brush = QBrush(QColor(fill))
         painter.setPen(pen)
         painter.setBrush(brush)
 
@@ -262,7 +327,7 @@ class VectorIconEngine:
             doc_rect = QRect(margin, margin, inner_size, inner_size)
             painter.drawRect(doc_rect)
             # Plus sign
-            painter.setPen(QPen(QColor("#27AE60"), max(2, size // 12)))
+            painter.setPen(QPen(QColor(green), max(2, size // 12)))
             center = doc_rect.center()
             painter.drawLine(center.x() - inner_size // 6, center.y(), center.x() + inner_size // 6, center.y())
             painter.drawLine(center.x(), center.y() - inner_size // 6, center.x(), center.y() + inner_size // 6)
@@ -282,7 +347,7 @@ class VectorIconEngine:
         elif icon_type == "save_file":
             # Floppy disk
             painter.drawRect(QRect(margin, margin + inner_size // 6, inner_size, inner_size - inner_size // 6))
-            painter.setBrush(QBrush(QColor("#E4E7EB")))
+            painter.setBrush(QBrush(QColor(hairline)))
             painter.drawRect(QRect(margin + inner_size // 4, margin, inner_size // 2, inner_size // 4))
 
         elif icon_type == "transpose":
@@ -304,19 +369,19 @@ class VectorIconEngine:
             axis_length = inner_size // 2
 
             # X-axis (PC1)
-            painter.setPen(QPen(QColor("#E74C3C"), max(2, size // 16)))
+            painter.setPen(QPen(QColor(red), max(2, size // 16)))
             painter.drawLine(center_x, center_y, center_x + axis_length, center_y)
 
             # Y-axis (PC2)
-            painter.setPen(QPen(QColor("#27AE60"), max(2, size // 16)))
+            painter.setPen(QPen(QColor(green), max(2, size // 16)))
             painter.drawLine(center_x, center_y, center_x, center_y - axis_length)
 
             # Z-axis hint (PC3)
-            painter.setPen(QPen(QColor("#3498DB"), max(2, size // 16)))
+            painter.setPen(QPen(QColor(fill), max(2, size // 16)))
             painter.drawLine(center_x, center_y, center_x - axis_length // 2, center_y + axis_length // 2)
 
             # Ellipse representing variance
-            painter.setPen(QPen(QColor("#F39C12"), max(1, size // 24)))
+            painter.setPen(QPen(QColor(amber), max(1, size // 24)))
             ellipse_rect = QRect(
                 center_x - axis_length // 3, center_y - axis_length // 3, axis_length * 2 // 3, axis_length * 2 // 3
             )
@@ -328,7 +393,7 @@ class VectorIconEngine:
             base_y = size - margin
 
             # Main trunk
-            painter.setPen(QPen(QColor("#27AE60"), max(2, size // 12)))
+            painter.setPen(QPen(QColor(green), max(2, size // 12)))
             painter.drawLine(center_x, base_y, center_x, margin + inner_size // 4)
 
             # Branches
@@ -361,7 +426,7 @@ class VectorIconEngine:
             painter.drawPath(path)
 
             # Center hole
-            painter.setBrush(QBrush(QColor("#E4E7EB")))
+            painter.setBrush(QBrush(QColor(hairline)))
             painter.drawEllipse(QRect(-inner_radius // 2, -inner_radius // 2, inner_radius, inner_radius))
             painter.restore()
 
@@ -428,31 +493,31 @@ class VectorIconEngine:
                 QPoint(size - margin - inner_size // 4, margin + inner_size // 4),
                 QPoint(size // 2, size - margin - inner_size // 4),
             ]
-            painter.setPen(QPen(QColor("#9B59B6"), max(2, size // 16)))
+            painter.setPen(QPen(QColor(violet), max(2, size // 16)))
             painter.drawPolygon(points)
             for pt in points:
-                painter.setBrush(QBrush(QColor("#9B59B6")))
+                painter.setBrush(QBrush(QColor(violet)))
                 painter.drawEllipse(pt, size // 10, size // 10)
 
         elif icon_type == "stratigraphy":
             # Layered sedimentary strata
             num_layers = 4
             layer_height = inner_size // num_layers
-            colors = ["#E74C3C", "#F39C12", "#27AE60", "#3498DB"]
+            colors = [red, amber, green, fill]
             for i, color in enumerate(colors):
                 painter.setBrush(QBrush(QColor(color)))
                 painter.drawRect(QRect(margin, margin + i * layer_height, inner_size, layer_height - 1))
 
         elif icon_type == "nmds":
             # Stress plot icon
-            painter.setPen(QPen(QColor("#16A085"), max(2, size // 16)))
+            painter.setPen(QPen(QColor(teal), max(2, size // 16)))
             points_data = [
                 QPoint(margin + inner_size // 5, size - margin - inner_size // 5),
                 QPoint(size // 2, margin + inner_size // 3),
                 QPoint(size - margin - inner_size // 5, size - margin - inner_size // 2),
             ]
             for pt in points_data:
-                painter.setBrush(QBrush(QColor("#16A085")))
+                painter.setBrush(QBrush(QColor(teal)))
                 painter.drawEllipse(pt, size // 12, size // 12)
             painter.drawPolyline(points_data)
 
@@ -462,7 +527,7 @@ class VectorIconEngine:
             box1_x = margin + inner_size // 6
             box2_x = size - margin - inner_size // 6 - box_width
 
-            painter.setBrush(QBrush(QColor("#3498DB")))
+            painter.setBrush(QBrush(QColor(fill)))
             painter.drawRect(QRect(box1_x, margin + inner_size // 3, box_width, inner_size // 2))
             painter.drawLine(box1_x + box_width // 2, margin, box1_x + box_width // 2, margin + inner_size // 3)
             painter.drawLine(
@@ -472,7 +537,7 @@ class VectorIconEngine:
                 size - margin,
             )
 
-            painter.setBrush(QBrush(QColor("#E74C3C")))
+            painter.setBrush(QBrush(QColor(red)))
             painter.drawRect(QRect(box2_x, margin + inner_size // 5, box_width, inner_size // 3))
             painter.drawLine(box2_x + box_width // 2, margin, box2_x + box_width // 2, margin + inner_size // 5)
             painter.drawLine(
@@ -492,8 +557,8 @@ class VectorIconEngine:
                 QPoint(center[0] - inner_size // 4, center[1] + inner_size // 3),
                 QPoint(center[0] - inner_size // 3, center[1] - inner_size // 4),
             ]
-            painter.setPen(QPen(QColor("#8E44AD"), max(2, size // 16)))
-            painter.setBrush(QBrush(QColor("#8E44AD")))
+            painter.setPen(QPen(QColor(plum), max(2, size // 16)))
+            painter.setBrush(QBrush(QColor(plum)))
             for pt in points:
                 painter.drawEllipse(pt, size // 18, size // 18)
             painter.drawPolyline(points[:-1])
@@ -502,7 +567,7 @@ class VectorIconEngine:
             # Generic bar chart (used by LDA, CCA, stats, etc.)
             bar_count = 4
             bar_width = inner_size // (bar_count * 2)
-            bar_colors = ["#3498DB", "#E74C3C", "#27AE60", "#F39C12"]
+            bar_colors = [fill, red, green, amber]
             for i in range(bar_count):
                 height_factor = 0.4 + 0.6 * (1 - abs(i - 1.5) / 2)
                 bar_height = int(inner_size * height_factor)
@@ -513,7 +578,7 @@ class VectorIconEngine:
 
         elif icon_type == "imputation":
             # Grid of cells with one cell highlighted to suggest "filling in"
-            painter.setPen(QPen(QColor("#7F8C8D"), max(1, size // 32)))
+            painter.setPen(QPen(QColor(muted), max(1, size // 32)))
             cell_size = inner_size // 3
             grid_origin_x = margin + (inner_size - 3 * cell_size) // 2
             grid_origin_y = margin + (inner_size - 3 * cell_size) // 2
@@ -526,10 +591,21 @@ class VectorIconEngine:
                         cell_size,
                     )
                     if (r, c) == (1, 1):
-                        painter.setBrush(QBrush(QColor("#27AE60")))
+                        painter.setBrush(QBrush(QColor(green)))
                     else:
-                        painter.setBrush(QBrush(QColor("#ECF0F1")))
+                        painter.setBrush(QBrush(QColor(paper)))
                     painter.drawRect(rect)
+
+        elif icon_type in _GLYPH_ICONS:
+            # Mathematical operator as the glyph.
+            #
+            # The six data transforms used to share one "settings" gear, which
+            # is worse than no icon: six adjacent buttons looked identical, and
+            # the icon repeated what the ribbon tab already said. These glyphs
+            # carry information the label does not -- sqrt, sigma, percent and
+            # the double-standardisation arrows are all readable without the
+            # word next to them.
+            _draw_glyph(painter, _GLYPH_ICONS[icon_type], size, margin, fill)
 
         else:
             # Default circle icon
@@ -582,18 +658,33 @@ class RibbonButton(QPushButton):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
 
-        # Create icon
+        # Create icon. The palette is passed in rather than defaulted inside
+        # the engine, so a button created while the dark theme is active does
+        # not start with light-theme glyphs.
         if icon_type:
-            icon_pixmap = VectorIconEngine.create_icon(icon_type, 24)
-            icon = QIcon(icon_pixmap)
-            self.setIcon(icon)
+            self._refresh_icon()
 
         # Apply stylesheet
         self._apply_stylesheet()
 
+    def _refresh_icon(self) -> None:
+        """(Re)draw the icon for the current theme.
+
+        Icons were drawn once at construction and never redrawn, so a theme
+        switch left the old palette's glyphs on screen -- the same failure as
+        matplotlib annotations keeping their creation-time colour.
+        """
+        if not self._icon_type:
+            return
+        pixmap = VectorIconEngine.create_icon(
+            self._icon_type, 24, get_palette(self._is_dark_theme)
+        )
+        self.setIcon(QIcon(pixmap))
+
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set theme and update stylesheet."""
         self._is_dark_theme = is_dark
+        self._refresh_icon()
         self._apply_stylesheet()
 
     def _apply_stylesheet(self) -> None:
@@ -624,7 +715,7 @@ class RibbonButton(QPushButton):
             "} "
             "QPushButton:pressed { "
             "background-color: " + c.primary + "; "
-            "color: white; "
+            "color: " + c.on_primary + "; "
             "border: 1px solid " + c.primary_dark + "; "
             "} "
             "QPushButton:disabled { "
@@ -1704,19 +1795,24 @@ class MainWindow(QMainWindow):
         self._btn_transpose = edit_group.addButton("transpose", _("Transpose"), _("Transpose data matrix"))
         self._btn_imputation = edit_group.addButton("imputation", _("NaN"), _("Missing Value Imputation"))
 
-        # Data transformations group
+        # Data transformations group.
+        #
+        # These used to share one "settings" gear, which made six adjacent
+        # buttons indistinguishable and repeated what the ribbon tab already
+        # said. Each gets its operator instead, so the icon carries something
+        # the label does not.
         transform_group = home_tab.addGroup(_("Transform"))
-        self._btn_log_transform = transform_group.addButton("settings", _("Log"), _("Log transformation (base 10)"))
-        self._btn_sqrt_transform = transform_group.addButton("settings", _("Sqrt"), _("Square root transformation"))
+        self._btn_log_transform = transform_group.addButton("tf_log", _("Log"), _("Log transformation (base 10)"))
+        self._btn_sqrt_transform = transform_group.addButton("tf_sqrt", _("Sqrt"), _("Square root transformation"))
         self._btn_hellinger_transform = transform_group.addButton(
-            "settings", _("Hellinger"), _("Hellinger transformation")
+            "tf_hellinger", _("Hellinger"), _("Hellinger transformation")
         )
-        self._btn_zscore_transform = transform_group.addButton("settings", _("Z-Score"), _("Z-score standardization"))
+        self._btn_zscore_transform = transform_group.addButton("tf_zscore", _("Z-Score"), _("Z-score standardization"))
         self._btn_percent_transform = transform_group.addButton(
-            "settings", _("% Total"), _("Percentage standardization")
+            "tf_pct", _("% Total"), _("Percentage standardization")
         )
         self._btn_wisconsin_transform = transform_group.addButton(
-            "settings", _("Wisconsin"), _("Wisconsin double standardization")
+            "tf_wisconsin", _("Wisconsin"), _("Wisconsin double standardization")
         )
 
         # View group
@@ -1749,11 +1845,23 @@ class MainWindow(QMainWindow):
         self._univar_combo._is_undo_button = False  # never used as undo marker
         self._btn_simper = univar_group.addButton("chart", "SIMPER", _("SIMPER Analysis"))
 
-        # Diversity group
+        # Diversity group.
+        #
+        # No icons here on purpose. All three previously used one "diversity"
+        # glyph, which repeated the tab name and made the buttons
+        # indistinguishable from each other. Inventing three decorative
+        # symbols would not be better -- the information is in the method
+        # names -- so the group drops the icon and keeps the words.
         diversity_group = analysis_tab.addGroup(_("Diversity"))
-        self._btn_diversity = diversity_group.addButton("diversity", _("Diversity"), _("Biodiversity indices"))
-        self._btn_abundance = diversity_group.addButton("diversity", _("Models"), _("Abundance Models"))
-        self._btn_she = diversity_group.addButton("diversity", "SHE", _("SHE Analysis"))
+        self._btn_diversity = diversity_group.addButton(
+            "", _("Diversity"), _("Biodiversity indices"), RibbonStyle.TEXT_ONLY
+        )
+        self._btn_abundance = diversity_group.addButton(
+            "", _("Models"), _("Abundance Models"), RibbonStyle.TEXT_ONLY
+        )
+        self._btn_she = diversity_group.addButton(
+            "", "SHE", _("SHE Analysis"), RibbonStyle.TEXT_ONLY
+        )
 
         # Group tests group
         tests_group = analysis_tab.addGroup(_("Tests"))
@@ -1782,22 +1890,46 @@ class MainWindow(QMainWindow):
         # Stratigraphy tab
         strat_tab = self._ribbon.addTab(_("Stratigraphy"))
 
+        # Every button on this tab used to carry one "stratigraphy" glyph, so
+        # the tab showed nine identical icons. The icon encoded the tab name
+        # and nothing else, so the tab drops it: the method names are the
+        # information, and a decorative symbol per method would be noise.
+        _text = RibbonStyle.TEXT_ONLY
+
         strat_group = strat_tab.addGroup(_("Time Series"))
-        self._btn_spectral = strat_group.addButton("stratigraphy", _("Spectral"), _("Spectral Analysis"))
-        self._btn_coniss = strat_group.addButton("stratigraphy", "CONISS", _("CONISS Zonation"))
-        self._btn_wavelet = strat_group.addButton("stratigraphy", _("Wavelet"), _("Wavelet CWT Analysis"))
-        self._btn_isotope = strat_group.addButton("stratigraphy", _("Isotope"), _("Isotope Time Series"))
-        self._btn_strat_corr = strat_group.addButton("stratigraphy", _("Correlation"), _("Stratigraphic Correlation"))
+        self._btn_spectral = strat_group.addButton(
+            "", _("Spectral"), _("Spectral Analysis"), _text
+        )
+        self._btn_coniss = strat_group.addButton(
+            "", "CONISS", _("CONISS Zonation"), _text
+        )
+        self._btn_wavelet = strat_group.addButton(
+            "", _("Wavelet"), _("Wavelet CWT Analysis"), _text
+        )
+        self._btn_isotope = strat_group.addButton(
+            "", _("Isotope"), _("Isotope Time Series"), _text
+        )
+        self._btn_strat_corr = strat_group.addButton(
+            "", _("Correlation"), _("Stratigraphic Correlation"), _text
+        )
 
         bio_group = strat_tab.addGroup(_("Biostratigraphy"))
-        self._btn_biostrat = bio_group.addButton("stratigraphy", _("Biozone"), _("UA/RASC Biostratigraphy"))
+        self._btn_biostrat = bio_group.addButton(
+            "", _("Biozone"), _("UA/RASC Biostratigraphy"), _text
+        )
 
         paleo_group = strat_tab.addGroup(_("Paleo-Environment"))
-        self._btn_paleo_env = paleo_group.addButton("stratigraphy", _("CA Axis"), _("Paleo-Env. CA Reconstruction"))
+        self._btn_paleo_env = paleo_group.addButton(
+            "", _("CA Axis"), _("Paleo-Env. CA Reconstruction"), _text
+        )
 
         markov_group = strat_tab.addGroup(_("Facies"))
-        self._btn_markov = markov_group.addButton("stratigraphy", _("Markov"), _("Markov Chain Analysis"))
-        self._btn_directional = markov_group.addButton("stratigraphy", _("Rose"), _("Directional Statistics"))
+        self._btn_markov = markov_group.addButton(
+            "", _("Markov"), _("Markov Chain Analysis"), _text
+        )
+        self._btn_directional = markov_group.addButton(
+            "", _("Rose"), _("Directional Statistics"), _text
+        )
 
     def _setup_connections(self) -> None:
         """Setup signal-slot connections."""

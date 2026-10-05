@@ -455,6 +455,15 @@ class InteractivePlotCanvas(QWidget):
 
         Only *colours* are touched - grids, spines visibility and reference
         lines are left exactly as the plotting method arranged them.
+
+        ``ax.texts`` is part of the job, not an afterthought. The sample
+        labels are drawn with ``annotate()``, which resolves ``text.color``
+        from rcParams *when the artist is created*; updating rcParams later
+        does not retroactively repaint an existing ``Text``. So a figure
+        drawn before a theme switch kept its light-theme label colour and
+        became invisible on the dark axes face - measured at roughly
+        2:1 against a 4.5:1 requirement, which is why the labels had to be
+        walked explicitly here.
         """
         target = self._ax if ax is None else ax
         t = self.theme_colors()
@@ -467,6 +476,17 @@ class InteractivePlotCanvas(QWidget):
                 target.title.set_color(t["text"])
                 for spine in target.spines.values():
                     spine.set_color(t["border"])
+                # Annotations: sample labels, bar values, empty-state notes.
+                for artist in target.texts:
+                    artist.set_color(t["text"])
+                # Legend text is a separate artist list from ax.texts.
+                legend = target.get_legend()
+                if legend is not None:
+                    for text in legend.get_texts():
+                        text.set_color(t["text"])
+                    if legend.get_frame() is not None:
+                        legend.get_frame().set_facecolor(t["figure_bg"])
+                        legend.get_frame().set_edgecolor(t["border"])
         with contextlib.suppress(Exception):
             self._figure.patch.set_facecolor(t["figure_bg"])
 
