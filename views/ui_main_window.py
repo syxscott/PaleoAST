@@ -29,6 +29,7 @@ import logging
 import os
 import sys
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -2185,6 +2186,25 @@ class MainWindow(QMainWindow):
         self._register_data_action(export_plot_action)
         self._export_plot_action = export_plot_action
 
+        # Editable-R export. Two actions on purpose: one regenerates the .R
+        # (and therefore overwrites an edited file, after asking), the other
+        # runs the .R exactly as it sits on disk. Merging them would silently
+        # discard the user's RStudio edits.
+        r_export_action = QAction(_("Export PCA as &R Script..."), self)
+        r_export_action.setShortcut(QKeySequence("Ctrl+Shift+R"))
+        r_export_action.triggered.connect(self._on_export_as_r_script)
+        file_menu.addAction(r_export_action)
+        self._register_data_action(r_export_action)
+
+        r_rerun_action = QAction(_("Re-run &R Script"), self)
+        # Not a variant of the export shortcut: Qt cannot even express
+        # "Ctrl+Shift+Shift+R", and a modifier chord that folds two different
+        # actions into one gesture is easy to trigger by accident -- which for
+        # the regenerate action means overwriting a script.
+        r_rerun_action.setShortcut(QKeySequence("Ctrl+Alt+R"))
+        r_rerun_action.triggered.connect(self._on_rerun_r_script)
+        file_menu.addAction(r_rerun_action)
+
         file_menu.addSeparator()
 
         exit_action = QAction(_("E&xit"), self)
@@ -3014,6 +3034,13 @@ class MainWindow(QMainWindow):
             "plot_figsize": settings.value(
                 "preferences/plot_figsize", "8,6", type=str
             ),
+            "r_rscript": settings.value("preferences/r_rscript", "", type=str),
+            "r_theme": settings.value("preferences/r_theme", "classic", type=str),
+            "r_base_size": settings.value("preferences/r_base_size", 9.0, type=float),
+            "r_output_format": settings.value(
+                "preferences/r_output_format", "pdf", type=str
+            ),
+            "r_timeout": settings.value("preferences/r_timeout", 300, type=int),
         }
 
     def _apply_preferences(self, new_state: dict) -> None:
@@ -3030,6 +3057,12 @@ class MainWindow(QMainWindow):
         settings.setValue("preferences/csv_has_row_labels", new_state["csv_has_row_labels"])
         settings.setValue("preferences/plot_dpi", new_state["plot_dpi"])
         settings.setValue("preferences/plot_figsize", new_state["plot_figsize"])
+        # R export settings. Read back through _get_preferences_state() when a
+        # script is generated or run, so changing them takes effect on the next
+        # export rather than needing a restart.
+        for key in ("r_rscript", "r_theme", "r_base_size", "r_output_format", "r_timeout"):
+            if key in new_state:
+                settings.setValue(f"preferences/{key}", new_state[key])
         # Propagate DPI / figsize to the interactive plot canvas so
         # the next plot uses the new values.  We touch ``figure.dpi``
         # at matplotlib's rcParams level (the canvas reads from there
@@ -3239,6 +3272,189 @@ class MainWindow(QMainWindow):
             _("Export Successful"),
             _("Plot saved to:\n{0}").format(path),
         )
+
+    # ------------------------------------------------------------------
+    # Editable R (ggplot2) export
+    # ------------------------------------------------------------------
+    #
+    # Two SEPARATE actions, on purpose:
+    #   * Export as R script  -- regenerate the .R from the current result and
+    #     run it. This REWRITES the file.
+    #   * Re-run R script      -- execute the .R exactly as it is on disk.
+    #
+    # They must not be merged. A user is expected to edit that script in
+    # RStudio; if a "render" button regenerated the file first, every edit
+    # would be silently destroyed. So the regenerate path asks first whenever
+    # the file on disk no longer matches what we wrote.
+
+    def _r_plot_spec(self):
+        """Build an :class:`RPlotSpec` from the user's preferences."""
+        from visualization.r_export import RPlotSpec
+
+        prefs = self._get_preferences_state()
+        try:
+            w_str, h_str = [s.strip() for s in str(prefs["plot_figsize"]).split(",")]
+            figsize = (float(w_str), float(h_str))
+        except (ValueError, AttributeError):
+            figsize = (7.0, 5.5)
+        return RPlotSpec(
+            theme=str(prefs.get("r_theme", "classic")),
+            base_size=float(prefs.get("r_base_size", 9)),
+            figsize=figsize,
+            dpi=int(prefs.get("plot_dpi", 300)),
+            output_format=str(prefs.get("r_output_format", "pdf")),
+            r_executable=str(prefs.get("r_rscript", "")),
+        )
+
+    def _r_output_dir(self) -> str:
+        """Where exported R scripts go.
+
+        Inside the user's documents folder rather than next to the source, so
+        the scripts and their CSVs travel together and are easy to find later.
+        """
+        base = Path(
+            os.environ.get("USERPROFILE")
+            or os.path.expanduser("~")
+            or str(Path.home())
+        )
+        out = base / "Documents" / "PaleoAST-R"
+        out.mkdir(parents=True, exist_ok=True)
+        return str(out)
+
+    def _on_export_as_r_script(self) -> None:
+        """Regenerate the .R script from the current result, then run it."""
+        if not self._state.has_data:
+            QMessageBox.information(
+                self, _("No Data"), _("Load data first, then export an R script.")
+            )
+            return
+
+        out_dir = Path(self._r_output_dir())
+        existing = out_dir / "pca_scores.R"
+
+        # Never clobber an edit without saying so.
+        if existing.is_file() and getattr(self, "_last_r_export", None) is not None:
+            if not self._last_r_export.script_is_unmodified():
+                reply = QMessageBox.question(
+                    self,
+                    _("Overwrite edited R script?"),
+                    _("{0}\n\nhas been edited. Regenerating replaces your changes "
+                      "with a freshly generated script. Continue?").format(
+                        existing.name
+                    ),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    self._logger.info("R export cancelled: script was edited")
+                    return
+
+        try:
+            import datetime as _dt
+
+            from stats.pca import PCAAnalyzer
+            from visualization.r_export import RScriptExporter
+
+            matrix = self._state.data_matrix
+            if matrix is None:
+                raise ValueError(_("No data matrix loaded."))
+            result = PCAAnalyzer().analyze(
+                matrix.to_numpy(), n_components=3, method="correlation"
+            )
+            # Index rather than unpack into `_`: the gettext alias must not be
+            # rebound to a throwaway name, or every later _("...") in this
+            # function silently resolves to the wrong object.
+            plot_meta = self._get_plot_labels_and_groups()
+            labels, groups = plot_meta[0], plot_meta[1]
+            exporter = RScriptExporter(
+                stamp=_dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            )
+            export = exporter.export_pca_scores(
+                result, out_dir, self._r_plot_spec(),
+                labels=labels, groups=groups,
+            )
+        except Exception as exc:
+            self._logger.error(f"R script export failed: {exc}")
+            QMessageBox.critical(self, _("R Export Error"), str(exc))
+            return
+
+        self._last_r_export = export
+        self._run_r_script_and_show(export.script_path, export.script_path.name)
+
+    def _on_rerun_r_script(self) -> None:
+        """Execute the .R exactly as it is on disk. Never regenerates it."""
+        script = Path(self._r_output_dir()) / "pca_scores.R"
+        if not script.is_file():
+            QMessageBox.information(
+                self,
+                _("No R script"),
+                _("Generate one first with \"Export as R script\".\n\n"
+                  "Expected at:\n{0}").format(script),
+            )
+            return
+        self._run_r_script_and_show(script, script.name)
+
+    def _run_r_script_and_show(self, script_path: Path, title: str) -> None:
+        """Run an R script and put the resulting figure in the workspace."""
+        from visualization.r_render import run_r_script
+
+        prefs = self._get_preferences_state()
+        self._status_bar.setInfo(_("Running {0} ...").format(title))
+        QApplication.processEvents()
+
+        run = run_r_script(
+            script_path,
+            rscript=str(prefs.get("r_rscript", "")),
+            timeout=float(prefs.get("r_timeout", 300)),
+        )
+        if not run.ok:
+            self._status_bar.setInfo(_("R failed"))
+            QMessageBox.critical(self, _("R Error"), run.message())
+            return
+
+        image = run.preview_png or next(
+            (p for p in run.produced if p.suffix.lower() in (".png", ".jpg", ".jpeg")),
+            None,
+        )
+        if image is None:
+            # A vector-only output cannot be displayed inline; say where it is
+            # rather than claiming a figure appeared.
+            where = "\n".join(str(p) for p in run.produced) or run.error
+            self._status_bar.setInfo(_("R finished"))
+            QMessageBox.information(
+                self,
+                _("Figure written"),
+                _("R finished but the output is vector-only, so it cannot be\n"
+                  "previewed here. Open the file directly:\n\n{0}\n\n"
+                  "The .R script stays editable; use \"Re-run R script\" after "
+                  "you change it.").format(where),
+            )
+            return
+
+        try:
+            self._show_rendered_png(image, title)
+        except Exception as exc:
+            self._logger.error(f"Could not display the R figure: {exc}")
+        self._status_bar.setInfo(
+            _("R finished: {0}").format(", ".join(p.name for p in run.produced))
+        )
+
+    def _show_rendered_png(self, png_path: Path, title: str) -> None:
+        """Put an R-rendered PNG into the workspace as a figure tab."""
+        import matplotlib.image as mpimg
+        from matplotlib.figure import Figure
+
+        fig = Figure(figsize=(7.2, 5.6), dpi=110)
+        ax = fig.add_subplot(111)
+        ax.imshow(mpimg.imread(str(png_path)))
+        ax.set_axis_off()
+        fig.tight_layout(pad=0)
+        # _embed_figure_in_workspace is the right host: it wraps a pre-built
+        # Figure in a QWidget, so the R output needs no InteractivePlotCanvas.
+        self._embed_figure_in_workspace(
+            fig, title, dark_theme=self._is_dark_theme
+        )
+        self._logger.info(f"Displayed R figure: {png_path}")
 
     def _extract_current_figure(self):
         """Return the matplotlib ``Figure`` in the active workspace tab."""
@@ -6507,3 +6723,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
