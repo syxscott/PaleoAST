@@ -11,6 +11,7 @@ version: 1.0.1
 
 import logging
 import sys
+import weakref
 from datetime import datetime
 
 from PyQt6 import sip
@@ -390,27 +391,38 @@ class ConsoleLogHandler(QObject, logging.Handler):
     def __init__(self, console: DiagnosticConsole) -> None:
         QObject.__init__(self)
         logging.Handler.__init__(self)
-        self._console = console
+        # WEAK reference, deliberately. A strong ref here keeps the Python
+        # wrapper alive after Qt has destroyed the C++ half, so every "is it
+        # still alive?" check sees a live object and lets the emit through --
+        # which is precisely the crash this class of guard keeps missing.
+        # With a weakref the dead-receiver state becomes unrepresentable:
+        # once the console is gone, the ref returns None and emit() no-ops.
+        self._console_ref = weakref.ref(console)
         # Set once the underlying QObject is gone; see flush()/close().
         self._closed = False
         # Connect the signal with the default (auto) connection.
-        # ``_console`` lives on the GUI thread, and because this
-        # QObject also lives there, Qt picks ``Qt.DirectConnection``
-        # automatically — which is correct for same-thread signal
-        # delivery. When the signal is emitted from a worker
-        # thread, Qt posts the slot to the receiver's thread.
-        self._message_signal.connect(self._console.append_message)
+        # The console lives on the GUI thread, and because this QObject also
+        # lives there, Qt picks ``Qt.DirectConnection`` automatically -- which
+        # is correct for same-thread signal delivery. When the signal is
+        # emitted from a worker thread, Qt posts the slot to the receiver's
+        # thread.
+        self._message_signal.connect(console.append_message)
 
-        # The console's own lifetime, not the interpreter's, is what matters:
-        # close() only runs during logging.shutdown(), so a console destroyed
-        # mid-session (dock closed, widget garbage-collected) would leave this
-        # handler attached to the ROOT logger with a dead receiver. Qt's
-        # destroyed() is the earliest reliable notice, and detaching here is
-        # what stops the next log record from aborting the process.
+        # Qt does NOT deliver closeEvent when it destroys an object during
+        # teardown, so the dock's own closeEvent cannot be relied on to detach
+        # this handler. destroyed() is the earliest reliable notice.
         try:
-            self._console.destroyed.connect(self._on_console_destroyed)
+            console.destroyed.connect(self._on_console_destroyed)
         except (RuntimeError, TypeError):  # pragma: no cover - already gone
             self._closed = True
+
+    @property
+    def _console(self):
+        """The console if it is still alive, else None."""
+        try:
+            return self._console_ref()
+        except TypeError:  # pragma: no cover - ref cleared
+            return None
 
     def _on_console_destroyed(self, *_args) -> None:
         """The console's C++ object is gone: stop emitting and detach."""
@@ -442,12 +454,17 @@ class ConsoleLogHandler(QObject, logging.Handler):
             self._closed = True
             return
         console = self._console
+        if console is None:
+            # The console is gone, so the "emit into the void" state is
+            # unrepresentable rather than merely detectable. Detach so later
+            # records cost nothing.
+            self.close()
+            return
         try:
-            # Mid-session case. Checked BEFORE emitting because the emit is
-            # the uncatchable part. Attribute access on a deleted QObject does
-            # not raise, so probing a method would not detect it;
-            # sip.isdeleted() is the only reliable test.
-            if console is None or sip.isdeleted(console):
+            # Checked BEFORE emitting because the emit is the uncatchable part:
+            # PyQt6 aborts the process instead of raising when a signal
+            # reaches a receiver whose C++ object is gone.
+            if sip.isdeleted(console):
                 self.close()
                 return
         except (RuntimeError, TypeError):
