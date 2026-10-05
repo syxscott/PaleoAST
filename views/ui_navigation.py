@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import BorderRadius, ColorPalette, Typography, get_palette
+from config.design_system import BorderRadius, Typography, get_palette
 from config.i18n import _
 
 
@@ -106,6 +106,27 @@ class NavigationDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self._expanded_items: set = set()
         self._hovered_index = None
+        # Theme flag, pushed in by NavigationPanel.setDarkTheme(). The delegate
+        # paints by hand, so the QSS on the tree cannot reach these colours:
+        # without this it always used the LIGHT palette and drew dark text on
+        # the dark background, which made every category label invisible in
+        # dark mode. Read at paint time, never cached as a palette object.
+        self._is_dark_theme = False
+
+    def set_dark_theme(self, is_dark: bool) -> None:
+        """Theme switch, followed by a repaint of the host view.
+
+        The host view is required because a QStyledItemDelegate has no
+        repaint() of its own -- without this the switch would leave stale
+        light-on-dark glyphs on screen until something else forced a redraw.
+        """
+        self._is_dark_theme = bool(is_dark)
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "viewport"):
+            try:
+                parent.viewport().update()
+            except Exception:
+                pass
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         """
@@ -204,7 +225,7 @@ class NavigationDelegate(QStyledItemDelegate):
             text = ""
 
         # Draw text
-        c = ColorPalette()
+        c = get_palette(self._is_dark_theme)
         text_color = c.primary if is_selected else c.text_primary
         if is_hovered and not is_selected:
             text_color = c.primary
@@ -232,7 +253,7 @@ class NavigationDelegate(QStyledItemDelegate):
 
     def _draw_folder_icon(self, painter: QPainter, x: float, y: float, size: float, is_expanded: bool) -> None:
         """Draw folder icon with optional open state."""
-        c = ColorPalette()
+        c = get_palette(self._is_dark_theme)
         color = QColor(c.primary)
         painter.setPen(QPen(color, 1.5))
         painter.setBrush(QBrush(color.lighter(130)))
@@ -340,7 +361,7 @@ class NavigationDelegate(QStyledItemDelegate):
         self, painter: QPainter, x: float, y: float, size: float, is_expanded: bool, is_selected: bool
     ) -> None:
         """Draw expand/collapse arrow."""
-        c = ColorPalette()
+        c = get_palette(self._is_dark_theme)
         color = c.text_disabled if not is_selected else c.bg_primary
         painter.setPen(QPen(QColor(color), 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -393,6 +414,10 @@ class NavigationTree(QWidget):
         """Set dark/light theme."""
         self._is_dark_theme = is_dark
         self._apply_stylesheet()
+        # The delegate draws its own text/icons, so the QSS above cannot reach
+        # them. It has to be told separately or the labels keep the light
+        # palette's text colour on the dark background.
+        self._delegate.set_dark_theme(is_dark)
 
     def _apply_stylesheet(self) -> None:
         """Apply themed stylesheet."""
@@ -478,8 +503,10 @@ class NavigationTree(QWidget):
         self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
         self._tree.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 
-        # Set custom delegate
-        self._delegate = NavigationDelegate()
+        # Set custom delegate. It is parented to the tree (not left orphaned)
+        # so set_dark_theme() can reach viewport() and force a repaint when the
+        # theme flips -- the delegate paints by hand, so nothing else would.
+        self._delegate = NavigationDelegate(self._tree)
         self._tree.setItemDelegate(self._delegate)
 
         # Search/filter input

@@ -750,12 +750,22 @@ class ScientificSpreadsheet(QWidget):
         if row_labels is None:
             self._row_labels = [f"Sample_{i + 1}" for i in range(n_rows)]
         else:
-            self._row_labels = list(row_labels)
+            # Coerce to str at this boundary. QTableWidget.setVerticalHeaderLabels()
+            # raises "TypeError: index 0 has type 'int' but 'str' is expected" for a
+            # non-string entry, and views/file_drop_handler.py hands us
+            # ``df.index.tolist()`` verbatim -- so any file with a NUMERIC index
+            # column (specimen catalogue numbers, horizon IDs) crashed the sheet.
+            # DataMatrix's own contract is ``list[str]`` as well, so one
+            # conversion here satisfies both consumers.
+            self._row_labels = [self._label_to_str(v) for v in row_labels]
 
         if col_labels is None:
             self._col_labels = [f"Var_{j + 1}" for j in range(n_cols)]
         else:
-            self._col_labels = list(col_labels)
+            # Same shape of defect as the row labels: setHorizontalHeaderLabels()
+            # would reject ints identically. Not reachable from pandas today
+            # (it keeps header names as strings), but the guard is free.
+            self._col_labels = [self._label_to_str(v) for v in col_labels]
 
         # Update table - optimized for large datasets
         self._table.blockSignals(True)
@@ -1299,6 +1309,26 @@ class ScientificSpreadsheet(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, _("Import Error"), _("Failed to import data:\n{0}").format(e))
+
+    @staticmethod
+    def _label_to_str(value) -> str:
+        """Normalise one axis label to the ``str`` that Qt and DataMatrix require.
+
+        Handles the three shapes that actually reach us from pandas:
+        numpy integer scalars, plain ints, and anything whose ``str()`` would
+        read as "nan" for a missing label. A non-finite float label would
+        otherwise silently become the literal text "nan" in the header.
+        """
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return ""
+        try:
+            if isinstance(value, float) and np.isnan(value):
+                return ""
+        except TypeError:
+            pass
+        return str(value)
 
     @staticmethod
     def _make_display_item(value) -> QTableWidgetItem:
