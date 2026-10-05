@@ -12,6 +12,7 @@ version: 1.0.1
 import logging
 from datetime import datetime
 
+from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
@@ -377,8 +378,46 @@ class ConsoleLogHandler(QObject, logging.Handler):
         # thread, Qt posts the slot to the receiver's thread.
         self._message_signal.connect(self._console.append_message)
 
+        # The console's own lifetime, not the interpreter's, is what matters:
+        # close() only runs during logging.shutdown(), so a console destroyed
+        # mid-session (dock closed, widget garbage-collected) would leave this
+        # handler attached to the ROOT logger with a dead receiver. Qt's
+        # destroyed() is the earliest reliable notice, and detaching here is
+        # what stops the next log record from aborting the process.
+        try:
+            self._console.destroyed.connect(self._on_console_destroyed)
+        except (RuntimeError, TypeError):  # pragma: no cover - already gone
+            self._closed = True
+
+    def _on_console_destroyed(self, *_args) -> None:
+        """The console's C++ object is gone: stop emitting and detach."""
+        self.close()
+
     def emit(self, record: logging.LogRecord) -> None:
-        """Emit a log record to the console (worker thread safe)."""
+        """Emit a log record to the console (worker thread safe).
+
+        The guard below is not paranoia. Emitting a Qt signal whose receiver
+        has been destroyed aborts the PROCESS from C++ (SIGABRT, exit 134) --
+        it is not a Python exception, so the ``except RuntimeError`` below
+        cannot catch it. That is exactly what killed the CI job for
+        9889a6d: a test destroyed the console, the handler stayed on the root
+        logger, and the next unrelated log record aborted pytest at 70%.
+        """
+        if getattr(self, "_closed", False):
+            return
+        console = self._console
+        try:
+            # Checked BEFORE emitting, because the emit itself is the
+            # uncatchable part. sip.isdeleted() is the only reliable test:
+            # attribute access on a deleted QObject does not raise, so
+            # probing `console.append_message` would not detect it.
+            if console is None or sip.isdeleted(console):
+                self.close()
+                return
+        except (RuntimeError, TypeError):
+            self.close()
+            return
+
         try:
             msg = self.format(record)
             level = record.levelname

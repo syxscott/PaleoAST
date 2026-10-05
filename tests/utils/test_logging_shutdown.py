@@ -127,3 +127,60 @@ class TestLoggingShutdown:
             )
         finally:
             logging.getLogger().removeHandler(handler)
+
+    def test_emit_after_the_console_is_destroyed_does_not_abort(self):
+        """A log record after the console dies must not kill the process.
+
+        This is the crash that aborted a CI job: the console's C++ object was
+        destroyed while the handler was still attached to the ROOT logger, and
+        the next unrelated log record emitted a Qt signal to that dead
+        receiver. PyQt6 ABORTS from C++ there -- it is not a Python exception,
+        so ``except RuntimeError`` inside ``emit()`` cannot catch it. That is
+        why this runs in a SUBPROCESS: an abort would take pytest with it.
+
+        Unlike the disabled end-to-end test above, this needs no event loop at
+        all, so it is deterministic on every platform.
+        """
+        child = textwrap.dedent(
+            """
+            import os, sys, logging
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PyQt6.QtCore import QEventLoop, QTimer
+            from PyQt6.QtWidgets import QApplication
+
+            app = QApplication([])
+            from views.diagnostic_console import DiagnosticConsole, ConsoleLogHandler
+
+            root = logging.getLogger()
+            root.setLevel(logging.INFO)
+            console = DiagnosticConsole()
+            handler = ConsoleLogHandler(console)
+            root.addHandler(handler)
+            handler.emit(logging.LogRecord("t", logging.INFO, "f", 1, "before", None, None))
+            print("BEFORE_OK", flush=True)
+
+            console.deleteLater()          # what closing the dock does
+            loop = QEventLoop(); QTimer.singleShot(0, loop.quit); loop.exec()
+            app.processEvents()
+
+            root.info("after destroy")     # what used to abort the runner
+            print("AFTER_OK", flush=True)
+            print("STILL_ATTACHED=%s" % any(
+                isinstance(h, ConsoleLogHandler) for h in root.handlers), flush=True)
+            """
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", child],
+            capture_output=True, text=True, timeout=120,
+            encoding="utf-8", errors="replace",
+        )
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        assert proc.returncode == 0, (
+            f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
+        )
+        assert "Fatal Python error" not in combined, combined[-1500:]
+        assert "BEFORE_OK" in combined and "AFTER_OK" in combined, combined[-1500:]
+        assert "STILL_ATTACHED=False" in combined, (
+            "the handler should detach itself once the console is destroyed, "
+            f"so later records are cheap no-ops:\n{combined[-1500:]}"
+        )
