@@ -36,8 +36,10 @@ docstring of visualization/r_render.py for why rpy2 is not used).
 from __future__ import annotations
 
 import csv
+import functools
 import os
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -453,20 +455,26 @@ def test_missing_r_explains_the_fix():
 # 6. The dialog -> spec -> script chain
 # ---------------------------------------------------------------------------
 
-# The QApplication must outlive every widget built from it. Creating it as a
-# local (``QApplication.instance() or QApplication([])``) and letting the local
-# go out of scope lets CPython collect it while the dialog still exists, and the
-# next widget construction aborts the interpreter outright -- 0xC0000409, with
-# only "Must construct a QApplication before a QWidget" on stderr. Holding it in
-# a module global is the fix.
-_QAPP: QApplication | None = None
-
-
-def _qapp() -> QApplication:
-    global _QAPP
-    if _QAPP is None:
-        _QAPP = QApplication.instance() or QApplication([])
-    return _QAPP
+# The QApplication must outlive every widget built from it, and must NOT
+# outlive this module. Two ways to get that wrong, both fatal:
+#
+#   * ``QApplication.instance() or QApplication([])`` as a plain local -- the
+#     local dies, CPython collects the app, and the next widget construction
+#     aborts the interpreter (0xC0000409) with the misleading message
+#     "Must construct a QApplication before a QWidget" even though one WAS
+#     created.
+#   * holding it in a module-level global -- the app then survives until
+#     interpreter shutdown, so it is torn down while widgets from other test
+#     modules still exist. On CI that showed up as a "Fatal Python error:
+#     Aborted" in views/diagnostic_console.py:479, when a late matplotlib font
+#     warning reached a console QObject that had already been destroyed.
+#
+# A module-scoped fixture scopes the app to this module, which is the same
+# arrangement tests/test_qss_supported_properties.py already uses.
+@pytest.fixture(scope="module")
+def qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
 
 
 def _r_plot_spec_from(values: dict):
@@ -482,7 +490,9 @@ def _r_plot_spec_from(values: dict):
     return MainWindow._r_plot_spec(win)
 
 
-def test_preferences_reach_the_script_through_the_real_spec(pca_result, tmp_path):
+def test_preferences_reach_the_script_through_the_real_spec(
+    pca_result, tmp_path, qapp
+):
     """The dialog's values must survive the trip into the generated script.
 
     The preference keys (``r_theme``, ``r_base_size``, ...) and the
@@ -500,7 +510,6 @@ def test_preferences_reach_the_script_through_the_real_spec(pca_result, tmp_path
     """
     from views.ui_permutation_dialogs import PreferencesDialog
 
-    QApplication.instance() or _qapp()
     chosen = {
         "r_rscript": r"D:\somewhere\Rscript.exe",
         "r_theme": "bw",
@@ -557,8 +566,30 @@ def test_every_offered_theme_maps_to_a_ggplot2_theme(pca_result, tmp_path):
 # 7. Live R (skipped when R is absent)
 # ---------------------------------------------------------------------------
 
+# "R is installed" is NOT the same as "R can plot". The GitHub Windows and
+# macOS runner images ship R but not ggplot2, so a skipif on find_rscript()
+# alone let these tests run and fail there with "there is no package called
+# 'ggplot2'". The precondition that actually matters is that the generated
+# script can run, so that is what gets checked -- once, at import.
+@functools.lru_cache(maxsize=1)
+def _r_with_ggplot2() -> bool:
+    exe = find_rscript()
+    if exe is None:
+        return False
+    try:
+        proc = subprocess.run(
+            [str(exe), "-e",
+             'suppressMessages(library(ggplot2)); cat("ggplot2-ok")'],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and "ggplot2-ok" in (proc.stdout or "")
+
+
 needs_r = pytest.mark.skipif(
-    find_rscript() is None, reason="Rscript is not installed"
+    not _r_with_ggplot2(), reason="Rscript with ggplot2 is not installed"
 )
 
 
