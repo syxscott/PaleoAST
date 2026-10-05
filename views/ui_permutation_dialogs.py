@@ -343,6 +343,12 @@ class PreferencesDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
+        # The groups size to their contents instead of sharing the dialog
+        # height equally. Without this a dialog taller than its content
+        # stretches every QGroupBox, so each one shows a band of empty space
+        # under its last row and the four sections read as unrelated boxes
+        # rather than as one list of settings.
+        root.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # --- Language -----------------------------------------------------
         lang_group = QGroupBox(_("Interface"))
@@ -421,7 +427,13 @@ class PreferencesDialog(QDialog):
 
         self._r_size_spin = QDoubleSpinBox(r_group)
         self._r_size_spin.setRange(4.0, 24.0)
-        self._r_size_spin.setSingleStep(0.5)
+        # Whole points. ggplot2's base_size is an integer in practice, and the
+        # generated script writes it with ``:g`` anyway -- so showing "11.00"
+        # here while the script says ``base_size = 11`` told the user two
+        # different numbers for the same setting. The half-point step was a
+        # precision the format spec does not carry.
+        self._r_size_spin.setDecimals(0)
+        self._r_size_spin.setSingleStep(1)
         self._r_size_spin.setValue(self._current["r_base_size"])
         r_form.addRow(_("Base font size:"), self._r_size_spin)
 

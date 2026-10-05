@@ -2,20 +2,32 @@
 # FILE: config/design_system.py
 # =============================================================================
 """
-Modern Design System for PaleoAST
+Design tokens for PaleoAST.
 
-Defines a unified, professional design language for all UI components.
-Based on Material Design 3 + modern flat design principles.
+WHAT IS ACTUALLY AUTHORITATIVE
+------------------------------
+This module, not the docstring of any other file. The colours below are the
+single source of truth; the QSS built by :func:`get_modern_stylesheet` and the
+ribbon widgets in views/ui_main_window.py both read them.
 
-Color Palette:
-    - Primary: #3498DB (Professional Blue)
-    - Success: #27AE60 (Fresh Green)
-    - Warning: #F39C12 (Golden)
-    - Error: #E74C3C (Soft Red)
-    - Neutral: #ECF0F1, #BDC3C7, #95A5A6
+Colour roles
+------------
+``primary`` and friends are *accents*. They are used two different ways, and
+the two need different values:
 
-Spacing: Based on 4px grid system
-Typography: Segoe UI + fallbacks
+  * as a **foreground** on a surface (menu selection text, a group title, a
+    focus ring) -- must be legible against ``bg_*``;
+  * as a **fill**, with ``on_primary`` as the foreground painted on top.
+
+Keeping those two roles on one token is what let the dark theme inherit
+``primary = #1E40AF`` -- a blue chosen for white backgrounds -- and then paint
+dark-blue text on dark-blue fills at 1.44:1. The dark palette therefore
+overrides every accent, and ``on_primary`` exists so that "text on the accent"
+never has to be hardcoded as white.
+
+Spacing is a 4px grid. It is only worth claiming if the stylesheet actually
+uses it, which is why the QSS interpolates ``{spacing.*}`` rather than
+hardcoding pixels.
 """
 
 
@@ -35,11 +47,17 @@ class ColorPalette:
     # Secondary - Supporting blue tones
     secondary = "#64748B"  # Slate for secondary elements
 
-    # Semantic colors
-    success = "#059669"  # Emerald green
-    warning = "#D97706"  # Amber
+    # Semantic colors. Nudged one step darker than the stock Tailwind values so
+    # they clear 4.5:1 on bg_tertiary, the hardest light surface -- a colour
+    # that passes on white but fails on a grey surface is still a failure.
+    success = "#04805A"  # Emerald
+    warning = "#A95D05"  # Amber
     error = "#DC2626"  # Red
-    info = "#0891B2"  # Cyan
+    info = "#077A96"  # Cyan
+
+    # Foreground painted ON an accent fill. White, because every light-theme
+    # accent is dark enough to carry it.
+    on_primary = "#FFFFFF"
 
     # Neutral colors - Clean grays
     bg_primary = "#FFFFFF"  # Main background
@@ -48,7 +66,7 @@ class ColorPalette:
     bg_hover = "#E2E8F0"  # Hover background
 
     text_primary = "#0F172A"  # Main text (near black)
-    text_secondary = "#64748B"  # Secondary text (slate)
+    text_secondary = "#617187"  # Secondary text
     text_disabled = "#94A3B8"  # Disabled text
 
     border_light = "#E2E8F0"  # Light border
@@ -68,11 +86,26 @@ class ColorPalette:
 
 
 class ColorPaletteDark(ColorPalette):
-    """Dark theme color palette."""
+    """Dark theme color palette.
+
+    Every accent is overridden, not just the surfaces. The accents in the
+    light palette were chosen to be *dark* so that white text would sit on
+    them; inheriting them here painted dark-blue text on dark-blue fills
+    (ribbon tab selection measured 1.44:1 against a 4.5:1 requirement) and
+    dark-blue group titles on a dark ribbon (2.05:1).
+
+    The values are the same ramp stepped lighter -- blue-500/400/300,
+    emerald-400, amber-400, red-400, cyan-400 -- so an accent stays the same
+    hue in both themes and only its lightness moves.
+    """
 
     bg_primary = "#0F172A"
     bg_secondary = "#1E293B"
-    bg_tertiary = "#334155"
+    # Darker than the other surfaces on purpose: this is the one both
+    # text_secondary and the primary accent have to sit on, and at #334155
+    # they measured 4.04 and 4.07. Dropping the surface fixes both without
+    # washing the accents out to chase a number.
+    bg_tertiary = "#2A3546"
     bg_hover = "#475569"
 
     text_primary = "#F1F5F9"
@@ -82,6 +115,18 @@ class ColorPaletteDark(ColorPalette):
     border_light = "#334155"
     border_medium = "#475569"
     border_focus = "#60A5FA"
+
+    # Accents, re-stepped for a dark background.
+    primary = "#60A5FA"
+    primary_light = "#93C5FD"
+    primary_dark = "#3B82F6"
+    success = "#34D399"
+    warning = "#FBBF24"
+    error = "#F87171"
+    info = "#22D3EE"
+
+    # The accents are light now, so the text painted on them must be dark.
+    on_primary = "#0F172A"
 
     hover_overlay = "rgba(59, 130, 246, 0.15)"
     active_overlay = "rgba(59, 130, 246, 0.25)"
@@ -207,10 +252,10 @@ QMenuBar {{
 }}
 
 QMenuBar::item {{
-    padding: 6px 16px;
+    padding: {spacing.sm}px {spacing.lg}px;
     background: transparent;
     border-radius: {radius.md};
-    margin: 2px 4px;
+    margin: {spacing.xs}px {spacing.xs}px;
 }}
 
 QMenuBar::item:selected {{
@@ -223,7 +268,7 @@ QMenu {{
     background-color: {colors.bg_primary};
     border: 1px solid {colors.border_light};
     border-radius: {radius.lg};
-    padding: 4px 0;
+    padding: {spacing.xs}px 0;
     /* No `box-shadow` here on purpose -- Qt's style sheets have no shadow
        property, so the declaration was dropped with "Unknown property
        box-shadow" and the menu had no elevation. A real drop shadow needs a
@@ -233,9 +278,9 @@ QMenu {{
 }}
 
 QMenu::item {{
-    padding: 8px 24px 8px 28px;
+    padding: {spacing.sm}px {spacing.xl}px {spacing.sm}px 28px;
     border-radius: {radius.md};
-    margin: 2px 4px;
+    margin: {spacing.xs}px {spacing.xs}px;
 }}
 
 QMenu::item:selected {{
@@ -256,9 +301,8 @@ QPushButton {{
     color: {colors.text_primary};
     border: 1px solid {colors.border_light};
     border-radius: {radius.lg};
-    padding: 10px 18px;
-    min-width: 80px;
-    min-height: 36px;
+    padding: {spacing.md}px {spacing.lg}px;
+    min-width: 80px;    min-height: 36px;
     font-size: {typo.body_size}px;
     font-weight: {typo.medium};
     /* No `transition` here on purpose. Qt's style-sheet reference has no
@@ -278,7 +322,7 @@ QPushButton:hover {{
 
 QPushButton:pressed {{
     background-color: {colors.primary};
-    color: white;
+    color: {colors.on_primary};
     border-color: {colors.primary_dark};
 }}
 
@@ -290,7 +334,7 @@ QPushButton:disabled {{
 
 QPushButton[default="true"] {{
     background-color: {colors.primary};
-    color: white;
+    color: {colors.on_primary};
     border-color: {colors.primary_dark};
     font-weight: {typo.semibold};
 }}
@@ -313,9 +357,9 @@ QLineEdit, QTextEdit, QPlainTextEdit {{
     color: {colors.text_primary};
     border: 1px solid {colors.border_light};
     border-radius: {radius.md};
-    padding: 8px 12px;
+    padding: {spacing.sm}px {spacing.md}px;
     selection-background-color: {colors.primary};
-    selection-color: white;
+    selection-color: {colors.on_primary};
 }}
 
 QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {{
@@ -336,7 +380,7 @@ QComboBox {{
     color: {colors.text_primary};
     border: 1px solid {colors.border_light};
     border-radius: {radius.md};
-    padding: 8px 12px;
+    padding: {spacing.sm}px {spacing.md}px;
     min-height: 36px;
 }}
 
@@ -362,7 +406,7 @@ QSpinBox, QDoubleSpinBox {{
     color: {colors.text_primary};
     border: 1px solid {colors.border_light};
     border-radius: {radius.md};
-    padding: 8px 12px;
+    padding: {spacing.sm}px {spacing.md}px;
     min-height: 36px;
 }}
 
@@ -380,8 +424,8 @@ QCheckBox, QRadioButton {{
 }}
 
 QCheckBox::indicator {{
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border: 1px solid {colors.border_medium};
     border-radius: {radius.sm};
     background-color: {colors.bg_primary};
@@ -398,8 +442,8 @@ QCheckBox::indicator:checked {{
 }}
 
 QRadioButton::indicator {{
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border: 1px solid {colors.border_medium};
     border-radius: 50%;
     background-color: {colors.bg_primary};
@@ -427,8 +471,8 @@ QGroupBox {{
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 16px;
-    padding: 0 8px;
+    left: {spacing.lg}px;
+    padding: 0 {spacing.sm}px;
     color: {colors.primary};
 }}
 
@@ -440,7 +484,7 @@ QFrame {{
 QFrame[frameShape="4"] {{
     background-color: {colors.border_light};
     max-height: 1px;
-    margin: 8px 0;
+    margin: {spacing.sm}px 0;
 }}
 
 /* =============================================================================
@@ -449,7 +493,7 @@ QFrame[frameShape="4"] {{
 
 QScrollBar:vertical {{
     background: {colors.bg_secondary};
-    width: 10px;
+    width: {spacing.sm}px;
     border-radius: {radius.sm};
 }}
 
@@ -470,7 +514,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 
 QScrollBar:horizontal {{
     background: {colors.bg_secondary};
-    height: 10px;
+    height: {spacing.sm}px;
     border-radius: {radius.sm};
 }}
 
@@ -496,7 +540,7 @@ QTreeView, QListView {{
 }}
 
 QTreeView::item {{
-    padding: 6px 4px;
+    padding: {spacing.sm}px {spacing.xs}px;
     border-radius: {radius.md};
 }}
 
@@ -511,7 +555,7 @@ QTreeView::item:selected {{
 }}
 
 QListWidget::item {{
-    padding: 8px 12px;
+    padding: {spacing.sm}px {spacing.md}px;
     border-radius: {radius.md};
 }}
 
@@ -521,7 +565,7 @@ QListWidget::item:hover {{
 
 QListWidget::item:selected {{
     background-color: {colors.primary};
-    color: white;
+    color: {colors.on_primary};
     font-weight: {typo.medium};
 }}
 
@@ -533,8 +577,8 @@ QTabBar::tab {{
     background-color: {colors.bg_secondary};
     color: {colors.text_secondary};
     border: none;
-    padding: 10px 20px;
-    margin: 0 2px;
+    padding: {spacing.md}px {spacing.xl}px;
+    margin: 0;
     border-radius: {radius.lg} {radius.lg} 0 0;
 }}
 
@@ -544,7 +588,7 @@ QTabBar::tab:hover {{
 
 QTabBar::tab:selected {{
     background-color: {colors.primary};
-    color: white;
+    color: {colors.on_primary};
     font-weight: {typo.medium};
 }}
 
@@ -553,7 +597,7 @@ QTabBar::tab:selected {{
    ============================================================================= */
 
 QSlider::groove:horizontal {{
-    height: 6px;
+    height: {spacing.sm}px;
     background: {colors.border_light};
     border-radius: {radius.sm};
 }}
@@ -577,7 +621,7 @@ QStatusBar {{
     background-color: {colors.bg_secondary};
     border-top: 1px solid {colors.border_light};
     color: {colors.text_secondary};
-    padding: 4px 8px;
+    padding: {spacing.xs}px {spacing.sm}px;
 }}
 
 /* =============================================================================
