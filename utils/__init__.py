@@ -43,6 +43,18 @@ from .matrix_ops import (
     standardize_matrix,
     validate_matrix_shape,
 )
+from .statistics_core import (
+    MISSING_GROUP,
+    NonlinearFitResult,
+    PermutationResult,
+    aic_from_log_likelihood,
+    aicc_from_log_likelihood,
+    fit_nonlinear,
+    gaussian_log_likelihood,
+    group_indices,
+    make_rng,
+    permutation_pvalue,
+)
 from .validators import (
     check_constant_columns,
     check_infinite_values,
@@ -54,6 +66,7 @@ from .validators import (
 )
 
 __all__ = [
+    "MISSING_GROUP",
     "ComputationError",
     "ConvergenceError",
     "DataValidationError",
@@ -63,10 +76,14 @@ __all__ = [
     "MatrixDimensionError",
     "MorphometricsError",
     # Exceptions
+    "NonlinearFitResult",
     "PaleoASTError",
+    "PermutationResult",
     "PlottingError",
     "StatisticalError",
     "ValidationError",
+    "aic_from_log_likelihood",
+    "aicc_from_log_likelihood",
     "cache_result",
     "center_matrix",
     "check_constant_columns",
@@ -77,10 +94,15 @@ __all__ = [
     # Matrix operations
     "ensure_matrix",
     "euclidean_distance_matrix",
+    "fit_nonlinear",
+    "gaussian_log_likelihood",
+    "group_indices",
     "log_execution_time",
     "mahalanobis_distance",
+    "make_rng",
     "memoize",
     "pairwise_distances",
+    "permutation_pvalue",
     "standardize_matrix",
     # Decorators
     "thread_safe",

@@ -43,6 +43,7 @@ from scipy.spatial import cKDTree
 
 from config.i18n import _
 from utils.exceptions import ComputationError
+from utils.statistics_core import make_rng
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -277,12 +278,12 @@ class RipleyKAnalyzer:
         x_min, x_max = points[:, 0].min(), points[:, 0].max()
         y_min, y_max = points[:, 1].min(), points[:, 1].max()
 
-        # Store L values from simulations. Use a dedicated Generator
-        # when a seed is supplied so the envelope is reproducible.
-        if random_seed is not None:
-            rng = np.random.default_rng(random_seed)
-        else:
-            rng = np.random
+        # Store L values from simulations. The generator is always an
+        # isolated one: this used to fall back to the global ``np.random``
+        # when no seed was given, so simply running an unseeded envelope
+        # moved the stream that the caller's own data generation and every
+        # other stochastic analysis then drew from.
+        rng = make_rng(random_seed, context="Ripley's K envelope")
 
         l_simulations = np.zeros((n_simulations, len(r_values)))
 

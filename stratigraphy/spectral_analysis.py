@@ -115,6 +115,44 @@ def _linear_detrend(values: np.ndarray) -> np.ndarray:
     return values - (a * x + b)
 
 
+def ar1_theoretical_spectrum(
+    frequencies: np.ndarray,
+    phi: float,
+    dt: float,
+) -> np.ndarray:
+    """The normalised AR(1) red-noise power spectrum (Mann & Lees 1996, Eq. 3).
+
+        S_AR1(f) = (1 - phi^2) / (1 - 2 phi cos(2*pi*f*dt) + phi^2)
+
+    This is the null curve that a Lomb-Scargle periodogram is tested
+    against, and it is the first term of the REDFIT rotation
+
+        S_REDFIT(f) = (S_data(f) - S_AR1(f)) / sqrt(S_AR1(f))
+
+    (Muellersohn et al. 1999; Watters & Solomon 2004), so anything that
+    implements REDFIT needs this curve as a first-class value rather than
+    a formula to re-derive. It used to be computed here and thrown away.
+
+    Parameters
+    ----------
+    frequencies:
+        Frequencies in cycles per unit time, as passed to the periodogram.
+    phi:
+        Lag-1 autocorrelation of the series, clipped to (-1, 1).
+    dt:
+        Mean sample spacing.
+
+    Returns
+    -------
+    ndarray
+        Power at each frequency, ``inf`` where the denominator is
+        non-positive (which only happens as |phi| -> 1).
+    """
+    omega = 2.0 * np.pi * np.asarray(frequencies, dtype=float)
+    denom = 1.0 - 2.0 * phi * np.cos(omega * dt) + phi**2
+    return np.where(denom > 0, (1.0 - phi**2) / denom, np.inf)
+
+
 def _ar1_threshold(
     time: np.ndarray,
     values: np.ndarray,
@@ -168,13 +206,9 @@ def _ar1_threshold(
     if len(frequencies) < 2:
         return phi, None
 
-    # Build the theoretical AR(1) curve over the frequency grid.
-    # (Diagnostic — not used by the Monte-Carlo threshold below, but
-    # retained so callers can plot the null vs. the observed periodogram
-    # by recomputing from (phi, dt, frequencies).)
+    # Frequency axis, shared by the theoretical null and the Monte-Carlo
+    # periodogram below.
     omega = 2 * np.pi * frequencies
-    denom = 1 - 2 * phi * np.cos(omega * dt) + phi**2
-    _ = np.where(denom > 0, (1 - phi**2) / denom, np.inf)
 
     # Monte-Carlo false-alarm: simulate M AR(1) series with the same
     # phi, compute Lomb-Scargle periodogram of each, take the (1-α)
@@ -187,6 +221,27 @@ def _ar1_threshold(
     # analogue of the unevenly-sampled real series (we treat the
     # evenly-spaced median as a reference).
     n = len(values)
+
+    # The Lomb-Scargle basis depends only on the frequency grid and the
+    # time grid -- neither varies across the Monte-Carlo replicates, which
+    # differ only in the simulated signal. Building it once here rather
+    # than inside the loop removes 199 of 200 evaluations of four
+    # (n_freq x n) trig arrays; at n_freq=1000, n=500 that is the
+    # difference between ~4e8 and ~2e6 trig calls.
+    sin_2wt = np.sin(2 * omega[:, None] * time[None, :])
+    cos_2wt = np.cos(2 * omega[:, None] * time[None, :])
+    sin_sum = sin_2wt.sum(axis=1)
+    cos_sum = cos_2wt.sum(axis=1)
+    # Avoid division by zero in arctan2
+    sin_sum_safe = np.where(np.abs(sin_sum) < 1e-12, 1e-12, sin_sum)
+    tau = np.arctan2(sin_sum_safe, cos_sum) / (2 * omega)
+    t_shifted = time[None, :] - tau[:, None]
+    sin_t = np.sin(omega[:, None] * t_shifted)
+    cos_t = np.cos(omega[:, None] * t_shifted)
+    sum_sin2 = (sin_t**2).sum(axis=1)
+    sum_cos2 = (cos_t**2).sum(axis=1)
+    valid = (sum_sin2 > 0) & (sum_cos2 > 0)
+
     for k in range(n_sim):
         sim = np.empty(n)
         sim[0] = rng.normal()
@@ -194,24 +249,9 @@ def _ar1_threshold(
             sim[i] = phi * sim[i - 1] + rng.normal() * np.sqrt(1 - phi**2)
         sim_centered = sim - np.mean(sim)
         # Quick LS power at the peak frequencies of the real signal
-        # — for the threshold we just need the per-frequency
+        # -- for the threshold we just need the per-frequency
         # distribution of LS powers under the null.
-        # Vectorised: precompute sin/cos for each frequency.
-        omega_k = omega
-        sin_2wt = np.sin(2 * omega_k[:, None] * time[None, :])
-        cos_2wt = np.cos(2 * omega_k[:, None] * time[None, :])
-        sin_sum = sin_2wt.sum(axis=1)
-        cos_sum = cos_2wt.sum(axis=1)
-        # Avoid division by zero in arctan2
-        sin_sum_safe = np.where(np.abs(sin_sum) < 1e-12, 1e-12, sin_sum)
-        tau_k = np.arctan2(sin_sum_safe, cos_sum) / (2 * omega_k)
-        t_shifted = time[None, :] - tau_k[:, None]
-        sin_t = np.sin(omega_k[:, None] * t_shifted)
-        cos_t = np.cos(omega_k[:, None] * t_shifted)
-        sum_sin2 = (sin_t**2).sum(axis=1)
-        sum_cos2 = (cos_t**2).sum(axis=1)
-        valid = (sum_sin2 > 0) & (sum_cos2 > 0)
-        sim_power = np.zeros(len(omega_k))
+        sim_power = np.zeros(len(omega))
         sim_power[valid] = (
             (sim_centered[None, :] * sin_t).sum(axis=1)[valid] ** 2 / sum_sin2[valid]
             + (sim_centered[None, :] * cos_t).sum(axis=1)[valid] ** 2 / sum_cos2[valid]
@@ -689,11 +729,18 @@ class SpectralAnalyzer:
 
         # Convert scales to Fourier frequencies (cycles per unit time),
         # following Torrence & Compo (1998) per-wavelet Fourier factors.
+        #
+        # The name goes through unchanged. An earlier version rewrote
+        # anything that was not exactly "mexican_hat" to "morlet" here, so
+        # "ricker" -- which IS the Mexican hat (DOG m=2), as the dispatch
+        # above already treats it -- got a Mexican Hat transform plotted
+        # against a Morlet frequency axis, and every reported period came
+        # out 3.85x too small (a 385 kyr obliquity band labelled 100 kyr).
         sampling_rate = 1.0 / dt if dt > 0 else 1.0
         frequencies = (
             np.array(
                 [
-                    _wavelet_fourier_frequency(s, wavelet.lower() if wavelet in ("morlet", "mexican_hat") else "morlet")
+                    _wavelet_fourier_frequency(s, wavelet.lower())
                     for s in scales
                 ]
             )
