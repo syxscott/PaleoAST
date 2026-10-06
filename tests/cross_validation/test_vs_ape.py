@@ -247,7 +247,16 @@ class TestPICVsApe:
         paleo_contrasts, _pairs = compute_pic(PhyloTree.from_newick(newick), traits)
 
         r_tree = R_APE.read_tree(text=r_string_vector([newick]))
-        r_x = r("c")(r("setNames")(r_vector(list(traits.values())), r_vector(list(traits))))
+        # setNames takes a character vector for the names. r_vector coerces to
+        # float, so passing list(traits) -- the KEYS -- raised
+        # "could not convert string to float: 'A'". r_string_vector is the
+        # accessor for anything textual, which is what its docstring says.
+        r_x = r("c")(
+            r("setNames")(
+                r_vector(list(traits.values())),
+                r_string_vector(list(traits)),
+            )
+        )
         r_pic = R_APE.pic(r_tree, x=r_x)
 
         # A named numeric, so the values are read directly and the names

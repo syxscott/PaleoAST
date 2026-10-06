@@ -176,6 +176,7 @@ xxl: 32px
 ### 为新对话框应用主题
 ```python
 from config.design_system import get_modern_stylesheet
+
 dialog = MyDialog()
 dialog.setStyleSheet(get_modern_stylesheet())
 ```
@@ -183,6 +184,7 @@ dialog.setStyleSheet(get_modern_stylesheet())
 ### 添加新的颜色
 ```python
 from config.design_system import ColorPalette
+
 palette = ColorPalette()
 my_color = palette.primary  # #3498DB
 ```

@@ -47,7 +47,10 @@ dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "mypy>=1.4.0",
-    "ruff>=0.4.0",
+    # Pinned for the same reason CI pins it: the formatter gate must not
+      # move when ruff publishes a release. 0.16.x formats Python inside
+      # Markdown code blocks; 0.15.x does not.
+      "ruff==0.16.10",
     # tests/property/* imports hypothesis unconditionally, and the
     # ``addopts`` below passes ``--hypothesis-show-statistics``. Without this
     # entry a fresh ``pip install -e .[dev]`` makes ``pytest`` fail at

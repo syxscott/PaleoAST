@@ -69,7 +69,7 @@ def _compute_centroid_sizes(self, configurations: npt.NDArray) -> npt.NDArray:
     for i in range(n_specimens):
         centroid = configurations[i].mean(axis=0)  # 真实质心
         diff = configurations[i] - centroid
-        centroid_sizes[i] = np.sqrt(np.sum(diff ** 2))
+        centroid_sizes[i] = np.sqrt(np.sum(diff**2))
     return centroid_sizes
 ```
 
@@ -184,6 +184,7 @@ QApplication.exit(1)  # 或 os._exit(1)
 def nan_mask(self) -> npt.NDArray:
     with self._lock:
         return np.isnan(self._data).copy()  # 明确拷贝
+
 
 # transform_standardize:
 data_arr = np.asarray(data).copy()  # 明确拷贝

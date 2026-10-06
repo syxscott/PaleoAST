@@ -150,7 +150,11 @@ def _r_adonis2_component(data: np.ndarray, groups: list[str], column: str, row: 
     if row not in labels:
         raise AssertionError(f"adonis2 table has no row {row!r}; it has {labels}")
 
-    return as_float(table[labels.index(row), columns.index(column)])
+    # A data.frame does not accept a (row, column) tuple from rpy2:
+    # ListSexpVector.__getitem__ raises "Indices must be integers or slices,
+    # not <class 'tuple'>". Name the column with rx2 and index that vector,
+    # which is the accessor the rest of this suite already relies on.
+    return as_float(table.rx2(column)[labels.index(row)])
 
 
 class TestDistanceVsVegan:

@@ -69,14 +69,11 @@ def _on_export(self) -> None:
     if not self._state.has_data:
         QMessageBox.warning(...)
         return
-    
+
     filepath, _ext = QFileDialog.getSaveFileName(...)
     if filepath:
         self._data_controller.export_csv(filepath)
-        QMessageBox.information(
-            self, _("Export Successful"),
-            _("Data successfully exported to {0}").format(...)
-        )
+        QMessageBox.information(self, _("Export Successful"), _("Data successfully exported to {0}").format(...))
 ```
 
 #### B. Spectral Analysis完全实现 ✅
@@ -117,9 +114,7 @@ def _on_run_spectral(self) -> None:
 def _on_run_anosim(self) -> None:
     """Run Analysis of Similarity (ANOSIM) test."""
     # 完整的ANOSIM分析实现
-    result = self._statistics_controller.analyze_anosim(
-        data=self._state.data_matrix.data
-    )
+    result = self._statistics_controller.analyze_anosim(data=self._state.data_matrix.data)
 ```
 
 #### D. PERMANOVA分析新增 ✅
@@ -129,9 +124,7 @@ def _on_run_anosim(self) -> None:
 def _on_run_permanova(self) -> None:
     """Run Permutational Multivariate Analysis of Variance."""
     # 完整的PERMANOVA分析实现
-    result = self._statistics_controller.analyze_permanova(
-        data=self._state.data_matrix.data
-    )
+    result = self._statistics_controller.analyze_permanova(data=self._state.data_matrix.data)
 ```
 
 ---
@@ -147,14 +140,15 @@ def _on_import_data(self) -> None:
     # 检查是否有现有数据
     if self._state.has_data:
         reply = QMessageBox.question(
-            self, _("Overwrite Data?"),
+            self,
+            _("Overwrite Data?"),
             _("You already have data loaded. Do you want to replace it?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No  # 默认"No"更安全
+            QMessageBox.StandardButton.No,  # 默认"No"更安全
         )
         if reply == QMessageBox.StandardButton.No:
             return
-    
+
     dialog = ImportDialog(self)
     dialog.dataImported.connect(self._on_data_imported)
     dialog.exec()

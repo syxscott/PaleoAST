@@ -69,6 +69,7 @@ def _on_run_anosim(self) -> None:
     result = self._statistics_controller.analyze_anosim(...)
     plot.plot_anosim_results(result)
 
+
 def _on_run_permanova(self) -> None:
     """Run Permutational Multivariate Analysis of Variance."""
     result = self._statistics_controller.analyze_permanova(...)
@@ -92,10 +93,11 @@ def _on_import_data(self) -> None:
     """Show import data dialog with conflict checking."""
     if self._state.has_data:
         reply = QMessageBox.question(
-            self, _("Overwrite Data?"),
+            self,
+            _("Overwrite Data?"),
             _("You already have data loaded. Do you want to replace it?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No  # 默认"No"更安全
+            QMessageBox.StandardButton.No,  # 默认"No"更安全
         )
         if reply == QMessageBox.StandardButton.No:
             return
@@ -232,17 +234,17 @@ python main.py
 
 **ui_main_window.py**：
 ```python
-_update_ui_state()              # 更新所有UI元素状态
-_register_data_action()         # 注册数据相关菜单项
-_register_data_button()         # 注册数据相关按钮
-_on_run_anosim()               # ANOSIM分析
-_on_run_permanova()            # PERMANOVA分析
+_update_ui_state()  # 更新所有UI元素状态
+_register_data_action()  # 注册数据相关菜单项
+_register_data_button()  # 注册数据相关按钮
+_on_run_anosim()  # ANOSIM分析
+_on_run_permanova()  # PERMANOVA分析
 ```
 
 **ui_dialogs.py**：
 ```python
-_on_run_validated()            # 带验证的运行
-_validate_parameters()         # 参数验证（可在子类重写）
+_on_run_validated()  # 带验证的运行
+_validate_parameters()  # 参数验证（可在子类重写）
 ```
 
 ### 改进的快捷键

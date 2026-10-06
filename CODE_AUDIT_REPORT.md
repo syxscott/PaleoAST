@@ -363,6 +363,7 @@ def process_data(data: Optional[np.ndarray]) -> np.ndarray:
         raise ValueError("data cannot be None")
     return np.sqrt(np.abs(data))
 
+
 # 避免
 def process_data(data):  # 无类型提示
     return np.sqrt(np.abs(data))  # 如果 data 是 None 会崩溃

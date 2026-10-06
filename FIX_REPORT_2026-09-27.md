@@ -21,10 +21,10 @@
 
 ```python
 # 修复前
-self._width_spin.setRange(0.5, 60.0)   # 最小值 0.5
-self._width_spin.setValue(0.0)         # Qt 钳到 0.5，但界面显示 "auto"
+self._width_spin.setRange(0.5, 60.0)  # 最小值 0.5
+self._width_spin.setValue(0.0)  # Qt 钳到 0.5，但界面显示 "auto"
 ...
-width_inches=self._width_spin.value() or None,   # 0.5 or None -> 0.5，永不为 None
+width_inches = (self._width_spin.value() or None,)  # 0.5 or None -> 0.5，永不为 None
 ```
 
 `setSpecialValueText` 在值等于 minimum 时显示 "auto"，于是**界面显示"自动"而实际值是 0.5**，`or None` 永远拿到 0.5，`plot_export.py:265` 永远执行 `set_size_inches(0.5, 0.5)`。选 "Publication 600 dpi PDF" 得到 300×300 像素邮票。
@@ -42,7 +42,7 @@ width_inches=self._width_spin.value() or None,   # 0.5 or None -> 0.5，永不�
 ### 1.3 Newick 注释劈树 — `utils/newick_core.py:234`（共享核心，影响 `parsers` + `phylogenetics`）
 
 ```python
-parse_newick_trees("(A,B)[&x]C;")            # 修复前 -> 2 个根: ["", "C"]
+parse_newick_trees("(A,B)[&x]C;")  # 修复前 -> 2 个根: ["", "C"]
 parse_newick_trees("((A,B)[&x]C,(D,E)F)G;")  # 修复前 -> NewickParseError
 ```
 

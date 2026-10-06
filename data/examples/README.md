@@ -74,7 +74,7 @@ import pandas as pd
 df = pd.read_csv("data/examples/community_abundance.csv")
 # Get species matrix for analysis
 species_matrix = df.iloc[:, 2:].values
-groups = df['group'].values
+groups = df["group"].values
 ```
 
 ### Citation
