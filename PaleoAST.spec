@@ -44,7 +44,6 @@ hiddenimports = [
     "PyQt6.QtGui",
     "PyQt6.QtWidgets",
     "PyQt6.sip",
-
     # Config 模块
     "config",
     "config.colors",
@@ -53,17 +52,14 @@ hiddenimports = [
     "config.i18n",
     "config.i18n.translations_en",
     "config.i18n.translations_zh",
-
     # Models
     "models",
     "models.state_manager",
     "models.data_matrix",
-
     # Controllers
     "controllers",
     "controllers.data_controller",
     "controllers.statistics_controller",
-
     # Views
     "views",
     "views.ui_main_window",
@@ -77,29 +73,23 @@ hiddenimports = [
     "views.ui_evolution_rate_dialogs",
     "views.ui_extinction_dialogs",
     "views.ui_null_model_dialogs",
-
     # Statistics
     # NOTE: this was "statistics", which is a STDLIB module name -- there is no
     # statistics/ package in this project (it is `stats/`, renamed precisely
     # because the stdlib shadows it). The real analysis package was therefore
     # never collected, and PyInstaller would have shipped the stdlib one.
     "stats",
-
     # Ecology
     "ecology",
-
     # Morphometrics
     "morphometrics",
     "morphometrics.gpa",
     "morphometrics.evolution_rate",
-
     # Phylogenetics
     "phylogenetics",
-
     # Stratigraphy
     "stratigraphy",
     "stratigraphy.extinction",
-
     # Visualization
     "visualization",
     # The R export path is reached through a local import inside
@@ -109,17 +99,14 @@ hiddenimports = [
     # the frozen build only.
     "visualization.r_export",
     "visualization.r_render",
-
     # Utils
     "utils",
     "utils.exceptions",
     "utils.event_bus",
-
     # NOTE: the `app_infrastructure` entries that used to sit here were
     # removed with the package -- nothing imported it, and its
     # exception_handler hard-imports `psutil`, which is only in the `full`
     # extra, so listing it could only ever fail on a minimal build.
-
     # scipy / numpy 扩展
     "scipy",
     "scipy.linalg",
@@ -142,7 +129,6 @@ hiddenimports = [
 datas = [
     # Logo
     (str(PROJECT_ROOT / "logo.png"), "."),
-
     # i18n 翻译文件
     (str(PROJECT_ROOT / "config" / "i18n" / "translations_en.py"), "config/i18n"),
     (str(PROJECT_ROOT / "config" / "i18n" / "translations_zh.py"), "config/i18n"),
@@ -161,6 +147,45 @@ datas = [
 # The explicit hiddenimports list above covers what the code imports; the
 # scientific hooks PyInstaller ships for numpy/scipy/matplotlib/pandas/sklearn
 # collect their own data files, so nothing real is lost.
+# The analysis catalog references its targets BY NAME, and PyInstaller's
+# analysis follows imports, not strings. Without this, six of the
+# catalogued analyses were absent from the frozen build -- stats.mantel,
+# stats.detriding, stats.spatial_stats, stats.design_tests,
+# models.growth_models and utils.script_cli all ran perfectly from source
+# and were missing from the executable, and nothing local noticed: the
+# Analysis Runner opens them by name, so the failure would surface on a
+# user's machine as an ImportError from a menu item.
+#
+# Deriving the list from BUILTIN_ANALYSES rather than maintaining it by
+# hand means adding an analysis to the catalog also adds it to the build,
+# which is the only way the two stay in step.
+try:
+    from plugins.catalog import BUILTIN_ANALYSES
+
+    _catalog_modules = sorted({entry.module for entry in BUILTIN_ANALYSES})
+    hiddenimports.extend(_catalog_modules)
+    print("[spec] catalogued analysis modules added as hidden imports:")
+    for _module_name in _catalog_modules:
+        print("[spec]   " + _module_name)
+except Exception as _exc:  # pragma: no cover - build-time safety net
+    print("[spec] WARNING: could not read the analysis catalog: %r" % (_exc,))
+    print("[spec] Analyses will be missing from the build if they are not")
+    print("[spec] imported anywhere on a static import path.")
+
+# The scripting layer is not an analysis, so it is not in the catalog, and
+# main.py does not import it either -- utils/script_session is reached
+# through views/script_console, but utils/script_cli is the
+# `paleoast-run` console script's entry point and nothing else.
+hiddenimports.extend(
+    [
+        "utils.statistics_core",
+        "utils.script_session",
+        "utils.script_cli",
+        "views.script_console",
+        "views.analysis_runner",
+    ]
+)
+
 for module_name in ("sklearn.utils", "scipy.spatial", "scipy.stats"):
     try:
         hiddenimports.extend(collect_submodules(module_name))
@@ -170,6 +195,7 @@ for module_name in ("sklearn.utils", "scipy.spatial", "scipy.stats"):
 # 收集 PyQt6 数据文件
 try:
     from PyInstaller.utils.hooks import collect_data_files
+
     qt_datas, qt_binaries = collect_data_files("PyQt6", include_py_files=True)
     hiddenimports.append("PyQt6")
 except Exception:

@@ -120,6 +120,46 @@ def test_every_entry_resolves() -> None:
     assert not broken, "catalog entries that do not resolve:\n" + "\n".join(broken)
 
 
+def test_every_catalogued_module_imports() -> None:
+    """Each catalogued module must be importable, not merely present.
+
+    A name that resolves to a class attribute can still name a module
+    that fails to import -- a circular import, or a dependency the base
+    install lacks. The frozen build hits the same wall harder: the spec
+    lists these modules as hidden imports precisely because the catalog
+    references them by string and PyInstaller's analysis follows imports
+    only. Six of them -- stats.mantel, stats.detriding,
+    stats.spatial_stats, stats.design_tests, models.growth_models and
+    utils.script_cli -- were missing from the executable while passing
+    every other check here, so this is the assertion that would have
+    caught it.
+    """
+    failures: list[str] = []
+    for module in sorted({entry.module for entry in BUILTIN_ANALYSES}):
+        try:
+            importlib.import_module(module)
+        except Exception as exc:
+            failures.append(f"{module}: {type(exc).__name__}: {exc}")
+    assert not failures, "catalogued modules that do not import:\n" + "\n".join(failures)
+
+
+def test_the_spec_derives_hidden_imports_from_the_catalog() -> None:
+    """The spec must read the catalog, or the two can drift apart.
+
+    Checking the catalog is importable is necessary but not sufficient:
+    PyInstaller will not follow a string reference, so an analysis in the
+    catalog that nothing imports statically is still left out of the
+    build. The guard for that is that PaleoAST.spec adds the catalog's
+    modules to hiddenimports at build time rather than listing them.
+    """
+    spec = (Path(__file__).resolve().parent.parent.parent / "PaleoAST.spec").read_text(encoding="utf-8")
+    assert "BUILTIN_ANALYSES" in spec, (
+        "PaleoAST.spec does not derive hidden imports from the analysis "
+        "catalog, so a catalogued analysis that nothing imports statically "
+        "will be missing from the frozen build."
+    )
+
+
 def test_names_are_unique() -> None:
     """A duplicate name would make the second one unreachable."""
     names = [e.name for e in BUILTIN_ANALYSES]
