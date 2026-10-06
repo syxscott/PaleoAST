@@ -46,6 +46,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -424,14 +425,21 @@ class AnalysisRunnerDialog(QDialog):
         parent: QWidget | None = None,
         controller: Any = None,
         data_provider: Any = None,
+        on_figure: Any = None,
     ) -> None:
-        """Build the dialog."""
+        """Build the dialog.
+
+        ``on_figure(figure, name)`` is called instead of formatting the result
+        when the run produces a matplotlib Figure -- the plot menu does, and
+        text-formatting a Figure prints its object repr and loses the picture.
+        """
         super().__init__(parent)
         self._logger = logging.getLogger(f"{__name__}.AnalysisRunnerDialog")
         self.setWindowTitle(_("Run Analysis"))
         self.resize(1000, 700)
         self._controller = controller
         self._data_provider = data_provider
+        self._on_figure = on_figure
         self._registry = get_plugin_registry()
         self._entry: Any = None
         self._specs: list[ParameterSpec] = []
@@ -608,6 +616,19 @@ class AnalysisRunnerDialog(QDialog):
             import traceback
 
             self._output.setPlainText(traceback.format_exc())
+            return
+        # The plot menu returns a matplotlib Figure. Formatting that as text
+        # would print an object repr and throw the picture away, so a figure
+        # goes to the canvas instead.
+        if isinstance(outcome, Figure):
+            self._output.setPlainText(_("Figure drawn."))
+            if self._on_figure is not None:
+                try:
+                    self._on_figure(outcome, self._entry.name)
+                except Exception:
+                    self._output.setPlainText(traceback.format_exc())
+                    return
+            self._logger.info("analysis runner: %s drew a figure", self._entry.name)
             return
         self._output.setPlainText(_format_result(outcome))
         self._logger.info("analysis runner: %s completed", self._entry.name)

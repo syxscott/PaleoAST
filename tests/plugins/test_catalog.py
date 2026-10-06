@@ -54,6 +54,10 @@ ANALYSIS_PACKAGES = (
     "macroevolution",
     "models",
     "phylogenetics",
+    # The plot menu is catalogued too, and its facade lives here. Without
+    # this the staleness check never looks at visualization/ and would
+    # happily report PlotMenuAnalyzer as a class that does not exist.
+    "visualization",
 )
 
 

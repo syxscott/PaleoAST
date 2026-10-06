@@ -513,6 +513,25 @@ class InteractivePlotCanvas(QWidget):
                 selector.update_axes(ax)
         return ax
 
+    def plot_figure(self, figure) -> None:
+        """Display a ``Figure`` that was built outside this canvas.
+
+        The plot menu produces its figures in ``visualization.generic_plots``,
+        which returns a standalone ``Figure`` rather than drawing into a
+        canvas. This adopts one so the plot menu gets the same toolbar, zoom,
+        lasso and export as every other figure in the app.
+
+        The canvas is bound to a figure at construction, so the swap has to go
+        through both the attribute and the backend widget's own ``figure``.
+        """
+        if figure is None:
+            return
+        self._figure = figure
+        self._canvas.figure = figure
+        axes = list(figure.axes)
+        self._adopt_axes(axes[0] if axes else figure.add_subplot(111))
+        self._canvas.draw_idle()
+
     def _reset_axes(self, *args, **kwargs):
         """
         Clear the figure and create (and adopt) a single fresh axes.

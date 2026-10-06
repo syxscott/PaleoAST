@@ -576,6 +576,181 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "growth",
         "Fit several growth curves and rank them by AICc",
     ),
+    # ---------------------------------------------------------------------------
+    # The plot menu.
+    #
+    # Registered here for one reason that is really two. The catalog is what
+    # PaleoAST.spec reads to decide what to freeze, and PyInstaller follows
+    # imports rather than names -- so a plotting module reached by name from
+    # the UI is absent from the executable, and the failure surfaces on the
+    # user's machine as an ImportError from a menu item. That already happened
+    # once: six catalogued analyses were missing from the build while every
+    # local check passed. Registering them means a plot kind cannot be added
+    # without also being frozen.
+    #
+    # They are reachable by name from the script console as well, because
+    # register_builtin_analyses() wraps whatever is catalogued.
+    # ---------------------------------------------------------------------------
+    _e(
+        "xy_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_xy",
+        "plot",
+        "XY scatter with an optional fitted line and log axes",
+    ),
+    _e(
+        "xy_error_bars",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_xy_with_errorbars",
+        "plot",
+        "XY scatter with error bars",
+    ),
+    _e(
+        "histogram",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_histogram",
+        "plot",
+        "Histogram of one column",
+    ),
+    _e(
+        "bar_chart",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_bar_chart",
+        "plot",
+        "Bar chart of a column, or sums per category",
+    ),
+    _e(
+        "box_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_box_plot",
+        "plot",
+        "Box plot of one column per group",
+    ),
+    _e(
+        "pie_chart",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_pie_chart",
+        "plot",
+        "Pie chart of a column's values or labels",
+    ),
+    _e(
+        "stacked_chart",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_stacked_chart",
+        "plot",
+        "Stacked bars over the rows of a matrix",
+    ),
+    _e(
+        "percentiles",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_percentiles",
+        "plot",
+        "Percentile plot: a box plot without outliers",
+    ),
+    _e(
+        "normal_probability_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_normal_probability",
+        "plot",
+        "Normal probability (Q-Q) plot",
+    ),
+    _e(
+        "ternary_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_ternary",
+        "plot",
+        "Ternary plot of three components",
+    ),
+    _e(
+        "bubble_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_bubble",
+        "plot",
+        "Scatter with a third variable as point area",
+    ),
+    _e(
+        "matrix_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_matrix",
+        "plot",
+        "Matrix plot of a 2-D array",
+    ),
+    _e(
+        "mosaic_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_mosaic",
+        "plot",
+        "Mosaic plot of a contingency table",
+    ),
+    _e(
+        "venn_diagram",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_venn",
+        "plot",
+        "Venn diagram for two or three sets",
+    ),
+    _e(
+        "radar_chart",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_radar",
+        "plot",
+        "Radar chart: one polygon per matrix row",
+    ),
+    _e(
+        "polar_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_polar",
+        "plot",
+        "Polar plot of one column",
+    ),
+    _e(
+        "vector_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_vectors",
+        "plot",
+        "Vector (quiver) field",
+    ),
+    _e(
+        "network_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_network",
+        "plot",
+        "Network plot from an edge list",
+    ),
+    _e(
+        "plot_3d",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_3d",
+        "plot",
+        "3-D scatter, line or bubble plot",
+    ),
+    _e(
+        "surface_plot",
+        "visualization.plot_menu",
+        "PlotMenuAnalyzer",
+        "plot_surface",
+        "plot",
+        "3-D surface over a grid",
+    ),
 )
 
 

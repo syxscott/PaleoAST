@@ -1867,6 +1867,23 @@ class MainWindow(QMainWindow):
         view_group = home_tab.addGroup(_("View"))
         self._btn_preferences = view_group.addButton("settings", _("Preferences"), _("Application settings"))
 
+        # Plot tab.
+        #
+        # PAST's Plot menu takes columns out of the sheet and draws them. Until
+        # 1.1.2 there was no way to do that here at all: every plotter drew the
+        # result of one analysis. The kinds live in the analysis catalog under
+        # the "plot" category, so they are reachable from the generated form
+        # AND frozen into the build -- registering them is what stops the module
+        # being left out of the executable, which is what happens to anything
+        # PyInstaller cannot see a static import for.
+        plot_tab = self._ribbon.addTab(_("Plot"))
+        plot_group = plot_tab.addGroup(_("Plot menu"))
+        self._btn_plot_menu = plot_group.addButton(
+            "chart", _("Plot ..."), _("Draw the selected spreadsheet columns: XY, histogram, box, pie, 3-D and more")
+        )
+        self._btn_plot_menu.clicked.connect(self._on_open_analysis_runner)
+        self._register_data_button(self._btn_plot_menu)
+
         # Analysis tab
         analysis_tab = self._ribbon.addTab(_("Analysis"))
 
@@ -6893,6 +6910,22 @@ class MainWindow(QMainWindow):
             return None
         return data
 
+    def _on_plot_menu_figure(self, figure, name: str) -> None:
+        """Open a plot-menu figure in its own workspace tab.
+
+        The plot menu builds its figures in ``visualization.generic_plots`` and
+        hands back a matplotlib ``Figure``. Giving it a real canvas rather than
+        dumping an object repr into a text pane is the whole reason the menu is
+        worth having: it gets the same zoom, lasso and export toolbar as every
+        other figure in the app.
+        """
+        from views.ui_plot_canvas import InteractivePlotCanvas
+
+        canvas = InteractivePlotCanvas()
+        canvas.setDarkTheme(self._is_dark_theme)
+        canvas.plot_figure(figure)
+        self._add_tab_to_workspace(canvas, name)
+
     def _on_open_analysis_runner(self) -> None:
         """Open the generated parameter form for any catalogued analysis.
 
@@ -6908,6 +6941,7 @@ class MainWindow(QMainWindow):
                 parent=self,
                 controller=self._statistics_controller,
                 data_provider=self._console_data,
+                on_figure=self._on_plot_menu_figure,
             )
         self._analysis_runner.show()
         self._analysis_runner.raise_()
