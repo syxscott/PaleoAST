@@ -247,11 +247,12 @@ class LDAAnalyzer:
             if np.issubdtype(np.asarray(groups_clean).dtype, np.number):
                 grouped_mask = groups_clean >= 0
             else:
-                # np.full rather than np.ones(dtype=bool): same all-True mask,
-                # but numpy's type stubs bind ones()' ScalarT to numeric
-                # scalars, so the bool version type-errors on a newer numpy
-                # than the one pinned locally.
-                grouped_mask = np.full(groups_clean.shape[0], True, dtype=bool)
+                # np.array rather than np.ones/np.full with dtype=bool: numpy's
+                # type stubs bind both of those to numeric ScalarT, so a bool
+                # mask type-errors on numpy 2.x. np.array has no such bound.
+                grouped_mask = np.array(
+                    [True] * groups_clean.shape[0], dtype=bool
+                )
             data_grouped = data_clean[grouped_mask]
             groups_grouped = groups_clean[grouped_mask]
 
