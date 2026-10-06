@@ -46,3 +46,8 @@ docs/superpowers/
 # intentionally: lockfile keeps dependencies reproducible.
 .claude/worktrees/
 reconstruction_debug.png
+
+# Generated WiX fragment: rewritten from dist/PaleoAST by
+# packaging/harvest_payload.py on every build, ~3,500 lines. Run
+# packaging/make_msi.py rather than committing it.
+packaging/_payload.wxs

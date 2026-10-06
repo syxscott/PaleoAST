@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX 3 authoring for the PaleoAST MSI.
+
+  WHY WiX AND NOT cx_Freeze
+  ~~~~~~~~~~~~~~~~~~~~~~~~~
+  cx_Freeze 7.2.2 and 8.7.1 both failed on this machine at the same point,
+  in two environments and two directories, after the frozen tree and the exe
+  had already been produced:
+      error: [Errno 13] Permission denied: &lt;build_dir&gt;
+  The directory was not locked: it renamed cleanly afterwards, so the
+  failure is inside cx_Freeze's own build_exe finalisation, not in anything
+  this project configures. WiX needs none of that: it takes a file tree and
+  writes an installer.
+
+  WHY IT POINTS AT THE PyInstaller OUTPUT
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  The MSI and the portable zip are built from the SAME directory. Two
+  freezers would mean two subtly different builds under one version number,
+  and only one of them would be the one that was tested.
+  dist/PaleoAST is the tree that was launched and version-checked.
+
+  WHAT THIS FILE DOES AND DOES NOT OWN
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Nothing that lives inside dist/PaleoAST. All 2,400+ files, PaleoAST.exe
+  included, are harvested by packaging/harvest_payload.py into a single
+  ComponentGroup named Payload. That is not tidiness: a hand-written File
+  for the exe alongside the harvested one puts the same file in two
+  components, which ICE rejects outright.
+
+  Build (packaging/make_msi.py drives exactly this):
+    python packaging/harvest_payload.py
+    candle -dPaleoAST.wixobj -out obj packaging/PaleoAST.wxs
+           packaging/_payload.wxs
+    light  -ext WixUIExtension -ext WixUtilExtension
+           -out dist/PaleoAST-1.1.0-windows-x64.msi obj/PaleoAST.wixobj
+
+  There is no Include element for _payload.wxs. WiX 3 has one, but it is
+  only legal as a command-line argument; inside Wix it is CNDL0005
+  ("unexpected child element 'Include'"), and after the closing Wix element
+  any XML parser calls it junk.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:ui="http://schemas.microsoft.com/wix/UIExtension">
+
+  <?define ProductName = "PaleoAST" ?>
+  <?define ProductVersion = "1.1.0" ?>
+  <?define Manufacturer = "PaleoAST Development Team" ?>
+  <?define UpgradeCode = "{8B4A5C71-1D6E-4E3B-9F27-6C1A2D5E7B03}" ?>
+
+  <Product Id="*"
+           Name="$(var.ProductName)"
+           Language="1033"
+           Version="$(var.ProductVersion)"
+           Manufacturer="$(var.Manufacturer)"
+           UpgradeCode="$(var.UpgradeCode)">
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="$(var.ProductName) $(var.ProductVersion)"
+             Manufacturer="$(var.Manufacturer)" />
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of $(var.ProductName) is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- The Python runtime and every library travel with the program, so
+         nothing needs to be downloaded or found on the target machine. -->
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/syxscott/PaleoAST" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <Feature Id="Main" Title="$(var.ProductName)" Level="1" Absent="disallow">
+      <ComponentGroupRef Id="Payload" />
+      <ComponentGroupRef Id="Shortcuts" />
+    </Feature>
+
+    <UIRef Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="$(var.ProductName)" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ShortcutFolder" Name="$(var.ProductName)" />
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <!--
+      Only what is NOT in the payload. Both components key on a registry value
+      rather than a file, because the files they point at belong to the
+      harvested Payload group and a component cannot own the same file twice.
+    -->
+    <ComponentGroup Id="Shortcuts">
+      <Component Id="StartMenuShortcut" Directory="ShortcutFolder"
+                 Guid="{2C6F1D2E-9B4A-4C7E-9A1B-3D5E7F8A9B0C}">
+        <Shortcut Id="AppShortcut"
+                  Name="$(var.ProductName)"
+                  Description="$(var.ProductName) $(var.ProductVersion)"
+                  Target="[INSTALLFOLDER]PaleoAST.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveShortcutFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\$(var.Manufacturer)\$(var.ProductName)"
+                       Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!-- An opt-in desktop shortcut. A desktop icon nobody asked for is the
+           most common complaint about an installer. -->
+      <Component Id="DesktopShortcut" Directory="DesktopFolder"
+                 Guid="{3D7E2C1B-8A5F-4D6E-9B2C-4E6F8A9B0C1D}">
+        <Shortcut Id="DesktopAppShortcut"
+                  Name="$(var.ProductName)"
+                  Description="$(var.ProductName) $(var.ProductVersion)"
+                  Target="[INSTALLFOLDER]PaleoAST.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\$(var.Manufacturer)\$(var.ProductName)"
+                       Name="desktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
