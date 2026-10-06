@@ -90,10 +90,17 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
       ``finally``. The cleanup matters: leaving a stale ``spec`` bound in
       globalenv would let a later test pick up the previous dataset, which is
       the sys.modules-mock failure mode all over again.
-    * **The return value is an ``anova.cca`` object, not the data frame.** The
-      per-term statistics live in its ``table`` element, with columns ``Df``,
-      ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)`` and one row per term plus
-      ``Residual`` and ``Total``.
+    * **The return value is the table itself.** adonis2 returns an
+      ``anova.cca`` object that *inherits from* ``data.frame`` -- the AOV
+      table is the object, not a component of it. vegan's own guidance on
+      the adonis2 transition is explicit: "adonis2 return object is
+      essentially the same as the aov.tab element of adonis. Instead of
+      object$aov.tab refer only to object." Reading ``$table`` therefore
+      returns NULL, and every downstream column access then fails with
+      ``TypeError: 'NULLType' object is not iterable`` -- an error that
+      names neither the real problem nor where it is. Columns are ``Df``,
+      ``SumOfSqs``, ``R2``, ``F`` and ``Pr(>F)``, with one row per term
+      plus ``Residual`` and ``Total``.
     """
     group = r("factor")(StrVector([str(g) for g in groups]))
     frame = r("data.frame")(ListVector({"group": group}), check_names=False)
@@ -110,7 +117,10 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
         result = R_VEGAN.adonis2(formula, data=frame, method="euclidean", permutations=99)
     finally:
         r("rm")("spec", "group")
-    return result.rx2("table")
+    # The result IS the aov.cca data.frame; see the docstring. Do not
+    # reach for a "table" component -- adonis2 has none, and the NULL that
+    # comes back turns into a TypeError two frames away from the mistake.
+    return result
 
 
 def _r_adonis2_component(data: np.ndarray, groups: list[str], column: str, row: str) -> float:

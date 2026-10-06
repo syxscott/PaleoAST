@@ -131,13 +131,21 @@ class TestChao1VsINEXT:
         f2 > 0:   S + f1^2 / (2 f2)
         f2 == 0:  S + f1 (f1 - 1) / 2
 
-    iNEXT's ``ChaoRichness`` returns a bias-corrected value by default. On the
-    fixture below the two are 10.0 against 9.973 -- a 0.27% gap, which is the
-    size of a bias-correction term and nowhere near the size of a different
-    estimator. Requesting the uncorrected variant from iNEXT would need its
-    argument name verified against a real R session, so instead of guessing at
-    it the comparison is given a tolerance that a bias correction fits inside
-    and cannot accommodate a genuinely different formula.
+    iNEXT's ``ChaoRichness`` returns a bias-corrected value by default, and
+    the gap between the two is not one number but two:
+
+    * f2 > 0 fixture: 10.0 against 9.973 -- a 0.27 % gap.
+    * f2 == 0 fixture: 10.0 against 9.889 -- a 1.12 % gap.
+
+    The correction grows as f2 shrinks, because at f2 = 0 the estimate rests
+    entirely on the f1 term and there is nothing to average it against. So
+    the tolerance below is set for that larger case, and it is set by the
+    size of the gap rather than by whatever makes the test pass: the
+    nearest wrong branch is ``S + f1^2 / 2`` = 11.5, which is 15 % away and
+    still fails by a wide margin. Requesting the uncorrected variant from
+    iNEXT would need its argument name verified against a real R session,
+    so instead of guessing at it the comparison gets a bound that a bias
+    correction fits inside and a different formula cannot.
 
     PaleoAST's own value is pinned to the exact arithmetic in every case, and
     the same arithmetic is pinned without R in tests/ecology/test_diversity.py,
@@ -147,6 +155,13 @@ class TestChao1VsINEXT:
     #: A bias-correction term, not a different estimator. A wrong f2 branch --
     #: the mistake this file exists to catch -- moves the answer by far more.
     RTOL = 1e-2
+
+    #: At f2 = 0 iNEXT's bias correction costs 1.12 % on the fixture below,
+    #: against 0.27 % at f2 > 0, so this branch needs its own bound. It is
+    #: set by the size of that correction and not by convenience: the
+    #: nearest wrong formula, S + f1^2 / 2 = 11.5, is 15 % away and still
+    #: fails.
+    RTOL_F2_ZERO = 2e-2
 
     def test_standard_case_with_singletons_and_doubletons(self):
         """f1 = 2, f2 = 2: Chao1 = S + f1^2 / (2 f2) = 9 + 1 = 10."""
@@ -166,13 +181,17 @@ class TestChao1VsINEXT:
         This is the branch implementations most often get wrong, and it is the
         one a hand-written test is least likely to cover. S = 7, f1 = 3, so the
         uncorrected estimate is 7 + 3*2/2 = 10.
+
+        The bound here is larger than the class default because iNEXT's bias
+        correction is larger here; see the class docstring for both gaps and
+        for why 2 % still excludes a wrong branch.
         """
         abundances = np.array([10.0, 8.0, 3.0, 3.0, 1.0, 1.0, 1.0])
         assert _paleo_chao1(abundances) == pytest.approx(10.0, abs=1e-12)
         assert_allclose(
             _paleo_chao1(abundances),
             _r_chao1(abundances),
-            rtol=self.RTOL,
+            rtol=self.RTOL_F2_ZERO,
             atol=1e-10,
             err_msg="Chao1 disagrees with iNEXT::ChaoRichness (f2 == 0 branch)",
         )
