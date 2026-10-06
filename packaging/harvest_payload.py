@@ -9,7 +9,7 @@ is an ICE error rather than a warning.
 Emits a fragment included by packaging/PaleoAST.wxs:
 
     candle -dPaleoAST.wixobj -out obj packaging/PaleoAST.wxs
-    light  -ext WixUIExtension -out dist/PaleoAST-1.1.1-windows-x64.msi obj/PaleoAST.wixobj
+    light  -ext WixUIExtension -out dist/PaleoAST-1.1.2-windows-x64.msi obj/PaleoAST.wixobj
 
 Run:  python packaging/harvest_payload.py
 """

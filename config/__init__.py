@@ -8,7 +8,7 @@ This package contains all configuration-related modules for the PaleoAST
 application, including constants, color schemes, and validators.
 
 Author: PaleoAST Development Team
-version: 1.1.1
+version: 1.1.2
 """
 
 from .colors import (

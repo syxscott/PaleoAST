@@ -14,7 +14,7 @@ Mathematical Notation Reference:
 - N: Total number of elements
 
 Author: PaleoAST Development Team
-version: 1.1.1
+version: 1.1.2
 """
 
 from typing import Final
@@ -26,7 +26,7 @@ from typing import Final
 APP_NAME: Final[str] = "PaleoAST"
 """Application name - Paleontological Advanced Statistical Toolkit"""
 
-APP_VERSION: Final[str] = "1.1.1"
+APP_VERSION: Final[str] = "1.1.2"
 """Current version string following semantic versioning (MAJOR.MINOR.PATCH)"""
 
 APP_AUTHOR: Final[str] = "PaleoAST Development Team"

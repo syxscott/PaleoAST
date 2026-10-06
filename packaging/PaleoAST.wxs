@@ -33,7 +33,7 @@
     candle -dPaleoAST.wixobj -out obj packaging/PaleoAST.wxs
            packaging/_payload.wxs
     light  -ext WixUIExtension -ext WixUtilExtension
-           -out dist/PaleoAST-1.1.1-windows-x64.msi obj/PaleoAST.wixobj
+           -out dist/PaleoAST-1.1.2-windows-x64.msi obj/PaleoAST.wixobj
 
   There is no Include element for _payload.wxs. WiX 3 has one, but it is
   only legal as a command-line argument; inside Wix it is CNDL0005
@@ -44,7 +44,7 @@
      xmlns:ui="http://schemas.microsoft.com/wix/UIExtension">
 
   <?define ProductName = "PaleoAST" ?>
-  <?define ProductVersion = "1.1.1" ?>
+  <?define ProductVersion = "1.1.2" ?>
   <?define Manufacturer = "PaleoAST Development Team" ?>
   <?define UpgradeCode = "{8B4A5C71-1D6E-4E3B-9F27-6C1A2D5E7B03}" ?>
 

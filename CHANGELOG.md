@@ -4,82 +4,88 @@ All notable changes to PaleoAST will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-07
+
+Feature-parity work aimed at PAST 4, plus the defects that surfaced while
+comparing against it. The headline is a plot menu: every plotter here drew the
+result of one analysis, so there was no way to take two columns out of the
+sheet and draw them, which is the largest single difference from PAST for
+anyone whose deliverable is a figure.
+
 ### Added
+- **The plot menu** (`visualization/generic_plots.py`) -- 21 ways to draw
+  spreadsheet columns: XY with an optional fitted line and log axes, XY with
+  error bars, histogram, bar chart, box plot, pie chart, stacked chart,
+  percentiles, normal probability (Q-Q), ternary, bubble, matrix, mosaic, Venn
+  for two and three sets, radar, polar, vector, network, and the 3-D family.
+  Categorical colours come from the same registry the R export reads, so these
+  figures are the figures the export produces.
 - **A machine-readable inventory of PAST 4's features**
   (`docs/parity/past4_features.json`), transcribed from the official PAST 4
-  reference manual: 242 entries across twelve menus, each with its page. The
-  aim is that "reproduce everything PAST has" becomes a state that can be
-  checked rather than one that has to be judged by eye. No test consumes it
-  yet.
+  reference manual: 242 entries across twelve menus. The aim is that
+  "reproduce everything PAST has" becomes a state that can be checked rather
+  than judged by eye.
+- **k-medoids (PAM), DBSCAN and k-nearest-neighbours classification** in
+  `stats/clustering.py`. PAM is implemented here rather than taken from
+  scikit-learn because `KMedoids` was deprecated in 1.3 and removed
+  afterwards, and this project's floor of >=1.3.0 does not guarantee it is
+  present. DBSCAN and kNN import scikit-learn inside the function, so the
+  base-dependency install still gets k-medoids and still imports.
 - **Abundance model fitting** is now reachable by name
-  (`run("abundance_models")`). The four models -- log-series, log-normal,
-  geometric and broken-stick -- have been in `ecology/advanced.py` with
-  cross-validation tests against R, but nothing pointed a user at them. The
-  catalog is 79 analyses in 12 categories.
+  (`run("abundance_models")`): log-series, log-normal, geometric and
+  broken-stick. The implementation and its cross-validation tests were already
+  in `ecology/advanced.py`; nothing pointed a user at them.
 - **A structural test for dead interactive controls**
-  (`tests/views/test_dead_controls.py`). A widget that is built, filled and
-  laid out but never asked for its value looks like a choice and silently has
-  none.
+  (`tests/views/test_dead_controls.py`).
 
 ### Fixed
-- **Three controls did nothing while appearing to do something.** All three
-  were the same defect, and none was caught by a behavioural test, because
-  every dialog still ran and still returned a result:
-  - the allometry dialog's **"RMA (reduced major axis)"** combo. Constructed,
-    filled with OLS and RMA, added to the layout -- and never read. Picking
-    RMA ran the OLS regression and labelled the output RMA. Removed rather
-    than wired up: RMA fits error in both axes and so needs measurement-error
-    estimates the dialog does not collect, making it an engine change rather
-    than a wiring change.
-  - the PCA dialog's **"Use correlation matrix"** checkbox. A mirror of the
-    Similarity Matrix combo, kept in step by `_on_method_changed`, while
-    `get_parameters` read only the combo -- untick the box by hand and nothing
-    happened. The combo already states the choice and is what reaches the
-    engine, so the mirror went rather than being wired in parallel.
-  - the macroevolution dialog's **"Starting consensus from:"** combo, offering
-    "Consensus (recommended)" and "First specimen". Never read, and the engine
-    has no first-specimen mode to read.
+- **Three controls did nothing while appearing to do something**, and none
+  was caught by a behavioural test because every dialog still ran and still
+  returned a result: the allometry dialog's "RMA (reduced major axis)" combo
+  (picking RMA ran the OLS regression and labelled the output RMA), the PCA
+  dialog's "Use correlation matrix" checkbox (a mirror of the Similarity
+  Matrix combo that nothing read), and the macroevolution dialog's "Starting
+  consensus from:" combo (offering a mode the engine does not have). The new
+  test found the second and third on its first run against a tree where the
+  first had already been removed.
+- **The figure on screen and the figure you export were not the same figure.**
+  The interactive plotters hard-coded `get_color_scheme("default")` (Paul
+  Tol's colours) while the R export defaulted to Okabe-Ito, so every palette a
+  user chose in Preferences changed the exported file and left the on-screen
+  figure exactly as it was. Both sides now read one registry in
+  `config/colors.py`, and the generated R script is handed that list verbatim.
+  **The default is Okabe-Ito on both paths, so every categorical figure looks
+  different from 1.1.1.**
+- **The two Okabe-Ito tables disagreed about the eighth colour** -- grey in the
+  in-app list, black in the R list. Okabe & Ito's eighth colour is black.
+- **`r_palette` was collected by the Preferences dialog and then discarded.**
+  Neither `_get_preferences_state` nor `_apply_preferences` mentioned the key,
+  so it was never written to QSettings and never read back: choosing anything
+  but the default silently did nothing.
+- **`get_color_scheme` returned a default for any name it did not recognise**,
+  with no error. A typo -- or a name copied from the R side, where the palette
+  is `okabeito` rather than `colorblind` -- produced a figure in a different
+  palette and said nothing.
+- **The generated R script asked for packages it did not need.** `brewer.pal()`
+  and `viridis(8)` came from RColorBrewer and viridisLite behind
+  `requireNamespace`, so the colours could differ between machines. The colours
+  are injected instead.
+- **`PaleoASTError.__str__` calls `.items()` on `details`**, so a caller
+  passing a plain string got an AttributeError while the exception was being
+  formatted -- a crash inside the error path, replacing the message with
+  "str has no attribute items". Non-mapping details are now wrapped.
+- **`MatrixDimensionError`'s docstring advertised `expected_shape` and
+  `actual_shape` as keyword arguments** the class does not accept, and spelled
+  the detail keys two different ways inside the same docstring.
 
-  The new test found the second and third on its first run against a tree
-  where the first had already been removed, which is the point of having it.
-  It counts a control as alive only when a getter is called on it, or when it
-  is passed to something that is not a layout method: an earlier version that
-  treated any appearance as a read reported all three as healthy.
-- **The figure on screen and the figure you export were not the same
-  figure.** The interactive plotters hard-coded `get_color_scheme("default")`
-  (Paul Tol's colours) while the R export defaulted to Okabe-Ito, so every
-  palette a user chose in Preferences changed the exported file and left the
-  on-screen figure exactly as it was -- the worst direction for a mismatch,
-  because the export moved and the preview did not. Both sides now read one
-  registry in `config/colors.py`, under the names the Preferences dialog
-  already stored, and the generated R script is handed that list verbatim.
-  The default is Okabe-Ito on both paths.
-- **The two Okabe-Ito tables disagreed about the eighth colour.** The in-app
-  list had grey where the R list had black, so an eight-group figure showed
-  grey on screen and black in the export. Okabe & Ito's eighth colour is
-  black; it is now black in the one table that exists.
-- **`r_palette` was collected by the Preferences dialog and then
-  discarded.** Neither `_get_preferences_state` nor `_apply_preferences`
-  mentioned the key, so it was never written to QSettings and never read
-  back: choosing anything but the default silently did nothing. Both ends
-  carry it now, and it is applied at startup so the first figure drawn is
-  already in the chosen palette.
-- **`get_color_scheme` returned a default for any name it did not
-  recognise.** No error, no warning. A typo -- or a name copied from the R
-  side, where the palette is `okabeito` rather than `colorblind` -- produced
-  a figure in a different palette with nothing to indicate it. An unknown
-  name raises now. The magic name `"default"` is gone too: it resolved to one
-  palette while the application defaulted to another, which is the same trap
-  wearing a different hat.
-- **The generated R script asked for packages it did not need.**
-  `brewer.pal()` and `viridis(8)` came from RColorBrewer and viridisLite
-  behind `requireNamespace`, so the colours could differ between machines --
-  and between the preview and the render on any machine missing one. The
-  colours are injected instead, which makes the script's claim that it cannot
-  die on a missing package true rather than aspirational.
+### Removed
+- A "Top Taxa Abundance" panel in `diversity_plot`, guarded by
+  `hasattr(result, "abundances")` -- a field `DiversityResult` does not have,
+  so it could never run. Its evenness pie and single rarefaction curve also
+  still used hard-coded colours while the other panels in the same figures
+  used the palette.
 
 ## [1.1.1] - 2026-10-06
 

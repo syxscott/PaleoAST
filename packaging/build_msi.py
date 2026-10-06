@@ -29,7 +29,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DIST = PROJECT_ROOT / "dist"
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 PRODUCT_NAME = "PaleoAST"
 ORG_NAME = "PaleoAST Development Team"
 DESCRIPTION = (

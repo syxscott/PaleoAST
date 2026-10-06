@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGING = ROOT / "packaging"
 PAYLOAD = ROOT / "dist" / "PaleoAST"
-MSI = ROOT / "dist" / "PaleoAST-1.1.1-windows-x64.msi"
+MSI = ROOT / "dist" / "PaleoAST-1.1.2-windows-x64.msi"
 OBJ = Path(os.environ.get("TEMP", str(ROOT))) / "wixobj"
 
 WIX_CANDIDATES = [
