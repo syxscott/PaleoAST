@@ -88,6 +88,15 @@ numbers that may have been published.
   red lint step was never reached. Both are pinned to 0.16.10, since an
   unpinned formatter gate moves whenever ruff publishes a release.
 
+### Changed
+- **The MSI's desktop shortcut is now genuinely opt-in.** The component
+  carried a comment saying it was opt-in, but it sat in the same component
+  group as the Start Menu shortcut under a single `Level="1"` feature, so
+  every install -- including a silent `/qn` one -- put an icon on the
+  public desktop. It is now its own feature at `Level="101"`, above the
+  default `INSTALLLEVEL` of 100: skipped unless named explicitly, and
+  reachable from the installer by choosing *Advanced*.
+
 ## [1.1.0] - 2026-10-06
 
 First release with the editable-R plotting path and the dark-theme
