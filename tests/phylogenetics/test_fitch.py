@@ -40,9 +40,9 @@ def _compute(newick: str, sequences: dict[str, str], **kwargs):
 
 
 def _root_states(result, site: int = 0) -> set:
-    return set(result.character_states[site][result.character_states[site].__iter__().__next__() and
+    return set(result.character_states[site][(result.character_states[site].__iter__().__next__() and
                                           next(n for n, s in result.character_states[site].items()
-                                               if s) or result.character_states[site].__iter__().__next__()])
+                                               if s)) or result.character_states[site].__iter__().__next__()])
 
 
 def _root_states_simple(result, site: int = 0):

@@ -37,14 +37,14 @@ from .sentinels import MISSING_SENTINELS, MISSING_SENTINELS_UPPER, is_missing_to
 from .tps_parser import TPSFile, TPSParser, TPSSpecimen, parse_tps_file
 
 __all__ = [
+    "MISSING_SENTINELS",
+    "MISSING_SENTINELS_UPPER",
     "BaseLexer",
     "BinaryCache",
     "BinaryCacheHeader",
     "ChunkType",
     "DATParser",
     "LexerError",
-    "MISSING_SENTINELS",
-    "MISSING_SENTINELS_UPPER",
     "NewickParser",
     "NewickTree",
     "NexusLexer",

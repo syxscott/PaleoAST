@@ -27,7 +27,7 @@ PACKAGES = (
 
 # Which lines are executable. Derived from the AST so that docstrings,
 # comments and multi-line expressions are not counted as missed lines.
-import ast  # noqa: E402
+import ast
 
 _EXECUTABLE: dict[str, set[int]] = {}
 
@@ -41,9 +41,7 @@ def _build_line_index() -> None:
                 continue
             lines: set[int] = set()
             for node in ast.walk(tree):
-                if isinstance(node, (ast.stmt, ast.expr)):
-                    lines.add(node.lineno)
-                elif isinstance(node, ast.ExceptHandler) and node.lineno:
+                if isinstance(node, (ast.stmt, ast.expr)) or (isinstance(node, ast.ExceptHandler) and node.lineno):
                     lines.add(node.lineno)
             _EXECUTABLE[str(path)] = lines
 
@@ -52,7 +50,7 @@ _build_line_index()
 _HIT: dict[str, set[int]] = {}
 
 
-def pytest_configure(config):  # noqa: ARG001
+def pytest_configure(config):
     if os.environ.get("LINECOV_DISABLE"):
         return
     target = str(ROOT)
@@ -78,7 +76,7 @@ def pytest_configure(config):  # noqa: ARG001
         threading_profile(_tracer)
 
 
-def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+def pytest_sessionfinish(session, exitstatus):
     report = {}
     for filename, executable in _EXECUTABLE.items():
         if not executable:

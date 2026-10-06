@@ -11,11 +11,7 @@ Author: PaleoAST Development Team
 """
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
-
-import pytest
 
 from models.state_manager import StateManager, get_state_manager
 
@@ -41,8 +37,8 @@ class TestStateManagerThreadSafety:
         """
         num_threads = 20
         barrier = threading.Barrier(num_threads)
-        instances: List[StateManager | None] = [None] * num_threads
-        errors: List[Exception] = []
+        instances: list[StateManager | None] = [None] * num_threads
+        errors: list[Exception] = []
 
         def get_instance_task(index: int) -> None:
             try:
@@ -117,7 +113,7 @@ class TestStateManagerThreadSafety:
         num_threads = 10
         iterations = 50
         barrier = threading.Barrier(num_threads)
-        errors: List[Exception] = []
+        errors: list[Exception] = []
 
         state = StateManager.get_instance()
 
@@ -165,7 +161,7 @@ class TestStateManagerThreadSafety:
         num_writers = 5
         iterations = 30
         barrier = threading.Barrier(num_readers + num_writers)
-        errors: List[Exception] = []
+        errors: list[Exception] = []
 
         state = StateManager.get_instance()
 

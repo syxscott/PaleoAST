@@ -245,7 +245,7 @@ class TestTBRReconnectDirection:
         search = HeuristicSearch(nni_swap_probability=0.0)
         search._tbr_prob = 1.0
 
-        import reference_algorithms as R  # noqa: PLC0415
+        import reference_algorithms as R
 
         tree = R.random_binary_tree(list("ABCDEFG"), rng)
         neighbours = {R.unrooted_splits(n) for n in search._generate_neighbors(tree)}

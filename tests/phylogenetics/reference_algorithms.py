@@ -43,24 +43,24 @@ under test is the algorithm, not the node structure.
 from __future__ import annotations
 
 import itertools
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
 from phylogenetics.tree import PhyloNode, PhyloTree
 
 __all__ = [
-    "leaf_key",
-    "clades_of",
-    "non_trivial_clades",
     "all_possible_clades",
+    "canonical_newick",
+    "clades_of",
+    "leaf_key",
+    "non_trivial_clades",
+    "patristic_matrix",
+    "random_binary_tree",
+    "reference_nj",
+    "reference_upgma",
     "topology_of",
     "unrooted_splits",
-    "canonical_newick",
-    "random_binary_tree",
-    "patristic_matrix",
-    "reference_upgma",
-    "reference_nj",
 ]
 
 

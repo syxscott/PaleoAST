@@ -9,7 +9,6 @@ Validates:
 """
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 
 def _generate_ar1(n: int, phi: float, innovations_std: float = 1.0) -> np.ndarray:
@@ -28,8 +27,8 @@ def test_pyper_peterman_white_noise():
     """
     White noise data: effective sample size should be close to n.
     """
+
     from stratigraphy.correlation import pyper_peterman_correction
-    from scipy import stats
 
     np.random.seed(42)
     n = 100
@@ -90,8 +89,9 @@ def test_pyper_peterman_vs_pearsonr():
     The corrected p-value should generally be larger (less significant)
     for autocorrelated data.
     """
-    from stratigraphy.correlation import pyper_peterman_correction
     from scipy import stats
+
+    from stratigraphy.correlation import pyper_peterman_correction
 
     np.random.seed(123)
     n = 50

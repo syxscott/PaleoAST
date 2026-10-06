@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from macroevolution.cohort import CohortSurvivorshipAnalysis, analyze_cohort_survivorship
+from macroevolution.cohort import CohortSurvivorshipAnalysis
 
 
 def test_foote_cohort_basic():

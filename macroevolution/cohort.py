@@ -358,9 +358,9 @@ class CohortSurvivorshipAnalysis:
                 started_before = o > t_end
                 started_in = t_start <= o < t_end
                 started_after = o < t_start
-                ended_before = L > t_end
+                ended_before = t_end < L
                 ended_in = t_start <= L < t_end
-                ended_after = L <= t_start
+                ended_after = t_start >= L
 
                 if started_before and ended_after:
                     # Through-timer: existed before interval, survived past interval

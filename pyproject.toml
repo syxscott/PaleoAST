@@ -189,6 +189,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests_morpho3d_macroevolution/**/*.py" = ["E", "W", "F", "B008", "N"]
 "scripts/smoke_check.py" = ["E", "W", "F"]
+# Named after the ProcD-LM method it implements, not after a snake_case noun.
+# Renaming the module would break the cross-validation job that references it,
+# and the name is the only place the method is identifiable.
+"stats/procD_lm.py" = ["N999"]
 
 [tool.ruff.lint.isort]
 known-first-party = [

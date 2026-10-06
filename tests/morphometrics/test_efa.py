@@ -1,8 +1,8 @@
 # tests/morphometrics/test_efa.py
-import numpy as np
-import math
 
-from morphometrics.efa import EFAAnalyzer, normalize_starting_point
+import numpy as np
+
+from morphometrics.efa import EFAAnalyzer
 
 
 def test_efa_analyzer_creation():
@@ -176,9 +176,9 @@ def test_normalize_starting_point_rotation_invariance():
     # Both should satisfy the same invariants: |a1|=1, b1=0, a0=c0=0
     for result in [result_orig, result_rot]:
         a1_amp = np.sqrt(result.coefficients[0, 0] ** 2 + result.coefficients[0, 1] ** 2)
-        assert np.isclose(a1_amp, 1.0, atol=1e-10), f"Rotation test: |a1| should be 1.0"
-        assert np.isclose(result.a0, 0.0, atol=1e-10), f"Rotation test: a0 should be 0"
-        assert np.isclose(result.c0, 0.0, atol=1e-10), f"Rotation test: c0 should be 0"
+        assert np.isclose(a1_amp, 1.0, atol=1e-10), "Rotation test: |a1| should be 1.0"
+        assert np.isclose(result.a0, 0.0, atol=1e-10), "Rotation test: a0 should be 0"
+        assert np.isclose(result.c0, 0.0, atol=1e-10), "Rotation test: c0 should be 0"
 
 
 def test_normalize_starting_point_starting_point_invariance():

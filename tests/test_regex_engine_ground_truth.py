@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import re
 
-import numpy as np
 import pytest
 
 from state_machine.automaton import RegexCompiler, regex_to_dfa, regex_to_nfa

@@ -868,7 +868,7 @@ def coverage_rarefaction_hill(
     # row, which also drops stray negative / non-finite cells.
     abundance_matrix = _integerize_abundances(abundance_matrix, context="abundance_matrix")
 
-    n_samples, n_species = abundance_matrix.shape
+    n_samples, _n_species = abundance_matrix.shape
 
     if sample_names is None:
         sample_names = [f"Sample_{i + 1}" for i in range(n_samples)]
@@ -1333,7 +1333,7 @@ class CoverageRarefactionAnalyzer:
         if abundance_matrix.ndim != 2:
             raise ValidationError(_("Abundance matrix must be 2D"))
 
-        n_samples, n_species = abundance_matrix.shape
+        n_samples, _n_species = abundance_matrix.shape
 
         if sample_names is None:
             sample_names = [f"Sample_{i + 1}" for i in range(n_samples)]
@@ -1522,7 +1522,7 @@ class CoverageRarefactionAnalyzer:
         if K == 0:
             # Species not in the population -> certainly absent.
             return 1.0
-        if N - K < n:
+        if n > N - K:
             # Fewer non-focal individuals than the sample size, so the
             # species must appear at least once in the sample.
             return 0.0

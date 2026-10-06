@@ -17,7 +17,7 @@ Tests for Phylogenetic Independent Contrasts (PIC)
 import numpy as np
 import pytest
 
-from phylogenetics import PhyloNode, PhyloTree, compute_pic
+from phylogenetics import PhyloTree, compute_pic
 
 
 class TestPICBasic:

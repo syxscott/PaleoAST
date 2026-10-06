@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 import contextlib
 
-from PyQt6.QtCore import QObject, QPoint, QRect, QRunnable, QSettings, Qt, QTimer, pyqtSignal, QThreadPool
+from PyQt6.QtCore import QObject, QPoint, QRect, QRunnable, QSettings, Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QBrush,
@@ -47,9 +47,9 @@ from PyQt6.QtGui import (
     QCursor,
     QDragEnterEvent,
     QDropEvent,
+    QFont,
     QIcon,
     QKeySequence,
-    QFont,
     QPainter,
     QPainterPath,
     QPen,
@@ -109,9 +109,9 @@ from views.ui_dialogs import (
     LDADialog,
     MarkovDialog,
     NMDSOptionsDialog,
+    PaleoEnvironmentDialog,
     PCADialog,
     PCoADialog,
-    PaleoEnvironmentDialog,
     RarefactionDialog,
     SimperDialog,
     SpatialRipleyKDialog,
@@ -122,18 +122,18 @@ from views.ui_dialogs import (
 )
 from views.ui_evolution_rate_dialogs import EvolutionRateDialog
 from views.ui_extinction_dialogs import ExtinctionIntervalDialog
+from views.ui_imputation_dialog import ImputationDialog
 from views.ui_macroevolution_dialogs import (
     MacroevolutionDialog,
     Morpho3DDialog,
 )
-from views.ui_imputation_dialog import ImputationDialog
 from views.ui_navigation import NavigationItem, NavigationTree
 from views.ui_null_model_dialogs import NullModelDialog
 from views.ui_pcm_dialogs import AncestralStateDialog, PhyloANOVADialog, PhyloSignalDialog, PICDialog
+from views.ui_permutation_dialogs import PermutationTestDialog, PreferencesDialog
 from views.ui_plot_canvas import InteractivePlotCanvas
 from views.ui_runlist_panel import RunListPanel
 from views.ui_spreadsheet import ScientificSpreadsheet
-from views.ui_permutation_dialogs import PermutationTestDialog, PreferencesDialog
 
 
 def format_user_error(e: Exception, operation: str = "") -> str:
@@ -1393,7 +1393,7 @@ class _AnalysisTask(QRunnable):
             # escape the worker thread, which Qt turns into
             # "QThread: Destroyed while thread is still running" -> abort.
             logging.getLogger(__name__).debug("Discarding analysis result after teardown: %s", e)
-        except Exception as e:  # noqa: BLE001 - 后台线程边界, 必须回传
+        except Exception as e:
             try:
                 self._signals.error_raised.emit(e)
             except RuntimeError:
@@ -1559,7 +1559,25 @@ class MainWindow(QMainWindow):
             row_labels = data.get("row_labels")
             col_labels = data.get("col_labels")
 
-            new_matrix = DataMatrix(matrix_data, row_labels=row_labels, col_labels=col_labels)
+            # PAST .dat files can carry {Group} lines, and the parser
+            # captures them. They used to be dropped here: DataMatrix was
+            # built from row/col labels only, so the file loaded, the row
+            # count was right, and every downstream grouping-aware analysis
+            # then ran as if the whole file were one group -- with nothing
+            # on screen to say so. The grouping travels in
+            # ``specimen_metadata`` because that is the source
+            # ``_resolve_groups_for_plot`` already reads, and it only
+            # accepts a value when *every* row has one.
+            specimen_metadata = self._specimen_metadata_from_groups(
+                data.get("groups"), matrix_data
+            )
+
+            new_matrix = DataMatrix(
+                matrix_data,
+                row_labels=row_labels,
+                col_labels=col_labels,
+                specimen_metadata=specimen_metadata,
+            )
 
             self._state.set_data_matrix(new_matrix)
             self._spreadsheet.load_data(matrix_data, row_labels=row_labels, col_labels=col_labels, update_state=False)
@@ -1578,6 +1596,43 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, _("Load Error"), format_user_error(e, "Op: file loading"))
+
+    def _specimen_metadata_from_groups(
+        self, groups: object, matrix_data: object
+    ) -> list[dict[str, str]] | None:
+        """Turn a parser's per-row group labels into ``specimen_metadata``.
+
+        Returns ``None`` -- not a partial list -- when the grouping is
+        unusable, for three reasons, each of which would otherwise reach an
+        analysis as a silent mis-grouping:
+
+          * no groups at all (a CSV, or a .dat with no {Group} lines);
+          * the wrong length, so the labels no longer line up with the rows;
+          * some rows unlabelled. A .dat may have data rows before the first
+            {Group} line; filling those in would invent a group the file
+            never declared.
+        """
+        if not isinstance(groups, (list, tuple)) or not groups:
+            return None
+        labels = [g for g in groups]
+        if len(labels) != len(matrix_data):  # type: ignore[arg-type]
+            self._logger.warning(
+                "Group labels (%d) do not match the data rows (%d); "
+                "the grouping was discarded rather than misaligned",
+                len(labels),
+                len(matrix_data),  # type: ignore[arg-type]
+            )
+            return None
+        if any(g is None or str(g).strip() == "" for g in labels):
+            unlabelled = sum(1 for g in labels if g is None or str(g).strip() == "")
+            self._logger.warning(
+                "%d of %d rows have no group label; the grouping was "
+                "discarded rather than partly invented",
+                unlabelled,
+                len(labels),
+            )
+            return None
+        return [{"group": str(g)} for g in labels]
 
     def _on_file_drop_failed(self, error_msg: str) -> None:
         """Handle file load failure."""
@@ -1669,8 +1724,15 @@ class MainWindow(QMainWindow):
         anything other than the ribbon entries, which the new user
         typically doesn't know to look for.
         """
-        from data.loader import list_example_datasets, load_community, load_moth_wings, load_primate_traits, load_primate_tree
         from PyQt6.QtWidgets import QInputDialog
+
+        from data.loader import (
+            list_example_datasets,
+            load_community,
+            load_moth_wings,
+            load_primate_traits,
+            load_primate_tree,
+        )
 
         datasets = list_example_datasets()
         labels = [f"{d['name']} — {d['description']}" for d in datasets]
@@ -3364,9 +3426,8 @@ class MainWindow(QMainWindow):
         visible, the user is told to run an analysis first.
         """
         try:
-            from views.ui_plot_export_dialog import PlotExportDialog
-
             from plot_export import export_figure
+            from views.ui_plot_export_dialog import PlotExportDialog
         except ImportError as exc:  # pragma: no cover - defensive
             QMessageBox.critical(
                 self,
@@ -3623,10 +3684,7 @@ class MainWindow(QMainWindow):
             is_cleanable = False
             if widget is not None:
                 marker = widget.property("workspace_cleanable")
-                if marker is not None and bool(marker):
-                    is_cleanable = True
-                # Backward-compatibility: legacy property name.
-                elif widget.property("figure_canvas") is not None:
+                if (marker is not None and bool(marker)) or widget.property("figure_canvas") is not None:
                     is_cleanable = True
             if is_interactive_plot or is_cleanable:
                 stack.removeWidget(widget)
@@ -5691,7 +5749,7 @@ class MainWindow(QMainWindow):
                     # refuse the data. The user gets a sim=1.0 trivial
                     # answer and at least sees the column rendered.
                     h = np.asarray(data[:, 0], dtype=np.float64)
-                    only_name = col_labels[0] if 0 < len(col_labels) else _("Section 1")
+                    only_name = col_labels[0] if len(col_labels) > 0 else _("Section 1")
                     sections.append(
                         StratigraphicSection(
                             name=str(only_name),
@@ -5838,9 +5896,9 @@ class MainWindow(QMainWindow):
                 taxon_labels: list[str] = []
                 for idx in taxon_indices:
                     if 0 <= idx < len(col_labels):
-                        taxon_labels.append("{0}: {1}".format(idx, col_labels[idx]))
+                        taxon_labels.append(f"{idx}: {col_labels[idx]}")
                     else:
-                        taxon_labels.append("col_{0}".format(idx))
+                        taxon_labels.append(f"col_{idx}")
 
                 # --------------------------------------------------------
                 # Pre-validate to give actionable error messages instead
@@ -6226,7 +6284,7 @@ class MainWindow(QMainWindow):
                         lines = [_("Detected {0} cyclic FAD contradiction(s):").format(len(cyclic))]
                         for entry in cyclic[:5]:
                             lines.append(
-                                "  - {0} ↔ {1}  (a→b in {2}, b→a in {3})".format(
+                                "  - {} ↔ {}  (a→b in {}, b→a in {})".format(
                                     entry.get("event_a", "?"),
                                     entry.get("event_b", "?"),
                                     entry.get("n_sections_a_before_b", 0),
@@ -6234,7 +6292,7 @@ class MainWindow(QMainWindow):
                                 )
                             )
                         if len(cyclic) > 5:
-                            lines.append("  ... ({0} more)".format(len(cyclic) - 5))
+                            lines.append(f"  ... ({len(cyclic) - 5} more)")
                         QMessageBox.warning(self, _("Cyclic Contradictions Detected"), "\n".join(lines))
                 else:
                     from stratigraphy.biostratigraphy import RASCAnalyzer
@@ -6301,10 +6359,12 @@ class MainWindow(QMainWindow):
             top.setText(1, ", ".join(str(e) for e in event_union))
             # Format ``inf`` and NaN gracefully instead of printing
             # the literal "inf" string in the UI.
-            if not (mean_sim == mean_sim) or mean_sim in (float("inf"), float("-inf")):
+            # NaN is the only value not equal to itself, which is the cheapest
+            # check that does not import anything.
+            if mean_sim != mean_sim or mean_sim in (float("inf"), float("-inf")):
                 top.setText(2, "—")
             else:
-                top.setText(2, "{0:.3f}".format(mean_sim))
+                top.setText(2, f"{mean_sim:.3f}")
             top.setToolTip(1, "\n".join(str(e) for e in event_union))
 
             for zone_idx in uaz.get("zone_indices", []) or []:
@@ -6329,7 +6389,7 @@ class MainWindow(QMainWindow):
                             ):
                                 leaf.setText(2, "—")
                             else:
-                                leaf.setText(2, "{0:.3f}".format(d_val))
+                                leaf.setText(2, f"{d_val:.3f}")
                         except (TypeError, ValueError):
                             leaf.setText(2, "—")
                 else:

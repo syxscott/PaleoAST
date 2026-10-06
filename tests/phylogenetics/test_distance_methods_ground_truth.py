@@ -59,17 +59,14 @@ _TESTS_DIR = Path(__file__).resolve().parent
 if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
 
-import reference_algorithms as R  # noqa: E402
+import reference_algorithms as R
 
-from phylogenetics.distance_methods import (  # noqa: E402
+from phylogenetics.distance_methods import (
     DistanceMatrix,
-    NeighborJoining,
-    UPGMA,
     build_nj_tree,
     build_upgma_tree,
 )
-from phylogenetics.tree import PhyloTree  # noqa: E402
-
+from phylogenetics.tree import PhyloTree
 
 # =============================================================================
 # Test-local helpers

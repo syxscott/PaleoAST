@@ -456,7 +456,7 @@ class UAAnalyzer:
             if len(event_names) != fad_arr.shape[1]:
                 raise ComputationError("event_names length does not match matrix width")
 
-            n_sections, n_events = fad_arr.shape
+            _n_sections, n_events = fad_arr.shape
             endemic_mask: list[bool] = []
 
             for col in range(n_events):

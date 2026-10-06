@@ -11,7 +11,6 @@ false-alarm probability (Mann & Lees 1996; Schulz & Mudelsee 2002).
 """
 
 import numpy as np
-import pytest
 
 from stratigraphy.spectral_analysis import SpectralAnalyzer
 

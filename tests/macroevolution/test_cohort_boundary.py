@@ -22,8 +22,6 @@ from __future__ import annotations
 
 import warnings
 
-import pytest
-
 from macroevolution.cohort import CohortSurvivorshipAnalysis
 
 

@@ -13,6 +13,7 @@ jobs:
   lint:
     name: Ruff Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,6 +29,7 @@ jobs:
   typecheck:
     name: Mypy Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,6 +44,11 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A wedged job otherwise occupies a runner until GitHub's 6-hour default.
+    # One Windows job sat for 27 minutes with no output before finishing on its
+    # own, which stretched the whole run past 45 minutes; 45 is generous for a
+    # suite that normally takes 2-8.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +113,7 @@ jobs:
   property-tests:
     name: Hypothesis Property Tests (Python 3.12, Ubuntu)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -126,6 +134,9 @@ jobs:
   cross-validation:
     name: Cross-Validation vs R (vegan/ape/geomorph/iNEXT)
     runs-on: ubuntu-latest
+    # Builds vegan, ape, phytools, iNEXT, rgeomorph and RRPP from CRAN source,
+    # so this is legitimately the slowest job here and gets the longest leash.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -289,6 +300,7 @@ jobs:
   package:
     name: Wheel Build & Import Smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -366,6 +378,7 @@ jobs:
     name: Coverage Report
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

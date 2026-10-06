@@ -105,7 +105,7 @@ class DiversityDynamics:
         # 二者本该一致。
         def _present(idx: int) -> set[int]:
             t_s, t_e = norm_intervals[idx]
-            return {k for k, (o, L) in enumerate(records) if L < t_e and o > t_s}
+            return {k for k, (o, L) in enumerate(records) if t_e > L and o > t_s}
 
         present = [_present(i) for i in range(len(norm_intervals))]
 

@@ -115,7 +115,7 @@ class TestFailuresAreSurfaced:
         for task in (good, bad):
             try:
                 scheduler.get_result(task, timeout=10)
-            except Exception:  # noqa: BLE001, S110 - the failure is the point
+            except Exception:
                 pass
         status = scheduler.get_status()
         assert status["total_tasks"] == 2

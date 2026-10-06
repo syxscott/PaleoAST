@@ -31,7 +31,6 @@ All tests use fixed seeds (where randomness appears) and are deterministic.
 from __future__ import annotations
 
 import itertools
-from typing import Iterable
 
 import numpy as np
 import pytest
@@ -40,7 +39,6 @@ from stratigraphy.biostratigraphy import (
     BioeventResult,
     RASCAnalyzer,
     UAAnalyzer,
-    Zone,
 )
 from utils.exceptions import ComputationError, DataValidationError
 

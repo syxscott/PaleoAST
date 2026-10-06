@@ -3328,7 +3328,6 @@ class InteractivePlotCanvas(QWidget):
         :class:`plot_export.PlotExportOptions` instance.
         """
         from plot_export import export_figure
-
         from views.ui_plot_export_dialog import PlotExportDialog
 
         dialog = PlotExportDialog("plot.png", parent=self)
@@ -3883,7 +3882,11 @@ class InteractivePlotCanvas(QWidget):
             if lo.size == len(centers):
                 self._ax.fill_between(centers, lo, hi, color=self.COLORS[0], alpha=0.18, label=_("Confidence interval"))
 
-        for x, y in zip(centers, survival):
+        # strict=True: centers has one entry per interval and survival one per
+        # survival rate, so a mismatch is a bug in the result object. The
+        # plot() call above would already have raised, so this makes the
+        # invariant local rather than incidental.
+        for x, y in zip(centers, survival, strict=True):
             if np.isfinite(y):
                 self._ax.annotate(
                     f"{y:.2f}",

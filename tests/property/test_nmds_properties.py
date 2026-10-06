@@ -20,11 +20,11 @@ References:
 from __future__ import annotations
 
 import numpy as np
-import pytest
-from hypothesis import given, settings, strategies as st, HealthCheck
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
-from stats.nmds import NMDSAnalyzer
 from stats.distance_metrics import compute_distance_matrix
+from stats.nmds import NMDSAnalyzer
 
 _abundance_data = st.lists(
     st.lists(

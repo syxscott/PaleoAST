@@ -33,7 +33,7 @@ class TestINEXTBootstrapResampling:
         Each bootstrap replicate should be a different resample from the
         multinomial distribution, so bootstrap curves should vary.
         """
-        from ecology.beta_diversity import coverage_rarefaction_hill, _multinomial_resample
+        from ecology.beta_diversity import _multinomial_resample
 
         # Fixed seed for reproducibility
         rng = np.random.default_rng(42)

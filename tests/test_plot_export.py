@@ -351,9 +351,8 @@ def test_plot_canvas_export_plot_uses_facade(tmp_path, monkeypatch):
     pytest.importorskip("PyQt6")
     from PyQt6.QtWidgets import QApplication
 
+    from plot_export import PlotExportOptions
     from views.ui_plot_canvas import InteractivePlotCanvas
-
-    from plot_export import PlotExportOptions, export_figure
 
     app = QApplication.instance() or QApplication(["paleoast-export-tests"])
     canvas = InteractivePlotCanvas()

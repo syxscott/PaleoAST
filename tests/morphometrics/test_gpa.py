@@ -22,7 +22,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from morphometrics.gpa import GPAAnalyzer, partial_gpa, PartialGPAResult
+from morphometrics.gpa import GPAAnalyzer, PartialGPAResult, partial_gpa
 
 
 class TestDimensionInference(unittest.TestCase):

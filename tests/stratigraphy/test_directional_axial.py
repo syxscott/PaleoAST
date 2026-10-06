@@ -14,7 +14,6 @@ mean in [0, 180). The polar path is unchanged.
 """
 
 import numpy as np
-import pytest
 
 from stratigraphy.directional import DirectionalAnalyzer
 

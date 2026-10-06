@@ -15,13 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from reporting.figure_handler import FigureHandler  # noqa: E402
-from reporting.latex_preamble import DocumentClass, LatexPreamble  # noqa: E402
-from reporting.matrix_converter import MatrixConverter  # noqa: E402
-from reporting.report_builder import ReportBuilder  # noqa: E402
-from reporting.table_generator import TableGenerator  # noqa: E402
-
-import numpy as np  # noqa: E402
+from reporting.latex_preamble import DocumentClass, LatexPreamble
+from reporting.matrix_converter import MatrixConverter
+from reporting.report_builder import ReportBuilder
+from reporting.table_generator import TableGenerator
 
 OUT = Path(__file__).resolve().parents[1] / "_ui_audit" / "report"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -55,7 +52,7 @@ try:
     check("generate() returned a path", bool(written), repr(written))
     check("file exists on disk", tex_path.exists())
     text = tex_path.read_text(encoding="utf-8")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  FAIL  generate() raised {type(exc).__name__}: {exc}")
     PROBLEMS.append(f"generate raised {type(exc).__name__}: {exc}")
     text = ""
@@ -92,7 +89,7 @@ try:
     rendered = preamble.render() if hasattr(preamble, "render") else str(preamble)
     check("preamble renders", bool(rendered) and len(rendered) > 20)
     check("preamble declares a documentclass", "documentclass" in rendered)
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  FAIL  LatexPreamble.render raised {type(exc).__name__}: {exc}")
     PROBLEMS.append(f"preamble: {exc}")
 
@@ -108,7 +105,7 @@ try:
     for raw, expected in cases.items():
         got = _escape_latex(raw)
         check(f"escape {raw!r}", got == expected, f"got {got!r} want {expected!r}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  FAIL  _escape_latex raised {type(exc).__name__}: {exc}")
 
 print()
@@ -118,7 +115,7 @@ try:
     has = [m for m in dir(tg) if not m.startswith("_")]
     check("TableGenerator exposes something usable", len(has) > 1, str(has))
     print(f"        methods: {has[:8]}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  FAIL  TableGenerator: {exc}")
     PROBLEMS.append(f"TableGenerator: {exc}")
 
@@ -127,7 +124,7 @@ try:
     has = [m for m in dir(mc) if not m.startswith("_")]
     check("MatrixConverter exposes something usable", len(has) > 1, str(has))
     print(f"        methods: {has[:8]}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  FAIL  MatrixConverter: {exc}")
     PROBLEMS.append(f"MatrixConverter: {exc}")
 

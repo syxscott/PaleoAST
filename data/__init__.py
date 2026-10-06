@@ -25,17 +25,17 @@ version: 1.0.1
 """
 
 from data.loader import (
+    list_example_datasets,
     load_community,
     load_moth_wings,
     load_primate_traits,
     load_primate_tree,
-    list_example_datasets,
 )
 
 __all__ = [
-    "load_moth_wings",
-    "load_community",
-    "load_primate_tree",
-    "load_primate_traits",
     "list_example_datasets",
+    "load_community",
+    "load_moth_wings",
+    "load_primate_traits",
+    "load_primate_tree",
 ]

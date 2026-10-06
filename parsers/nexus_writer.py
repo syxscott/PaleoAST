@@ -258,7 +258,6 @@ class NEXUSWriter:
         if not self._data:
             return ""
 
-        n_taxa = len(self._taxa)
         n_chars = len(self._data[0]) if self._data else 0
 
         lines: list[str] = []
@@ -337,7 +336,6 @@ class NEXUSWriter:
     def _write_interleaved_matrix(self) -> list[str]:
         """生成交错格式的MATRIX块"""
         lines: list[str] = []
-        n_taxa = len(self._taxa)
         n_chars = len(self._data[0]) if self._data else 0
         chars_per_line = max(50, n_chars // 3)  # 约3块
 

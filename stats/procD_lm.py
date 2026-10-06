@@ -87,7 +87,7 @@ def _proc_ss(y: npt.NDArray, yhat: npt.NDArray) -> npt.NDArray:
     rotations R (scale kept — geomorph scales fitted values once per model,
     not per specimen).  Vectorised closed form via SVD of Ŷ'Y per row.
     """
-    n, p, k = y.shape
+    n, _p, _k = y.shape
     out = np.zeros(n)
     for i in range(n):
         A = y[i]
@@ -219,7 +219,11 @@ def procD_lm(
             )
             prev_rss = int_rss
         cols = list(range(col_iter, col_iter + 1))
-        col_iter += 1
+        # Not enumerate(): col_iter is a running column cursor that survives
+        # across terms, not the loop position. The comment above spells out why
+        # it is tracked separately -- a term may one day span several columns,
+        # and then the term df must come from the column count rather than j.
+        col_iter += 1  # noqa: SIM113
         if not is_intercept:
             full_rss = rss_of(prev_cols + cols)[0]
             term_ss = prev_rss - full_rss

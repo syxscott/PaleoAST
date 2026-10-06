@@ -20,13 +20,13 @@ as an unused module attribute.)
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import matplotlib
 from matplotlib.figure import Figure
-
 
 ExportFormat = Literal["svg", "pdf", "png", "jpg"]
 ColorMode = Literal["color", "grayscale"]
@@ -191,8 +191,17 @@ def _apply_grayscale(figure: Figure) -> Callable[[], None]:
             except Exception:  # pragma: no cover - defensive
                 continue
             if face.ndim == 2 and face.shape[0] > 0 and face.shape[1] >= 3:
-                luma = 0.299 * face[:, 0] + 0.587 * face[:, 1] + 0.114 * face[:, 2]
-                grey = np.column_stack([luma, luma, luma, face[:, 3]])
+                # Annotated because the array comes from an untyped
+                # matplotlib accessor, so the luma expression is inferred as
+                # `float | Any` and column_stack's argument list no longer
+                # type-checks against a (4, N) float array.
+                luma: np.ndarray = (
+                    0.299 * face[:, 0] + 0.587 * face[:, 1] + 0.114 * face[:, 2]
+                )
+                # Same reason as `luma`: an integer column index makes numpy
+                # infer a union for the slice.
+                alpha: np.ndarray = np.asarray(face[:, 3], dtype=float)
+                grey = np.column_stack([luma, luma, luma, alpha])
                 restore.append((coll, "set_facecolor", np.array(face, copy=True)))
                 coll.set_facecolor(grey)
         # Image artists such as heatmap imshows.

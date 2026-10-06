@@ -34,14 +34,12 @@ version: 1.0.1
 from __future__ import annotations
 
 import logging
-import math
 import threading
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-from scipy import stats
 
 from config.i18n import _
 from utils.exceptions import ValidationError
@@ -397,7 +395,6 @@ class ExtinctionIntervalAnalyzer:
             Estimated detection probability
         """
         lad_sorted = np.sort(lad_positions)[::-1]
-        n_taxa = len(lad_sorted)
 
         if known_extinction_layer is not None:
             # Use known extinction to calibrate

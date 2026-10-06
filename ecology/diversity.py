@@ -73,7 +73,7 @@ def compute_diversity_indices(abundances: npt.NDArray, sample_name: str = "Sampl
             "not a relative-abundance or percentage vector."
         )
 
-    N = int(round(float(np.sum(abundances))))  # Total individuals
+    N = round(float(np.sum(abundances)))  # Total individuals
     S = len(abundances)  # Number of taxa
     logger.info(f"compute_diversity_indices started: n_taxa={S}, total_abundance={N}, sample_name='{sample_name}'")
 

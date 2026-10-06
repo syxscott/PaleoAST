@@ -6,7 +6,6 @@ Tests numerical stability fixes:
     - Bug 2: chi-square distance with zero expected values
 """
 
-import logging
 import warnings
 
 import numpy as np

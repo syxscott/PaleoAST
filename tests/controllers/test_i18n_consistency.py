@@ -206,8 +206,9 @@ def test_register_translations_round_trip(zh_translations: dict[str, str]) -> No
     of the two tables (e.g. an import typo after a rename).
     """
     pytest.importorskip("PyQt6", reason="PyQt6 is required for config.i18n QObject base class")
-    from config.i18n import _reset_translator, get_translator, register_translations
     from PyQt6.QtWidgets import QApplication
+
+    from config.i18n import _reset_translator, get_translator, register_translations
 
     app = QApplication.instance() or QApplication([])
     try:

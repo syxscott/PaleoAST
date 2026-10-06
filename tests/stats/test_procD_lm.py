@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from utils.exceptions import DataValidationError
 from stats.procD_lm import ProcDLMResult, procD_lm
+from utils.exceptions import DataValidationError
 
 
 @pytest.fixture

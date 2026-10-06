@@ -30,7 +30,6 @@ import numpy.typing as npt
 from config.i18n import _
 from utils.exceptions import MorphometricsError
 
-
 # =============================================================================
 # Preshape / distances
 # =============================================================================
@@ -378,9 +377,9 @@ def hotelling_t2(sample1: npt.NDArray, sample2: npt.NDArray) -> HotellingT2Resul
     rank = int(np.linalg.matrix_rank(S))
     if rank < d:
         warnings.warn(
-            "Hotelling T²: pooled covariance is singular (rank {0} of {1}); "
+            f"Hotelling T²: pooled covariance is singular (rank {rank} of {d}); "
             "falling back to least-squares. The reported T² is the "
-            "minimum-norm projection, not the true quadratic form.".format(rank, d),
+            "minimum-norm projection, not the true quadratic form.",
             stacklevel=2,
         )
         sol = np.linalg.lstsq(S, diff, rcond=None)[0]

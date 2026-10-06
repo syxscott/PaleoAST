@@ -290,7 +290,7 @@ class NNIOperation(TreeOperation):
         new_nodes = list(new_root.preorder_traverse())
         if len(old_nodes) != len(new_nodes):
             return mapping
-        for old_node, new_node in zip(old_nodes, new_nodes):
+        for old_node, new_node in zip(old_nodes, new_nodes, strict=True):
             mapping[old_node] = new_node
         return mapping
 

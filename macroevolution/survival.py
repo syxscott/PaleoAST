@@ -574,7 +574,9 @@ def _compute_concordance(
     # Case 2: Only i has event - comparable only if t_i <= t_j
     i_only_event = (e1 == 1) & (e2 == 0) & (t1 <= t2)
     if np.any(i_only_event):
-        t1_i, t2_i = t1[i_only_event], t2[i_only_event]
+        # Only t1 is needed: comparability was decided by the mask, and the
+        # concordance test below compares log-rank values, not times.
+        t1_i = t1[i_only_event]
         lp1_i, lp2_i = lp1[i_only_event], lp2[i_only_event]
         comparable += t1_i.size
         i_higher_risk = lp1_i > lp2_i
@@ -584,7 +586,8 @@ def _compute_concordance(
     # Case 3: Only j has event - comparable only if t_j <= t_i
     j_only_event = (e1 == 0) & (e2 == 1) & (t2 <= t1)
     if np.any(j_only_event):
-        t1_j, t2_j = t1[j_only_event], t2[j_only_event]
+        # t1 is what the comparable count below reads, mirroring Case 2.
+        t1_j = t1[j_only_event]
         lp1_j, lp2_j = lp1[j_only_event], lp2[j_only_event]
         comparable += t1_j.size
         j_higher_risk = lp2_j > lp1_j

@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from stats.distance_metrics import compute_distance_matrix, _bray_curtis_distance_matrix
+from stats.distance_metrics import _bray_curtis_distance_matrix, compute_distance_matrix
 
 
 class TestBrayCurtisGoldenValues:

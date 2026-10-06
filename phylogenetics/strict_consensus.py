@@ -44,8 +44,9 @@ import logging
 from collections import Counter
 from dataclasses import dataclass
 
-from .tree import NodeType, PhyloNode, PhyloTree
 from utils.exceptions import ValidationError
+
+from .tree import NodeType, PhyloNode, PhyloTree
 
 logger = logging.getLogger(__name__)
 

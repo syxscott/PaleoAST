@@ -33,11 +33,11 @@ for _var in (
 ):
     os.environ.setdefault(_var, "1")
 
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
+import numpy as np
+import pytest
 
-from hpc.process_pool import ProcessPool  # noqa: E402
-from utils.exceptions import ComputationError  # noqa: E402
+from hpc.process_pool import ProcessPool
+from utils.exceptions import ComputationError
 
 
 def _square(x: int) -> int:

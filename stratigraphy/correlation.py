@@ -469,7 +469,7 @@ def pyper_peterman_correction(
         n_eff = n * (1 - sum_rho_product) / (1 + sum_rho_product)
         n_eff = max(2.0, min(n_eff, n))
 
-    n_eff_int = int(round(n_eff))
+    n_eff_int = round(n_eff)
 
     # Pearson r
     r, _ = stats.pearsonr(x, y)

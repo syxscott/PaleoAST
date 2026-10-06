@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from utils.exceptions import MorphometricsError
 from morphometrics.shape_stats import (
     geometric_median,
     goodall_f,
@@ -13,6 +12,7 @@ from morphometrics.shape_stats import (
     procrustes_distance,
     procrustes_median,
 )
+from utils.exceptions import MorphometricsError
 
 
 def _rotation_matrix_2d(theta: float) -> np.ndarray:

@@ -2072,7 +2072,7 @@ class StratigraphicCorrelationDialog(BaseAnalysisDialog):
             return
         self._height_combo.clear()
         for idx, label in enumerate(labels):
-            self._height_combo.addItem("{0}: {1}".format(idx, label), idx)
+            self._height_combo.addItem(f"{idx}: {label}", idx)
 
     def _setup_parameters(self) -> None:
         # Method group
@@ -2229,7 +2229,7 @@ class PaleoEnvironmentDialog(BaseAnalysisDialog):
         try:
             self._height_combo.clear()
             for idx, label in enumerate(labels):
-                self._height_combo.addItem("{0}: {1}".format(idx, label), idx)
+                self._height_combo.addItem(f"{idx}: {label}", idx)
         finally:
             self._height_combo.blockSignals(False)
 
@@ -2265,7 +2265,7 @@ class PaleoEnvironmentDialog(BaseAnalysisDialog):
             self._taxa_list.clear()
             for idx in candidate_indices:
                 label = self._cached_labels[idx]
-                self._taxa_list.addItem("{0}: {1}".format(idx, label))
+                self._taxa_list.addItem(f"{idx}: {label}")
                 item = self._taxa_list.item(self._taxa_list.count() - 1)
                 if idx in surviving_selection:
                     item.setSelected(True)

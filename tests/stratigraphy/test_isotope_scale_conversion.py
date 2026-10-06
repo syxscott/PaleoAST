@@ -16,9 +16,9 @@ import numpy as np
 import pytest
 
 from stratigraphy.isotope_analysis import (
+    EL_BEMIS_VSMOW_TO_VPDB_OFFSET,
     IsotopeAnalyzer,
     IsotopeData,
-    EL_BEMIS_VSMOW_TO_VPDB_OFFSET,
 )
 
 

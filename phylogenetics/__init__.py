@@ -51,7 +51,11 @@ from .tree_distance import (
     weighted_robinson_foulds_distance,
 )
 
-__all__ = [
+# Grouped by topic, with the defining citation on each block, rather than
+# sorted. RUF022 is suppressed for that reason: alphabetical order would
+# scatter the PIC, signal and bitmask groups and delete the comments that say
+# which paper each came from.
+__all__ = [  # noqa: RUF022
     "UPGMA",
     "FitchAlgorithm",
     "HeuristicSearch",

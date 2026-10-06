@@ -28,7 +28,6 @@ from scipy.linalg import eigh
 
 from stats.lda import _compute_canonical_eigenvalues
 
-
 # =============================================================================
 # Independent reference
 # =============================================================================

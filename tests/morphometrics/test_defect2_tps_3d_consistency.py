@@ -24,8 +24,8 @@ solver.  These tests:
 import numpy as np
 import pytest
 
-from morphometrics.tps import TPSAnalyzer
 from morpho3d.tps3d import TPS3D
+from morphometrics.tps import TPSAnalyzer
 
 
 class TestTPS3DKernelConsistency:

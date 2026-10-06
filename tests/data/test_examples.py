@@ -21,7 +21,6 @@ version: 1.0.1
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 
 class TestMothWingsDataset:
@@ -209,7 +208,7 @@ class TestPrimateTraitsDataset:
 
     def test_load_primate_traits_species_match_tree(self):
         """Test that trait species match tree tip labels."""
-        from data import load_primate_tree, load_primate_traits
+        from data import load_primate_traits, load_primate_tree
 
         tree = load_primate_tree()
         traits = load_primate_traits()
@@ -246,7 +245,7 @@ class TestDataLoaderIntegration:
 
     def test_all_loaders_return_expected_types(self):
         """Test that all loader functions return expected types."""
-        from data import load_community, load_moth_wings, load_primate_tree, load_primate_traits
+        from data import load_community, load_moth_wings, load_primate_traits, load_primate_tree
 
         landmarks, ids = load_moth_wings()
         assert isinstance(landmarks, np.ndarray), "load_moth_wings landmarks not ndarray"

@@ -25,8 +25,8 @@ Author: PaleoAST Development Team
 version: 1.0.1
 """
 
-import math
 import logging
+import math
 import threading
 
 import numpy as np
@@ -79,7 +79,7 @@ def compute_rarefaction(
             "not a relative-abundance or percentage vector."
         )
 
-    N = int(round(float(np.sum(abundances))))  # Total individuals
+    N = round(float(np.sum(abundances)))  # Total individuals
     S = len(abundances)  # Observed richness
     logger.info(f"compute_rarefaction started: n_taxa={S}, total_individuals={N}, max_n={max_n}, n_points={n_points}")
 

@@ -453,7 +453,7 @@ class StratigraphyPlotter:
             text_color = ds_colors.text_primary
             border_color = ds_colors.border_medium
         except Exception:
-            from config.colors import PRIMARY_COLOR, CELL_HEADER_TEXT, DEFAULT_EDGE_COLOR
+            from config.colors import CELL_HEADER_TEXT, DEFAULT_EDGE_COLOR, PRIMARY_COLOR
 
             primary_color = PRIMARY_COLOR
             text_color = CELL_HEADER_TEXT

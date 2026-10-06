@@ -25,8 +25,6 @@ import pytest
 
 from parsers.newick_parser import (
     NewickParser,
-    NewickTree,
-    TreeNode,
     TreeComparator,
     parse_newick,
 )

@@ -21,9 +21,9 @@ from .ui_dialogs import (
     ImportDialog,
     IsotopeAnalysisDialog,
     NMDSOptionsDialog,
+    PaleoEnvironmentDialog,
     PCADialog,
     PCoADialog,
-    PaleoEnvironmentDialog,
     RarefactionDialog,
     StratigraphicCorrelationDialog,
 )

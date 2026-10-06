@@ -35,6 +35,7 @@ version: 1.0.1
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import NoReturn
 
 from utils.exceptions import NewickParseError
 
@@ -79,7 +80,15 @@ class _Scanner:
     # ------------------------------------------------------------------
     # Diagnostics
     # ------------------------------------------------------------------
-    def error(self, message: str, at: int | None = None) -> None:
+    def error(self, message: str, at: int | None = None) -> NoReturn:
+        """Report a parse error and raise.
+
+        ``NoReturn`` rather than ``None`` because this never returns: the body
+        is a single unconditional ``raise``. Annotating it ``-> None`` made
+        every call site look like it could fall through, which produced a
+        "missing return statement" error in ``parse_quoted_name`` -- a loop
+        whose only exit after an unterminated label is this raise.
+        """
         at = self.pos if at is None else at
         line_start = self.text.rfind("\n", 0, at) + 1
         line_end = self.text.find("\n", at)
@@ -201,7 +210,7 @@ class _Scanner:
         self.depth += 1
         if self.depth > MAX_NEWICK_DEPTH:
             self.error(
-                "Newick nesting depth exceeded {0}; tree is malformed or too deeply nested".format(MAX_NEWICK_DEPTH)
+                f"Newick nesting depth exceeded {MAX_NEWICK_DEPTH}; tree is malformed or too deeply nested"
             )
         try:
             self.skip_ws()

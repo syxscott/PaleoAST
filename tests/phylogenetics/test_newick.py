@@ -10,9 +10,7 @@ Tests for PhyloTree NEWICK export functionality.
 
 from __future__ import annotations
 
-import pytest
-
-from phylogenetics.tree import PhyloNode, PhyloTree, NodeType
+from phylogenetics.tree import NodeType, PhyloNode, PhyloTree
 
 
 class TestPhyloTreeNewickBasic:

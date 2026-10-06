@@ -17,17 +17,17 @@ PaleoAST - Paleontological Advanced Statistical Toolkit
 """
 
 import logging
-import sys
-import time
-import traceback
-from pathlib import Path
-from typing import Any
 
 # =============================================================================
 # BLAS/OpenMP 线程限制 - 必须在 import numpy 之前设置
 # 防止与 QThreadPool oversubscription 导致 CPU 利用率下降
 # =============================================================================
 import os
+import sys
+import time
+import traceback
+from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")

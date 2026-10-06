@@ -13,7 +13,6 @@ while keeping the raw path intact for backward compatibility.
 import logging
 
 import numpy as np
-import pytest
 
 from ecology.diversity import DiversityAnalyzer
 

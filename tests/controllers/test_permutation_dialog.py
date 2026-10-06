@@ -6,8 +6,6 @@ honest-degradation contract used by the new ``_on_*_result`` slots.
 from __future__ import annotations
 
 import warnings
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 

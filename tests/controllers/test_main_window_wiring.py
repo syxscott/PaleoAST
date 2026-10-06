@@ -21,7 +21,6 @@ pytest.importorskip("PyQt6", reason="UI tests require PyQt6")
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -422,7 +421,6 @@ def test_execute_pcoa_passes_labels_and_groups(main_window, monkeypatch):
 def test_execute_anosim_passes_dialog_params(main_window, monkeypatch):
     """The handler must hand ``metric``, ``n_permutations`` and
     ``random_seed`` to the controller via ``_run_analysis_async``."""
-    from views import ui_main_window as mw
 
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
@@ -598,7 +596,6 @@ def test_lda_handler_runs_controller(main_window, monkeypatch):
 
     # Stub the LDADialog so it returns ``cross_validate=True`` and a
     # custom n_components value.
-    from views import ui_dialogs
 
     class _StubDialog:
         accepted = True
@@ -651,7 +648,6 @@ def test_biostrat_handler_forwards_occurrence_threshold(main_window, monkeypatch
 
     monkeypatch.setattr(bio, "UAAnalyzer", _StubAnalyzer)
 
-    from views import ui_dialogs
 
     class _StubDialog:
         params = {
@@ -695,7 +691,6 @@ def test_directional_handler_uses_column_index(main_window, monkeypatch):
     )
 
     # Stub the DirectionalDialog so it always returns a known n_bins.
-    from views import ui_dialogs
 
     class _StubDialog:
         params = {"n_bins": 8}
@@ -736,7 +731,6 @@ def test_cca_handler_forwards_permutation_params(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-    from views import ui_dialogs
 
     class _StubDialog:
         params = {
@@ -801,7 +795,6 @@ def test_diversity_handler_runs_for_all_rows(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-    from views import ui_dialogs
 
     class _StubDialog:
         params = {"sample_name": ""}
@@ -825,7 +818,6 @@ def test_rarefaction_handler_runs_per_selected_sample(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-    from views import ui_dialogs
 
     class _StubDialog:
         params = {"samples": ["Site_1", "Site_2"], "max_n": 100, "step": 5}
@@ -927,7 +919,6 @@ def test_long_running_handlers_use_async_pool(handler_name, main_window, monkeyp
         staticmethod(lambda *a, **kw: QMessageBox.StandardButton.Yes),
     )
 
-    from views import ui_dialogs
 
     class _AcceptAllDialog:
         params: dict = {}

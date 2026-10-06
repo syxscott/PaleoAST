@@ -73,10 +73,10 @@ DELIBERATELY_UNTRANSLATED = {
 }
 
 
-# Known backlog outside the figure. Lower this every time a batch of strings
-# is translated; the test fails if the number of untranslated strings rises
-# above it, so the backlog cannot grow while it shrinks.
-MAX_UNTRANSLATED = 553
+# Known backlog outside the figure. Zero: every user-facing literal in the
+# view layer now has a Chinese entry. Lower this only if a batch is reverted;
+# the figure subset below is a hard requirement and never consults it.
+MAX_UNTRANSLATED = 0
 
 # Populated on the first run so the failure message can tell "you added a new
 # untranslated string" from "you closed some and forgot to lower the ceiling".

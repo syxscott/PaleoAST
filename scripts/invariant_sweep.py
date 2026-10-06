@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 warnings.filterwarnings("ignore")
 
-import numpy as np  # noqa: E402
+import numpy as np
 
 FAILURES: list[str] = []
 
@@ -37,7 +37,7 @@ def run(label: str, fn) -> object | None:
         result = fn()
         print(f"  ok    {label} ran")
         return result
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"  FAIL  {label} raised {type(exc).__name__}: {exc}")
         FAILURES.append(f"{label}: {type(exc).__name__}: {exc}")
         if "--trace" in sys.argv:
@@ -49,7 +49,7 @@ rng = np.random.default_rng(20260929)
 
 # ---------------------------------------------------------------- distances
 print("=== stats.distance_metrics ===")
-from stats.distance_metrics import compute_distance_matrix  # noqa: E402
+from stats.distance_metrics import compute_distance_matrix
 
 for metric in ("euclidean", "bray_curtis", "jaccard", "manhattan", "correlation"):
     data = rng.integers(0, 30, size=(6, 8)).astype(float)
@@ -65,9 +65,9 @@ for metric in ("euclidean", "bray_curtis", "jaccard", "manhattan", "correlation"
 
 # ---------------------------------------------------------------- rarefaction
 print("\n=== ecology.rarefaction (vs exact combinatorics) ===")
-from math import comb  # noqa: E402
+from math import comb
 
-from ecology.rarefaction import RarefactionAnalyzer  # noqa: E402
+from ecology.rarefaction import RarefactionAnalyzer
 
 analyzer = RarefactionAnalyzer()
 for trial in range(3):
@@ -103,7 +103,7 @@ for trial in range(3):
 
 # ---------------------------------------------------------------- diversity
 print("\n=== ecology.diversity ===")
-from ecology.diversity import DiversityAnalyzer  # noqa: E402
+from ecology.diversity import DiversityAnalyzer
 
 for trial in range(3):
     counts = rng.integers(1, 50, size=12).astype(float)
@@ -134,7 +134,7 @@ for trial in range(3):
 
 # ---------------------------------------------------------------- DTW
 print("\n=== ecology.dtw ===")
-from ecology.dtw import DTWAnalyzer  # noqa: E402
+from ecology.dtw import DTWAnalyzer
 
 d = DTWAnalyzer()
 series_a = rng.normal(size=20).cumsum()
@@ -165,7 +165,7 @@ if result is not None:
 
 # ---------------------------------------------------------------- paleoenv
 print("\n=== ecology.paleoenv ===")
-from ecology.paleoenv import PaleoEnvironmentReconstructor  # noqa: E402
+from ecology.paleoenv import PaleoEnvironmentReconstructor
 
 abund = rng.integers(0, 30, size=(24, 10)).astype(float)
 heights = np.linspace(0, 100, 24)
@@ -182,7 +182,7 @@ if result is not None:
 
 # ---------------------------------------------------------------- biostrat
 print("\n=== stratigraphy.biostratigraphy (UA) ===")
-from stratigraphy.biostratigraphy import UAAnalyzer  # noqa: E402
+from stratigraphy.biostratigraphy import UAAnalyzer
 
 n_sections, n_events = 5, 6
 rng_local = np.random.default_rng(11)
@@ -200,7 +200,7 @@ if result is not None:
 
 # ---------------------------------------------------------------- isotope
 print("\n=== stratigraphy.isotope_analysis ===")
-from stratigraphy.isotope_analysis import IsotopeAnalyzer  # noqa: E402
+from stratigraphy.isotope_analysis import IsotopeAnalyzer
 
 ia = IsotopeAnalyzer()
 # All three take (seawater VSMOW, carbonate VPDB). A warmer calcification
@@ -236,7 +236,7 @@ for label, fn in (
 
 # ---------------------------------------------------------------- mesh
 print("\n=== morpho3d.mesh ===")
-from morpho3d.mesh import Mesh3D  # noqa: E402
+from morpho3d.mesh import Mesh3D
 
 verts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
 faces = np.array([[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]])

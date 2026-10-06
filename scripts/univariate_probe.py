@@ -15,10 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import numpy as np  # noqa: E402
-from scipy import stats as sp  # noqa: E402
+import numpy as np
+from scipy import stats as sp
 
-from stats.univariate import (  # noqa: E402
+from stats.univariate import (
     UnivariateAnalyzer,
     cohens_d,
     compare_models,
@@ -275,7 +275,7 @@ def main() -> int:
             finite = bool(vals) and all(np.isfinite(v) for v in vals)
             check(f"{label}: finite or refused", finite,
                   f"{type(out).__name__} -> {vals}")
-        except Exception:  # noqa: BLE001
+        except Exception:
             check(f"{label}: refused cleanly", True)
 
     failures = [r for r in RESULTS if not r[1]]

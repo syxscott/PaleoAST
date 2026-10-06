@@ -26,13 +26,13 @@ import pytest
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
-from phylogenetics.tree import PhyloTree  # noqa: E402
-from stats.pcm import (  # noqa: E402
+from phylogenetics.tree import PhyloTree
+from stats.pcm import (
     PCMAnalyzer,
     _check_positive_branch_lengths,
     _compute_contrasts_recursive,
 )
-from utils.exceptions import ComputationError, ValidationError  # noqa: E402
+from utils.exceptions import ComputationError, ValidationError
 
 # A tree whose two focal clades are *trichotomies* (hard polytomies).
 POLYTOMOUS_NEWICK = "((A:1,B:1,C:1)ABC:1,(D:1,E:1,F:1)DEF:1)R;"

@@ -28,7 +28,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ecology.rarefaction import (  # noqa: E402
+from ecology.rarefaction import (
     compute_rarefaction,
     compute_sample_based_rarefaction,
 )

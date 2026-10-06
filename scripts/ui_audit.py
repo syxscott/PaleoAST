@@ -27,8 +27,8 @@ import matplotlib
 
 matplotlib.use("Agg", force=True)
 
-from PyQt6.QtCore import QCoreApplication, Qt  # noqa: E402
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtCore import QCoreApplication, Qt
+from PyQt6.QtWidgets import QApplication
 
 QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeMenuBar, True)
 
@@ -47,7 +47,7 @@ _FONT_CANDIDATES = [
     r"C:\Windows\Fonts\calibri.ttf",
     r"C:\Windows\Fonts\arial.ttf",
 ]
-from PyQt6.QtGui import QFont, QFontDatabase  # noqa: E402
+from PyQt6.QtGui import QFont, QFontDatabase
 
 _loaded: list[str] = []
 for _path in _FONT_CANDIDATES:
@@ -94,7 +94,7 @@ def shoot(widget, name: str, resize=None) -> Path | None:
             f"{'  (resized)' if resize else ''}"
         )
         return path
-    except Exception as exc:  # noqa: BLE001 - diagnostics must not abort the sweep
+    except Exception as exc:
         note(f"  [ERR]  {name}: {type(exc).__name__}: {exc}")
         return None
 
@@ -104,7 +104,7 @@ def shoot(widget, name: str, resize=None) -> Path | None:
 # ---------------------------------------------------------------------------
 note("=== main window ===")
 note(f"  fonts registered: {len(_loaded)} -> {_loaded[:6]}")
-from views.ui_main_window import MainWindow  # noqa: E402
+from views.ui_main_window import MainWindow
 
 win = MainWindow()
 win.resize(1600, 950)
@@ -116,7 +116,7 @@ for name in ("sizeHint", "minimumSizeHint", "minimumSize", "maximumSize"):
     try:
         v = getattr(win, name)()
         note(f"  {name:18s} {v.width()}x{v.height()}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         note(f"  {name:18s} <{type(exc).__name__}>")
 note(f"  actual size        {win.width()}x{win.height()}")
 note(f"  central widget     {type(win.centralWidget()).__name__}")
@@ -127,18 +127,18 @@ note(f"  window title       {win.windowTitle()!r}")
 # ---------------------------------------------------------------------------
 note("")
 note("=== loading bundled example data ===")
-import data.loader as loader  # noqa: E402
+import data.loader as loader
 
 for fn_name in ("load_community", "load_moth_wings", "load_primate_traits", "load_primate_tree"):
     try:
         value = getattr(loader, fn_name)()
         shape = getattr(value, "shape", None)
         note(f"  {fn_name:22s} ok, shape={shape}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         note(f"  {fn_name:22s} FAILED: {type(exc).__name__}: {exc}")
 
 try:
-    from models.data_matrix import DataMatrix  # noqa: PLC0415
+    from models.data_matrix import DataMatrix
 
     frame = loader.load_community()
     # community_abundance.csv has two string columns up front: `site` (row
@@ -182,7 +182,7 @@ try:
             shoot(win, f"02b_ribbon_tab_{i}")
     else:
         note("  ribbon widget not located by class name")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     note(f"  ribbon tab sweep failed: {type(exc).__name__}: {exc}")
 
 # --- run a real analysis so the plotting path is exercised -----------------
@@ -190,7 +190,7 @@ except Exception as exc:  # noqa: BLE001
 # directly: the labels/groups fix lives in the *wiring* between the state and
 # the canvas, so bypassing it would test the wrong thing.
 try:
-    from stats.pca import PCAAnalyzer  # noqa: PLC0415
+    from stats.pca import PCAAnalyzer
 
     labels, groups, group_names = win._get_plot_labels_and_groups()
     note(f"  resolved labels      : {labels[:4] if labels else None} ...")
@@ -257,7 +257,7 @@ DIALOGS = [
     # than by this (module, class, size) loop.
 ]
 
-import importlib  # noqa: E402
+import importlib
 
 controller = getattr(win, "_statistics_controller", None)
 index = 3
@@ -266,21 +266,25 @@ for module_name, class_name, size in DIALOGS:
     try:
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         note(f"  [ERR]  {class_name}: import failed: {type(exc).__name__}: {exc}")
         continue
 
     dialog = None
-    for attempt in (lambda: cls(parent=win, controller=controller),
-                    lambda: cls(win, controller),
-                    lambda: cls(parent=win),
-                    lambda: cls()):
+    # Bound explicitly: `cls` is rebound on every iteration, so a bare closure
+    # would capture whichever class happened to be last. These are called
+    # within the same iteration so it cannot bite today, but binding the
+    # default makes that a property of the code rather than of the caller.
+    for attempt in (lambda c=cls: c(parent=win, controller=controller),
+                    lambda c=cls: c(win, controller),
+                    lambda c=cls: c(parent=win),
+                    lambda c=cls: c()):
         try:
             dialog = attempt()
             break
         except TypeError:
             continue
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             note(f"  [ERR]  {class_name}: construct: {type(exc).__name__}: {exc}")
             dialog = None
             break
@@ -300,7 +304,7 @@ try:
     dialog = module.MacroevolutionDialog(controller, win)
     shoot(dialog, f"{index + 1:02d}_MacroevolutionDialog", resize=(840, 640))
     dialog.close()
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     note(f"  [ERR]  MacroevolutionDialog: {type(exc).__name__}: {exc}")
 
 # PlotExportDialog's signature is (default_path, parent) -- the path comes
@@ -310,7 +314,7 @@ try:
     dialog = module.PlotExportDialog(str(OUT / "figure.png"), win)
     shoot(dialog, f"{index + 2:02d}_PlotExportDialog", resize=(660, 640))
     dialog.close()
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     note(f"  [ERR]  PlotExportDialog: {type(exc).__name__}: {exc}")
 
 # AddRunDialog's signature is (manager, parent); it needs a real PresetManager.
@@ -322,7 +326,7 @@ try:
     dialog = module.AddRunDialog(manager, win)
     shoot(dialog, "39_AddRunDialog", resize=(720, 560))
     dialog.close()
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     note(f"  [ERR]  AddRunDialog: {type(exc).__name__}: {exc}")
 
 # ---------------------------------------------------------------------------

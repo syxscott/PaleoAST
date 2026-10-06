@@ -23,9 +23,10 @@ Bug 2 Description:
     4. Proportions are computed from the positive parts of the eigenvalues
 """
 
+import warnings
+
 import numpy as np
 import pytest
-import warnings
 
 from stats.pcoa import PCoAAnalyzer, PCoAResult
 

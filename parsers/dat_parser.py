@@ -53,7 +53,7 @@ class DATParseError(PaleoASTError, Exception):
         self.line_content = line_content
         self.expected_fields = expected_fields
         self.actual_fields = actual_fields
-        full_message = f"DAT Parse Error"
+        full_message = "DAT Parse Error"
         if file_path:
             full_message += f" in {os.path.basename(file_path)}"
         if line_number > 0:
@@ -351,7 +351,7 @@ class DATParser:
         value = value.strip()
 
         if not value:
-            raise ValueError(f"Empty value")
+            raise ValueError("Empty value")
 
         # Check for NaN indicators. The sentinel set is shared with the TPS
         # parser and the NEXUS standard via ``parsers.sentinels``; a hard-coded

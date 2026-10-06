@@ -296,7 +296,7 @@ class UnivariateAnalyzer:
                     "Normality test is undefined for a constant variable "
                     "(variance = 0): Shapiro-Wilk and Anderson-Darling cannot "
                     "be evaluated. Remove the column or check the grouping.",
-                    details={"n": int(len(valid)), "constant_value": float(valid[0])},
+                    details={"n": len(valid), "constant_value": float(valid[0])},
                 )
 
             # Shapiro-Wilk (best for n < 5000)

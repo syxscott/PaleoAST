@@ -65,16 +65,16 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import reference_algorithms as R  # noqa: E402
+import reference_algorithms as R
 
-from utils.exceptions import PaleoASTError  # noqa: E402
-from phylogenetics.strict_consensus import (  # noqa: E402
+from phylogenetics.strict_consensus import (
     Split,
     StrictConsensusTree,
     build_majority_rule_consensus,
     build_strict_consensus,
 )
-from phylogenetics.tree import PhyloTree  # noqa: E402
+from phylogenetics.tree import PhyloTree
+from utils.exceptions import PaleoASTError
 
 # Fixed seed keeps the random-tree fixtures deterministic across runs and
 # across machines.  See module docstring.

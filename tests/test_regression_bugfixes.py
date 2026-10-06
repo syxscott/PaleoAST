@@ -261,7 +261,7 @@ def test_pca_scree_added_via_helper_switches_to_it():
             self.tabs: list[object] = []
             self.current = -1
 
-        def addWidget(self, widget, name):  # noqa: N802 - Qt API name
+        def addWidget(self, widget, name):
             self.tabs.append(widget)
             return len(self.tabs) - 1
 
@@ -274,17 +274,17 @@ def test_pca_scree_added_via_helper_switches_to_it():
         def count(self) -> int:
             return len(self.tabs)
 
-        def removeWidget(self, widget):  # noqa: N802 - Qt API name
+        def removeWidget(self, widget):
             self.tabs.remove(widget)
 
     class FakeWorkspace:
         def __init__(self):
             self._stack = FakeStack()
 
-        def addWidget(self, widget, name):  # noqa: N802 - Qt API name
+        def addWidget(self, widget, name):
             return self._stack.addWidget(widget, name)
 
-        def setCurrentIndex(self, idx):  # noqa: N802 - Qt API name
+        def setCurrentIndex(self, idx):
             self._stack.setCurrentIndex(idx)
 
     class FakeMainWindow:

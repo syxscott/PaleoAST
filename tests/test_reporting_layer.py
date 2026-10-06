@@ -24,7 +24,6 @@ from reporting.matrix_converter import MatrixConverter
 from reporting.report_builder import ReportBuilder
 from reporting.table_generator import TableGenerator
 
-
 # =============================================================================
 # End-to-end report
 # =============================================================================
@@ -38,7 +37,6 @@ def generated_report(tmp_path_factory) -> str:
     text -- the return value is not a path, despite the parameter. Read the
     file back so the tests check what a user would actually compile.
     """
-    from pathlib import Path
 
     out = tmp_path_factory.mktemp("report")
     target = out / "report.tex"
@@ -259,7 +257,7 @@ class TestTableAndMatrixConversion:
         """A missing figure must be reported, not raise mid-report."""
         try:
             result = FigureHandler().include_figure("/definitely/not/here.png", "c")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             pytest.fail(f"include_figure raised on a missing file: {type(exc).__name__}: {exc}")
         else:
             assert isinstance(result, str)

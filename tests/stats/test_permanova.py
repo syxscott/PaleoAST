@@ -11,21 +11,19 @@ Tests:
 4. Edge cases (single group, perfect separation, etc.)
 """
 
+# Set BLAS threads to 1 before importing modules under test
+import os
 import time
 import unittest
-from typing import Any
 
 import numpy as np
 from numpy.testing import assert_allclose
-
-# Set BLAS threads to 1 before importing modules under test
-import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
-from stats.permanova import PERMANOVAAnalyzer, PERMANOVAResult
+from stats.permanova import PERMANOVAAnalyzer
 from utils.exceptions import ComputationError
 
 

@@ -4,7 +4,7 @@ bin_time five methods, FAD/LAD ranges, range-through expansion)."""
 import numpy as np
 import pytest
 
-from utils.exceptions import DataValidationError
+from macroevolution.diversity import interval_count_diversity, range_through_diversity
 from stratigraphy.time_bins import (
     bin_time,
     get_scale,
@@ -12,7 +12,7 @@ from stratigraphy.time_bins import (
     tax_range_time,
     time_bins,
 )
-from macroevolution.diversity import interval_count_diversity, range_through_diversity
+from utils.exceptions import DataValidationError
 
 
 @pytest.fixture

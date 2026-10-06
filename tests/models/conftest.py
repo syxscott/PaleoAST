@@ -84,8 +84,8 @@ def pytest_collection_finish(session):
         import PyQt6  # noqa: F401
     except ImportError:
         return
-    import sys as _sys
     import importlib
+    import sys as _sys
 
     _sys.modules.pop("utils.event_bus", None)
     importlib.invalidate_caches()

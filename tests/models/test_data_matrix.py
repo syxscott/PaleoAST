@@ -261,7 +261,6 @@ class TestDataMatrixMetadata:
 
     def test_impute_preserves_metadata(self):
         """测试impute方法保留metadata"""
-        import numpy as np
 
         data = np.array([[1.0, np.nan], [3.0, 4.0]])
         matrix = DataMatrix(

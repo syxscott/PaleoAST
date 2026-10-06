@@ -20,7 +20,6 @@ version: 1.0.1
 from __future__ import annotations
 
 import logging
-import os
 from importlib.resources import files
 from typing import TYPE_CHECKING
 
@@ -148,7 +147,7 @@ def load_community() -> pd.DataFrame:
     return df
 
 
-def load_primate_tree() -> "PhyloTree":
+def load_primate_tree() -> PhyloTree:
     """
     Load the primate phylogenetic tree.
 

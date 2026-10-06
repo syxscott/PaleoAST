@@ -1371,9 +1371,9 @@ class StatisticsController:
         positional arguments``, so this path could never succeed. When they
         are not supplied, derive them from the target landmark cloud.
         """
-        from morpho3d.tps3d import TPS3D
-
         import numpy as _np
+
+        from morpho3d.tps3d import TPS3D
 
         with self._lock:
             tps = TPS3D(**kwargs)

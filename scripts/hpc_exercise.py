@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hpc.task_scheduler import TaskPriority, TaskScheduler  # noqa: E402
+from hpc.task_scheduler import TaskPriority, TaskScheduler
 
 PROBLEMS: list[str] = []
 
@@ -54,7 +54,7 @@ try:
     rb = s.get_result(b, timeout=15)
     rc = s.get_result(c, timeout=15)
     check("dependent task runs after its dependency", rb == 2 and rc == 10, f"{rb}, {rc}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     check("dependent task runs after its dependency", False, f"{type(exc).__name__}: {exc}")
 s.shutdown()
 
@@ -66,7 +66,7 @@ try:
     t = s.add_task(add, 1, 1, dependencies=["no_such_task"])
     r = s.get_result(t, timeout=5)
     check("missing dependency does not hang or return a wrong number", r is not None, repr(r))
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     check("missing dependency reported, not a wrong result", True, f"{type(exc).__name__}: {exc}")
 s.shutdown(wait=False)
 
@@ -83,10 +83,10 @@ try:
     try:
         s.get_result(x, timeout=3)
         check("circular-ish dependency resolves or times out", True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         check("circular-ish dependency times out rather than hanging",
               time.time() - start < 10, f"took {time.time()-start:.1f}s: {exc}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     print(f"  note  add_task raised for circular dependency: {type(exc).__name__}: {exc}")
 s.shutdown(wait=False)
 
@@ -99,11 +99,11 @@ bad = s.add_task(boom)
 try:
     r = s.get_result(bad, timeout=10)
     check("failing task raises or reports, never returns a fake value", r is None or True, repr(r))
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     check("failing task surfaces an error", isinstance(exc, Exception), f"{type(exc).__name__}: {exc}")
 try:
     check("a failure does not poison its neighbours", s.get_result(good, timeout=10) == 3)
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     check("a failure does not poison its neighbours", False, f"{type(exc).__name__}: {exc}")
 s.shutdown()
 
@@ -114,7 +114,7 @@ s.start()
 try:
     s.get_result("nope", timeout=2)
     check("unknown task id returns None or raises", True, "returned a value")
-except Exception as exc:  # noqa: BE001
+except Exception as exc:
     check("unknown task id raises a clear error", isinstance(exc, (KeyError, ValueError)),
           f"{type(exc).__name__}: {exc}")
 s.shutdown()
@@ -129,7 +129,7 @@ for name, pr in (("low", TaskPriority.LOW), ("crit", TaskPriority.CRITICAL), ("n
 for name, tid in ids.items():
     try:
         check(f"priority {name} task completes", s.get_result(tid, timeout=10) is not None)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         check(f"priority {name} task completes", False, f"{type(exc).__name__}: {exc}")
 s.shutdown()
 
@@ -143,9 +143,9 @@ s.shutdown()
 try:
     after = s.add_task(add, 1, 1)
     check("add_task after shutdown raises clearly", False, f"accepted {after!r}")
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     check("add_task after shutdown raises clearly", isinstance(exc, Exception), f"{type(exc).__name__}")
-except BaseException:  # noqa: BLE001
+except BaseException:
     pass
 
 print()

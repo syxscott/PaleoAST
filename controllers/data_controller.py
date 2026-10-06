@@ -112,10 +112,13 @@ class DataLoadTask:
         from a successful load.
     """
 
-    # Class-level import to avoid hard PyQt6 dependency in headless environments
-    _QRunnable = None
-    _QThreadPool = None
-    _SignalsClass = None
+    # Class-level import to avoid hard PyQt6 dependency in headless environments.
+    # Annotated as "a class, or None": without the annotation these are inferred
+    # as None from the initial assignment, and the subclass below is then read
+    # by mypy as a variable being used as a type.
+    _QRunnable: type[Any] | None = None
+    _QThreadPool: type[Any] | None = None
+    _SignalsClass: type[Any] | None = None
     _pyqtImportFailed = False
 
     def __init__(
@@ -182,12 +185,20 @@ class DataLoadTask:
 
     def _create_qrunnable(self) -> Any:
         """Build the actual QRunnable wrapper (only if PyQt6 is available)."""
-        if DataLoadTask._QRunnable is None:
+        # Bound to a local first, and the class statement carries a narrow
+        # ignore. mypy does not accept a variable as a base class at all, even
+        # one annotated ``type[Any] | None`` and narrowed to ``type[Any]`` by
+        # the guard above -- there is nothing it can verify, because the base
+        # is resolved at runtime from whether PyQt6 imported. The alternative
+        # was contorting correct code; this is a real limitation, not a
+        # suppressed defect.
+        base = DataLoadTask._QRunnable
+        if base is None:
             return None
 
         task = self
 
-        class _CsvLoadQRunnable(DataLoadTask._QRunnable):
+        class _CsvLoadQRunnable(base):  # type: ignore[valid-type]
             """Concrete QRunnable that runs :meth:`_run` on a worker thread."""
 
             def run(self) -> None:
