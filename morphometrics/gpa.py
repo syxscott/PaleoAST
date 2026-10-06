@@ -506,9 +506,10 @@ class GPAAnalyzer:
         # Compute cross-covariance
         H = target.T @ reference
 
-        # SVD
+        # SVD. The singular values are not needed: the Procrustes rotation is
+        # the polar factor V^T U^T of the orthogonal factors alone.
         try:
-            U, S, Vt = np.linalg.svd(H)
+            U, _S, Vt = np.linalg.svd(H)
         except np.linalg.LinAlgError as e:
             raise ComputationError("SVD failed during GPA rotation", original_exception=e)
 
@@ -801,7 +802,11 @@ def _slide_surface_tangent_plane(
     if n_dims != 3:
         return config
     out = config.copy()
-    normals, tangent_basis = _compute_surface_tangents_and_normals(consensus, surface)
+    # The tangent basis is not needed: the tangent plane is defined by its
+    # normal, and the projection below uses only that.
+    normals, _tangent_basis = _compute_surface_tangents_and_normals(
+        consensus, surface
+    )
     for i in range(1, len(surface) - 1):
         lm_idx = surface[i]
         normal = normals[i]

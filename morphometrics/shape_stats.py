@@ -139,7 +139,9 @@ def _procrustes_align_to(source: npt.NDArray, target: npt.NDArray) -> npt.NDArra
     if na <= np.finfo(float).eps:
         return A
     A = A / na * np.sqrt(np.sum(B**2))
-    U, S, Vt = np.linalg.svd(A.T @ B)
+    # The singular values are not needed: the Procrustes rotation is the polar
+    # factor of the orthogonal factors, V^T D U^T.
+    U, _S, Vt = np.linalg.svd(A.T @ B)
     d = np.sign(np.linalg.det(Vt.T @ U.T))
     D = np.diag([1.0] * (A.shape[1] - 1) + [d])
     R = Vt.T @ D @ U.T
