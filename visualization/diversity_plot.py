@@ -18,7 +18,7 @@ import logging
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from config.colors import get_color_scheme
+from config.colors import current_palette
 from models.diversity_result import DiversityResult, RarefactionResult
 
 from ._style_scope import scoped_plot_methods
@@ -61,7 +61,7 @@ class DiversityPlotter:
             result.sample_sizes,
             result.expected_taxa,
             "o-",
-            color="#3498DB",
+            color=current_palette()[0],
             linewidth=2,
             markersize=5,
             markerfacecolor="white",
@@ -74,7 +74,7 @@ class DiversityPlotter:
                 result.confidence_interval_lower,
                 result.confidence_interval_upper,
                 alpha=0.2,
-                color="#3498DB",
+                color=current_palette()[0],
             )
 
         if title is None:
@@ -104,7 +104,7 @@ class DiversityPlotter:
 
         fig, ax = plt.subplots(figsize=self._figure_size)
 
-        colors = get_color_scheme("default")
+        colors = current_palette()
 
         for i, result in enumerate(results):
             ax.plot(
@@ -148,7 +148,7 @@ class DiversityPlotter:
         samples = [r.sample_name for r in results]
         values = [r.get(index, 0) for r in results]
 
-        colors = get_color_scheme("default")
+        colors = current_palette()
 
         bars = ax.bar(
             range(len(results)),
@@ -209,46 +209,45 @@ class DiversityPlotter:
 
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-        # 1. Shannon vs Simpson comparison (abundance bar chart)
+        # 1. Shannon vs Simpson comparison.
+        #
+        # This used to be an if/else. The ``if`` branch drew a "Top Taxa
+        # Abundance" panel from ``result.abundances``, and it never ran:
+        # DiversityResult is a dataclass whose fields are sample_name,
+        # taxa_count, individuals, indices and metadata, so ``hasattr(result,
+        # "abundances")`` is False for every object that can reach here --
+        # including the ones compute_diversity_indices builds. Thirteen lines
+        # of speculative generality, including a palette lookup, sitting behind
+        # a condition that no caller can satisfy.
+        #
+        # The abundance panel is a reasonable thing to want; it needs the field
+        # added to DiversityResult and populated, which is a change to what
+        # the analysis returns rather than to how it is drawn. Until then the
+        # Shannon/Simpson comparison is the panel, not a fallback.
         ax1 = axes[0, 0]
-        if hasattr(result, "abundances") and result.abundances is not None:
-            top_n = min(15, len(result.abundances))
-            sorted_abundances = sorted(result.abundances.items(), key=lambda x: x[1], reverse=True)[:top_n]
-            taxa_names = [a[0] for a in sorted_abundances]
-            taxa_counts = [a[1] for a in sorted_abundances]
-            colors_bar = get_color_scheme("default")
-            ax1.barh(range(top_n), taxa_counts, color=colors_bar[:top_n], edgecolor="white")
-            ax1.set_yticks(range(top_n))
-            ax1.set_yticklabels(taxa_names, fontsize=8)
-            ax1.invert_yaxis()
-            ax1.set_xlabel("Abundance", fontsize=9)
-            ax1.set_title("Top Taxa Abundance", fontsize=11, fontweight="bold")
-            ax1.grid(True, axis="x", linestyle="--", alpha=0.3)
+        shannon_val = result.indices.get("shannon")
+        simpson_val = result.indices.get("simpson")
+        if shannon_val and simpson_val:
+            ax1.bar(
+                ["Shannon (H')", "Simpson (1-D)"],
+                [shannon_val.value, simpson_val.value * 100],
+                color=current_palette()[:2],
+                edgecolor="white",
+            )
+            ax1.set_ylabel("Value", fontsize=9)
+            ax1.set_title("Shannon vs Simpson", fontsize=11, fontweight="bold")
+            ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
         else:
-            # Fallback: show Shannon vs Simpson as a simple bar comparison
-            shannon_val = result.indices.get("shannon")
-            simpson_val = result.indices.get("simpson")
-            if shannon_val and simpson_val:
-                ax1.bar(
-                    ["Shannon (H')", "Simpson (1-D)"],
-                    [shannon_val.value, simpson_val.value * 100],
-                    color=["#3498DB", "#E74C3C"],
-                    edgecolor="white",
-                )
-                ax1.set_ylabel("Value", fontsize=9)
-                ax1.set_title("Shannon vs Simpson", fontsize=11, fontweight="bold")
-                ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
-            else:
-                ax1.axis("off")
-                ax1.text(
-                    0.5,
-                    0.5,
-                    "Shannon/Simpson not available",
-                    transform=ax1.transAxes,
-                    ha="center",
-                    va="center",
-                    fontsize=10,
-                )
+            ax1.axis("off")
+            ax1.text(
+                0.5,
+                0.5,
+                "Shannon/Simpson not available",
+                transform=ax1.transAxes,
+                ha="center",
+                va="center",
+                fontsize=10,
+            )
 
         # 2. Diversity indices radar chart (simplified as bar)
         ax2 = axes[0, 1]
@@ -266,7 +265,7 @@ class DiversityPlotter:
                 else:
                     values_to_show.append(value)
 
-        colors = get_color_scheme("default")
+        colors = current_palette()
         ax2.bar(
             indices_to_show,
             values_to_show,
@@ -302,7 +301,10 @@ class DiversityPlotter:
         if result.evenness is not None:
             labels = ["Even", "Uneven"]
             sizes = [result.evenness, 1 - result.evenness]
-            colors_pie = ["#3498DB", "#E74C3C"]
+            # A two-slice pie is a categorical pair, not an emphasis colour,
+            # so it takes the palette like the other three panels in this
+            # figure rather than a pair of constants chosen for one layout.
+            colors_pie = current_palette()[:2]
             ax4.pie(sizes, labels=labels, colors=colors_pie, autopct="%1.1f%%", startangle=90, explode=(0.05, 0))
             ax4.set_title("Pielou's Evenness", fontsize=11, fontweight="bold")
         else:

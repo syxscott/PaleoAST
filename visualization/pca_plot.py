@@ -20,7 +20,7 @@ import numpy as np
 import numpy.typing as npt
 from matplotlib.figure import Figure
 
-from config.colors import get_color_scheme
+from config.colors import current_palette
 from stats.pca import PCAResult
 
 from ._style_scope import scoped_plot_methods
@@ -90,7 +90,7 @@ class PCAPlotter:
         # Plot points
         if groups is not None:
             unique_groups = sorted(set(groups))
-            colors = get_color_scheme("default")
+            colors = current_palette()
 
             for i, group in enumerate(unique_groups):
                 mask = np.array(groups) == group
@@ -288,7 +288,7 @@ class PCAPlotter:
         from matplotlib.patches import Ellipse
 
         unique_groups = sorted(set(groups))
-        colors = get_color_scheme("default")
+        colors = current_palette()
 
         for idx, group in enumerate(unique_groups):
             mask = np.array(groups) == group

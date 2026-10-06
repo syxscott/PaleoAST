@@ -5,6 +5,42 @@ All notable changes to PaleoAST will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **The figure on screen and the figure you export were not the same
+  figure.** The interactive plotters hard-coded `get_color_scheme("default")`
+  (Paul Tol's colours) while the R export defaulted to Okabe-Ito, so every
+  palette a user chose in Preferences changed the exported file and left the
+  on-screen figure exactly as it was -- the worst direction for a mismatch,
+  because the export moved and the preview did not. Both sides now read one
+  registry in `config/colors.py`, under the names the Preferences dialog
+  already stored, and the generated R script is handed that list verbatim.
+  The default is Okabe-Ito on both paths.
+- **The two Okabe-Ito tables disagreed about the eighth colour.** The in-app
+  list had grey where the R list had black, so an eight-group figure showed
+  grey on screen and black in the export. Okabe & Ito's eighth colour is
+  black; it is now black in the one table that exists.
+- **`r_palette` was collected by the Preferences dialog and then
+  discarded.** Neither `_get_preferences_state` nor `_apply_preferences`
+  mentioned the key, so it was never written to QSettings and never read
+  back: choosing anything but the default silently did nothing. Both ends
+  carry it now, and it is applied at startup so the first figure drawn is
+  already in the chosen palette.
+- **`get_color_scheme` returned a default for any name it did not
+  recognise.** No error, no warning. A typo -- or a name copied from the R
+  side, where the palette is `okabeito` rather than `colorblind` -- produced
+  a figure in a different palette with nothing to indicate it. An unknown
+  name raises now. The magic name `"default"` is gone too: it resolved to one
+  palette while the application defaulted to another, which is the same trap
+  wearing a different hat.
+- **The generated R script asked for packages it did not need.**
+  `brewer.pal()` and `viridis(8)` came from RColorBrewer and viridisLite
+  behind `requireNamespace`, so the colours could differ between machines --
+  and between the preview and the render on any machine missing one. The
+  colours are injected instead, which makes the script's claim that it cannot
+  die on a missing package true rather than aspirational.
+
 ## [1.1.1] - 2026-10-06
 
 Thirteen analyses brought over from PAST3, a way to reach all of them

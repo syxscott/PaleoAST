@@ -150,7 +150,14 @@ Extended color palette for datasets with 10+ categories.
 # COLORBLIND-FRIENDLY PALETTE
 # =============================================================================
 
-# Okabe-Ito color palette - designed for color vision deficiency
+# Okabe-Ito color palette - designed for color vision deficiency.
+#
+# The first eight are Okabe & Ito's own set, in their order -- which means the
+# eighth is BLACK. This list used to end ... "#CC79A7", "#999999": grey had
+# been substituted for black, so the eighth group in an in-app figure was grey
+# while the eighth group in the exported R figure was black. The preview was
+# not previewing. The ninth entry is a spare grey, carried over from the old
+# list so a ninth group still gets a colour that is not black-on-white.
 COLORBLIND_FRIENDLY_PALETTE: Final[list] = [
     "#E69F00",  # Orange
     "#56B4E9",  # Sky Blue
@@ -159,7 +166,8 @@ COLORBLIND_FRIENDLY_PALETTE: Final[list] = [
     "#0072B2",  # Blue
     "#D55E00",  # Vermillion
     "#CC79A7",  # Reddish Purple
-    "#999999",  # Gray
+    "#000000",  # Black
+    "#999999",  # Gray (spare, not part of Okabe-Ito)
 ]
 """
 Okabe-Ito colorblind-friendly palette.
@@ -358,21 +366,157 @@ Alias for CHART_COLORS for backward compatibility.
 """
 
 
-# Color scheme getter
-def get_color_scheme(name: str = "default") -> list:
+# =============================================================================
+# CATEGORICAL PALETTES -- THE SINGLE SOURCE OF TRUTH
+# =============================================================================
+#
+# The interactive figures (matplotlib) and the exported figures (real ggplot2)
+# must be the same picture. They can only be the same picture if both sides
+# read the SAME hex values, so they are defined here once and the generated R
+# script is handed this list verbatim rather than keeping its own copy.
+#
+# Previously each side had its own table with its own NAMES and its own values:
+# R offered okabeito/greyscale/dark2/viridis while Python offered
+# default/colorblind/extended/ibm, so nothing lined up, and the two Okabe-Ito
+# tables disagreed about the eighth colour. Two tables means the preview cannot
+# promise to match the export.
+#
+# The four values below are what R actually produced when asked, captured with
+# R 4.5.2 / RColorBrewer / viridisLite, so the R script now needs neither
+# package: it receives the colours outright instead of computing them.
+# viridis is listed without its trailing "FF" alpha because alpha=1 is opaque;
+# that keeps one spelling that both matplotlib and R read identically.
+
+PALETTES: Final[dict[str, list[str]]] = {
+    "okabeito": list(COLORBLIND_FRIENDLY_PALETTE),
+    "greyscale": [
+        "#0D0D0D",
+        "#5A5A5A",
+        "#7B7B7B",
+        "#949494",
+        "#A8A8A8",
+        "#BABABA",
+        "#CACACA",
+        "#D9D9D9",
+    ],
+    "dark2": [
+        "#1B9E77",
+        "#D95F02",
+        "#7570B3",
+        "#E7298A",
+        "#66A61E",
+        "#E6AB02",
+        "#A6761D",
+        "#666666",
+    ],
+    "viridis": [
+        "#440154",
+        "#46337E",
+        "#365C8D",
+        "#277F8E",
+        "#1FA187",
+        "#4AC16D",
+        "#9FDA3A",
+        "#FDE725",
+    ],
+}
+"""
+The categorical palettes, keyed by the name the Preferences dialog stores.
+
+``okabeito`` is the default: Okabe & Ito's set is separable under
+deuteranopia, protanopia and tritanopia, and it survives greyscale, which is
+what a journal photocopy demands.
+"""
+
+DEFAULT_PALETTE_NAME: Final[str] = "okabeito"
+"""The palette used until the user picks another one."""
+
+# Older spellings kept so existing callers keep working, mapped onto the
+# canonical names above. "default" is deliberately absent: it used to mean
+# CHART_COLORS while the application actually defaulted to something else
+# entirely, and a name that resolves to a different palette than the app's
+# real default is exactly the kind of quiet surprise this registry exists to
+# remove.
+PALETTE_ALIASES: Final[dict[str, str]] = {
+    "colorblind": "okabeito",
+    "okabe-ito": "okabeito",
+}
+
+_current_palette_name: str = DEFAULT_PALETTE_NAME
+
+
+def palette_names() -> list[str]:
+    """The canonical palette names, in the order a figure is judged by them."""
+    return list(PALETTES)
+
+
+def set_current_palette(name: str) -> list[str]:
+    """Select the palette the interactive figures draw with.
+
+    Called when preferences are applied. Returns the palette in use, so a
+    caller can assert on it.
     """
-    Get color scheme by name.
+    global _current_palette_name
+    _current_palette_name = _canonical_palette_name(name)
+    return PALETTES[_current_palette_name]
+
+
+def current_palette() -> list[str]:
+    """The palette the interactive figures should draw with.
+
+    This is what the plotters call. It tracks the same preference the R
+    export reads, so the in-app figure and the exported figure are the same
+    figure.
+
+    Returns a copy, like :func:`get_color_scheme`: handing out the registry's
+    own list would let one caller appending a colour change every figure drawn
+    after it.
+    """
+    return list(PALETTES[_current_palette_name])
+
+
+def current_palette_name() -> str:
+    """The name behind :func:`current_palette`."""
+    return _current_palette_name
+
+
+def _canonical_palette_name(name: str) -> str:
+    resolved = PALETTE_ALIASES.get(str(name).strip().lower(), str(name).strip().lower())
+    if resolved not in PALETTES:
+        raise ValueError(
+            f"unknown palette {name!r}; expected one of {sorted(PALETTES)} or an alias in {sorted(PALETTE_ALIASES)}"
+        )
+    return resolved
+
+
+def resolve_palette_name(name: str = DEFAULT_PALETTE_NAME) -> str:
+    """Canonical name for ``name``, or :class:`ValueError` if unknown.
+
+    Callers that need the name as well as the colours -- the R export writes
+    the chosen palette's name into the generated script -- go through here
+    rather than reaching into the registry themselves.
+    """
+    return _canonical_palette_name(name)
+
+
+def get_color_scheme(name: str = DEFAULT_PALETTE_NAME) -> list:
+    """
+    Get a palette by name.
 
     Parameters:
-        name: Scheme name ('default', 'colorblind', 'extended')
+        name: A key of :data:`PALETTES`, or an alias in :data:`PALETTE_ALIASES`.
 
     Returns:
-        List of hex color codes
+        A copy of the palette's hex colour codes.
+
+    Raises:
+        ValueError: if ``name`` is not a palette.
+
+    An unknown name used to return CHART_COLORS without a word, so a typo --
+    or a name copied from the R side, where the palette is called
+    ``okabeito`` rather than ``colorblind`` -- produced a figure in a
+    different palette and no indication of it. Two callers were relying on
+    that behaviour to mean "the application's categorical palette"; they now
+    call :func:`current_palette`, which is what they meant.
     """
-    schemes = {
-        "default": CHART_COLORS,
-        "colorblind": COLORBLIND_FRIENDLY_PALETTE,
-        "extended": CHART_COLORS_EXTENDED,
-        "ibm": IBM_COLORBLIND_SAFE,
-    }
-    return schemes.get(name, CHART_COLORS)
+    return list(PALETTES[_canonical_palette_name(name)])

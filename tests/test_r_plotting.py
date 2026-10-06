@@ -47,6 +47,7 @@ import numpy as np
 import pytest
 from PyQt6.QtWidgets import QApplication
 
+from config.colors import get_color_scheme
 from visualization.r_export import (
     RPlotSpec,
     RScriptExporter,
@@ -201,9 +202,19 @@ def test_okabe_ito_is_the_default_palette(pca_result, tmp_path):
     assert RPlotSpec().color_palette == "okabeito"
     assert 'PALETTE_NAME <- "okabeito"' in script
     assert "#E69F00" in script and "#009E73" in script  # Okabe-Ito orange/green
-    # Every advertised palette must be selectable in the generated script.
+    # Every advertised palette must be selectable, and the colours it selects
+    # must reach the script. The selection moved out of the script: the R side
+    # used to carry a `switch()` with a branch per palette, which meant a
+    # second copy of every colour and two suggested packages. Python now hands
+    # the script the colours directly, so "selectable" has to be demonstrated
+    # by selecting and looking, not by finding a branch name in the text.
     for name in ("okabeito", "dark2", "greyscale", "viridis"):
-        assert f"\n  {name} =" in script or f"\n  {name} = " in script
+        chosen = RScriptExporter(stamp="test").export_pca_scores(
+            pca_result, tmp_path, RPlotSpec(output_format="pdf", color_palette=name)
+        )
+        text = chosen.script_path.read_text(encoding="utf-8")
+        assert f'PALETTE_NAME <- "{name}"' in text
+        assert get_color_scheme(name)[0] in text
 
 
 def test_ellipses_are_computed_not_stated_by_ggplot(pca_result, tmp_path):

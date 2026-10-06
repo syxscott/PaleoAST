@@ -49,6 +49,8 @@ from typing import Any
 
 import numpy as np
 
+from config.colors import get_color_scheme, resolve_palette_name
+
 __all__ = [
     "ELLIPSE_MIN_N",
     "RExportResult",
@@ -740,36 +742,34 @@ ELLIPSE_MIN_N <- {ELLIPSE_MIN_N}
 
     @staticmethod
     def _palette_block(spec: RPlotSpec) -> str:
+        # The colours are resolved HERE rather than in the script. The script
+        # used to carry its own copy of the palettes and called
+        # RColorBrewer::brewer.pal() and viridisLite::viridis() to build two of
+        # them, which meant three separate costs: a second table to keep in
+        # step with config/colors.py, two suggested packages the generated
+        # script needed and might not have had, and an eighth colour that
+        # disagreed between the two sides -- the in-app table had grey where
+        # the R table had black. Handing the script the same list the on-screen
+        # figure was drawn with makes "the preview shows what you will get" a
+        # property of the code instead of a coincidence.
+        name = resolve_palette_name(spec.color_palette)
+        colours = ", ".join(f'"{c}"' for c in get_color_scheme(name))
         return f"""
 ## --- colour palette ----------------------------------------------
-## PALETTE_NAME is the only knob. The rest of the script is unchanged, and
-## every option is base R, so the script never dies on a missing package.
+## These are the exact colours the on-screen figure was drawn with, so the
+## figure in the app and the figure this script draws are the same figure.
+## The palette name in Preferences is the only knob. Everything here is plain
+## base R, so the script cannot die on a missing package.
 ##
 ##   okabeito  Okabe & Ito (2008), Colour Universal Design. Distinguishable
 ##             under deuteranopia, protanopia and tritanopia, and in
-##             greyscale. The usual default for a figure in biology.
-##   dark2     RColorBrewer Dark2, qualitative; needs the suggested package.
+##             greyscale. The default, and the usual choice in biology.
 ##   greyscale Tones of grey only -- for a journal that photocopies.
+##   dark2     RColorBrewer Dark2, qualitative.
 ##   viridis   Perceptually uniform; right for a magnitude, weak for a class
 ##             because neighbouring viridis colours read alike.
-PALETTE_NAME <- "{spec.color_palette}"
-PALETTE <- switch(
-  PALETTE_NAME,
-  okabeito = c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
-               "#0072B2", "#D55E00", "#CC79A7", "#000000",
-               "#999999"),
-  dark2 = if (requireNamespace("RColorBrewer", quietly = TRUE)) {{
-            RColorBrewer::brewer.pal(8, "Dark2")
-          }} else {{
-            grDevices::hcl.colors(8, palette = "Dark 3")
-          }},
-  greyscale = grDevices::grey.colors(8, start = 0.05, end = 0.85),
-  viridis = if (requireNamespace("viridisLite", quietly = TRUE)) {{
-              viridisLite::viridis(8)
-            }} else {{
-              grDevices::hcl.colors(8, palette = "Viridis")
-            }}
-)
+PALETTE_NAME <- "{name}"
+PALETTE <- c({colours})
 
 ## More groups than colours. Indexing straight into a short vector yields NA,
 ## and ggplot then DROPS those rows -- printing "Removed N rows containing

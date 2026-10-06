@@ -79,6 +79,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.colors import DEFAULT_PALETTE_NAME, set_current_palette
 from config.constants import APP_VERSION
 from config.design_system import (
     BorderRadius,
@@ -3215,6 +3216,7 @@ class MainWindow(QMainWindow):
             "r_base_size": settings.value("preferences/r_base_size", 9.0, type=float),
             "r_output_format": settings.value("preferences/r_output_format", "pdf", type=str),
             "r_timeout": settings.value("preferences/r_timeout", 300, type=int),
+            "r_palette": settings.value("preferences/r_palette", DEFAULT_PALETTE_NAME, type=str),
         }
 
     def _apply_preferences(self, new_state: dict) -> None:
@@ -3234,7 +3236,7 @@ class MainWindow(QMainWindow):
         # R export settings. Read back through _get_preferences_state() when a
         # script is generated or run, so changing them takes effect on the next
         # export rather than needing a restart.
-        for key in ("r_rscript", "r_theme", "r_base_size", "r_output_format", "r_timeout"):
+        for key in ("r_rscript", "r_theme", "r_base_size", "r_output_format", "r_timeout", "r_palette"):
             if key in new_state:
                 settings.setValue(f"preferences/{key}", new_state[key])
         # Propagate DPI / figsize to the interactive plot canvas so
@@ -3253,6 +3255,19 @@ class MainWindow(QMainWindow):
         except Exception:
             # Matplotlib is optional; if not available nothing to do.
             pass
+
+        # The categorical palette for the interactive figures, not only the
+        # copy the R script is handed. It used to reach just the export, so
+        # choosing anything but the default in Preferences changed the figure
+        # the user would eventually get and left the figure on screen exactly
+        # as it was -- the worst direction for a mismatch, because the export
+        # moved and the preview did not.
+        try:
+            set_current_palette(str(new_state.get("r_palette", DEFAULT_PALETTE_NAME)))
+        except ValueError:
+            # A name this build no longer knows (an older setting, or a
+            # hand-edited config). Fall back rather than refuse to start.
+            set_current_palette(DEFAULT_PALETTE_NAME)
 
     def _on_import_data(self) -> None:
         """Show import data dialog with conflict checking."""
@@ -6485,6 +6500,14 @@ class MainWindow(QMainWindow):
         state = settings.value("window/state")
         if state:
             self.restoreState(state)
+
+        # Categorical palette for the interactive figures, from the same
+        # preference the R export reads. Applied here rather than at import
+        # time so it is in force before the first figure is drawn.
+        try:
+            set_current_palette(str(settings.value("preferences/r_palette", DEFAULT_PALETTE_NAME)))
+        except ValueError:
+            set_current_palette(DEFAULT_PALETTE_NAME)
 
     def _save_settings(self) -> None:
         """Save application settings."""
