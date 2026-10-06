@@ -90,6 +90,11 @@ docs = [
 
 [project.scripts]
 paleoast = "main:main"
+# Headless counterpart to the script console. Same session, same
+# namespace; the only difference is that the data comes from a file
+# instead of whatever spreadsheet happens to be open, and that a long
+# run is not sitting behind a window that can be closed by accident.
+paleoast-run = "utils.script_cli:main"
 
 [tool.setuptools]
 # ``main.py`` and ``plot_export.py`` are top-level modules, not packages.

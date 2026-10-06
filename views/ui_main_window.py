@@ -30,7 +30,7 @@ import os
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import numpy.typing as npt
@@ -1441,6 +1441,8 @@ class MainWindow(QMainWindow):
         # Initialize controllers
         self._data_controller = DataController()
         self._statistics_controller = StatisticsController()
+        # Kept across open/close so a batch script's variables survive.
+        self._script_console: Any = None
 
         # Is dark theme
         self._is_dark_theme = False
@@ -2398,6 +2400,19 @@ class MainWindow(QMainWindow):
         r_rerun_action.setShortcut(QKeySequence("Ctrl+Alt+R"))
         r_rerun_action.triggered.connect(self._on_rerun_r_script)
         file_menu.addAction(r_rerun_action)
+
+        file_menu.addSeparator()
+
+        script_action = QAction(_("Script &Console..."), self)
+        script_action.setToolTip(
+            _(
+                "Run Python over the current data and every registered "
+                "analysis, for work that would take too many clicks"
+            )
+        )
+        script_action.triggered.connect(self._on_open_script_console)
+        file_menu.addAction(script_action)
+        self._register_data_action(script_action)
 
         file_menu.addSeparator()
 
@@ -6895,6 +6910,48 @@ class MainWindow(QMainWindow):
         editor.setPlainText(str(payload.get("summary", payload)))
         self._add_tab_to_workspace(editor, _("Null Model Result"))
         self._status_bar.setInfo(_("Null model: text fallback"))
+
+    def _on_open_script_console(self) -> None:
+        """Open the script console against the current data.
+
+        The console gets a data provider rather than a snapshot, so a script
+        run after the user edits a cell sees the edit. It is wired to the
+        controller rather than to the analyses directly, because the
+        registry is what makes every analysis reachable by name -- which
+        is the whole reason the catalog exists.
+
+        A single instance is kept: a console whose namespace dies with the
+        window loses the variables a batch script accumulated, and the
+        common pattern is open, run a few blocks, close, open again.
+        """
+        if self._script_console is None:
+            from views.script_console import ScriptConsoleDialog
+
+            self._script_console = ScriptConsoleDialog(
+                parent=self,
+                controller=self._statistics_controller,
+                data_provider=self._console_data,
+            )
+        self._script_console.show()
+        self._script_console.raise_()
+        self._script_console.activateWindow()
+        self._status_bar.setInfo(_("Script console"))
+
+    def _console_data(self) -> Any:
+        """The current spreadsheet for the script console, or None.
+
+        A missing spreadsheet is not an error here: the console is
+        perfectly usable for inspecting a taxon list or fitting a curve
+        from arrays, and refusing to open without data would make it the
+        one tool that needs the thing it is most often used to look at.
+        """
+        matrix = getattr(self._state, "data_matrix", None)
+        if matrix is None:
+            return None
+        data = getattr(matrix, "data", None)
+        if data is None or getattr(data, "size", 0) == 0:
+            return None
+        return data
 
 
 def main() -> None:

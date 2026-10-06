@@ -80,6 +80,11 @@ class StatisticsController:
         """Initialize the statistics controller."""
         self._logger = logging.getLogger(f"{__name__}.StatisticsController")
         self._lock = threading.RLock()
+        # Guarded separately from _lock: filling the registry imports
+        # analysis modules, and _lock is also held across state updates
+        # that a plugin's analyze() may itself touch.
+        self._plugin_registration_lock = threading.Lock()
+        self._plugins_registered = False
 
         # Initialize analyzers
         self._pca_analyzer = PCAAnalyzer()
@@ -1609,6 +1614,47 @@ class StatisticsController:
     # Plugin System Integration
     # =========================================================================
 
+    def _ensure_plugins_registered(self) -> None:
+        """Fill the plugin registry from the built-in catalog, once.
+
+        The registry had a read side and no write side: list_available_analyses
+        merged in get_plugin_registry().list_plugins(), and run_plugin()
+        dispatched into it, but nothing registered anything, so the plugin
+        half of both always contributed nothing. The catalog in
+        plugins/catalog.py is the write side.
+
+        Registration is lazy -- on first use, not at import time -- so
+        constructing a controller does not import every analysis module.
+        The catalog itself defers its imports until an entry is actually
+        run, so the first call here is cheap too.
+
+        Idempotent, so this is safe to call repeatedly: after the first
+        time it costs one boolean check.
+        """
+        if self._plugins_registered:
+            return
+        with self._plugin_registration_lock:
+            if self._plugins_registered:
+                return
+            try:
+                from plugins.catalog import register_builtin_analyses
+
+                registered = register_builtin_analyses()
+                self._logger.info(
+                    "Registered %d built-in analysis plugins", len(registered)
+                )
+            except Exception:  # a broken catalog must not break the app
+                self._logger.warning(
+                    "Could not register built-in analysis plugins",
+                    exc_info=True,
+                )
+            finally:
+                # Set even on failure: a catalog that cannot load once will
+                # not load on the next call either, and retrying on every
+                # list_available_analyses() would log a traceback per
+                # menu open.
+                self._plugins_registered = True
+
     def list_available_analyses(self) -> list[str]:
         """
         List all available analyses (built-in + registered plugins).
@@ -1616,6 +1662,7 @@ class StatisticsController:
         Returns:
             List of analysis names
         """
+        self._ensure_plugins_registered()
         # Built-in analyses (methods on this controller). Look for both
         # ``run_<name>`` and ``analyze_<name>`` patterns; deduplicate by
         # the bare analysis name. The previous implementation crammed a
@@ -1666,6 +1713,7 @@ class StatisticsController:
         with self._lock:
             data = self._ensure_data(data)
 
+        self._ensure_plugins_registered()
         try:
             from plugins import get_plugin_registry
 
@@ -1688,6 +1736,7 @@ class StatisticsController:
 
     def list_plugins(self) -> list[str]:
         """List all registered plugin names."""
+        self._ensure_plugins_registered()
         try:
             from plugins import get_plugin_registry
 
@@ -1697,6 +1746,7 @@ class StatisticsController:
 
     def list_plugin_categories(self) -> list[str]:
         """List all unique plugin categories."""
+        self._ensure_plugins_registered()
         try:
             from plugins import get_plugin_registry
 

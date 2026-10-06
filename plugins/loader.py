@@ -16,28 +16,16 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Built-in analysis modules, kept as a testable list of names.
+# The first-party analyses used to be listed here, as a 7-entry tuple
+# that no code read and whose docstring claimed it was a complete
+# inventory when it named 7 of 23. The real list is
+# ``plugins.catalog.BUILTIN_ANALYSES``, which IS consumed, is checked
+# against the source tree by tests/plugins/test_catalog.py, and records
+# the class and method as well as the module.
 #
-# This is a hand-curated list, not a complete inventory: ``stats/`` has 15
-# modules and ``ecology/`` 8, and this names 7. The earlier version of this
-# comment claimed the list let a caller "find every first-party analysis
-# plugin", which was wrong twice over -- it is not every one of them, and
-# ``discover_plugins_in_package`` does not read this list at all (it scans a
-# directory path). The names are kept because they are what the stale-rename
-# test asserts against: they used to say ``statistics.*`` after the package was
-# renamed to ``stats/``, and ``statistics`` is also a stdlib name, so the list
-# pointed at modules that could never import.
-_BUILTIN_PLUGINS: tuple[str, ...] = (
-    "stats.pca",
-    "stats.pcoa",
-    "stats.nmds",
-    "stats.anosim",
-    "stats.permanova",
-    "stats.simper",
-    "ecology.diversity",
-)
-
-
+# What remains here is the directory-walk helper, which is a different
+# job: it finds module NAMES in a package and deliberately does not
+# import them, because importing a module runs it.
 def discover_plugins_in_package(package_path: Path) -> list[str]:
     """
     List the importable module names directly inside a package directory.
