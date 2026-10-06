@@ -29,7 +29,7 @@ CCA (Canonical Correspondence Analysis, ter Braak 1986):
     Total inertia is the chi-square inertia sum_ij (p_ij - r_i c_j)^2/(r_i c_j).
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

@@ -14,7 +14,7 @@ Datasets:
 - primate_traits: Trait data for phylogenetic comparative methods
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

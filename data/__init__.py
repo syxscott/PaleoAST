@@ -21,7 +21,7 @@ Quick Start
 >>> tree = load_primate_tree()
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from data.loader import (

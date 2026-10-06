@@ -24,7 +24,7 @@ Reference: Fisher (1936) "The use of multiple measurements in
 taxonomic problems." Annals of Eugenics, 7, 179-188.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

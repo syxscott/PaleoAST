@@ -12,7 +12,7 @@ Modules:
     - time_bins: geologic time binning (palaeoverse-style) and occurrence binning
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .arma import ARMAAnalyzer, ARMAResult, ForecastResult

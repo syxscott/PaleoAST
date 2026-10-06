@@ -8,7 +8,7 @@ Provides tools for:
 - Computing sedimentation rates
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

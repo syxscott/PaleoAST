@@ -5,6 +5,93 @@ All notable changes to PaleoAST will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-06
+
+First release with the editable-R plotting path and the dark-theme
+corrections. The figure is the deliverable, so most of what is fixed here is
+what a figure was doing.
+
+### Added
+- **R export of ordination plots.** `visualization/r_export.py` writes an
+  editable ggplot2 script plus its data as CSV, from the PCA scores or the
+  scree plot. The script stands alone: it needs R and ggplot2, not PaleoAST.
+- **R rendering.** `visualization/r_render.py` locates `Rscript` (searching
+  the D: drive as well as C:), runs the script as a child process, and finds
+  the figures it produced by diffing the directory -- so a renamed output is
+  still found, and the in-app preview is best effort rather than a
+  requirement. Two actions in the File menu, deliberately separate:
+  *Export PCA as R Script* regenerates and asks before overwriting a script
+  you have edited; *Re-run R Script* only ever executes the file on disk.
+- **R settings** in Preferences: `Rscript` path with a Detect button, ggplot2
+  theme, base size, output format, timeout, and group colour palette.
+- **Scientific colour palettes.** Okabe & Ito (2008) is the default:
+  separable under deuteranopia, protanopia and tritanopia, and in greyscale.
+  ColorBrewer Dark2, a greyscale set for a photocopied journal, and viridis
+  for a magnitude rather than a class. All are base R, so a missing suggested
+  package cannot break the generated script.
+- **A marker shape channel**, so groups stay separable when colour is not
+  enough -- in greyscale, or with more groups than the palette has colours.
+- **Windows installer**, as a portable `.exe` and an `.msi`.
+
+### Fixed
+- **A score plot silently lost its points.** The scale indexed the palette by
+  group count: `PALETTE[seq_along(levels(...))]`. With more groups than
+  colours -- nine habitats, or a set of time bins, which is ordinary
+  stratigraphic data -- the surplus indices were `NA`, ggplot removed those
+  rows, and R still exited 0 with a PDF on disk. The palette is recycled and
+  the shortfall reported.
+- **The 95% ellipses were drawn in the wrong colour.** `stat_ellipse` does
+  not preserve the colour aesthetic, so naming it in the layer's aes gave
+  ellipses that did not match their points, with ggplot reporting "the
+  following aesthetics were dropped during statistical transformation". The
+  region is now computed in base R and drawn with `geom_path`.
+- **Small groups no longer emit one warning each.** The minimum sample size
+  for a 95% region is applied where the ellipse is built, and the skipped
+  groups are named. Four points is the technical minimum, but the region has
+  no residual degrees of freedom at that size and the curve expands until it
+  spans the panel.
+- **Dark theme legibility.** Plot sample labels were invisible: the theme
+  repaint covered the axes, ticks, labels, title and spines but never
+  `ax.texts`, which is where `annotate()` puts the labels, and an artist's
+  colour is fixed when it is created. `ColorPaletteDark` also inherited all
+  six accents from the light palette, so a blue chosen for white backgrounds
+  was used as a foreground on near-black -- the selected ribbon tab measured
+  1.44:1 against a 4.5:1 requirement. A WCAG sweep of the pairs the UI
+  composes went from 12 failures to 0.
+- **Icons follow the theme.** `VectorIconEngine` hardcoded eleven flat-UI
+  colours, including a default pen that disappeared on a dark button, and
+  `RibbonButton` never redrew its icon on a theme switch.
+- **`.dat` group labels are no longer discarded.** PAST's `{Group}` lines
+  were parsed and counted, then dropped when the matrix was built, so the
+  file loaded with a correct row count and every grouping-aware method ran as
+  if it were a single group. A partial grouping is refused rather than
+  padded.
+- **Error messages carry their arguments.** Ten of them passed an operation
+  name, and sometimes the underlying error, to `str.format` while the English
+  catalog entry had no placeholder, so the arguments were silently
+  discarded. The Chinese for the same messages read as machine output and no
+  longer does.
+- **The R code that draws a figure is one keystroke away from being wrong.**
+  A leading `+` on its own line is a unary plus in R, and an omitted `+`
+  splits the expression; both still exit 0 while `ggsave` writes an
+  incomplete plot. The layers are joined with a trailing operator, and
+  `validate_r_script` checks it.
+
+### Changed
+- **The design system is enforced rather than documented.** `Spacing`
+  declared a 4px grid that twelve hardcoded `padding` values ignored, three
+  of them off-grid; they are tokens now. The guard reads the stylesheet
+  *template*, because the generated sheet cannot tell a token from a literal.
+- **The ribbon distinguishes its actions.** The six data transforms shared
+  one gear, and the Diversity and Stratigraphy groups were one icon per
+  group, so five glyphs covered 29 buttons -- an icon repeating the tab name
+  while costing 24px a button. The transforms use their operator; the groups
+  with no honest symbol to draw drop the icon.
+- **CI jobs have a time limit.** None of the seven had one, so a wedged job
+  held a runner until GitHub's 6-hour default.
+- **Static analysis is clean.** Mypy went from 11 errors to 0, and Ruff from
+  376 findings to 96, none of them in application code.
+
 ## [1.0.1] - 2026-06-01
 
 ### Fixed

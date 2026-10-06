@@ -15,7 +15,7 @@ Modules:
     - shape_stats: Procrustes shape statistics (medians, Goodall F, Hotelling T²)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .allometry import AllometryAnalyzer, AllometryResult, IntegrationAnalyzer, PLSResult

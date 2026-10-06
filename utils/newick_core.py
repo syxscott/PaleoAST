@@ -29,7 +29,7 @@ Superset grammar features (union of both historic parsers):
       :class:`utils.exceptions.NewickParseError`
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

@@ -9,7 +9,7 @@ Provides dialogs for:
     - Beta diversity decomposition (Baselga 2010)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

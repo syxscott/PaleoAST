@@ -9,7 +9,7 @@ Provides dialogs for:
     - Swap randomization (Gotelli 2000)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

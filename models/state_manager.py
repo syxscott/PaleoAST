@@ -13,7 +13,7 @@ Architecture:
     Supports concurrent read access and exclusive write access.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

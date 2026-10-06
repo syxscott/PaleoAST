@@ -8,7 +8,7 @@ Implements abundance distribution models (log-normal, geometric series,
 broken stick) and SHE analysis for community structure assessment.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

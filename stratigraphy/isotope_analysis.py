@@ -7,7 +7,7 @@ including trend extraction, excursion detection, spectral analysis, and
 correlation analysis.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

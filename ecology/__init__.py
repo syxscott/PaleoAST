@@ -12,7 +12,7 @@ Modules:
     - paleoenv: Correspondence Analysis (CA) paleo-environmental reconstruction
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .beta_diversity import (

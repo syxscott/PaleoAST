@@ -89,7 +89,7 @@ TRANSLATIONS = {
     "Spectral analysis: select time and value columns first.": "频谱分析: 请先选择时间和数值列。",
     "About PaleoAST": "关于PaleoAST",
     "Paleontological Advanced Statistical Toolkit": "古生物学高级统计分析平台",
-    "Version 1.0.1": "版本 1.0.1",
+    "Version 1.1.0": "版本 1.1.0",
     "Copyright (c) 2024 PaleoAST Development Team": "版权所有 (c) 2024 PaleoAST开发团队",
     "A comprehensive tool for paleontological data analysis including:": "古生物学数据分析综合工具，包括:",
     "Multivariate Statistics (PCA, PCoA, NMDS)": "多变量统计 (PCA, PCoA, NMDS)",
@@ -580,7 +580,7 @@ TRANSLATIONS = {
     # removed so the key set is unique (regression-tested by
     # tests/test_translation_parity.py).
     "Event Ranking (RASC):": "事件排序 (RASC):",
-    # Ribbon / nav-tree labels added in v1.0.1
+    # Ribbon / nav-tree labels added in v1.1.0
     "Isotope": "同位素",
     "Wavelet": "小波",
     "CA Axis": "对应分析主轴",

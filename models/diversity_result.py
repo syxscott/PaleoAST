@@ -8,7 +8,7 @@ This module defines result classes for biodiversity and paleoecological
 diversity analyses, providing structured output for various diversity indices.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from dataclasses import dataclass, field

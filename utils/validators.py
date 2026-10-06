@@ -17,7 +17,7 @@ Validation Functions:
     - check_constant_columns: Check for constant/variance-zero columns
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

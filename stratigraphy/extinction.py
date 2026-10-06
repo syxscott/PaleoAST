@@ -28,7 +28,7 @@ Two Models:
        CI based on order statistics
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

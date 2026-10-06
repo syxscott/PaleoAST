@@ -32,7 +32,7 @@ dispersion has no defined F ratio; such tests raise ComputationError rather
 than being reported as F = inf.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

@@ -10,7 +10,7 @@ TPS format is widely used in geometric morphometrics for storing:
 - Associated specimen data
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

@@ -38,7 +38,7 @@ Mathematical Foundation:
         R = max_{i<j} d_ij
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

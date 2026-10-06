@@ -25,7 +25,7 @@ The implementation is thread-safe (guarded by a threading.RLock)
 and uses _ from config.i18n for all user-facing strings.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

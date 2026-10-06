@@ -7,7 +7,7 @@ Plugin Registration Decorators for PaleoAST
 Provides decorators for convenient plugin registration.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from collections.abc import Callable

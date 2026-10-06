@@ -25,7 +25,7 @@ def _payload(**over):
         "analysis": "nmds",
         "params": {"n_restarts": 25},
         "created_at": "2026-09-19T12:00:00",
-        "app_version": "1.0.1",
+        "app_version": "1.1.0",
     }
     base.update(over)
     return base

@@ -14,7 +14,7 @@ Design Patterns:
     - Command Pattern: Each navigation item represents a command/action
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from collections.abc import Callable
@@ -675,7 +675,7 @@ class NavigationTree(QWidget):
             NavigationItem(_("Markov"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Directional"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
             NavigationItem(_("Extinction Intervals"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),
-            # Industrial-grade entries added in v1.0.1 - previously
+            # Industrial-grade entries added in v1.1.0 - previously
             # accessible only via the ribbon; now also exposed in the
             # left navigation tree.
             NavigationItem(_("Isotope"), NavigationCategory.STRATIGRAPHY, "stratigraphy"),

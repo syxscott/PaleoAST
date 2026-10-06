@@ -8,7 +8,7 @@ This package contains utility modules for matrix operations, data validation,
 exception handling, decorators, and parallel computing.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .decorators import (

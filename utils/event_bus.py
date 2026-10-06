@@ -14,7 +14,7 @@ Architecture:
     - Thread-safe via Qt signal/slot mechanism
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

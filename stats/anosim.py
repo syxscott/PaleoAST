@@ -25,7 +25,7 @@ similar to each other than within.
 Significance is assessed via permutation test.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

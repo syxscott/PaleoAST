@@ -13,7 +13,7 @@ example-data loader (``data/loader.py``) and the interactive import path
 package every layer already depends on.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

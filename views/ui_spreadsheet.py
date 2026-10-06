@@ -27,7 +27,7 @@ Mathematical Context:
         - Scale: x' = x / σ
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

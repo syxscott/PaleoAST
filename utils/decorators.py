@@ -15,7 +15,7 @@ Decorator Functions:
     - cache_result: Cache results to disk or memory
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import functools

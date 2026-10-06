@@ -25,7 +25,7 @@ where:
     rᵢ = sqrt((x-xᵢ)² + (y-yᵢ)²) is the distance to landmark i
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

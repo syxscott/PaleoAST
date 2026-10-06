@@ -16,7 +16,7 @@ The engines remain the single source of truth; these dialogs only collect
 parameters and dispatch through StatisticsController.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

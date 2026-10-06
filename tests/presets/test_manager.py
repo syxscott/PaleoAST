@@ -16,7 +16,7 @@ def _preset(name="Run A", analysis="pca", **params):
         analysis_id=analysis,
         params=params or {"n_components": 3},
         created_at="2026-09-19T00:00:00",
-        app_version="1.0.1",
+        app_version="1.1.0",
     )
 
 

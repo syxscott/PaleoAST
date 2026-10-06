@@ -35,7 +35,7 @@ Reference:
     Processing, 26(1), 43-49.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

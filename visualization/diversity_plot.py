@@ -10,7 +10,7 @@ This module implements publication-quality diversity plots including:
     - Species accumulation curves
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

@@ -12,7 +12,7 @@ Controllers:
     - data_controller: Manages data operations
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .data_controller import DataController

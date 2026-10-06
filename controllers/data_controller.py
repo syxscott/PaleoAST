@@ -11,7 +11,7 @@ This controller manages all data operations including:
     - Undo/Redo
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import csv

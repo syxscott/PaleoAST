@@ -25,7 +25,7 @@ Variance Explained:
     Cumulative: R_k² = Σᵢ₌₁ᵏ λ_i / Σλ_i
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

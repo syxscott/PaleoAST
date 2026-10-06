@@ -25,7 +25,7 @@ stratigraphically constrained cluster analysis." Computers &
 Geosciences, 13, 13-35.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

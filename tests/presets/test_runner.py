@@ -160,9 +160,9 @@ class TestManifest:
         items[0].status = OK
         items[0].started_at = 100.0
         items[0].finished_at = 100.5
-        manifest = build_manifest(items, meta={"app_version": "1.0.1"})
+        manifest = build_manifest(items, meta={"app_version": "1.1.0"})
         assert manifest["format"] == "paleoast_run_manifest_v1"
-        assert manifest["meta"]["app_version"] == "1.0.1"
+        assert manifest["meta"]["app_version"] == "1.1.0"
         assert manifest["summary"] == {OK: 1}
         record = manifest["items"][0]
         assert record["analysis"] == "pca"

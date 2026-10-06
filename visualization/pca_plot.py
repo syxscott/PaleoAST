@@ -11,7 +11,7 @@ This module implements publication-quality PCA plots including:
     - Scree plots (variance explained)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

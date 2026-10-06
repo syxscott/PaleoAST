@@ -10,7 +10,7 @@ This module implements visualization for spectral analysis results including:
     - Peak identification
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

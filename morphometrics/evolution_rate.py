@@ -43,7 +43,7 @@ Model Selection:
     AIC_weights = exp(-0.5 * delta_AIC) / sum(exp(-0.5 * delta_AIC))
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

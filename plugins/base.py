@@ -5,7 +5,7 @@
 Base Plugin Classes for PaleoAST Analysis Plugins
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from abc import ABC, abstractmethod

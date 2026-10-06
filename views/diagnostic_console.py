@@ -6,7 +6,7 @@ Provides a real-time logging console widget that displays
 computation status and logs from the application.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

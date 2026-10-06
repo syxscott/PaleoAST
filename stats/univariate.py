@@ -8,7 +8,7 @@ Provides descriptive statistics, normality tests, t-tests, ANOVA,
 and non-parametric alternatives for paleontological data exploration.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

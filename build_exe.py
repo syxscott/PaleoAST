@@ -125,11 +125,17 @@ def run_pyinstaller():
     print(f"使用 Python: {python}")
 
     # 构建命令
+    #
+    # NOTE: no --onedir / --onefile here. Those are makespec-time options and
+    # PyInstaller rejects them outright when a .spec is supplied:
+    #   ERROR: option(s) not allowed: --onedir/--onefile
+    #   makespec options not valid when a .spec file is given
+    # The mode already lives in the spec -- EXE() is built with
+    # exclude_binaries=True and handed to COLLECT(), which is onedir.
     cmd = [
         str(python),
         "-m",
         "PyInstaller",
-        "--onedir",  # 文件夹模式
         "--clean",  # 清理缓存
         "--noconfirm",  # 不询问确认
         f"--distpath={project_root / 'dist'}",

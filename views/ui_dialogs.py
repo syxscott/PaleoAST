@@ -13,7 +13,7 @@ Design Patterns:
     - Observer Pattern: Dialogs observe state for data preview
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

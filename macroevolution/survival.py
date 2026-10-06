@@ -35,7 +35,7 @@ Reference:
     from incomplete observations. JASA, 53(282), 457-481.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

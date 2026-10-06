@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paleoast"
-version = "1.0.1"
+version = "1.1.0"
 description = "Paleontological Advanced Statistical Toolkit - Professional desktop application for paleontological data analysis"
 readme = "README.md"
 license = {text = "MIT"}

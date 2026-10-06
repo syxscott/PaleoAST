@@ -22,7 +22,7 @@ Hurlbert's Formula:
     E[S_n] = Σ_{i=1}^{S} [1 - (N - n_i choose n) / (N choose n)]
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

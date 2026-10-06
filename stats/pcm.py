@@ -43,7 +43,7 @@ Blomberg's K:
     K ≈ 1 under BM; K > 1 strong phylogenetic signal
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations

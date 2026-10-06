@@ -13,7 +13,7 @@ This package contains statistical analysis engines including:
 - Distance metrics computation
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .anosim import ANOSIMAnalyzer, ANOSIMResult

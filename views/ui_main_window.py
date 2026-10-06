@@ -22,7 +22,7 @@ Signals emitted:
     - navigationChanged: Emitted when navigation item selected
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging
@@ -6499,7 +6499,7 @@ class MainWindow(QMainWindow):
             </ul>
             """.format(
                 _("Paleontological Advanced Statistical Toolkit"),
-                _("Version 1.0.1"),
+                _("Version 1.1.0"),
                 _("A comprehensive tool for paleontological data analysis including:"),
                 _("Multivariate Statistics (PCA, PCoA, NMDS, LDA)"),
                 _("Group Comparison Tests (ANOSIM, PERMANOVA, SIMPER)"),

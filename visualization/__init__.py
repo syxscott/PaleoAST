@@ -16,7 +16,7 @@ Modules:
     - strat_column: ICS-styled stratigraphic columns with geologic-time strips
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .allometry_plot import AllometryPlotter

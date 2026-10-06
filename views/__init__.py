@@ -9,7 +9,7 @@ user interface, including main window, spreadsheet, dialogs, and
 interactive visualization canvas.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from .diagnostic_console import ConsoleLogHandler, DiagnosticConsole

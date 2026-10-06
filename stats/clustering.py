@@ -8,7 +8,7 @@ Provides agglomerative hierarchical clustering with dendrogram generation
 and cophenetic correlation coefficient.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

@@ -28,7 +28,7 @@ Model Selection:
 where L is likelihood and k is number of parameters.
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

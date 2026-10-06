@@ -18,7 +18,17 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 # 项目路径
 # =============================================================================
 
-PROJECT_ROOT = Path(__file__).parent
+# A spec file is EXECUTED, not imported: PyInstaller exec()s it in a namespace
+# that has no __file__, so `Path(__file__).parent` raises NameError before a
+# single line of the build runs. SPECPATH is the global PyInstaller injects for
+# exactly this. The sys.path entry is what lets the spec import PyInstaller
+# helpers at all, and matters just as much when the build is driven from a
+# different working directory.
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(SPECPATH) or ".")
+PROJECT_ROOT = Path(SPECPATH)
 BUILD_ROOT = PROJECT_ROOT / "build"
 DIST_ROOT = PROJECT_ROOT / "dist"
 
@@ -92,6 +102,13 @@ hiddenimports = [
 
     # Visualization
     "visualization",
+    # The R export path is reached through a local import inside
+    # MainWindow._on_export_as_r_script, so nothing in the import graph
+    # mentions it and PyInstaller's analysis would leave it out. Without the
+    # entry the File > "Export PCA as R script" action raises ImportError in
+    # the frozen build only.
+    "visualization.r_export",
+    "visualization.r_render",
 
     # Utils
     "utils",
@@ -135,8 +152,16 @@ datas = [
 # 收集子模块
 # =============================================================================
 
-# 收集所有子模块以确保完整打包
-for module_name in ["scipy", "numpy", "pandas", "matplotlib", "sklearn"]:
+# Collect submodules of the packages the project actually uses.
+#
+# This used to cover numpy, scipy, pandas, matplotlib AND sklearn with a bare
+# collect_submodules(), which is indiscriminate: it walks every importable
+# name in each distribution, including the optional ones. That is how a
+# 1.5 GB build ended up carrying torch, polars, OpenCV and four CUDA DLLs.
+# The explicit hiddenimports list above covers what the code imports; the
+# scientific hooks PyInstaller ships for numpy/scipy/matplotlib/pandas/sklearn
+# collect their own data files, so nothing real is lost.
+for module_name in ("sklearn.utils", "scipy.spatial", "scipy.stats"):
     try:
         hiddenimports.extend(collect_submodules(module_name))
     except Exception:
@@ -171,12 +196,59 @@ a = Analysis(
         "IPython",
         "notebook",
         "jupyter",
+        # --- Size, not correctness -------------------------------------
+        # None of these is imported anywhere in the project (checked by
+        # grepping every module: numpy, scipy, matplotlib, pandas, sklearn
+        # and psutil are what the code actually uses). They arrived anyway
+        # because they sit in site-packages and the analysis walks
+        # importable modules. The first build shipped 1.49 GB, of which:
+        #   torch          292 MB
+        #   _polars_runtime 168 MB
+        #   cv2            113 MB
+        #   bitsandbytes    86 MB   (four CUDA DLLs, none of which can load
+        #                                on a machine without a GPU)
+        #   pyarrow          21 MB
+        # Excluding them costs nothing at runtime and roughly halves the
+        # installer.
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "torchgen",
+        "functorch",
+        "cv2",
+        "polars",
+        "_polars_runtime_32",
+        "_polars_runtime_64",
+        "bitsandbytes",
+        "pyarrow",
+        "tensorflow",
+        "jax",
+        "jaxlib",
+        "numba",
+        "llvmlite",
+        "h5py",
+        "pyarrow.lib",
+        "nvidia",
+        "triton",
+        "onnxruntime",
+        "optuna",
+        "ray",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=None,
-    noarchive=False,
+    # NOTE: cipher= / win_no_prefer_redirects= / win_private_assemblies= were
+    # 5.x-only Analysis kwargs and were REMOVED in PyInstaller 6.0, which
+    # build_exe.py pins. Passing them here made the spec fail to load at all
+    # -- and because build_exe.py installs PyInstaller itself, the error
+    # arrived only on a machine that had never built before.
 )
+
+# =============================================================================
+# Windows version resource
+# =============================================================================
+# Without it the exe reports 0.0.0.0 in its file properties and "Unknown" in
+# the task manager. Kept as a separate .txt because PyInstaller parses the
+# numeric version fields with int().
+VERSION_FILE = PROJECT_ROOT / "packaging" / "version_info.txt"
+version_file = str(VERSION_FILE) if VERSION_FILE.exists() else None
 
 # =============================================================================
 # PYZ 打包
@@ -205,6 +277,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(PROJECT_ROOT / "logo.png") if (PROJECT_ROOT / "logo.png").exists() else None,
+    version=version_file,
 )
 
 # =============================================================================

@@ -16,7 +16,7 @@ Supported Indices:
     - Chao-1: S_obs + f₁² / (2f₂)
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

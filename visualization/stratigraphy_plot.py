@@ -12,7 +12,7 @@ This module implements publication-quality stratigraphic plots including:
     - Multi-section stratigraphic correlation with DTW warping paths
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 import logging

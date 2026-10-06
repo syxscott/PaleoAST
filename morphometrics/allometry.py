@@ -41,7 +41,7 @@ Allometry:
     RV coefficient: measure of integration between blocks
 
 Author: PaleoAST Development Team
-version: 1.0.1
+version: 1.1.0
 """
 
 from __future__ import annotations
