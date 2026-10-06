@@ -3,6 +3,7 @@
 Covers Defect 2 (no parameter dialog for ANOSIM / PERMANOVA) and the
 honest-degradation contract used by the new ``_on_*_result`` slots.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -83,8 +84,7 @@ def test_accept_emits_runtime_warning_when_seed_is_empty(qapp):
         warnings.simplefilter("always")
         dialog._on_accept()
     assert any(issubclass(w.category, RuntimeWarning) for w in caught), (
-        "Expected RuntimeWarning when no seed is set, got: "
-        + ", ".join(str(w.message) for w in caught)
+        "Expected RuntimeWarning when no seed is set, got: " + ", ".join(str(w.message) for w in caught)
     )
 
 
@@ -97,8 +97,7 @@ def test_accept_suppresses_warning_when_seed_is_set(qapp):
         warnings.simplefilter("always")
         dialog._on_accept()
     assert not any(issubclass(w.category, RuntimeWarning) for w in caught), (
-        "Did not expect a RuntimeWarning when seed is set; got: "
-        + ", ".join(str(w.message) for w in caught)
+        "Did not expect a RuntimeWarning when seed is set; got: " + ", ".join(str(w.message) for w in caught)
     )
 
 

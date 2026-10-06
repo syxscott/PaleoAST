@@ -409,9 +409,7 @@ class EFAAnalyzer:
         Rows are ``(a_n, b_n, c_n, d_n)`` for n = 1..N, so the row index
         carries the 1-based harmonic number.
         """
-        return [
-            EFAHarmonic(n=n + 1, a=row[0], b=row[1], c=row[2], d=row[3]) for n, row in enumerate(coefficients)
-        ]
+        return [EFAHarmonic(n=n + 1, a=row[0], b=row[1], c=row[2], d=row[3]) for n, row in enumerate(coefficients)]
 
     def _reconstruct(
         self, a0: float, c0: float, harmonics: list, t: npt.NDArray, T: float, n_points: int

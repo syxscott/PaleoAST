@@ -66,8 +66,12 @@ def test_different_metrics_on_same_data_are_not_one(analyzer: MantelAnalyzer) ->
     """Euclidean and Manhattan on the same points are related, not equal."""
     data = np.random.default_rng(0).normal(size=(25, 4))
     result = analyzer.analyze(
-        data, data, metric_a="euclidean", metric_b="manhattan",
-        n_permutations=99, random_seed=1,
+        data,
+        data,
+        metric_a="euclidean",
+        metric_b="manhattan",
+        n_permutations=99,
+        random_seed=1,
     )
     assert 0.5 < result.statistic < 1.0
     assert result.metric_a == "euclidean"
@@ -80,9 +84,7 @@ def test_spearman_option_differs_from_pearson(analyzer: MantelAnalyzer) -> None:
     a = rng.uniform(size=(30, 1))
     b = a**3 + rng.normal(0, 0.01, (30, 1))
     pearson = analyzer.analyze(a, b, n_permutations=99, random_seed=1)
-    spearman = analyzer.analyze(
-        a, b, correlation="spearman", n_permutations=99, random_seed=1
-    )
+    spearman = analyzer.analyze(a, b, correlation="spearman", n_permutations=99, random_seed=1)
     assert pearson.statistic < spearman.statistic
 
 
@@ -113,16 +115,12 @@ def test_p_values_are_uniform_under_the_null(analyzer: MantelAnalyzer) -> None:
     for seed in range(reps):
         a = np.random.default_rng(1000 + seed).normal(size=(18, 3))
         b = np.random.default_rng(5000 + seed).normal(size=(18, 3))
-        p_values.append(
-            analyzer.analyze(a, b, n_permutations=99, random_seed=seed).p_value
-        )
+        p_values.append(analyzer.analyze(a, b, n_permutations=99, random_seed=seed).p_value)
     arr = np.asarray(p_values)
     false_positive_rate = float((arr < alpha).mean())
     # Binomial 95% interval around alpha is wide at 40 reps, so allow slack
     # while still catching a p-value that is systematically too small.
-    assert false_positive_rate <= 0.20, (
-        f"false positive rate {false_positive_rate} is far above alpha={alpha}"
-    )
+    assert false_positive_rate <= 0.20, f"false positive rate {false_positive_rate} is far above alpha={alpha}"
     assert sp_stats.kstest(arr, "uniform").pvalue > 0.001
     assert arr.min() >= 1.0 / 100 - 1e-12
 
@@ -254,9 +252,7 @@ def test_last_result_is_retained(analyzer: MantelAnalyzer) -> None:
 def test_constant_matrix_is_rejected(analyzer: MantelAnalyzer) -> None:
     """Zero variance makes the correlation undefined; say so, do not invent."""
     with pytest.raises(ComputationError):
-        analyzer.analyze(
-            np.zeros((10, 3)), np.ones((10, 3)), n_permutations=19, random_seed=1
-        )
+        analyzer.analyze(np.zeros((10, 3)), np.ones((10, 3)), n_permutations=19, random_seed=1)
 
 
 def test_too_few_objects_is_rejected(analyzer: MantelAnalyzer) -> None:
@@ -297,8 +293,10 @@ def test_partial_mantel_rejects_mismatched_object_counts(
     rng = np.random.default_rng(0)
     with pytest.raises(MatrixDimensionError):
         analyzer.analyze_partial(
-            rng.normal(size=(20, 3)), rng.normal(size=(20, 3)),
-            rng.normal(size=(25, 1)), n_permutations=19,
+            rng.normal(size=(20, 3)),
+            rng.normal(size=(20, 3)),
+            rng.normal(size=(25, 1)),
+            n_permutations=19,
         )
 
 

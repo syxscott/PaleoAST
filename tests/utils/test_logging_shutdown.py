@@ -60,8 +60,7 @@ class TestLoggingShutdown:
         from views.diagnostic_console import ConsoleLogHandler
 
         assert "flushOnClose" in vars(ConsoleLogHandler), (
-            "flushOnClose must be a CLASS attribute so getattr() never touches "
-            "the deleted QObject instance"
+            "flushOnClose must be a CLASS attribute so getattr() never touches the deleted QObject instance"
         )
         assert ConsoleLogHandler.flushOnClose is False
 
@@ -98,14 +97,11 @@ class TestLoggingShutdown:
     # Reinstating an end-to-end variant needs a way to stop a real Qt app
     # that does not depend on the caller's thread, the PyQt6 build, or the
     # platform's timer behaviour. None of the three is available here.
-    _why_this_test_is_disabled = (
-        "see the block comment above; use test_flush_on_close_is_a_class_attribute"
-    )
+    _why_this_test_is_disabled = "see the block comment above; use test_flush_on_close_is_a_class_attribute"
 
     @pytest.mark.skip(reason="Prematurely disabled: see the note above.")
     def test_no_traceback_when_the_process_exits(self):
         raise NotImplementedError
-
 
     def test_handler_close_does_not_depend_on_root_logger_membership(self):
         """Document the trap: close() does not unregister from _handlerList.
@@ -171,13 +167,14 @@ class TestLoggingShutdown:
         )
         proc = subprocess.run(
             [sys.executable, "-c", child],
-            capture_output=True, text=True, timeout=120,
-            encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
         )
         combined = (proc.stdout or "") + (proc.stderr or "")
-        assert proc.returncode == 0, (
-            f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
-        )
+        assert proc.returncode == 0, f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
         assert "Fatal Python error" not in combined, combined[-1500:]
         assert "BEFORE_OK" in combined and "AFTER_OK" in combined, combined[-1500:]
         assert "STILL_ATTACHED=False" in combined, (
@@ -225,12 +222,13 @@ class TestLoggingShutdown:
         )
         proc = subprocess.run(
             [sys.executable, "-c", child],
-            capture_output=True, text=True, timeout=120,
-            encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
         )
         combined = (proc.stdout or "") + (proc.stderr or "")
         assert "SETUP_OK" in combined, combined[-1500:]
-        assert proc.returncode == 0, (
-            f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
-        )
+        assert proc.returncode == 0, f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
         assert "Fatal Python error" not in combined, combined[-1500:]

@@ -144,9 +144,7 @@ MIN_SAMPLES = 8
 # =============================================================================
 
 
-def _clean_pair(
-    time: npt.NDArray, values: npt.NDArray, name: str = "series"
-) -> tuple[npt.NDArray, npt.NDArray]:
+def _clean_pair(time: npt.NDArray, values: npt.NDArray, name: str = "series") -> tuple[npt.NDArray, npt.NDArray]:
     """Drop non-finite pairs and sort by time; require enough left over."""
     t = np.asarray(time, dtype=float).flatten()
     v = np.asarray(values, dtype=float).flatten()
@@ -189,8 +187,10 @@ def _check_increasing(time: npt.NDArray, name: str = "time") -> npt.NDArray:
     steps = np.diff(time)
     if np.any(steps <= 0):
         raise DataValidationError(
-            _("time must be strictly increasing after sorting; a non-monotonic "
-              "axis has no single dt for a periodogram"),
+            _(
+                "time must be strictly increasing after sorting; a non-monotonic "
+                "axis has no single dt for a periodogram"
+            ),
             details={"n_non_increasing": int(np.sum(steps <= 0))},
         )
     return float(np.median(steps))
@@ -249,14 +249,15 @@ def _resample_uniform(
     n = int(np.floor((time[-1] - time[0]) / dt)) + 1
     if n < MIN_SAMPLES:
         raise DataValidationError(
-            _("'{0}' spans too few samples at its own median step after "
-              "resampling; reduce the sampling density or the time span").format(name)
+            _(
+                "'{0}' spans too few samples at its own median step after "
+                "resampling; reduce the sampling density or the time span"
+            ).format(name)
         )
     grid = time[0] + dt * np.arange(n)
     resampled = np.interp(grid, time, values)
     logger.info(
-        "%s: resampled %d unevenly spaced points onto a uniform grid of %d "
-        "points (dt=%.6g)",
+        "%s: resampled %d unevenly spaced points onto a uniform grid of %d points (dt=%.6g)",
         name,
         time.size,
         n,
@@ -683,15 +684,11 @@ class RedfitResult:
             _("AR(1) phi: {0}").format(f"{self.phi:.4f}"),
             _("Frequencies: {0}").format(self.frequencies.size),
             _("Span: {0}").format(f"{self.time_span:.6g}"),
-            _("Significant frequencies at FAP <= {0}: {1}").format(
-                self.fap_level, int(np.sum(self.significant))
-            ),
+            _("Significant frequencies at FAP <= {0}: {1}").format(self.fap_level, int(np.sum(self.significant))),
         ]
         for i, peak in enumerate(self.significant_periods[:8]):
             lines.append(
-                _("  {0}. period = {1} (FAP = {2})").format(
-                    i + 1, f"{peak['period']:.6g}", f"{peak['fap']:.3e}"
-                )
+                _("  {0}. period = {1} (FAP = {2})").format(i + 1, f"{peak['period']:.6g}", f"{peak['fap']:.3e}")
             )
         return "\n".join(lines)
 
@@ -710,9 +707,7 @@ class RedfitResult:
         }
 
 
-def _redfit_widths(
-    frequencies: npt.NDArray, window: float, max_window: int
-) -> tuple[npt.NDArray, npt.NDArray]:
+def _redfit_widths(frequencies: npt.NDArray, window: float, max_window: int) -> tuple[npt.NDArray, npt.NDArray]:
     """REDFIT window widths (odd, in grid points) and their effective dof.
 
     Following Muellersohn et al. (1999), the window at frequency ``f_k``
@@ -735,9 +730,7 @@ def _redfit_widths(
     return np.where(widths % 2 == 0, widths + 1, widths).astype(int)
 
 
-def _ar1_periodogram_variance(
-    frequencies: npt.NDArray, phi: float, dt: float, n_samples: int
-) -> npt.NDArray:
+def _ar1_periodogram_variance(frequencies: npt.NDArray, phi: float, dt: float, n_samples: int) -> npt.NDArray:
     """Exact variance of the normalised AR(1) periodogram, for a unit record.
 
     For a Gaussian stationary record the periodogram variance is the
@@ -777,9 +770,7 @@ def _ar1_periodogram_variance(
     return (1.0 - a2**2) / (n_samples**2 * np.maximum(denom, 1e-300))
 
 
-def _simulate_ar1(
-    n: int, phi: float, rng: np.random.Generator
-) -> npt.NDArray:
+def _simulate_ar1(n: int, phi: float, rng: np.random.Generator) -> npt.NDArray:
     """One standardised AR(1) record of length ``n`` from ``rng``."""
     innovation = rng.normal(scale=np.sqrt(max(1.0 - phi**2, 0.0)), size=n)
     series = np.empty(n, dtype=float)
@@ -909,9 +900,7 @@ def redfit(
     """
     t, v = _clean_pair(time, values, "redfit input")
     if len(t) < 2 * MIN_SAMPLES:
-        raise DataValidationError(
-            _("redfit needs at least {0} points; got {1}").format(2 * MIN_SAMPLES, t.size)
-        )
+        raise DataValidationError(_("redfit needs at least {0} points; got {1}").format(2 * MIN_SAMPLES, t.size))
     if not 0.0 < window < 5.0:
         raise DataValidationError(
             _("window must lie in (0, 5); got {0}").format(window),
@@ -927,9 +916,7 @@ def redfit(
     n_elements = int(max(2, round(f_max * span)))
     n_freq = int(n_periods) if n_periods is not None else min(4000, max(200, 5 * n_elements))
     if n_freq < 32:
-        raise DataValidationError(
-            _("n_periods must be >= 32 for a smoothed spectrum; got {0}").format(n_freq)
-        )
+        raise DataValidationError(_("n_periods must be >= 32 for a smoothed spectrum; got {0}").format(n_freq))
     frequencies = np.linspace(f_min, f_max, n_freq)
     if n_freq > 3 * freqs_all.size:
         logger.warning(
@@ -1015,8 +1002,7 @@ def redfit(
     peaks.sort(key=lambda p: -p["redfit"])
 
     logger.info(
-        "redfit: n=%d, phi=%.4f, %d/%d frequencies significant at FAP<=%.3f, "
-        "strongest period=%s",
+        "redfit: n=%d, phi=%.4f, %d/%d frequencies significant at FAP<=%.3f, strongest period=%s",
         grid.size,
         phi,
         int(np.sum(significant)),
@@ -1103,9 +1089,7 @@ class MultitaperResult:
             _("Eigenvalue range: {0:.4f} - {1:.4f}").format(
                 float(self.eigenvalues.min()), float(self.eigenvalues.max())
             ),
-            _("Significant frequencies at FAP <= {0}: {1}").format(
-                self.fap_level, int(np.sum(self.significant))
-            ),
+            _("Significant frequencies at FAP <= {0}: {1}").format(self.fap_level, int(np.sum(self.significant))),
         ]
         return "\n".join(lines)
 
@@ -1169,9 +1153,7 @@ def dpss_tapers(n: int, nw: float, n_tapers: int) -> tuple[npt.NDArray, npt.NDAr
         raise DataValidationError(_("DPSS needs n >= 2; got {0}").format(n))
     k = int(n_tapers)
     if k < 1 or k > n:
-        raise DataValidationError(
-            _("n_tapers must lie in [1, n]; got {0} for n = {1}").format(k, n)
-        )
+        raise DataValidationError(_("n_tapers must lie in [1, n]; got {0} for n = {1}").format(k, n))
     if nw <= 0:
         raise DataValidationError(_("nw must be > 0; got {0}").format(nw))
     w = float(nw) / n
@@ -1394,9 +1376,7 @@ def cross_correlation(
     a, b = a[:n], b[:n]
     lag_max = int(max_lag) if max_lag is not None else n // 2
     if lag_max < 1 or lag_max >= n:
-        raise DataValidationError(
-            _("max_lag must lie in [1, n-1]; got {0} for n = {1}").format(lag_max, n)
-        )
+        raise DataValidationError(_("max_lag must lie in [1, n-1]; got {0} for n = {1}").format(lag_max, n))
 
     r1x = float(autocorrelation(a, max_lag=1).acf[1])
     r1y = float(autocorrelation(b, max_lag=1).acf[1])
@@ -1481,9 +1461,7 @@ class RunsResult:
 
     def summary(self) -> str:
         """Generate summary text."""
-        observed = _("Runs observed / expected: {0} / {1}").format(
-            self.runs, f"{self.expected_runs:.3f}"
-        )
+        observed = _("Runs observed / expected: {0} / {1}").format(self.runs, f"{self.expected_runs:.3f}")
         counts = _("Above / below threshold: {0} / {1}").format(self.n_above, self.n_below)
         return (
             f"{_('Runs Test')}\n"
@@ -1534,9 +1512,7 @@ def _runs_count_exact(r: int, n0: int, n1: int) -> float:
     return float(total)
 
 
-def runs_test(
-    values: npt.NDArray, expected_sign: float = 0.0, max_exact_n: int = 60
-) -> RunsResult:
+def runs_test(values: npt.NDArray, expected_sign: float = 0.0, max_exact_n: int = 60) -> RunsResult:
     """Runs test for randomness in the ordering of a binarised series.
 
     The series is binarised and the number of maximal runs of like symbols
@@ -1583,9 +1559,7 @@ def runs_test(
     n0 = int(x.size - n1)
     if n0 == 0 or n1 == 0:
         raise DataValidationError(
-            _("Runs test needs values on both sides of the threshold; got {0} above and {1} below").format(
-                n1, n0
-            ),
+            _("Runs test needs values on both sides of the threshold; got {0} above and {1} below").format(n1, n0),
             details={"threshold": threshold},
         )
 
@@ -1693,9 +1667,7 @@ class MannKendallResult:
             _("Sen's slope 95% CI: [{0:.6g}, {1:.6g}]").format(*self.slope_ci),
             _("Tie groups: {0}").format(self.n_tied_groups),
             _("Hamed-Rao correction: {0}").format(
-                _("on (factor {0:.4f})").format(self.variance_factor)
-                if self.pre_whitened
-                else _("off")
+                _("on (factor {0:.4f})").format(self.variance_factor) if self.pre_whitened else _("off")
             ),
         ]
         return "\n".join(lines)
@@ -1716,9 +1688,7 @@ class MannKendallResult:
         }
 
 
-def _sen_slope(
-    values: npt.NDArray, times: npt.NDArray
-) -> tuple[float, tuple[float, float]]:
+def _sen_slope(values: npt.NDArray, times: npt.NDArray) -> tuple[float, tuple[float, float]]:
     """Sen's slope and its normal-approximation confidence interval."""
     n = values.size
     i, j = np.triu_indices(n, k=1)
@@ -1750,7 +1720,7 @@ def _sen_slope(
 def _mk_variance(values: npt.NDArray) -> float:
     """Variance of the Mann-Kendall S statistic, with the tie correction.
 
-        Var(S) = [n(n-1)(2n+5) - sum_t m_t (m_t - 1)(2 m_t + 5)] / 18
+    Var(S) = [n(n-1)(2n+5) - sum_t m_t (m_t - 1)(2 m_t + 5)] / 18
     """
     n = values.size
     total = n * (n - 1.0) * (2.0 * n + 5.0)
@@ -1852,9 +1822,7 @@ def mann_kendall(
     else:
         t = np.asarray(times, dtype=float).flatten()
         if t.size != n:
-            raise DataValidationError(
-                _("times must have the same length as values; got {0} and {1}").format(t.size, n)
-            )
+            raise DataValidationError(_("times must have the same length as values; got {0} and {1}").format(t.size, n))
         ok = np.isfinite(t)
         x, t = x[ok], t[ok]
         has_times = True
@@ -2012,17 +1980,16 @@ def autoassociation(
     total_pairs = n * (n - 1) // 2
     if total_pairs > max_pairs:
         raise DataValidationError(
-            _("autoassociation would need {0} pairs, above the limit of {1}; "
-              "downsample the record or bin coarser").format(total_pairs, max_pairs),
+            _(
+                "autoassociation would need {0} pairs, above the limit of {1}; downsample the record or bin coarser"
+            ).format(total_pairs, max_pairs),
             details={"pairs": int(total_pairs), "max_pairs": int(max_pairs)},
         )
     if n_bins is None:
         n_bins = int(max(8, min(n - 1, round(np.sqrt(total_pairs)))))
     n_bins = int(n_bins)
     if n_bins < 2:
-        raise DataValidationError(
-            _("n_bins must be >= 2; got {0}").format(n_bins), details={"n_bins": n_bins}
-        )
+        raise DataValidationError(_("n_bins must be >= 2; got {0}").format(n_bins), details={"n_bins": n_bins})
 
     i, j = np.triu_indices(n, k=1)
     lag = np.abs(t[j] - t[i])
@@ -2053,9 +2020,7 @@ def autoassociation(
     # UNBIASED sample ACF, i.e. n / (n - k) times the biased estimator
     # :func:`autocorrelation` returns; the test suite pins that exact
     # relationship down.
-    similarity = np.divide(
-        sums, np.maximum(counts, 1), out=np.zeros(n_bins), where=counts > 0
-    )
+    similarity = np.divide(sums, np.maximum(counts, 1), out=np.zeros(n_bins), where=counts > 0)
 
     # Per-bin Pearson correlation of the two value vectors, as an
     # alternative reading that is not tied to the mean value.
@@ -2180,9 +2145,11 @@ def orbital_forcing(
         )
     if period_kyr is not None and not rows:
         raise DataValidationError(
-            _("No Milankovitch band within 1 % of {0} kyr; the table holds 400, "
-              "100, 70, 41, 23 and 19 kyr (pass 400 for the modern 405 kyr "
-              "long-period cycle)").format(period_kyr)
+            _(
+                "No Milankovitch band within 1 % of {0} kyr; the table holds 400, "
+                "100, 70, 41, 23 and 19 kyr (pass 400 for the modern 405 kyr "
+                "long-period cycle)"
+            ).format(period_kyr)
         )
     return rows
 

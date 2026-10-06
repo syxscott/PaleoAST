@@ -54,12 +54,20 @@ class TestCCAOverallSignificance:
             # reproducible at low cost.
             analyzer = CCAAnalyzer()
             res_rda = analyzer.analyze(
-                Y, X, n_components=2, method="rda",
-                n_permutations=199, random_seed=trial,
+                Y,
+                X,
+                n_components=2,
+                method="rda",
+                n_permutations=199,
+                random_seed=trial,
             )
             res_cca = analyzer.analyze(
-                Y, X, n_components=2, method="cca",
-                n_permutations=199, random_seed=trial,
+                Y,
+                X,
+                n_components=2,
+                method="cca",
+                n_permutations=199,
+                random_seed=trial,
             )
             pvals_rda.append(res_rda.p_value)
             pvals_cca.append(res_cca.p_value)
@@ -69,12 +77,10 @@ class TestCCAOverallSignificance:
         n_sig_rda = sum(p < 0.05 for p in pvals_rda)
         n_sig_cca = sum(p < 0.05 for p in pvals_cca)
         assert n_sig_rda <= 8, (
-            f"RDA: {n_sig_rda}/30 p-values below 0.05 under the null -- "
-            f"the test is anti-conservative."
+            f"RDA: {n_sig_rda}/30 p-values below 0.05 under the null -- the test is anti-conservative."
         )
         assert n_sig_cca <= 8, (
-            f"CCA: {n_sig_cca}/30 p-values below 0.05 under the null -- "
-            f"the test is anti-conservative."
+            f"CCA: {n_sig_cca}/30 p-values below 0.05 under the null -- the test is anti-conservative."
         )
 
     def test_pvalue_small_under_alternative(self):
@@ -95,8 +101,12 @@ class TestCCAOverallSignificance:
         )
         analyzer = CCAAnalyzer()
         result = analyzer.analyze(
-            Y, X, n_components=2, method="rda",
-            n_permutations=499, random_seed=123,
+            Y,
+            X,
+            n_components=2,
+            method="rda",
+            n_permutations=499,
+            random_seed=123,
         )
         # Strong signal: p-value should be small
         assert result.p_value < 0.05, f"RDA p-value {result.p_value} too large under strong signal"
@@ -111,10 +121,8 @@ class TestCCAOverallSignificance:
         Y = rng.random((n, 4))
         X = rng.random((n, 2))
         analyzer = CCAAnalyzer()
-        res1 = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                n_permutations=99, random_seed=42)
-        res2 = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                n_permutations=99, random_seed=42)
+        res1 = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=99, random_seed=42)
+        res2 = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=99, random_seed=42)
         assert res1.p_value == res2.p_value
         assert res1.f_statistic == res2.f_statistic
 
@@ -132,19 +140,16 @@ class TestCCAPermutationScheme:
         rng = np.random.default_rng(42)
         n = 30
         X = rng.random((n, 2))
-        Y = np.column_stack([X[:, 0] + 0.01 * rng.standard_normal(n),
-                             0.5 * X[:, 1] + 0.01 * rng.standard_normal(n)])
+        Y = np.column_stack([X[:, 0] + 0.01 * rng.standard_normal(n), 0.5 * X[:, 1] + 0.01 * rng.standard_normal(n)])
         analyzer = CCAAnalyzer()
-        result = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                  n_permutations=499, random_seed=10)
+        result = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=499, random_seed=10)
         # If we permuted X (wrong), the p-value would be ~1 because
         # permuting X destroys the Q-NULL relationship but leaves Y's
         # internal structure intact -- our F statistic would not exceed
         # the permuted F values.  Since we get a small p here, Y was the
         # variable shuffled.
         assert result.p_value < 0.05, (
-            f"CCA permutation does not appear to be shuffling Y: "
-            f"p_value={result.p_value} should be small"
+            f"CCA permutation does not appear to be shuffling Y: p_value={result.p_value} should be small"
         )
 
 
@@ -157,8 +162,7 @@ class TestCCAResultFields:
         Y = rng.random((15, 4))
         X = rng.random((15, 2))
         analyzer = CCAAnalyzer()
-        result = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                  n_permutations=99, random_seed=42)
+        result = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=99, random_seed=42)
         # Per-axis fields
         assert hasattr(result, "f_statistic"), "Result must expose f_statistic"
         assert hasattr(result, "p_value"), "Result must expose p_value (overall model)"
@@ -175,8 +179,7 @@ class TestCCAResultFields:
         Y = rng.random((20, 4))
         X = rng.random((20, 2))
         analyzer = CCAAnalyzer()
-        result = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                  n_permutations=99, random_seed=42)
+        result = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=99, random_seed=42)
         assert 0.0 < result.wilks_lambda <= 1.0
 
     def test_strong_signal_has_small_wilks_lambda(self):
@@ -184,13 +187,12 @@ class TestCCAResultFields:
         rng = np.random.default_rng(1)
         n = 30
         X = rng.random((n, 2))
-        Y = np.column_stack([X[:, 0] + 0.01 * rng.standard_normal(n),
-                             X[:, 1] + 0.01 * rng.standard_normal(n)])
+        Y = np.column_stack([X[:, 0] + 0.01 * rng.standard_normal(n), X[:, 1] + 0.01 * rng.standard_normal(n)])
         analyzer = CCAAnalyzer()
-        result = analyzer.analyze(Y, X, n_components=2, method="rda",
-                                  n_permutations=99, random_seed=1)
+        result = analyzer.analyze(Y, X, n_components=2, method="rda", n_permutations=99, random_seed=1)
         # Wilks lambda = prod(1 - r_k^2). Strong signal => some r close to 1.
         assert result.wilks_lambda < 0.9
+
 
 class TestCCAZeroRowDegreesOfFreedom:
     """A zero-total sample must not change the reported F.
@@ -231,8 +233,12 @@ class TestCCAZeroRowDegreesOfFreedom:
         inside = analyzer.analyze(Y_with_empty, X, n_permutations=99, method="cca", random_seed=0)
         before = analyzer.analyze(Y_without, X_without, n_permutations=99, method="cca", random_seed=0)
 
-        assert_allclose(inside.f_statistic, before.f_statistic, rtol=1e-9,
-                        err_msg="F depends on whether the empty sample was dropped inside the analysis")
+        assert_allclose(
+            inside.f_statistic,
+            before.f_statistic,
+            rtol=1e-9,
+            err_msg="F depends on whether the empty sample was dropped inside the analysis",
+        )
 
     def test_per_axis_f_is_unaffected_too(self):
         """The per-axis F values share the same denominator, so they shift too."""
@@ -242,8 +248,9 @@ class TestCCAZeroRowDegreesOfFreedom:
 
         analyzer = CCAAnalyzer()
         inside = analyzer.analyze(Y_with_empty, X, n_permutations=99, method="cca", random_seed=0)
-        before = analyzer.analyze(np.delete(Y_with_empty, 3, axis=0), np.delete(X, 3, axis=0),
-                                  n_permutations=99, method="cca", random_seed=0)
+        before = analyzer.analyze(
+            np.delete(Y_with_empty, 3, axis=0), np.delete(X, 3, axis=0), n_permutations=99, method="cca", random_seed=0
+        )
 
         assert_allclose(inside.f_per_axis, before.f_per_axis, rtol=1e-9)
 

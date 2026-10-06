@@ -113,7 +113,6 @@ class SearchResult:
         return consensus_builder.build(self.all_trees)
 
 
-
 def _unrooted_topology(tree: PhyloTree) -> frozenset:
     """A root-independent fingerprint of a tree's topology.
 
@@ -125,11 +124,9 @@ def _unrooted_topology(tree: PhyloTree) -> frozenset:
     Branch lengths are deliberately excluded: this is a topology key, used to
     drop duplicates and to drop self-loops.
     """
+
     def _leafset(node) -> frozenset:
-        return frozenset(
-            (leaf.name if leaf.name is not None else leaf.label)
-            for leaf in node.get_leaves()
-        )
+        return frozenset((leaf.name if leaf.name is not None else leaf.label) for leaf in node.get_leaves())
 
     labels = _leafset(tree.root)
     whole = tree.root
@@ -864,8 +861,7 @@ class HeuristicSearch:
             for node in node1.get_ancestors():
                 ancestors_of_cut.add(id(node))
             parent_candidates = [
-                n for n in all_nodes
-                if id(n) not in moved and not n.is_leaf and id(n) in ancestors_of_cut
+                n for n in all_nodes if id(n) not in moved and not n.is_leaf and id(n) in ancestors_of_cut
             ]
 
             # CANDIDATE CAP. A textbook TBR move may regraft the pruned

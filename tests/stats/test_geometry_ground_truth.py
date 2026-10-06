@@ -52,14 +52,10 @@ class TestConvexHull:
         rng = np.random.default_rng(SEED)
         for _ in range(12):
             points = rng.normal(size=(40, 3))
-            assert analyzer.convex_hull_volume(points) == pytest.approx(
-                float(SciPyHull(points).volume), rel=1e-9
-            )
+            assert analyzer.convex_hull_volume(points) == pytest.approx(float(SciPyHull(points).volume), rel=1e-9)
 
     def test_unit_cube_has_volume_one(self, analyzer):
-        cube = np.array(
-            [[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=float
-        )
+        cube = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=float)
         assert analyzer.convex_hull_volume(cube) == pytest.approx(1.0, abs=1e-9)
 
     @pytest.mark.parametrize(
@@ -91,25 +87,19 @@ class TestMinimumSpanningTree:
         rng = np.random.default_rng(SEED)
         points = rng.normal(size=(12, 3))
         tree = analyzer.minimum_spanning_tree(points, [f"t{i}" for i in range(12)])
-        total = float(
-            getattr(tree, "total_length", np.sum([e[2] for e in tree.edges]))
-        )
+        total = float(getattr(tree, "total_length", np.sum([e[2] for e in tree.edges])))
         assert total == pytest.approx(_brute_force_prim(points), rel=1e-9)
 
     def test_collinear_points_span_exactly_their_range(self, analyzer):
         """A closed form: the MST of points on a line is just the span."""
         line = np.array([[float(i), 0.0, 0.0] for i in range(6)])
         tree = analyzer.minimum_spanning_tree(line, [str(i) for i in range(6)])
-        total = float(
-            getattr(tree, "total_length", np.sum([e[2] for e in tree.edges]))
-        )
+        total = float(getattr(tree, "total_length", np.sum([e[2] for e in tree.edges])))
         assert total == pytest.approx(5.0, abs=1e-9)
 
     def test_single_point_has_zero_length(self, analyzer):
         tree = analyzer.minimum_spanning_tree(np.zeros((1, 3)), ["only"])
-        total = float(
-            getattr(tree, "total_length", np.sum([e[2] for e in tree.edges], dtype=float))
-        )
+        total = float(getattr(tree, "total_length", np.sum([e[2] for e in tree.edges], dtype=float)))
         assert total == pytest.approx(0.0, abs=1e-9)
 
 

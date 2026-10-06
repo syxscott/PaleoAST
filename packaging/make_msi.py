@@ -24,6 +24,7 @@ Details that are not obvious and were each a real failure here:
 Usage:
     python packaging/make_msi.py [--validate]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -112,21 +113,30 @@ def main() -> int:
     #
     # -out wants a directory with a trailing separator when linking more than
     # one source afterwards.
-    run([
-        candle, "-nologo",
-        "-arch", "x64",
-        "-dPaleoAST.wixobj",
-        "-out", f"{OBJ}{os.sep}",
-        PACKAGING / "PaleoAST.wxs",
-        PACKAGING / "_payload.wxs",
-    ])
+    run(
+        [
+            candle,
+            "-nologo",
+            "-arch",
+            "x64",
+            "-dPaleoAST.wixobj",
+            "-out",
+            f"{OBJ}{os.sep}",
+            PACKAGING / "PaleoAST.wxs",
+            PACKAGING / "_payload.wxs",
+        ]
+    )
 
     print("\n[3/4] linking")
     link = [
-        light, "-nologo",
-        "-ext", "WixUIExtension",
-        "-ext", "WixUtilExtension",
-        "-out", MSI,
+        light,
+        "-nologo",
+        "-ext",
+        "WixUIExtension",
+        "-ext",
+        "WixUtilExtension",
+        "-out",
+        MSI,
     ]
     if args.validate:
         link.append("-sice:ALL")

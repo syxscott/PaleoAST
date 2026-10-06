@@ -85,8 +85,9 @@ class TestTukeyQStatistic:
         for pair in result.tukey_results:
             i = labels.index(pair["group_a"])
             j = labels.index(pair["group_b"])
-            expected = _q(np.mean(groups_data[i]) - np.mean(groups_data[j]), mse,
-                          len(groups_data[i]), len(groups_data[j]))
+            expected = _q(
+                np.mean(groups_data[i]) - np.mean(groups_data[j]), mse, len(groups_data[i]), len(groups_data[j])
+            )
             assert_allclose(pair["q_stat"], expected, rtol=1e-8)
 
     def test_q_matches_scipy_formula_unequal_sizes(self):
@@ -108,8 +109,9 @@ class TestTukeyQStatistic:
         for pair in result.tukey_results:
             i = labels.index(pair["group_a"])
             j = labels.index(pair["group_b"])
-            expected = _q(np.mean(groups_data[i]) - np.mean(groups_data[j]), mse,
-                          len(groups_data[i]), len(groups_data[j]))
+            expected = _q(
+                np.mean(groups_data[i]) - np.mean(groups_data[j]), mse, len(groups_data[i]), len(groups_data[j])
+            )
             assert_allclose(pair["q_stat"], expected, rtol=1e-8)
 
     def test_q_reproduces_the_reported_p_value(self):
@@ -184,9 +186,7 @@ class TestTukeyQStatistic:
         reference = sp_stats.tukey_hsd(*groups_data)
 
         def _boom(*args, **kwargs):
-            raise AttributeError(
-                "module 'scipy.stats' has no attribute 'tukey_hsd' (simulated)"
-            )
+            raise AttributeError("module 'scipy.stats' has no attribute 'tukey_hsd' (simulated)")
 
         monkeypatch.setattr(univariate_module.sp_stats, "tukey_hsd", _boom)
 
@@ -201,8 +201,9 @@ class TestTukeyQStatistic:
         for row_idx, pair in enumerate(result.tukey_results):
             i = labels.index(pair["group_a"])
             j = labels.index(pair["group_b"])
-            expected = _q(np.mean(groups_data[i]) - np.mean(groups_data[j]), mse,
-                          len(groups_data[i]), len(groups_data[j]))
+            expected = _q(
+                np.mean(groups_data[i]) - np.mean(groups_data[j]), mse, len(groups_data[i]), len(groups_data[j])
+            )
             assert_allclose(pair["q_stat"], expected, rtol=1e-8)
             # The whole point of the fallback: its p-value is derived from q,
             # so a wrong q here means a wrong published p-value.

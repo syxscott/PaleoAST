@@ -445,9 +445,7 @@ class GPA3D:
             aligned_full.append((config - centroid) / scale_factor @ R.T)
 
         final_mean = np.mean(np.stack(aligned_full), axis=0)
-        final_spread = np.sum([np.linalg.norm(config - final_mean) ** 2 for config in aligned_full]) / len(
-            aligned_full
-        )
+        final_spread = np.sum([np.linalg.norm(config - final_mean) ** 2 for config in aligned_full]) / len(aligned_full)
 
         return GPA3DResult(
             aligned_configs=aligned_full,

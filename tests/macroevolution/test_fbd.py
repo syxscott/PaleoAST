@@ -87,9 +87,7 @@ class TestFBDLogLikelihood:
         """Bug 2 regression: passing a Newick string used to ImportError too."""
         fbd = FossilizedBirthDeathProcess(lambda_=0.5, mu=0.2, psi=0.1)
         # 4-leaf fully bifurcating tree, ages: root=5, child=4, leaves=3.
-        result = fbd.log_likelihood(
-            "((A:1,B:1):1,(C:2,D:2):2);", fossils=[]
-        )
+        result = fbd.log_likelihood("((A:1,B:1):1,(C:2,D:2):2);", fossils=[])
         assert isinstance(result, float)
         assert result == result
 

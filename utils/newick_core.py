@@ -209,9 +209,7 @@ class _Scanner:
         # leaked RecursionError into a diagnostic parse error).
         self.depth += 1
         if self.depth > MAX_NEWICK_DEPTH:
-            self.error(
-                f"Newick nesting depth exceeded {MAX_NEWICK_DEPTH}; tree is malformed or too deeply nested"
-            )
+            self.error(f"Newick nesting depth exceeded {MAX_NEWICK_DEPTH}; tree is malformed or too deeply nested")
         try:
             self.skip_ws()
             char = self.current()

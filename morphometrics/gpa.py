@@ -804,9 +804,7 @@ def _slide_surface_tangent_plane(
     out = config.copy()
     # The tangent basis is not needed: the tangent plane is defined by its
     # normal, and the projection below uses only that.
-    normals, _tangent_basis = _compute_surface_tangents_and_normals(
-        consensus, surface
-    )
+    normals, _tangent_basis = _compute_surface_tangents_and_normals(consensus, surface)
     for i in range(1, len(surface) - 1):
         lm_idx = surface[i]
         normal = normals[i]

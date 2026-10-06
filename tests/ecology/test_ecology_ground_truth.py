@@ -65,10 +65,7 @@ def _gt_dtw(seq1: np.ndarray, seq2: np.ndarray) -> float:
     n1 = s1.shape[0]
     n2 = s2.shape[0]
 
-    cost = [
-        [math.sqrt(float(np.sum((s1[i] - s2[j]) ** 2))) for j in range(n2)]
-        for i in range(n1)
-    ]
+    cost = [[math.sqrt(float(np.sum((s1[i] - s2[j]) ** 2))) for j in range(n2)] for i in range(n1)]
 
     cum = [[math.inf] * n2 for _ in range(n1)]
     cum[0][0] = cost[0][0]
@@ -202,8 +199,7 @@ class TestDTWGroundTruth:
             got = float(DTWAnalyzer().compute(s1, s2).distance)
             ref = _gt_dtw(s1, s2)
             assert abs(got - ref) <= 1e-9, (
-                f"trial {trial}: DTW({n1},{n2}) produced {got!r}, "
-                f"textbook recurrence says {ref!r}, delta={got - ref}"
+                f"trial {trial}: DTW({n1},{n2}) produced {got!r}, textbook recurrence says {ref!r}, delta={got - ref}"
             )
 
     def test_recurrence_matches_2d_series(self):
@@ -239,9 +235,7 @@ class TestDTWGroundTruth:
             b = rng.normal(size=int(rng.integers(5, 20)))
             d_ab = float(analyzer.compute(a, b).distance)
             d_ba = float(analyzer.compute(b, a).distance)
-            assert abs(d_ab - d_ba) <= 1e-9, (
-                f"trial {trial}: DTW asymmetric: d(a,b)={d_ab} vs d(b,a)={d_ba}"
-            )
+            assert abs(d_ab - d_ba) <= 1e-9, f"trial {trial}: DTW asymmetric: d(a,b)={d_ab} vs d(b,a)={d_ba}"
 
     def test_reflexivity_d_a_a_eq_zero(self):
         """A sequence aligned with itself must give distance exactly 0.
@@ -308,8 +302,7 @@ class TestDTWGroundTruth:
         unconstrained = float(analyzer.compute(s1, s2).distance)
         ref = _gt_dtw(s1, s2)
         assert abs(unconstrained - ref) <= 1e-9, (
-            f"unconstrained DTW({n},{2 * n}) differs from textbook: "
-            f"{unconstrained} vs {ref}"
+            f"unconstrained DTW({n},{2 * n}) differs from textbook: {unconstrained} vs {ref}"
         )
 
         # Tight band (r=1): the alignment cannot follow the delay, so
@@ -326,8 +319,7 @@ class TestDTWGroundTruth:
             # and is the correct behaviour here.
             return
         assert tight > unconstrained + 1e-6, (
-            f"Sakoe-Chiba r=1 did not constrain alignment: "
-            f"tight={tight} should be > unconstrained={unconstrained}"
+            f"Sakoe-Chiba r=1 did not constrain alignment: tight={tight} should be > unconstrained={unconstrained}"
         )
 
 
@@ -369,9 +361,7 @@ class TestRarefactionGroundTruth:
             sizes = np.asarray(result.sample_sizes, dtype=int)
             got = np.asarray(result.expected_taxa, dtype=float)
             ref = np.array([_gt_hurlbert_expected_species(abundances, int(n)) for n in sizes])
-            assert got.shape == ref.shape, (
-                f"trial {trial}: shape mismatch got {got.shape} vs ref {ref.shape}"
-            )
+            assert got.shape == ref.shape, f"trial {trial}: shape mismatch got {got.shape} vs ref {ref.shape}"
             assert np.allclose(got, ref, atol=1e-9, rtol=5e-3), (
                 f"trial {trial}: curve differs from Hurlbert closed form; "
                 f"max delta={float(np.max(np.abs(got - ref)))}; "
@@ -394,8 +384,7 @@ class TestRarefactionGroundTruth:
         got = np.asarray(result.expected_taxa, dtype=float)
         diffs = np.diff(got)
         assert bool(np.all(diffs >= -1e-9)), (
-            f"rarefaction curve not monotone non-decreasing; "
-            f"min diff={float(diffs.min())}"
+            f"rarefaction curve not monotone non-decreasing; min diff={float(diffs.min())}"
         )
 
     def test_expected_species_bounded_above_by_total(self):
@@ -442,9 +431,7 @@ class TestRarefactionGroundTruth:
         # N-1; E[S_{N-1}] is also exactly S because there is only one
         # possible (N-1)-subset and it leaves out exactly one individual.
         # Either way, E[S_{>= N-1}] == S.
-        assert abs(float(got[-1]) - S) <= 1e-9, (
-            f"E[S_{int(sizes[-1])}] = {float(got[-1])} but source richness is {S}"
-        )
+        assert abs(float(got[-1]) - S) <= 1e-9, f"E[S_{int(sizes[-1])}] = {float(got[-1])} but source richness is {S}"
 
     def test_requested_n_larger_than_N_is_clipped_not_nan(self):
         """``max_n > N`` must be clipped, not produce NaN or raise.
@@ -461,12 +448,8 @@ class TestRarefactionGroundTruth:
         result = compute_rarefaction(abundances, max_n=total + 50, n_points=10)
         got = np.asarray(result.expected_taxa, dtype=float)
         sizes = np.asarray(result.sample_sizes, dtype=int)
-        assert bool(np.all(np.isfinite(got))), (
-            f"expected_taxa contains non-finite values: {got}"
-        )
-        assert int(sizes.max()) <= total, (
-            f"sampled n exceeds total N: max(sizes)={int(sizes.max())} > N={total}"
-        )
+        assert bool(np.all(np.isfinite(got))), f"expected_taxa contains non-finite values: {got}"
+        assert int(sizes.max()) <= total, f"sampled n exceeds total N: max(sizes)={int(sizes.max())} > N={total}"
 
 
 # =============================================================================
@@ -508,9 +491,7 @@ class TestFisherLogSeriesGroundTruth:
             assert abs(alpha_got - alpha_ref) <= 1e-3 * max(1.0, alpha_ref), (
                 f"trial {trial}: alpha got {alpha_got} vs ref {alpha_ref}"
             )
-            assert abs(x_got - x_ref) <= 1e-6, (
-                f"trial {trial}: x got {x_got} vs ref {x_ref}"
-            )
+            assert abs(x_got - x_ref) <= 1e-6, f"trial {trial}: x got {x_got} vs ref {x_ref}"
 
             # Both derived quantities must also satisfy the defining relations.
             # alpha = S / (-ln(1 - x))  by Fisher 1943.
@@ -602,9 +583,7 @@ class TestAbundanceModelFitDiagnostics:
         # n_params for log-normal is 2 (S0, a) per the implementation.
         aic_ref = _gt_aic(fit.observed, fit.predicted, n_params=2)
         assert math.isfinite(fit.aic), f"AIC not finite: {fit.aic}"
-        assert abs(fit.aic - aic_ref) <= 1e-6, (
-            f"AIC differs from textbook: got {fit.aic}, ref {aic_ref}"
-        )
+        assert abs(fit.aic - aic_ref) <= 1e-6, f"AIC differs from textbook: got {fit.aic}, ref {aic_ref}"
 
     def test_aic_matches_textbook_formula_for_geometric(self):
         """Geometric series has 1 free parameter (c), n_params = 1."""
@@ -615,9 +594,7 @@ class TestAbundanceModelFitDiagnostics:
         fit = AbundanceModelFitter().fit_geometric(abundances)
         aic_ref = _gt_aic(fit.observed, fit.predicted, n_params=1)
         assert math.isfinite(fit.aic), f"AIC not finite: {fit.aic}"
-        assert abs(fit.aic - aic_ref) <= 1e-6, (
-            f"geometric AIC differs from textbook: got {fit.aic}, ref {aic_ref}"
-        )
+        assert abs(fit.aic - aic_ref) <= 1e-6, f"geometric AIC differs from textbook: got {fit.aic}, ref {aic_ref}"
 
     def test_zero_variance_input_does_not_crash(self):
         """All abundances identical -> SS_tot == 0 -> must not raise/NaN.
@@ -638,12 +615,8 @@ class TestAbundanceModelFitDiagnostics:
                 # Some methods legitimately cannot fit a constant vector;
                 # the requirement is they do so loudly, not silently NaN.
                 continue
-            assert math.isfinite(fit.r_squared), (
-                f"{method}: r_squared is not finite on constant input: {fit.r_squared}"
-            )
-            assert math.isfinite(fit.aic), (
-                f"{method}: aic is not finite on constant input: {fit.aic}"
-            )
+            assert math.isfinite(fit.r_squared), f"{method}: r_squared is not finite on constant input: {fit.r_squared}"
+            assert math.isfinite(fit.aic), f"{method}: aic is not finite on constant input: {fit.aic}"
 
 
 # =============================================================================
@@ -692,8 +665,7 @@ class TestCAGroundTruth:
             # they return if rows are degenerate; we compare subspaces.
             cos = float(np.dot(axis_got, axis_ref) / (np.linalg.norm(axis_got) * np.linalg.norm(axis_ref)))
             assert abs(cos) >= 1 - 1e-6, (
-                f"trial {trial}: axis not aligned with textbook SVD, "
-                f"|cos| = {abs(cos)}; got={axis_got}, ref={axis_ref}"
+                f"trial {trial}: axis not aligned with textbook SVD, |cos| = {abs(cos)}; got={axis_got}, ref={axis_ref}"
             )
 
     def test_axis_length_matches_sample_count(self):
@@ -723,9 +695,7 @@ class TestCAGroundTruth:
         result = PaleoEnvironmentReconstructor().reconstruct(mat, heights)
         sv = np.asarray(result.singular_values, dtype=float)
         diffs = np.diff(sv)
-        assert bool(np.all(diffs <= 1e-9)), (
-            f"singular values not in non-increasing order: {sv.tolist()}"
-        )
+        assert bool(np.all(diffs <= 1e-9)), f"singular values not in non-increasing order: {sv.tolist()}"
 
     def test_pearson_corr_with_height_is_bounded(self):
         """|r(axis, height)| must be in [0, 1] *or* r is reported as 0.
@@ -786,8 +756,7 @@ class TestCAGroundTruth:
         # in magnitude; if calibration flipped the axis, the reported
         # r is the *raw* r (negative) and the live r is the flipped r.
         assert abs(abs(live_r) - abs(r_reported)) <= 1e-6, (
-            f"calibration lost correlation magnitude: |live|={abs(live_r)} "
-            f"vs |reported|={abs(r_reported)}"
+            f"calibration lost correlation magnitude: |live|={abs(live_r)} vs |reported|={abs(r_reported)}"
         )
 
     def test_axis_finite_across_many_random_inputs(self):
@@ -815,6 +784,4 @@ class TestCAGroundTruth:
             except Exception:
                 continue
             axis = np.asarray(result.row_species_axis, dtype=float)
-            assert bool(np.all(np.isfinite(axis))), (
-                f"trial {trial}: axis contains non-finite values: {axis}"
-            )
+            assert bool(np.all(np.isfinite(axis))), f"trial {trial}: axis contains non-finite values: {axis}"

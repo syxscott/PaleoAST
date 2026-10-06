@@ -173,7 +173,9 @@ def _resolve_pic_root(tree, traits: dict[str, float], root_variance: float = 0.0
         # Select the surviving leaves by trait presence, not by is_leaf, so
         # the "no data left" case reaches the empty-result path instead of
         # crashing in _pic_core on traits[""].
-        remaining = [leaf.name for leaf in working.get_leaves() if leaf.name is not None and traits.get(leaf.name) is not None]
+        remaining = [
+            leaf.name for leaf in working.get_leaves() if leaf.name is not None and traits.get(leaf.name) is not None
+        ]
         if not remaining:
             return None, missing
         return working, missing

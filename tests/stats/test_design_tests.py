@@ -182,12 +182,9 @@ def test_two_way_anova_holds_for_an_unbalanced_design(
     assert result.term_a.ss == pytest.approx(500.0 / 9.0, abs=1e-9)
     assert result.ss_total == pytest.approx(531.5555555555555, abs=1e-9)
     # Closure exact, which the naive weighted-marginal terms cannot do here.
-    assert (
-        result.term_a.ss
-        + result.term_b.ss
-        + result.term_interaction.ss
-        + result.ss_error
-    ) == pytest.approx(result.ss_total, abs=1e-9)
+    assert (result.term_a.ss + result.term_b.ss + result.term_interaction.ss + result.ss_error) == pytest.approx(
+        result.ss_total, abs=1e-9
+    )
     # And the one-way identity still holds for the main effect.
     grand = float(np.mean(values))
     expected_a = 0.0
@@ -205,9 +202,7 @@ def test_two_way_anova_error_is_the_within_cell_sum(analyzer: DesignTestAnalyzer
     within = 0.0
     for a in {"a1", "a2"}:
         for b in {"b1", "b2"}:
-            chunk = values[
-                [i for i in range(len(values)) if factor_a[i] == a and factor_b[i] == b]
-            ]
+            chunk = values[[i for i in range(len(values)) if factor_a[i] == a and factor_b[i] == b]]
             within += float(np.sum((chunk - np.mean(chunk)) ** 2))
     assert result.ss_error == pytest.approx(within, abs=1e-12)
 
@@ -230,8 +225,7 @@ def test_two_way_anova_uses_the_residual_in_every_denominator(
         assert term.f_statistic == pytest.approx(expected, abs=1e-9)
     assert result.term_interaction.f_statistic != pytest.approx(
         (result.term_interaction.ss / result.term_interaction.df)
-        / ((result.term_b.ss / result.term_b.df)
-           + (result.term_interaction.ss / result.term_interaction.df)),
+        / ((result.term_b.ss / result.term_b.df) + (result.term_interaction.ss / result.term_interaction.df)),
         abs=1e-6,
     )
 
@@ -307,9 +301,7 @@ def test_two_way_anova_permutation_p_values_are_calibrated(
         values = rng.normal(size=32)
         factor_a = ["a1"] * 8 + ["a2"] * 8 + ["a1"] * 8 + ["a2"] * 8
         factor_b = ["b1"] * 16 + ["b2"] * 16
-        result = analyzer.two_way_anova(
-            values, factor_a, factor_b, n_permutations=99, random_seed=seed
-        )
+        result = analyzer.two_way_anova(values, factor_a, factor_b, n_permutations=99, random_seed=seed)
         p_values.append(result.term_a.permutation_p_value)
     assert float(np.mean(np.asarray(p_values) < 0.05)) <= 0.25
     assert min(p_values) >= 1.0 / 100 - 1e-12
@@ -491,12 +483,8 @@ def test_repeated_measures_group_effect_uses_the_between_subject_error(
 
     assert result.term_subjects.ms == pytest.approx(150.0, abs=1e-9)
     assert result.term_error.ms == pytest.approx(4.0, abs=1e-9)
-    assert result.term_groups.f_statistic == pytest.approx(
-        result.term_groups.ms / result.term_subjects.ms, abs=1e-12
-    )
-    assert result.term_groups.f_statistic != pytest.approx(
-        result.term_groups.ms / result.term_error.ms, rel=0.01
-    )
+    assert result.term_groups.f_statistic == pytest.approx(result.term_groups.ms / result.term_subjects.ms, abs=1e-12)
+    assert result.term_groups.f_statistic != pytest.approx(result.term_groups.ms / result.term_error.ms, rel=0.01)
 
 
 def test_repeated_measures_reduces_to_the_textbook_one_factor_case(
@@ -538,9 +526,7 @@ def test_repeated_measures_reduces_to_the_textbook_one_factor_case(
     # The within-subject residual, computed here straight from the raw
     # values, must equal the within-subject stratum in full.
     residual = float(np.sum((matrix - matrix.mean(axis=1, keepdims=True)) ** 2))
-    assert result.term_measurement.ss + result.term_error.ss == pytest.approx(
-        residual, abs=1e-9
-    )
+    assert result.term_measurement.ss + result.term_error.ss == pytest.approx(residual, abs=1e-9)
 
 
 def test_repeated_measures_accepts_an_explicit_measurement_label(
@@ -558,12 +544,8 @@ def test_repeated_measures_accepts_an_explicit_measurement_label(
         [groups[i] for i in order],
         measurement=measurement,
     )
-    assert shuffled.term_measurement.f_statistic == pytest.approx(
-        expected.term_measurement.f_statistic, abs=1e-9
-    )
-    assert shuffled.term_interaction.f_statistic == pytest.approx(
-        expected.term_interaction.f_statistic, abs=1e-9
-    )
+    assert shuffled.term_measurement.f_statistic == pytest.approx(expected.term_measurement.f_statistic, abs=1e-9)
+    assert shuffled.term_interaction.f_statistic == pytest.approx(expected.term_interaction.f_statistic, abs=1e-9)
 
 
 def test_repeated_measures_p_values_match_scipy(analyzer: DesignTestAnalyzer) -> None:
@@ -614,9 +596,7 @@ def test_repeated_measures_rejects_an_incomplete_subject(
     keep = [i for i in range(len(values)) if i != 4]
     assert subjects[4] == "B"
     with pytest.raises(MatrixDimensionError, match="all 3 measurements"):
-        analyzer.repeated_measures_anova(
-            values[keep], [subjects[i] for i in keep], [groups[i] for i in keep]
-        )
+        analyzer.repeated_measures_anova(values[keep], [subjects[i] for i in keep], [groups[i] for i in keep])
 
 
 def test_repeated_measures_rejects_a_subject_in_two_groups(

@@ -90,9 +90,7 @@ class ScriptConsoleDialog(QDialog):
         self.resize(900, 640)
         self.setObjectName("ScriptConsoleDialog")
 
-        self._session = ScriptSession(
-            data_provider=data_provider, controller=controller
-        )
+        self._session = ScriptSession(data_provider=data_provider, controller=controller)
         self._build_ui()
         self._apply_stylesheet()
         self._write_banner()
@@ -105,21 +103,14 @@ class ScriptConsoleDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
-        self._hint = QLabel(
-            _(
-                "Python. Try analyses() to list what can be run, or "
-                "run(\"mantel\", n_permutations=999)."
-            )
-        )
+        self._hint = QLabel(_('Python. Try analyses() to list what can be run, or run("mantel", n_permutations=999).'))
         self._hint.setWordWrap(True)
         layout.addWidget(self._hint)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
 
         self._input = QPlainTextEdit()
-        self._input.setPlaceholderText(
-            _("Type Python here. The value of a final expression is echoed.")
-        )
+        self._input.setPlaceholderText(_("Type Python here. The value of a final expression is echoed."))
         self._input.setTabChangesFocus(True)
         self._input.setFont(QFont("Consolas", 10))
         splitter.addWidget(self._input)
@@ -140,9 +131,7 @@ class ScriptConsoleDialog(QDialog):
         buttons.addStretch(1)
 
         self._reset_button = QPushButton(_("Reset namespace"))
-        self._reset_button.setToolTip(
-            _("Forget every variable defined in this console")
-        )
+        self._reset_button.setToolTip(_("Forget every variable defined in this console"))
         self._reset_button.clicked.connect(self._on_reset)
         buttons.addWidget(self._reset_button)
 
@@ -195,9 +184,7 @@ class ScriptConsoleDialog(QDialog):
         categories = self._session.categories()
         lines = [
             _("PaleoAST script console."),
-            _("{0} analyses available in {1} categories.").format(
-                len(names), len(categories)
-            ),
+            _("{0} analyses available in {1} categories.").format(len(names), len(categories)),
             _("Names stay defined between runs. Ctrl+Enter runs the block."),
             "",
         ]
@@ -236,9 +223,7 @@ class ScriptConsoleDialog(QDialog):
         text = result.text
         if text:
             self._append(text)
-        self._status.setText(
-            _("Ready") if result.ok else _("Finished with an error")
-        )
+        self._status.setText(_("Ready") if result.ok else _("Finished with an error"))
 
     def _on_clear(self) -> None:
         """Empty the output pane. Variables are untouched."""

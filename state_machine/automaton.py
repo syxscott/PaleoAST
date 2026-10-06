@@ -440,9 +440,7 @@ class DFA(FiniteAutomaton):
                     for symbol in ordered_alphabet:
                         transition = self._find_transition(state, symbol)
                         signature.append(
-                            self._find_partition(transition.target, partitions)
-                            if transition is not None
-                            else None
+                            self._find_partition(transition.target, partitions) if transition is not None else None
                         )
                     groups.setdefault(tuple(signature), set()).add(state)
                 if len(groups) > 1:
@@ -634,7 +632,7 @@ class RegexNodeType(Enum):
     OPTIONAL = auto()
     CHAR = auto()
     CHARCLASS = auto()
-    ANY = auto()          # the dot: one character other than newline
+    ANY = auto()  # the dot: one character other than newline
     EPSILON = auto()
 
 

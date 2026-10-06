@@ -40,9 +40,15 @@ def _compute(newick: str, sequences: dict[str, str], **kwargs):
 
 
 def _root_states(result, site: int = 0) -> set:
-    return set(result.character_states[site][(result.character_states[site].__iter__().__next__() and
-                                          next(n for n, s in result.character_states[site].items()
-                                               if s)) or result.character_states[site].__iter__().__next__()])
+    return set(
+        result.character_states[site][
+            (
+                result.character_states[site].__iter__().__next__()
+                and next(n for n, s in result.character_states[site].items() if s)
+            )
+            or result.character_states[site].__iter__().__next__()
+        ]
+    )
 
 
 def _root_states_simple(result, site: int = 0):
@@ -110,8 +116,7 @@ class TestFitchMultifurcationStateSet:
         # 5-way polytomy: A has X, B has Y, C has Z, D and E have Y.
         # Buggy: {X} & {Y} -> {X,Y}, & {Z} -> {X,Y,Z}, & {Y} -> {Y}, & {Y} -> {Y}.
         # Correct: intersection of all = {}, union of all = {X,Y,Z}.
-        result = _compute("(A,B,C,D,E);",
-                          {"A": "X", "B": "Y", "C": "Z", "D": "Y", "E": "Y"})
+        result = _compute("(A,B,C,D,E);", {"A": "X", "B": "Y", "C": "Z", "D": "Y", "E": "Y"})
         assert _root_states_simple(result, 0) == {"X", "Y", "Z"}
 
     def test_polytomy_full_union(self):

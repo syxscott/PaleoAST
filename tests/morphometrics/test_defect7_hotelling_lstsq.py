@@ -55,8 +55,9 @@ class TestHotellingT2SolverPath:
             warnings.simplefilter("always")
             res = hotelling_t2(x1, x2)
         # A warning about singular covariance must be emitted.
-        assert any("singular" in str(w.message).lower() for w in caught), \
+        assert any("singular" in str(w.message).lower() for w in caught), (
             f"Expected a singular-matrix warning; got: {[str(w.message) for w in caught]}"
+        )
         # Still returns a finite T² (we degrade gracefully, but loudly).
         assert np.isfinite(res.t2)
         assert np.isfinite(res.p_value)

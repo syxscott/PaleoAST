@@ -1499,9 +1499,7 @@ class MarkovDialog(BaseAnalysisDialog):
         names_group = self.add_parameter_group(_("Facies Names"))
         names_layout = QVBoxLayout(names_group)
         self._facies_names_edit = QLineEdit()
-        self._facies_names_edit.setPlaceholderText(
-            _("Comma-separated names, e.g. Sandstone, Mudstone, Limestone")
-        )
+        self._facies_names_edit.setPlaceholderText(_("Comma-separated names, e.g. Sandstone, Mudstone, Limestone"))
         names_layout.addWidget(QLabel(_("Facies names (one per distinct code, in code order):")))
         names_layout.addWidget(self._facies_names_edit)
 

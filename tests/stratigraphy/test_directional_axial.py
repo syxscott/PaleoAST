@@ -52,8 +52,7 @@ class TestAxialUnimodal:
         assert result.data_type == "axial"
         assert result.mean_direction_deg is not None
         assert 80 < result.mean_direction_deg < 100, (
-            f"Axial mean {result.mean_direction_deg}° should be near 90°, "
-            "got pushed by quadrant bias?"
+            f"Axial mean {result.mean_direction_deg}° should be near 90°, got pushed by quadrant bias?"
         )
 
     def test_axial_polar_give_different_means(self):

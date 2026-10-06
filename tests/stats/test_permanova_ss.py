@@ -110,7 +110,7 @@ class TestPERMANOVASSDivisors:
         )
         # euclidean distance matrix
         diff = coords[:, None, :] - coords[None, :, :]
-        D = np.sqrt((diff ** 2).sum(axis=2))
+        D = np.sqrt((diff**2).sum(axis=2))
         groups = np.array(["A", "A", "A", "B", "B"])
 
         analyzer = PERMANOVAAnalyzer()

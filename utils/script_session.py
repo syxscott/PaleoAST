@@ -205,8 +205,7 @@ class DataProxy:
             return getattr(current, name)
         except AttributeError:
             raise AttributeError(
-                f"data.{name} is not available; the loaded object is a "
-                f"{type(current).__name__}"
+                f"data.{name} is not available; the loaded object is a {type(current).__name__}"
             ) from None
 
     def __getitem__(self, key: Any) -> Any:
@@ -228,9 +227,7 @@ class DataProxy:
     def __array__(self, dtype: Any = None, copy: Any = None) -> npt.NDArray:
         current = self.snapshot()
         if current is None:
-            raise ValueError(
-                "no data is loaded, so data cannot be converted to an array"
-            )
+            raise ValueError("no data is loaded, so data cannot be converted to an array")
         return current if dtype is None else current.astype(dtype, copy=False)
 
     def __iter__(self) -> Any:
@@ -426,10 +423,7 @@ class ScriptSession:
         self._ensure_catalog_loaded()
         if self._registry is None or self._registry.get(name) is None:
             available = ", ".join(self.analyses()[:20])
-            return (
-                f"No analysis named {name!r}.\n"
-                f"Available ({len(self.analyses())}): {available} ..."
-            )
+            return f"No analysis named {name!r}.\nAvailable ({len(self.analyses())}): {available} ..."
         payload = self.data if data is None else data
         if payload is not None and hasattr(payload, "raw_data"):
             payload = payload.raw_data

@@ -123,6 +123,7 @@ def test_message_handler_detects_an_unsupported_property(qapp):
     entirely (a Qt upgrade, a platform that routes messages elsewhere), and
     a test that can never fail is worse than no test at all.
     """
+
     def apply(app):
         probe = QPushButton("probe")
         probe.setStyleSheet("QPushButton { color: red; transition: all 200ms ease; }")
@@ -138,12 +139,10 @@ def test_message_handler_detects_an_unsupported_property(qapp):
 
 def test_message_handler_accepts_a_supported_property(qapp):
     """Negative control: a valid stylesheet must produce no such message."""
+
     def apply(app):
         probe = QPushButton("probe")
-        probe.setStyleSheet(
-            "QPushButton { color: red; background: #ffffff; "
-            "border-radius: 4px; padding: 4px 8px; }"
-        )
+        probe.setStyleSheet("QPushButton { color: red; background: #ffffff; border-radius: 4px; padding: 4px 8px; }")
         probe.ensurePolished()
         app.processEvents()
 
@@ -194,10 +193,7 @@ def test_project_stylesheets_use_only_supported_properties(qapp, dark):
         )
 
     bad = _collect_unknown_properties(qapp, apply)
-    assert bad == [], (
-        "Qt rejected these stylesheet properties, so the rules do not apply: "
-        f"{sorted(set(bad))}"
-    )
+    assert bad == [], f"Qt rejected these stylesheet properties, so the rules do not apply: {sorted(set(bad))}"
 
 
 def test_diagnostic_console_stylesheet_uses_only_supported_properties(qapp):
@@ -212,7 +208,4 @@ def test_diagnostic_console_stylesheet_uses_only_supported_properties(qapp):
             app.processEvents()
 
     bad = _collect_unknown_properties(qapp, apply)
-    assert bad == [], (
-        "DiagnosticConsole stylesheet uses properties Qt ignores: "
-        f"{sorted(set(bad))}"
-    )
+    assert bad == [], f"DiagnosticConsole stylesheet uses properties Qt ignores: {sorted(set(bad))}"

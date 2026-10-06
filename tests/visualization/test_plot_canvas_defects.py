@@ -217,9 +217,7 @@ class TestPCAGroupsAndLabels:
     paint every point in a single colour. The fix threads the new kwargs
     through and falls back to the result object's attributes."""
 
-    def test_explicit_groups_and_labels_win(
-        self, canvas, pca_result, site_groups, site_labels, habitat_names
-    ):
+    def test_explicit_groups_and_labels_win(self, canvas, pca_result, site_groups, site_labels, habitat_names):
         canvas.plot_pca_scores(
             pca_result,
             groups=site_groups,
@@ -360,9 +358,7 @@ class TestAnnotationOffset:
         # jitter.
         ys = [a.get_position()[1] for a in ann]
         rounded = [round(float(y), 6) for y in ys]
-        assert len(set(rounded)) >= 2, (
-            f"All annotations collapsed to the same data y after dodge: {ys}"
-        )
+        assert len(set(rounded)) >= 2, f"All annotations collapsed to the same data y after dodge: {ys}"
 
     def test_annotate_offset_false_keeps_legacy_layout(self, canvas, pca_result):
         rng = np.random.default_rng(5)

@@ -84,8 +84,11 @@ try:
         s.get_result(x, timeout=3)
         check("circular-ish dependency resolves or times out", True)
     except Exception as exc:
-        check("circular-ish dependency times out rather than hanging",
-              time.time() - start < 10, f"took {time.time()-start:.1f}s: {exc}")
+        check(
+            "circular-ish dependency times out rather than hanging",
+            time.time() - start < 10,
+            f"took {time.time() - start:.1f}s: {exc}",
+        )
 except Exception as exc:
     print(f"  note  add_task raised for circular dependency: {type(exc).__name__}: {exc}")
 s.shutdown(wait=False)
@@ -115,8 +118,9 @@ try:
     s.get_result("nope", timeout=2)
     check("unknown task id returns None or raises", True, "returned a value")
 except Exception as exc:
-    check("unknown task id raises a clear error", isinstance(exc, (KeyError, ValueError)),
-          f"{type(exc).__name__}: {exc}")
+    check(
+        "unknown task id raises a clear error", isinstance(exc, (KeyError, ValueError)), f"{type(exc).__name__}: {exc}"
+    )
 s.shutdown()
 
 print()

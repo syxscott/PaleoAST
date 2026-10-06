@@ -39,19 +39,92 @@ from state_machine.automaton import RegexCompiler, regex_to_dfa, regex_to_nfa
 
 # Patterns the engine claims to support.
 SUPPORTED = [
-    "a", "ab", "ba", "a|b", "ab|cd", "a*", "a+", "a?", "ab*", "(ab)*", "(ab)+",
-    "a(b|c)d", "a(bc|d)*e", "(a|b)*abb", "colou?r", "(a+)+b", "[abc]+", "[abc]",
-    "[a-z]+", "[a-z]", "[^a-z]+", "[^0-9]", "[a-zA-Z0-9]+", "[0-9]+", "a.b",
-    "abc|def|ghi", "a(b|c)(d|e)", "(a|b)(c|d)(e|f)", "x*y*z*", "(|a)",
+    "a",
+    "ab",
+    "ba",
+    "a|b",
+    "ab|cd",
+    "a*",
+    "a+",
+    "a?",
+    "ab*",
+    "(ab)*",
+    "(ab)+",
+    "a(b|c)d",
+    "a(bc|d)*e",
+    "(a|b)*abb",
+    "colou?r",
+    "(a+)+b",
+    "[abc]+",
+    "[abc]",
+    "[a-z]+",
+    "[a-z]",
+    "[^a-z]+",
+    "[^0-9]",
+    "[a-zA-Z0-9]+",
+    "[0-9]+",
+    "a.b",
+    "abc|def|ghi",
+    "a(b|c)(d|e)",
+    "(a|b)(c|d)(e|f)",
+    "x*y*z*",
+    "(|a)",
 ]
 
 # Inputs wide enough that a wrong DFA is very unlikely to agree by accident.
 PROBES = [
-    "", "a", "b", "c", "d", "e", "x", "y", "z", "A", "Z", "0", "9", "5",
-    "aa", "ab", "ba", "bb", "abc", "abd", "acb", "cd", "aab", "abb", "abcd",
-    "abab", "abba", "aabb", "aaaa", "aaaaa", "colou", "color", "colour", "colr",
-    "aXb", "a b", "a.b", "xyz", "ccd", "acc", "42", "7", "abcde", "dcba",
-    "e", "acbd", "cba", "bb", "aabbcc", "ababab", "cc", "dd",
+    "",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "x",
+    "y",
+    "z",
+    "A",
+    "Z",
+    "0",
+    "9",
+    "5",
+    "aa",
+    "ab",
+    "ba",
+    "bb",
+    "abc",
+    "abd",
+    "acb",
+    "cd",
+    "aab",
+    "abb",
+    "abcd",
+    "abab",
+    "abba",
+    "aabb",
+    "aaaa",
+    "aaaaa",
+    "colou",
+    "color",
+    "colour",
+    "colr",
+    "aXb",
+    "a b",
+    "a.b",
+    "xyz",
+    "ccd",
+    "acc",
+    "42",
+    "7",
+    "abcde",
+    "dcba",
+    "e",
+    "acbd",
+    "cba",
+    "bb",
+    "aabbcc",
+    "ababab",
+    "cc",
+    "dd",
 ]
 
 
@@ -63,9 +136,7 @@ class TestAgreesWithPythonRe:
         for text in PROBES:
             got = bool(dfa.accepts_string(text))
             want = expected.fullmatch(text) is not None
-            assert got == want, (
-                f"/{pattern}/ vs {text!r}: engine says {got}, re says {want}"
-            )
+            assert got == want, f"/{pattern}/ vs {text!r}: engine says {got}, re says {want}"
 
     @pytest.mark.parametrize(
         "pattern",
@@ -81,9 +152,9 @@ class TestAgreesWithPythonRe:
         """
         dfa = regex_to_dfa(pattern)
         for text in PROBES:
-            assert bool(dfa.accepts_string(text)) == (
-                re.fullmatch(pattern, text) is not None
-            ), f"/{pattern}/ vs {text!r}"
+            assert bool(dfa.accepts_string(text)) == (re.fullmatch(pattern, text) is not None), (
+                f"/{pattern}/ vs {text!r}"
+            )
 
 
 class TestMinimisationPreservesTheLanguage:
@@ -103,9 +174,7 @@ class TestMinimisationPreservesTheLanguage:
         """The specific shape that used to slip through: every state accepting."""
         nfa = RegexCompiler().compile("a?", to_dfa=False)
         dfa = nfa.to_dfa()
-        assert all(state.is_accepting for state in dfa.states), (
-            "fixture no longer exercises the all-accepting case"
-        )
+        assert all(state.is_accepting for state in dfa.states), "fixture no longer exercises the all-accepting case"
         minimal = dfa.minimize_hopcroft()
         assert minimal.accepts_string("") is True
         assert minimal.accepts_string("a") is True
@@ -145,10 +214,16 @@ class TestCharacterClassRanges:
 
 
 class TestDotIsNotALiteral:
-    @pytest.mark.parametrize("text,expected", [
-        ("axb", True), ("a b", True), ("a1b", True), ("ab", False),
-        ("axxb", False),
-    ])
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("axb", True),
+            ("a b", True),
+            ("a1b", True),
+            ("ab", False),
+            ("axxb", False),
+        ],
+    )
     def test_dot_matches_exactly_one_character(self, text, expected):
         dfa = regex_to_dfa("a.b")
         assert dfa.accepts_string(text) is expected

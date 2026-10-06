@@ -146,9 +146,7 @@ def test_morans_matches_the_textbook_formula(analyzer: SpatialStatsAnalyzer) -> 
 
     standardised = weights / weights.sum(axis=1, keepdims=True)
     z = ramp - ramp.mean()
-    expected_i = (len(ramp) / standardised.sum()) * float(
-        z @ standardised @ z
-    ) / float(z @ z)
+    expected_i = (len(ramp) / standardised.sum()) * float(z @ standardised @ z) / float(z @ z)
 
     result = analyzer.morans_i(ramp, weights=weights)
     assert result.statistic == pytest.approx(expected_i, rel=1e-12)
@@ -503,9 +501,7 @@ def test_idw_at_an_equidistant_point_is_the_arithmetic_mean(
     # Equal weights means the power cannot matter at the centre, for any of
     # the three powers tried.
     for power in (0.5, 1.0, 2.0, 8.0):
-        varied = analyzer.grid_interpolate(
-            values, coordinates, method="idw", power=power, n_points=3
-        )
+        varied = analyzer.grid_interpolate(values, coordinates, method="idw", power=power, n_points=3)
         assert varied.surface[1, 1] == pytest.approx(15.0 / 4.0, rel=1e-12)
 
 
@@ -648,17 +644,12 @@ def test_nn_csr_expectation_is_the_rayleigh_mean(analyzer: SpatialStatsAnalyzer)
     """
     coordinates = np.random.default_rng(11).uniform(0.0, 100.0, size=(250, 2))
     area = float(
-        (coordinates[:, 0].max() - coordinates[:, 0].min())
-        * (coordinates[:, 1].max() - coordinates[:, 1].min())
+        (coordinates[:, 0].max() - coordinates[:, 0].min()) * (coordinates[:, 1].max() - coordinates[:, 1].min())
     )
     intensity = 250.0 / area
-    by_integration = quad(
-        lambda d: float(np.exp(-intensity * np.pi * d * d)), 0.0, 50.0
-    )[0]
+    by_integration = quad(lambda d: float(np.exp(-intensity * np.pi * d * d)), 0.0, 50.0)[0]
 
-    result = analyzer.nearest_neighbour_stats(
-        coordinates, edge_correction=False, n_simulations=9, random_seed=5
-    )
+    result = analyzer.nearest_neighbour_stats(coordinates, edge_correction=False, n_simulations=9, random_seed=5)
     assert result.n_sites == 250
     assert result.expected_nn == pytest.approx(0.5 * np.sqrt(area / 250.0), rel=1e-12)
     assert result.expected_nn == pytest.approx(by_integration, rel=1e-6)
@@ -685,9 +676,7 @@ def test_nn_index_of_a_square_lattice_is_exactly_two_k_over_k_minus_one(
     """
     for k, expected in ((5, 2.0 * 5 / 4), (12, 2.0 * 12 / 11)):
         coordinates, _row, _col = _lattice(k)
-        result = analyzer.nearest_neighbour_stats(
-            coordinates, edge_correction=False, n_simulations=9, random_seed=3
-        )
+        result = analyzer.nearest_neighbour_stats(coordinates, edge_correction=False, n_simulations=9, random_seed=3)
         assert result.n_sites == k * k
         assert result.mean_nn == pytest.approx(1.0)
         assert result.index == pytest.approx(expected, rel=1e-12)
@@ -726,23 +715,17 @@ def test_nn_rejects_clustered_and_regular_patterns_correctly(
     """
     clusters = np.vstack(
         [
-            np.array([10.0, 10.0])
-            + 1e-3 * np.random.default_rng(1).normal(size=(50, 2)),
-            np.array([80.0, 80.0])
-            + 1e-3 * np.random.default_rng(2).normal(size=(50, 2)),
+            np.array([10.0, 10.0]) + 1e-3 * np.random.default_rng(1).normal(size=(50, 2)),
+            np.array([80.0, 80.0]) + 1e-3 * np.random.default_rng(2).normal(size=(50, 2)),
         ]
     )
-    clustered = analyzer.nearest_neighbour_stats(
-        clusters, n_simulations=99, random_seed=5
-    )
+    clustered = analyzer.nearest_neighbour_stats(clusters, n_simulations=99, random_seed=5)
     assert clustered.index < 0.2
     assert str(clustered.pattern) == "CLUSTERED"
     assert clustered.significant
     assert clustered.p_value == pytest.approx(0.01)
 
-    regular = analyzer.nearest_neighbour_stats(
-        _lattice(5)[0], n_simulations=99, random_seed=5
-    )
+    regular = analyzer.nearest_neighbour_stats(_lattice(5)[0], n_simulations=99, random_seed=5)
     assert regular.index > 1.0
     assert str(regular.pattern) == "REGULAR"
 
@@ -761,9 +744,7 @@ def test_nn_z_score_is_centred_under_the_null(analyzer: SpatialStatsAnalyzer) ->
     rejected = 0
     for seed in range(12):
         coordinates = np.random.default_rng(200 + seed).uniform(0.0, 100.0, size=(250, 2))
-        result = analyzer.nearest_neighbour_stats(
-            coordinates, n_simulations=99, random_seed=1
-        )
+        result = analyzer.nearest_neighbour_stats(coordinates, n_simulations=99, random_seed=1)
         z_scores.append(result.z_score)
         rejected += int(result.p_value < 0.05)
     assert abs(float(np.mean(z_scores))) < 1.0
@@ -780,12 +761,8 @@ def test_nn_edge_correction_uses_a_reduced_sample(analyzer: SpatialStatsAnalyzer
     significantly regular.
     """
     coordinates = np.random.default_rng(11).uniform(0.0, 100.0, size=(250, 2))
-    corrected = analyzer.nearest_neighbour_stats(
-        coordinates, n_simulations=9, random_seed=5
-    )
-    uncorrected = analyzer.nearest_neighbour_stats(
-        coordinates, n_simulations=9, random_seed=5, edge_correction=False
-    )
+    corrected = analyzer.nearest_neighbour_stats(coordinates, n_simulations=9, random_seed=5)
+    uncorrected = analyzer.nearest_neighbour_stats(coordinates, n_simulations=9, random_seed=5, edge_correction=False)
 
     assert uncorrected.n_sites == uncorrected.n_sites_total == 250
     assert uncorrected.edge_shrink == 0.0
@@ -794,9 +771,7 @@ def test_nn_edge_correction_uses_a_reduced_sample(analyzer: SpatialStatsAnalyzer
     # The inscribed window is strictly smaller than the study window, and the
     # reference area is computed from it.
     assert corrected.area < uncorrected.area
-    assert corrected.expected_nn == pytest.approx(
-        0.5 * np.sqrt(corrected.area / corrected.n_sites)
-    )
+    assert corrected.expected_nn == pytest.approx(0.5 * np.sqrt(corrected.area / corrected.n_sites))
 
 
 def test_nn_cdf_tracks_the_analytic_poisson_cdf(analyzer: SpatialStatsAnalyzer) -> None:
@@ -965,9 +940,7 @@ def test_spherical_kappa_matches_fishers_corrected_formula(
     reciprocal, or skipping it -- gives a different number, which is why the
     expected value is written out rather than merely bounded.
     """
-    vectors = np.array(
-        [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]
-    )
+    vectors = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]])
     result = analyzer.spherical_stats(vectors)
 
     assert result.resultant_length == pytest.approx(1.0, rel=1e-12)
@@ -989,16 +962,12 @@ def test_spherical_confidence_cone_holds_95_percent_of_the_vmf_density(
     the solver itself; the large-kappa approximation
     ``cos(w) = 1 + ln(0.05)/kappa`` is not used, and would not agree here.
     """
-    vectors = np.array(
-        [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]
-    )
+    vectors = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]])
     result = analyzer.spherical_stats(vectors)
     kappa = result.kappa
 
     def density(theta: float) -> float:
-        return float(
-            kappa * np.sin(theta) * np.exp(kappa * np.cos(theta)) / (2.0 * np.sinh(kappa))
-        )
+        return float(kappa * np.sin(theta) * np.exp(kappa * np.cos(theta)) / (2.0 * np.sinh(kappa)))
 
     # The density is a proper one, which the solver implicitly assumes.
     assert quad(density, 0.0, np.pi)[0] == pytest.approx(1.0, rel=1e-9)
@@ -1018,9 +987,7 @@ def test_spherical_reduces_to_the_circular_mean(analyzer: SpatialStatsAnalyzer) 
     Rayleigh resultant here is 4.78 and R/(n-1) would be 1.19.
     """
     angles = np.radians([10.0, 20.0, 30.0, 40.0, 350.0])
-    vectors = np.column_stack(
-        [np.cos(angles), np.sin(angles), np.zeros(angles.size)]
-    )
+    vectors = np.column_stack([np.cos(angles), np.sin(angles), np.zeros(angles.size)])
     result = analyzer.spherical_stats(vectors)
 
     rayleigh = abs(np.exp(1j * angles).sum())
@@ -1170,14 +1137,10 @@ def test_all_results_serialise_and_summarise(analyzer: SpatialStatsAnalyzer) -> 
     import json
 
     _coordinates, row, _col = _lattice(5)
-    morans = analyzer.morans_i(
-        row - 2.0, weights=_rook_weights(5), permutations=19, random_seed=1
-    )
+    morans = analyzer.morans_i(row - 2.0, weights=_rook_weights(5), permutations=19, random_seed=1)
     coordinates, values = _unit_corners()
     grid = analyzer.grid_interpolate(values, coordinates, n_points=3)
-    nn = analyzer.nearest_neighbour_stats(
-        _lattice(5)[0], edge_correction=False, n_simulations=9, random_seed=1
-    )
+    nn = analyzer.nearest_neighbour_stats(_lattice(5)[0], edge_correction=False, n_simulations=9, random_seed=1)
     sphere = analyzer.spherical_stats(np.tile(_oblique_unit(), (5, 1)))
 
     assert "Morans I" in morans.summary()
@@ -1209,9 +1172,7 @@ def test_last_results_are_retained(analyzer: SpatialStatsAnalyzer) -> None:
     assert analyzer.last_spherical is None
 
     _coordinates, row, _col = _lattice(5)
-    morans = analyzer.morans_i(
-        row - 2.0, weights=_rook_weights(5), permutations=19, random_seed=1
-    )
+    morans = analyzer.morans_i(row - 2.0, weights=_rook_weights(5), permutations=19, random_seed=1)
     assert analyzer.last_result is morans
     assert analyzer.last_morans_i is morans
 
@@ -1221,9 +1182,7 @@ def test_last_results_are_retained(analyzer: SpatialStatsAnalyzer) -> None:
     assert analyzer.last_interpolation is grid
     assert analyzer.last_morans_i is morans
 
-    nn = analyzer.nearest_neighbour_stats(
-        _lattice(5)[0], edge_correction=False, n_simulations=9, random_seed=1
-    )
+    nn = analyzer.nearest_neighbour_stats(_lattice(5)[0], edge_correction=False, n_simulations=9, random_seed=1)
     sphere = analyzer.spherical_stats(np.tile(_oblique_unit(), (5, 1)))
     assert analyzer.last_result is sphere
     assert analyzer.last_nearest_neighbour is nn

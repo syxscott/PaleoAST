@@ -117,10 +117,7 @@ def test_no_ribbon_group_is_collapsed_onto_one_icon():
 
     assert not offenders, (
         "ribbon groups whose buttons are mostly one icon:\n  "
-        + "\n  ".join(
-            f"{name}: {count}/{total} use {icon!r}"
-            for name, (icon, count, total) in offenders.items()
-        )
+        + "\n  ".join(f"{name}: {count}/{total} use {icon!r}" for name, (icon, count, total) in offenders.items())
         + "\n\nEither draw a distinct glyph per action, or drop the icon from "
         "that group (RibbonStyle.TEXT_ONLY exists). An icon that repeats the "
         "tab name costs 24px per button and says nothing."
@@ -136,19 +133,17 @@ def test_transform_buttons_have_distinct_glyphs():
     from views.ui_main_window import _GLYPH_ICONS
 
     expected = {
-        "tf_log", "tf_sqrt", "tf_hellinger", "tf_zscore", "tf_pct",
+        "tf_log",
+        "tf_sqrt",
+        "tf_hellinger",
+        "tf_zscore",
+        "tf_pct",
         "tf_wisconsin",
     }
-    assert expected <= set(_GLYPH_ICONS), (
-        f"missing transform glyphs: {sorted(expected - set(_GLYPH_ICONS))}"
-    )
+    assert expected <= set(_GLYPH_ICONS), f"missing transform glyphs: {sorted(expected - set(_GLYPH_ICONS))}"
     glyphs = [_GLYPH_ICONS[k] for k in expected]
-    assert len(set(glyphs)) == len(glyphs), (
-        f"transform glyphs are not distinct: {glyphs}"
-    )
+    assert len(set(glyphs)) == len(glyphs), f"transform glyphs are not distinct: {glyphs}"
     # Each must actually be wired to a button, or the table is decorative.
     requested = _requested_icon_types()
     unwired = sorted(expected - requested)
-    assert not unwired, (
-        f"glyph icons defined but never used on a button: {unwired}"
-    )
+    assert not unwired, f"glyph icons defined but never used on a button: {unwired}"

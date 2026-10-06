@@ -86,9 +86,7 @@ def _as_ages_ma(ages: npt.NDArray | list[float], units: str, name: str) -> npt.N
     """Validate and convert an age array to Ma, flattened and finite."""
     key = str(units).strip().lower()
     if key not in UNIT_TO_MA:
-        raise DataValidationError(
-            _("units must be one of {0}; got '{1}'").format(", ".join(sorted(UNIT_TO_MA)), units)
-        )
+        raise DataValidationError(_("units must be one of {0}; got '{1}'").format(", ".join(sorted(UNIT_TO_MA)), units))
     arr = np.asarray(ages, dtype=float).flatten()
     if arr.size == 0:
         raise DataValidationError(_("Time axis '{0}' is empty").format(name))
@@ -135,9 +133,7 @@ class TimeAxis:
     # -- construction from the three existing representations ---------------
 
     @classmethod
-    def from_ages(
-        cls, ages: npt.NDArray | list[float], units: str = "Ma", source: str = "ages"
-    ) -> TimeAxis:
+    def from_ages(cls, ages: npt.NDArray | list[float], units: str = "Ma", source: str = "ages") -> TimeAxis:
         """Build from a bare age array (any of the units above)."""
         return cls(ages, units=units, source=source)
 
@@ -169,9 +165,7 @@ class TimeAxis:
         return cls(ages, units="Ma", source=f"StratigraphicSection[{getattr(section, 'name', '?')}]")
 
     @classmethod
-    def from_bin_rows(
-        cls, rows: list[dict[str, Any]], key: str = "mid_ma"
-    ) -> TimeAxis:
+    def from_bin_rows(cls, rows: list[dict[str, Any]], key: str = "mid_ma") -> TimeAxis:
         """Build from ``time_bins`` rows (``max_ma``/``min_ma``/``mid_ma``).
 
         A bin table is an interval table, not a point axis, so a bin has to
@@ -268,7 +262,7 @@ class TimeAxis:
     def frequency_per_ma(self, period_kyr: float | npt.NDArray) -> npt.NDArray | float:
         """Convert a period in kyr to a frequency in cycles per Ma.
 
-            f = 1 / P,  with P in kyr and f per Ma  =>  f = 1000 / P_kyr
+        f = 1 / P,  with P in kyr and f per Ma  =>  f = 1000 / P_kyr
         """
         p = np.asarray(period_kyr, dtype=float)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -327,9 +321,7 @@ class TimeAxis:
         hi = 1.0 / (2.0 * self.dt_ma)
         if hi <= lo:
             raise DataValidationError(
-                _("Cannot build a period axis: Nyquist {0} is not above the fundamental {1}").format(
-                    hi, lo
-                )
+                _("Cannot build a period axis: Nyquist {0} is not above the fundamental {1}").format(hi, lo)
             )
         freqs = np.geomspace(lo, hi, int(n))
         return np.sort(self.period_kyr(freqs))

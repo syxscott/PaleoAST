@@ -207,8 +207,7 @@ class ProcessPool:
             # start() here would silently resurrect a set of processes the
             # caller had just torn down. Say so instead.
             raise ComputationError(
-                "This ProcessPool has been shut down and cannot accept more "
-                "work; construct a new ProcessPool."
+                "This ProcessPool has been shut down and cannot accept more work; construct a new ProcessPool."
             )
 
         if self._pool is None:
@@ -404,16 +403,12 @@ class ProcessPool:
             if task_id in self._results:
                 return self._results[task_id]
             if task_id in self._errors:
-                raise RuntimeError(
-                    f"Task {task_id} failed: {self._errors[task_id]}"
-                )
+                raise RuntimeError(f"Task {task_id} failed: {self._errors[task_id]}")
             task = self._tasks.get(task_id)
             if task is not None and task.status is TaskStatus.FAILED:
                 raise RuntimeError(f"Task {task_id} failed: {task.error}")
             if deadline is not None and time.time() > deadline:
-                raise TimeoutError(
-                    f"Task {task_id} did not complete within {timeout}s"
-                )
+                raise TimeoutError(f"Task {task_id} did not complete within {timeout}s")
             time.sleep(0.01)
 
     def wait_all(self, timeout: float | None = None) -> dict[str, Any]:

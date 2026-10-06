@@ -131,9 +131,7 @@ def make_rng(random_seed: int | None = None, *, context: str = "analysis") -> np
             RuntimeWarning,
             stacklevel=2,
         )
-        _logger.warning(
-            "%s: no random_seed supplied; result is not reproducible", context
-        )
+        _logger.warning("%s: no random_seed supplied; result is not reproducible", context)
         return np.random.default_rng()
     return np.random.default_rng(random_seed)
 
@@ -244,14 +242,9 @@ def permutation_pvalue(
         If ``n_permutations`` is not positive or ``alternative`` is unknown.
     """
     if n_permutations < 1:
-        raise ValidationError(
-            f"{context}: n_permutations must be >= 1, got {n_permutations}"
-        )
+        raise ValidationError(f"{context}: n_permutations must be >= 1, got {n_permutations}")
     if alternative not in ("greater", "two_sided"):
-        raise ValidationError(
-            f"{context}: alternative must be 'greater' or 'two_sided', "
-            f"got {alternative!r}"
-        )
+        raise ValidationError(f"{context}: alternative must be 'greater' or 'two_sided', got {alternative!r}")
 
     rng = make_rng(random_seed, context=context)
     null = np.empty(n_permutations, dtype=float)
@@ -329,9 +322,7 @@ def aic_from_log_likelihood(log_likelihood: float, n_params: int) -> float:
     return float(-2.0 * log_likelihood + 2.0 * n_params)
 
 
-def aicc_from_log_likelihood(
-    log_likelihood: float, n_params: int, n_obs: int
-) -> float:
+def aicc_from_log_likelihood(log_likelihood: float, n_params: int, n_obs: int) -> float:
     """AICc from a log-likelihood (Burnham & Anderson 2002, eq. 2.2.2).
 
     The small-sample correction matters here: a von Bertalanffy curve
@@ -350,10 +341,7 @@ def aicc_from_log_likelihood(
     if n_obs <= 0:
         raise StatisticalError("n_obs must be a positive integer")
     if n_obs - n_params - 1 <= 0:
-        raise StatisticalError(
-            f"AICc is undefined: n_obs ({n_obs}) must exceed "
-            f"n_params + 1 ({n_params + 1})"
-        )
+        raise StatisticalError(f"AICc is undefined: n_obs ({n_obs}) must exceed n_params + 1 ({n_params + 1})")
     aic = aic_from_log_likelihood(log_likelihood, n_params)
     return float(aic + (2.0 * n_params * (n_params + 1)) / (n_obs - n_params - 1))
 
@@ -439,10 +427,7 @@ class NonlinearFitResult:
         try:
             idx = self.param_names.index(name)
         except ValueError:
-            raise KeyError(
-                f"{self.name}: no parameter {name!r}; "
-                f"available: {', '.join(self.param_names)}"
-            ) from None
+            raise KeyError(f"{self.name}: no parameter {name!r}; available: {', '.join(self.param_names)}") from None
         return float(self.params[idx])
 
     def summary(self) -> str:
@@ -455,10 +440,7 @@ class NonlinearFitResult:
             if self.ci_lower is not None and np.isfinite(self.ci_lower[i]):
                 line += f"  [{self.ci_lower[i]:.4g}, {self.ci_upper[i]:.4g}]"
             lines.append(line)
-        lines.append(
-            f"  R^2 = {self.r_squared:.4f} (adj {self.adj_r_squared:.4f}), "
-            f"RMSE = {self.rmse:.4g}"
-        )
+        lines.append(f"  R^2 = {self.r_squared:.4f} (adj {self.adj_r_squared:.4f}), RMSE = {self.rmse:.4g}")
         lines.append(f"  AIC = {self.aic:.2f}, AICc = {self.aicc:.2f}")
         if not self.success:
             lines.append(f"  WARNING: optimiser did not converge ({self.message})")
@@ -547,36 +529,23 @@ def fit_nonlinear(
     x_arr = np.asarray(x, dtype=float)
     y_arr = np.asarray(y, dtype=float)
     if x_arr.ndim != 1 or y_arr.ndim != 1:
-        raise ValidationError(
-            f"{name}: x and y must be one-dimensional, got "
-            f"{x_arr.ndim}-d and {y_arr.ndim}-d"
-        )
+        raise ValidationError(f"{name}: x and y must be one-dimensional, got {x_arr.ndim}-d and {y_arr.ndim}-d")
     if len(x_arr) != len(y_arr):
-        raise ValidationError(
-            f"{name}: x and y must have equal length, got "
-            f"{len(x_arr)} and {len(y_arr)}"
-        )
+        raise ValidationError(f"{name}: x and y must have equal length, got {len(x_arr)} and {len(y_arr)}")
     n_obs = len(x_arr)
     p0_arr = np.asarray(p0, dtype=float)
     n_params = len(p0_arr)
     if n_params == 0:
         raise ValidationError(f"{name}: p0 must supply at least one parameter")
-    names = tuple(param_names) if param_names else tuple(
-        f"p{i}" for i in range(n_params)
-    )
+    names = tuple(param_names) if param_names else tuple(f"p{i}" for i in range(n_params))
     if len(names) != n_params:
-        raise ValidationError(
-            f"{name}: got {len(names)} param_names for {n_params} parameters"
-        )
+        raise ValidationError(f"{name}: got {len(names)} param_names for {n_params} parameters")
 
     finite = np.isfinite(x_arr) & np.isfinite(y_arr)
     x_arr, y_arr = x_arr[finite], y_arr[finite]
     n_obs = len(x_arr)
     if n_obs < n_params:
-        raise ValidationError(
-            f"{name}: need at least as many observations ({n_obs}) as "
-            f"parameters ({n_params})"
-        )
+        raise ValidationError(f"{name}: need at least as many observations ({n_obs}) as parameters ({n_params})")
 
     try:
         popt, pcov = curve_fit(
@@ -594,9 +563,7 @@ def fit_nonlinear(
             maxfev=20000,
         )
     except (RuntimeError, ValueError, TypeError) as exc:
-        raise ComputationError(
-            f"{name}: nonlinear least squares failed: {exc}"
-        ) from exc
+        raise ComputationError(f"{name}: nonlinear least squares failed: {exc}") from exc
 
     fitted = np.asarray(func(x_arr, *popt), dtype=float)
     residuals = y_arr - fitted
@@ -607,9 +574,7 @@ def fit_nonlinear(
     tss = float(np.sum((y_arr - np.mean(y_arr)) ** 2))
     r_squared = 1.0 - rss / tss if tss > 0 else 0.0
     adj_r_squared = (
-        1.0 - (1.0 - r_squared) * (n_obs - 1) / (n_obs - n_params - 1)
-        if n_obs - n_params - 1 > 0
-        else float("nan")
+        1.0 - (1.0 - r_squared) * (n_obs - 1) / (n_obs - n_params - 1) if n_obs - n_params - 1 > 0 else float("nan")
     )
     rmse = float(np.sqrt(rss / n_obs)) if n_obs else float("nan")
 
@@ -631,9 +596,7 @@ def fit_nonlinear(
         if np.all(diag >= 0):
             stderr = np.sqrt(diag)
             if n_obs - n_params - 1 > 0:
-                t_crit = float(
-                    sp_stats.t.ppf(0.5 + confidence / 2.0, n_obs - n_params - 1)
-                )
+                t_crit = float(sp_stats.t.ppf(0.5 + confidence / 2.0, n_obs - n_params - 1))
                 ci_lower = popt - t_crit * stderr
                 ci_upper = popt + t_crit * stderr
 

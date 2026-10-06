@@ -84,10 +84,7 @@ def load_data(path: Path) -> Any:
     try:
         import pandas as pd
     except ImportError:
-        raise PaleoASTError(
-            f"reading {suffix or 'this file type'} needs pandas, which is "
-            f"not installed"
-        ) from None
+        raise PaleoASTError(f"reading {suffix or 'this file type'} needs pandas, which is not installed") from None
     if suffix in (".csv", ".txt", ""):
         frame = pd.read_csv(path)
     elif suffix in (".xlsx", ".xls"):
@@ -99,14 +96,10 @@ def load_data(path: Path) -> Any:
     # analysis the script asked for.
     numeric = frame.select_dtypes("number")
     if numeric.shape[1] == 0:
-        raise PaleoASTError(
-            f"{path} has no numeric columns; a script needs an array"
-        )
+        raise PaleoASTError(f"{path} has no numeric columns; a script needs an array")
     if numeric.shape[1] != frame.shape[1]:
         dropped = [c for c in frame.columns if c not in numeric.columns]
-        logger.warning(
-            "dropped %d non-numeric column(s): %s", len(dropped), ", ".join(dropped)
-        )
+        logger.warning("dropped %d non-numeric column(s): %s", len(dropped), ", ".join(dropped))
     return numeric.to_numpy(dtype=float)
 
 

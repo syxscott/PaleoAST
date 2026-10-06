@@ -95,9 +95,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CORRECTION = "cmdscale"
 
 #: Aliases accepted by ``analyze``; anything outside this set is rejected.
-_VALID_CORRECTIONS: frozenset[str] = frozenset(
-    {"cmdscale", "none", "lingoes", "wickoff", "torgerson"}
-)
+_VALID_CORRECTIONS: frozenset[str] = frozenset({"cmdscale", "none", "lingoes", "wickoff", "torgerson"})
 
 
 def _correction_shift(B: npt.NDArray, D_sq: npt.NDArray, n: int, method: str) -> float:
@@ -141,10 +139,7 @@ def _correction_shift(B: npt.NDArray, D_sq: npt.NDArray, n: int, method: str) ->
         # the Lingoes smallest-space analysis.
         return float(2.0 * abs(neg.min()))
 
-    raise ValidationError(
-        f"Unknown PCoA correction method: {method!r}. "
-        f"Expected one of {sorted(_VALID_CORRECTIONS)}."
-    )
+    raise ValidationError(f"Unknown PCoA correction method: {method!r}. Expected one of {sorted(_VALID_CORRECTIONS)}.")
 
 
 @dataclass
@@ -246,8 +241,7 @@ class PCoAAnalyzer:
             correction_norm = (correction or DEFAULT_CORRECTION).lower()
             if correction_norm not in _VALID_CORRECTIONS:
                 raise ValidationError(
-                    f"Unknown PCoA correction method: {correction!r}. "
-                    f"Expected one of {sorted(_VALID_CORRECTIONS)}."
+                    f"Unknown PCoA correction method: {correction!r}. Expected one of {sorted(_VALID_CORRECTIONS)}."
                 )
             self._logger.info(
                 f"PCoA analyze started: distance matrix {D.shape[0]}x{D.shape[1]}, "
@@ -315,8 +309,7 @@ class PCoAAnalyzer:
             c_shift = _correction_shift(B, D_sq, n, correction_norm)
             if c_shift != 0.0:
                 self._logger.info(
-                    f"PCoA correction={correction_norm}: adding c={c_shift:.6g} "
-                    "to off-diagonal squared distances"
+                    f"PCoA correction={correction_norm}: adding c={c_shift:.6g} to off-diagonal squared distances"
                 )
                 # The constant must go on the OFF-DIAGONAL entries only.
                 #

@@ -76,12 +76,8 @@ class TestNoCharactersLostOrInvented:
     @pytest.mark.parametrize("source", SAMPLES, ids=range(len(SAMPLES)))
     def test_batch_and_incremental_agree(self, lexer, source):
         """Two tokenisation paths over the same input must not diverge."""
-        batch = [
-            (t.type, t.value, t.line, t.column) for t in lexer.tokenize(source)
-        ]
-        incremental = [
-            (t.type, t.value, t.line, t.column) for t in lexer.tokenize_incremental(source)
-        ]
+        batch = [(t.type, t.value, t.line, t.column) for t in lexer.tokenize(source)]
+        incremental = [(t.type, t.value, t.line, t.column) for t in lexer.tokenize_incremental(source)]
         assert batch == incremental
 
 
@@ -89,10 +85,7 @@ class TestClassification:
     """The bug: every token used to come back UNKNOWN."""
 
     def test_a_real_statement_is_classified(self, lexer):
-        kinds = {
-            t.type
-            for t in _significant(lexer.tokenize('x = 1 + 2.5; name = "hi"'))
-        }
+        kinds = {t.type for t in _significant(lexer.tokenize('x = 1 + 2.5; name = "hi"'))}
         assert TokenType.IDENTIFIER in kinds
         assert TokenType.OPERATOR in kinds
         assert TokenType.INTEGER in kinds
@@ -167,30 +160,22 @@ class TestKeywords:
 
 class TestValueAccessors:
     def test_integer_accessor_round_trips(self, lexer):
-        integers = [
-            t for t in _significant(lexer.tokenize("1 42 7")) if t.type == TokenType.INTEGER
-        ]
+        integers = [t for t in _significant(lexer.tokenize("1 42 7")) if t.type == TokenType.INTEGER]
         assert [t.get_int_value() for t in integers] == [1, 42, 7]
 
     def test_float_accessor_round_trips(self, lexer):
-        floats = [
-            t for t in _significant(lexer.tokenize("1.5 2.25")) if t.type == TokenType.FLOAT
-        ]
+        floats = [t for t in _significant(lexer.tokenize("1.5 2.25")) if t.type == TokenType.FLOAT]
         assert [t.get_float_value() for t in floats] == [1.5, 2.25]
 
     def test_string_accessor_strips_the_delimiters(self, lexer):
         """Documented behaviour: the accessor yields the content, not the
         literal. The raw text is still on ``token.value``."""
-        literal = next(
-            t for t in _significant(lexer.tokenize('"hi"')) if t.type == TokenType.STRING
-        )
+        literal = next(t for t in _significant(lexer.tokenize('"hi"')) if t.type == TokenType.STRING)
         assert literal.value == '"hi"'
         assert literal.get_string_value() == "hi"
 
     def test_the_wrong_accessor_raises_rather_than_guessing(self, lexer):
         """Asking a string for a number must not quietly return 0.0."""
-        literal = next(
-            t for t in _significant(lexer.tokenize('"hi"')) if t.type == TokenType.STRING
-        )
+        literal = next(t for t in _significant(lexer.tokenize('"hi"')) if t.type == TokenType.STRING)
         with pytest.raises(ValueError):
             literal.get_float_value()

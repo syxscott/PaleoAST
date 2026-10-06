@@ -149,14 +149,8 @@ class TestCanvasCallContract:
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                names = {
-                    child.id
-                    for child in ast.walk(node)
-                    if isinstance(child, ast.Name)
-                } | {
-                    child.attr
-                    for child in ast.walk(node)
-                    if isinstance(child, ast.Attribute)
+                names = {child.id for child in ast.walk(node) if isinstance(child, ast.Name)} | {
+                    child.attr for child in ast.walk(node) if isinstance(child, ast.Attribute)
                 }
                 if marker in names:
                     return node
@@ -168,10 +162,7 @@ class TestCanvasCallContract:
             child.func.attr
             for child in ast.walk(holder)
             if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)
-        }, (
-            f"{holder.name} falls back to a score plot when the biplot renderer "
-            "is missing but never warns the user"
-        )
+        }, f"{holder.name} falls back to a score plot when the biplot renderer is missing but never warns the user"
 
     def test_dialog_still_offers_the_biplot_checkbox(self):
         """Records why the warning exists: the control is user-facing."""

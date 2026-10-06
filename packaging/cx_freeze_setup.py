@@ -10,30 +10,46 @@ import sys
 
 from cx_Freeze import Executable, setup
 
-PROJECT_ROOT = 'D:\\GIthub\\PaleoAST'
+PROJECT_ROOT = "D:\\GIthub\\PaleoAST"
 if not os.path.isabs(PROJECT_ROOT):
     PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 setup(
-    name='PaleoAST',
-    version='1.1.0',
-    description='PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.',
-    long_description='PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.',
-    author='PaleoAST Development Team',
+    name="PaleoAST",
+    version="1.1.0",
+    description="PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.",
+    long_description="PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.",
+    author="PaleoAST Development Team",
     license="MIT",
     url="https://github.com/syxscott/PaleoAST",
     options={
         "build_exe": {
-            "build_exe": 'C:\\Users\\Administrator\\AppData\\Local\\Temp\\paleoast-msi-frozen',
+            "build_exe": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\paleoast-msi-frozen",
             "packages": [
-                "config", "controllers", "data", "ecology", "models",
-                "morphometrics", "macroevolution", "parsers", "phylogenetics",
-                "stats", "stratigraphy", "utils", "visualization", "views",
+                "config",
+                "controllers",
+                "data",
+                "ecology",
+                "models",
+                "morphometrics",
+                "macroevolution",
+                "parsers",
+                "phylogenetics",
+                "stats",
+                "stratigraphy",
+                "utils",
+                "visualization",
+                "views",
             ],
             "includes": [
-                "PyQt6", "numpy", "scipy", "pandas", "matplotlib", "psutil",
+                "PyQt6",
+                "numpy",
+                "scipy",
+                "pandas",
+                "matplotlib",
+                "psutil",
                 # Reached only through a local import inside the main window,
                 # so nothing in the module graph mentions them.
                 "visualization.r_export",
@@ -49,11 +65,25 @@ setup(
             # Same reasoning as the PyInstaller spec: none of these is imported
             # by the project, and the first build carried 680 MB of them.
             "excludes": [
-                "tkinter", "pytest", "IPython", "notebook", "jupyter",
-                "torch", "torchvision", "cv2", "polars",
-                "_polars_runtime_32", "_polars_runtime_64",
-                "bitsandbytes", "pyarrow", "tensorflow", "jax", "numba",
-                "h5py", "nvidia", "triton",
+                "tkinter",
+                "pytest",
+                "IPython",
+                "notebook",
+                "jupyter",
+                "torch",
+                "torchvision",
+                "cv2",
+                "polars",
+                "_polars_runtime_32",
+                "_polars_runtime_64",
+                "bitsandbytes",
+                "pyarrow",
+                "tensorflow",
+                "jax",
+                "numba",
+                "h5py",
+                "nvidia",
+                "triton",
             ],
             "optimize": 0,
         },

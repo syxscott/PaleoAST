@@ -190,9 +190,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
             return _("ErrMsg: data is empty").format(operation_hint)
 
         # 通用数据类型错误
-        return _("ErrMsg: data type error").format(
-            operation_hint, error_msg[:100]
-        )
+        return _("ErrMsg: data type error").format(operation_hint, error_msg[:100])
 
     # 验证错误
     if "ValidationError" in type(e).__name__ or "验证" in error_msg:
@@ -207,9 +205,7 @@ def format_user_error(e: Exception, operation: str = "") -> str:
         return _("ErrMsg: matrix computation failed").format(operation_hint)
 
     # 默认：显示原始错误消息的前100个字符
-    return _("ErrMsg: generic error during operation").format(
-        operation_hint, error_msg[:200]
-    )
+    return _("ErrMsg: generic error during operation").format(operation_hint, error_msg[:200])
 
 
 class RibbonStyle(Enum):
@@ -236,9 +232,7 @@ _GLYPH_ICONS = {
 }
 
 
-def _draw_glyph(
-    painter: QPainter, glyph: str, size: int, margin: int, color: str
-) -> None:
+def _draw_glyph(painter: QPainter, glyph: str, size: int, margin: int, color: str) -> None:
     """Draw a centred single-glyph icon.
 
     The font size is derived from the icon size rather than fixed, so the
@@ -676,9 +670,7 @@ class RibbonButton(QPushButton):
         """
         if not self._icon_type:
             return
-        pixmap = VectorIconEngine.create_icon(
-            self._icon_type, 24, get_palette(self._is_dark_theme)
-        )
+        pixmap = VectorIconEngine.create_icon(self._icon_type, 24, get_palette(self._is_dark_theme))
         self.setIcon(QIcon(pixmap))
 
     def setDarkTheme(self, is_dark: bool) -> None:
@@ -1574,9 +1566,7 @@ class MainWindow(QMainWindow):
             # ``specimen_metadata`` because that is the source
             # ``_resolve_groups_for_plot`` already reads, and it only
             # accepts a value when *every* row has one.
-            specimen_metadata = self._specimen_metadata_from_groups(
-                data.get("groups"), matrix_data
-            )
+            specimen_metadata = self._specimen_metadata_from_groups(data.get("groups"), matrix_data)
 
             new_matrix = DataMatrix(
                 matrix_data,
@@ -1603,9 +1593,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, _("Load Error"), format_user_error(e, "Op: file loading"))
 
-    def _specimen_metadata_from_groups(
-        self, groups: object, matrix_data: object
-    ) -> list[dict[str, str]] | None:
+    def _specimen_metadata_from_groups(self, groups: object, matrix_data: object) -> list[dict[str, str]] | None:
         """Turn a parser's per-row group labels into ``specimen_metadata``.
 
         Returns ``None`` -- not a partial list -- when the grouping is
@@ -1623,8 +1611,7 @@ class MainWindow(QMainWindow):
         labels = [g for g in groups]
         if len(labels) != len(matrix_data):  # type: ignore[arg-type]
             self._logger.warning(
-                "Group labels (%d) do not match the data rows (%d); "
-                "the grouping was discarded rather than misaligned",
+                "Group labels (%d) do not match the data rows (%d); the grouping was discarded rather than misaligned",
                 len(labels),
                 len(matrix_data),  # type: ignore[arg-type]
             )
@@ -1632,8 +1619,7 @@ class MainWindow(QMainWindow):
         if any(g is None or str(g).strip() == "" for g in labels):
             unlabelled = sum(1 for g in labels if g is None or str(g).strip() == "")
             self._logger.warning(
-                "%d of %d rows have no group label; the grouping was "
-                "discarded rather than partly invented",
+                "%d of %d rows have no group label; the grouping was discarded rather than partly invented",
                 unlabelled,
                 len(labels),
             )
@@ -1784,8 +1770,7 @@ class MainWindow(QMainWindow):
                     row_labels=site_col,
                     col_labels=list(data_df.columns),
                     specimen_metadata=[
-                        {"group": g} if g is not None else {}
-                        for g in (group_col or [None] * len(data_df))
+                        {"group": g} if g is not None else {} for g in (group_col or [None] * len(data_df))
                     ],
                 )
             elif name == "primate_tree":
@@ -1801,9 +1786,7 @@ class MainWindow(QMainWindow):
                 lines.append("Leaf names: " + ", ".join(tree.leaf_names))
                 editor.setPlainText("\n".join(lines))
                 self._add_tab_to_workspace(editor, _("Example — Primate Tree"))
-                self._status_bar.setInfo(
-                    _("Loaded example: {0} ({1} tips)").format(name, tree.leaf_count)
-                )
+                self._status_bar.setInfo(_("Loaded example: {0} ({1} tips)").format(name, tree.leaf_count))
                 return
             elif name == "primate_traits":
                 df = load_primate_traits()
@@ -1840,9 +1823,7 @@ class MainWindow(QMainWindow):
         self._update_ui_state()
         self._workspace.setCurrentIndex(self._spreadsheet_index)
         self._status_bar.setInfo(
-            _("Loaded example: {0} ({1} samples x {2} variables)").format(
-                name, matrix.n_samples, matrix.n_variables
-            )
+            _("Loaded example: {0} ({1} samples x {2} variables)").format(name, matrix.n_samples, matrix.n_variables)
         )
 
     def _setup_ribbon(self) -> None:
@@ -1876,9 +1857,7 @@ class MainWindow(QMainWindow):
             "tf_hellinger", _("Hellinger"), _("Hellinger transformation")
         )
         self._btn_zscore_transform = transform_group.addButton("tf_zscore", _("Z-Score"), _("Z-score standardization"))
-        self._btn_percent_transform = transform_group.addButton(
-            "tf_pct", _("% Total"), _("Percentage standardization")
-        )
+        self._btn_percent_transform = transform_group.addButton("tf_pct", _("% Total"), _("Percentage standardization"))
         self._btn_wisconsin_transform = transform_group.addButton(
             "tf_wisconsin", _("Wisconsin"), _("Wisconsin double standardization")
         )
@@ -1924,12 +1903,8 @@ class MainWindow(QMainWindow):
         self._btn_diversity = diversity_group.addButton(
             "", _("Diversity"), _("Biodiversity indices"), RibbonStyle.TEXT_ONLY
         )
-        self._btn_abundance = diversity_group.addButton(
-            "", _("Models"), _("Abundance Models"), RibbonStyle.TEXT_ONLY
-        )
-        self._btn_she = diversity_group.addButton(
-            "", "SHE", _("SHE Analysis"), RibbonStyle.TEXT_ONLY
-        )
+        self._btn_abundance = diversity_group.addButton("", _("Models"), _("Abundance Models"), RibbonStyle.TEXT_ONLY)
+        self._btn_she = diversity_group.addButton("", "SHE", _("SHE Analysis"), RibbonStyle.TEXT_ONLY)
 
         # Group tests group
         tests_group = analysis_tab.addGroup(_("Tests"))
@@ -1965,39 +1940,21 @@ class MainWindow(QMainWindow):
         _text = RibbonStyle.TEXT_ONLY
 
         strat_group = strat_tab.addGroup(_("Time Series"))
-        self._btn_spectral = strat_group.addButton(
-            "", _("Spectral"), _("Spectral Analysis"), _text
-        )
-        self._btn_coniss = strat_group.addButton(
-            "", "CONISS", _("CONISS Zonation"), _text
-        )
-        self._btn_wavelet = strat_group.addButton(
-            "", _("Wavelet"), _("Wavelet CWT Analysis"), _text
-        )
-        self._btn_isotope = strat_group.addButton(
-            "", _("Isotope"), _("Isotope Time Series"), _text
-        )
-        self._btn_strat_corr = strat_group.addButton(
-            "", _("Correlation"), _("Stratigraphic Correlation"), _text
-        )
+        self._btn_spectral = strat_group.addButton("", _("Spectral"), _("Spectral Analysis"), _text)
+        self._btn_coniss = strat_group.addButton("", "CONISS", _("CONISS Zonation"), _text)
+        self._btn_wavelet = strat_group.addButton("", _("Wavelet"), _("Wavelet CWT Analysis"), _text)
+        self._btn_isotope = strat_group.addButton("", _("Isotope"), _("Isotope Time Series"), _text)
+        self._btn_strat_corr = strat_group.addButton("", _("Correlation"), _("Stratigraphic Correlation"), _text)
 
         bio_group = strat_tab.addGroup(_("Biostratigraphy"))
-        self._btn_biostrat = bio_group.addButton(
-            "", _("Biozone"), _("UA/RASC Biostratigraphy"), _text
-        )
+        self._btn_biostrat = bio_group.addButton("", _("Biozone"), _("UA/RASC Biostratigraphy"), _text)
 
         paleo_group = strat_tab.addGroup(_("Paleo-Environment"))
-        self._btn_paleo_env = paleo_group.addButton(
-            "", _("CA Axis"), _("Paleo-Env. CA Reconstruction"), _text
-        )
+        self._btn_paleo_env = paleo_group.addButton("", _("CA Axis"), _("Paleo-Env. CA Reconstruction"), _text)
 
         markov_group = strat_tab.addGroup(_("Facies"))
-        self._btn_markov = markov_group.addButton(
-            "", _("Markov"), _("Markov Chain Analysis"), _text
-        )
-        self._btn_directional = markov_group.addButton(
-            "", _("Rose"), _("Directional Statistics"), _text
-        )
+        self._btn_markov = markov_group.addButton("", _("Markov"), _("Markov Chain Analysis"), _text)
+        self._btn_directional = markov_group.addButton("", _("Rose"), _("Directional Statistics"), _text)
 
     def _setup_connections(self) -> None:
         """Setup signal-slot connections."""
@@ -2191,9 +2148,7 @@ class MainWindow(QMainWindow):
         groups, group_names = self._resolve_groups_for_plot(n_samples)
         return labels, groups, group_names
 
-    def _resolve_groups_for_plot(
-        self, n_samples: int
-    ) -> tuple[list[int] | None, list[str] | None]:
+    def _resolve_groups_for_plot(self, n_samples: int) -> tuple[list[int] | None, list[str] | None]:
         """Find per-row group labels for ordination plots.
 
         Sources, in priority order:
@@ -3254,15 +3209,11 @@ class MainWindow(QMainWindow):
             "csv_has_header": settings.value("preferences/csv_has_header", True, type=bool),
             "csv_has_row_labels": settings.value("preferences/csv_has_row_labels", True, type=bool),
             "plot_dpi": settings.value("preferences/plot_dpi", 100, type=int),
-            "plot_figsize": settings.value(
-                "preferences/plot_figsize", "8,6", type=str
-            ),
+            "plot_figsize": settings.value("preferences/plot_figsize", "8,6", type=str),
             "r_rscript": settings.value("preferences/r_rscript", "", type=str),
             "r_theme": settings.value("preferences/r_theme", "classic", type=str),
             "r_base_size": settings.value("preferences/r_base_size", 9.0, type=float),
-            "r_output_format": settings.value(
-                "preferences/r_output_format", "pdf", type=str
-            ),
+            "r_output_format": settings.value("preferences/r_output_format", "pdf", type=str),
             "r_timeout": settings.value("preferences/r_timeout", 300, type=int),
         }
 
@@ -3535,11 +3486,7 @@ class MainWindow(QMainWindow):
         Inside the user's documents folder rather than next to the source, so
         the scripts and their CSVs travel together and are easy to find later.
         """
-        base = Path(
-            os.environ.get("USERPROFILE")
-            or os.path.expanduser("~")
-            or str(Path.home())
-        )
+        base = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or str(Path.home()))
         out = base / "Documents" / "PaleoAST-R"
         out.mkdir(parents=True, exist_ok=True)
         return str(out)
@@ -3547,9 +3494,7 @@ class MainWindow(QMainWindow):
     def _on_export_as_r_script(self) -> None:
         """Regenerate the .R script from the current result, then run it."""
         if not self._state.has_data:
-            QMessageBox.information(
-                self, _("No Data"), _("Load data first, then export an R script.")
-            )
+            QMessageBox.information(self, _("No Data"), _("Load data first, then export an R script."))
             return
 
         out_dir = Path(self._r_output_dir())
@@ -3561,10 +3506,10 @@ class MainWindow(QMainWindow):
                 reply = QMessageBox.question(
                     self,
                     _("Overwrite edited R script?"),
-                    _("{0}\n\nhas been edited. Regenerating replaces your changes "
-                      "with a freshly generated script. Continue?").format(
-                        existing.name
-                    ),
+                    _(
+                        "{0}\n\nhas been edited. Regenerating replaces your changes "
+                        "with a freshly generated script. Continue?"
+                    ).format(existing.name),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No,
                 )
@@ -3581,20 +3526,19 @@ class MainWindow(QMainWindow):
             matrix = self._state.data_matrix
             if matrix is None:
                 raise ValueError(_("No data matrix loaded."))
-            result = PCAAnalyzer().analyze(
-                matrix.to_numpy(), n_components=3, method="correlation"
-            )
+            result = PCAAnalyzer().analyze(matrix.to_numpy(), n_components=3, method="correlation")
             # Index rather than unpack into `_`: the gettext alias must not be
             # rebound to a throwaway name, or every later _("...") in this
             # function silently resolves to the wrong object.
             plot_meta = self._get_plot_labels_and_groups()
             labels, groups = plot_meta[0], plot_meta[1]
-            exporter = RScriptExporter(
-                stamp=_dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            )
+            exporter = RScriptExporter(stamp=_dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
             export = exporter.export_pca_scores(
-                result, out_dir, self._r_plot_spec(),
-                labels=labels, groups=groups,
+                result,
+                out_dir,
+                self._r_plot_spec(),
+                labels=labels,
+                groups=groups,
             )
         except Exception as exc:
             self._logger.error(f"R script export failed: {exc}")
@@ -3611,8 +3555,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 _("No R script"),
-                _("Generate one first with \"Export as R script\".\n\n"
-                  "Expected at:\n{0}").format(script),
+                _('Generate one first with "Export as R script".\n\nExpected at:\n{0}').format(script),
             )
             return
         self._run_r_script_and_show(script, script.name)
@@ -3647,10 +3590,12 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 _("Figure written"),
-                _("R finished but the output is vector-only, so it cannot be\n"
-                  "previewed here. Open the file directly:\n\n{0}\n\n"
-                  "The .R script stays editable; use \"Re-run R script\" after "
-                  "you change it.").format(where),
+                _(
+                    "R finished but the output is vector-only, so it cannot be\n"
+                    "previewed here. Open the file directly:\n\n{0}\n\n"
+                    'The .R script stays editable; use "Re-run R script" after '
+                    "you change it."
+                ).format(where),
             )
             return
 
@@ -3658,9 +3603,7 @@ class MainWindow(QMainWindow):
             self._show_rendered_png(image, title)
         except Exception as exc:
             self._logger.error(f"Could not display the R figure: {exc}")
-        self._status_bar.setInfo(
-            _("R finished: {0}").format(", ".join(p.name for p in run.produced))
-        )
+        self._status_bar.setInfo(_("R finished: {0}").format(", ".join(p.name for p in run.produced)))
 
     def _show_rendered_png(self, png_path: Path, title: str) -> None:
         """Put an R-rendered PNG into the workspace as a figure tab."""
@@ -3674,9 +3617,7 @@ class MainWindow(QMainWindow):
         fig.tight_layout(pad=0)
         # _embed_figure_in_workspace is the right host: it wraps a pre-built
         # Figure in a QWidget, so the R output needs no InteractivePlotCanvas.
-        self._embed_figure_in_workspace(
-            fig, title, dark_theme=self._is_dark_theme
-        )
+        self._embed_figure_in_workspace(fig, title, dark_theme=self._is_dark_theme)
         self._logger.info(f"Displayed R figure: {png_path}")
 
     def _extract_current_figure(self):
@@ -4063,7 +4004,7 @@ class MainWindow(QMainWindow):
             cum = np.asarray(cum, dtype=float).ravel()
             if cum.size == 0 or not np.all(np.isfinite(cum)):
                 return int(getattr(result, "n_components", 0) or 0)
-            if float(cum[-1]) <= 1.5:          # already fractions
+            if float(cum[-1]) <= 1.5:  # already fractions
                 cum = cum * 100.0
         # A non-positive threshold means "no threshold": keep everything the
         # engine returned rather than trimming down to a single component.
@@ -4185,7 +4126,9 @@ class MainWindow(QMainWindow):
                 if retained < getattr(result, "n_components", retained):
                     self._logger.info(
                         "PCA: min_variance=%.4f retained %d of %d components",
-                        min_variance, retained, getattr(result, "n_components", retained),
+                        min_variance,
+                        retained,
+                        getattr(result, "n_components", retained),
                     )
             return result
 
@@ -4203,7 +4146,9 @@ class MainWindow(QMainWindow):
 
         self._run_analysis_async(_work, _done, _fail, _("PCA"))
 
-    def _on_pca_result_ready(self, result, ctx: dict | None = None, impute_missing: bool = False, parallel: bool = True) -> None:
+    def _on_pca_result_ready(
+        self, result, ctx: dict | None = None, impute_missing: bool = False, parallel: bool = True
+    ) -> None:
         self._status_bar.setProgress(100, 100)
         ctx = ctx or {}
         # Pull row labels / groups from the data matrix so the canvas
@@ -4223,9 +4168,7 @@ class MainWindow(QMainWindow):
                 plot.plot_pca_biplot(result, scale=biplot_scale)
                 biplot_drawn = True
         if not biplot_drawn:
-            plot.plot_pca_scores(
-                result, labels=labels, groups=groups, group_names=group_names
-            )
+            plot.plot_pca_scores(result, labels=labels, groups=groups, group_names=group_names)
         idx = self._add_plot_to_workspace(plot, _("PCA Score Plot"))
         self._workspace.setCurrentIndex(idx)
         ev = result.explained_variance
@@ -4250,10 +4193,7 @@ class MainWindow(QMainWindow):
             self._status_bar.setWarning(
                 message
                 + "  "
-                + _(
-                    "Show biplot was selected but this build has no biplot "
-                    "renderer; a score plot was drawn instead."
-                )
+                + _("Show biplot was selected but this build has no biplot renderer; a score plot was drawn instead.")
             )
         else:
             self._status_bar.setInfo(message)
@@ -4357,29 +4297,19 @@ class MainWindow(QMainWindow):
         correction = params.get("correction", "cmdscale")
 
         def _work():
-            return controller.run_pcoa(
-                metric=metric, n_components=n_components, correction=correction
-            )
+            return controller.run_pcoa(metric=metric, n_components=n_components, correction=correction)
 
         def _done(result):
             self._status_bar.setProgress(100, 100)
             labels, groups, group_names = self._get_plot_labels_and_groups()
             plot = InteractivePlotCanvas()
-            plot.plot_pcoa_scores(
-                result, labels=labels, groups=groups, group_names=group_names
-            )
+            plot.plot_pcoa_scores(result, labels=labels, groups=groups, group_names=group_names)
 
             plot_index = self._add_plot_to_workspace(plot, _("PCoA Plot"))
             self._workspace.setCurrentIndex(plot_index)
 
             ev = result.proportion_explained
-            cum2 = (
-                ev[0] + ev[1]
-                if len(ev) >= 2
-                else ev[0]
-                if len(ev) == 1
-                else 0.0
-            )
+            cum2 = ev[0] + ev[1] if len(ev) >= 2 else ev[0] if len(ev) == 1 else 0.0
             self._status_bar.setInfo(
                 _("PCoA: {0} coordinates, Axis1+2 = {1:.1f}% (correction: {2})").format(
                     result.n_components, cum2, result.correction_method
@@ -4487,9 +4417,7 @@ class MainWindow(QMainWindow):
                     # builds one plot per row so the user sees every
                     # sample's diversity profile.
                     target_indices = list(range(matrix.n_samples))
-                    target_labels = list(matrix.row_labels) or [
-                        f"Sample_{i + 1}" for i in target_indices
-                    ]
+                    target_labels = list(matrix.row_labels) or [f"Sample_{i + 1}" for i in target_indices]
                 else:
                     sample_index = self._resolve_sample_index(sample_name, matrix)
                     if sample_index is None:
@@ -4734,9 +4662,7 @@ class MainWindow(QMainWindow):
         def _fail(exc):
             self._status_bar.setProgress(100, 100)
             self._logger.error(f"Spectral analysis failed: {exc}")
-            QMessageBox.critical(
-                self, _("Spectral Analysis Error"), format_user_error(exc, "Op: spectral analysis")
-            )
+            QMessageBox.critical(self, _("Spectral Analysis Error"), format_user_error(exc, "Op: spectral analysis"))
 
         self._run_analysis_async(_work, _done, _fail, _("Spectral"))
 
@@ -4916,9 +4842,7 @@ class MainWindow(QMainWindow):
         metric = params.get("metric", "bray_curtis")
 
         def _work():
-            return self._statistics_controller.analyze_simper(
-                data=data, groups=groups, metric=metric
-            )
+            return self._statistics_controller.analyze_simper(data=data, groups=groups, metric=metric)
 
         def _done(result):
             plot = InteractivePlotCanvas()
@@ -4991,9 +4915,7 @@ class MainWindow(QMainWindow):
                 plot.plot_normality_qq(data, col_names, result)
                 title = _("Normality Test")
                 n_normal = sum(1 for r in result if r.is_normal_shapiro)
-                info = _("Normality: {0}/{1} variables pass Shapiro-Wilk (α=0.05)").format(
-                    n_normal, len(result)
-                )
+                info = _("Normality: {0}/{1} variables pass Shapiro-Wilk (α=0.05)").format(n_normal, len(result))
             elif kind == "ttest":
                 p_values = [r.p_value for r in result]
                 plot.plot_group_comparison(data, groups, col_names, "t-test", p_values)
@@ -5025,9 +4947,7 @@ class MainWindow(QMainWindow):
         def _fail(exc):
             self._status_bar.setProgress(100, 100)
             self._logger.error(f"Univariate analysis failed: {exc}")
-            QMessageBox.critical(
-                self, _("Univariate Error"), format_user_error(exc, _("Univariate"))
-            )
+            QMessageBox.critical(self, _("Univariate Error"), format_user_error(exc, _("Univariate")))
 
         self._run_analysis_async(_work, _done, _fail, _("Univariate"))
 
@@ -5207,9 +5127,7 @@ class MainWindow(QMainWindow):
             plot.plot_dendrogram(result, labels=row_labels)
             self._add_plot_to_workspace(plot, _("Clustering"))
             self._status_bar.setInfo(
-                _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(
-                    result.n_clusters, result.cophenetic_corr
-                )
+                _("Clustering: {0} clusters, cophenetic r={1:.3f}").format(result.n_clusters, result.cophenetic_corr)
             )
             self._status_bar.setProgress(100, 100)
 
@@ -5237,10 +5155,7 @@ class MainWindow(QMainWindow):
             # list comprehension but never showed it. Surface the
             # model fit summaries on the status bar AND in a small info
             # tab so the user can see which models actually fitted.
-            info_lines = [
-                f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}"
-                for fit in results.values()
-            ]
+            info_lines = [f"{fit.model_name}: R²={fit.r_squared:.4f}, AIC={fit.aic:.2f}" for fit in results.values()]
             summary = " | ".join(info_lines)
             self._status_bar.setInfo(_("Abundance models fitted: {0}").format(summary))
             self._logger.info("Abundance model fits: %s", summary)
@@ -5382,9 +5297,7 @@ class MainWindow(QMainWindow):
                 # Forward the user's ``column_index`` pick; before this
                 # fix the analyser silently used column 0 on wide
                 # matrices.
-                result = self._statistics_controller.analyze_directional(
-                    column_index=int(chosen_col)
-                )
+                result = self._statistics_controller.analyze_directional(column_index=int(chosen_col))
                 bin_edges, counts = self._statistics_controller.bin_rose_diagram(
                     n_bins=params.get("n_bins", 12),
                     column_index=int(chosen_col),
@@ -5403,9 +5316,7 @@ class MainWindow(QMainWindow):
             finally:
                 self._status_bar.setProgress(100, 100)
 
-    def _prompt_column_index(
-        self, title: str, col_labels: list[str], default: int = 0
-    ) -> int | None:
+    def _prompt_column_index(self, title: str, col_labels: list[str], default: int = 0) -> int | None:
         """Tiny modal that asks the user which column to analyse.
 
         Returns ``None`` when the user cancels.  Defaults to ``default``
@@ -5551,9 +5462,7 @@ class MainWindow(QMainWindow):
                 result_i = efa.analyze(contour, n_harmonics=n_harmonics)
                 coefficients_list.append(result_i.coefficients)
             es_analyzer = EigenshapeAnalyzer()
-            return es_analyzer.analyze(
-                coefficients_list, n_components=min(5, data.shape[0] - 1)
-            )
+            return es_analyzer.analyze(coefficients_list, n_components=min(5, data.shape[0] - 1))
 
         def _done(es_result):
             plot = InteractivePlotCanvas()
@@ -5574,9 +5483,7 @@ class MainWindow(QMainWindow):
         def _fail(exc):
             self._status_bar.setProgress(100, 100)
             self._logger.error(f"Eigenshape analysis failed: {exc}")
-            QMessageBox.critical(
-                self, _("Eigenshape Error"), format_user_error(exc, "Eigenshape")
-            )
+            QMessageBox.critical(self, _("Eigenshape Error"), format_user_error(exc, "Eigenshape"))
 
         self._run_analysis_async(_work, _done, _fail, _("Eigenshape"))
 
@@ -5641,9 +5548,7 @@ class MainWindow(QMainWindow):
             )
 
         def _done(result):
-            self._status_bar.setInfo(
-                _("Isotope: {0} excursions detected").format(len(result.excursions))
-            )
+            self._status_bar.setInfo(_("Isotope: {0} excursions detected").format(len(result.excursions)))
             self._status_bar.setProgress(100, 100)
             QMessageBox.information(self, _("Analysis Complete"), result.summary())
 
@@ -6634,8 +6539,7 @@ class MainWindow(QMainWindow):
             # did not finish -- a non-blocking notification is enough
             # since the window is about to close.
             self._logger.warning(
-                "Closing with in-flight analysis tasks: their results were "
-                "abandoned to avoid hanging the close."
+                "Closing with in-flight analysis tasks: their results were abandoned to avoid hanging the close."
             )
 
         event.accept()
@@ -6748,9 +6652,7 @@ class MainWindow(QMainWindow):
             # ``plot_evolution_rate`` may not be wired up to the
             # canvas; the canvas is owned by another agent. Fall back
             # to a results tab so the user can still see the numbers.
-            self._logger.warning(
-                "Falling back to text tab for evolution-rate result: %s", exc
-            )
+            self._logger.warning("Falling back to text tab for evolution-rate result: %s", exc)
             from PyQt6.QtWidgets import QTextEdit
 
             editor = QTextEdit()
@@ -7009,4 +6911,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -82,9 +82,7 @@ class TestParameterRecovery:
     def test_ar1_fit_does_not_invent_ma_structure(self, analyzer):
         result = analyzer.fit(_times(N), _ar1(0.7), p=1, q=1)
         theta = _first(result.ma_params)
-        assert theta is None or abs(theta) < 0.15, (
-            f"a pure AR(1) series produced theta={theta}"
-        )
+        assert theta is None or abs(theta) < 0.15, f"a pure AR(1) series produced theta={theta}"
 
     def test_fit_is_deterministic(self, analyzer):
         series = _ar1(0.7)
@@ -155,9 +153,7 @@ class TestDegenerateInputs:
         from utils.exceptions import DataValidationError
 
         with pytest.raises((DataValidationError, ValueError)):
-            analyzer.fit(
-                _times(5), np.array([1.0, np.nan, 3.0, 4.0, 5.0]), p=1, q=1
-            )
+            analyzer.fit(_times(5), np.array([1.0, np.nan, 3.0, 4.0, 5.0]), p=1, q=1)
 
     def test_too_few_observations_is_refused(self, analyzer):
         from utils.exceptions import ComputationError
@@ -177,9 +173,7 @@ class TestOrderSelection:
         reachable = set(report["aic_table"])
         assert (0, 0) in reachable, f"white noise is unreachable: {sorted(reachable)}"
         assert (1, 0) in reachable, f"a pure AR model is unreachable: {sorted(reachable)}"
-        assert expected - reachable == set(), (
-            f"orders never evaluated: {sorted(expected - reachable)}"
-        )
+        assert expected - reachable == set(), f"orders never evaluated: {sorted(expected - reachable)}"
 
     def test_cross_validate_does_not_invent_ma_structure(self, analyzer):
         """A strong AR(1) series must not come back with a moving-average term.
@@ -189,7 +183,4 @@ class TestOrderSelection:
         """
         report = analyzer.cross_validate(_times(N), _ar1(0.9), max_p=3, max_q=2)
         best = report["best_order"]
-        assert best[1] == 0, (
-            f"an AR(0.9) series was given a moving-average term: {best} "
-            f"({report['aic_table']})"
-        )
+        assert best[1] == 0, f"an AR(0.9) series was given a moving-average term: {best} ({report['aic_table']})"

@@ -88,12 +88,8 @@ class TestCorrectionActuallyShifts:
         raw = _raw_eigenvalues(distance_matrix)
         assert (raw < 0).any(), "this fixture must have negative eigenvalues to be meaningful"
 
-        baseline = np.asarray(
-            PCoAAnalyzer().analyze(distance_matrix, 3, correction="cmdscale").eigenvalues
-        )
-        corrected = np.asarray(
-            PCoAAnalyzer().analyze(distance_matrix, 3, correction="lingoes").eigenvalues
-        )
+        baseline = np.asarray(PCoAAnalyzer().analyze(distance_matrix, 3, correction="cmdscale").eigenvalues)
+        corrected = np.asarray(PCoAAnalyzer().analyze(distance_matrix, 3, correction="lingoes").eigenvalues)
         assert not np.allclose(baseline, corrected), (
             "lingoes produced the same eigenvalues as cmdscale -- the shift is a no-op"
         )
@@ -107,9 +103,7 @@ class TestCorrectionActuallyShifts:
         shift = abs(raw.min())  # c = 2|lambda_min|  =>  c/2 = |lambda_min|
         expected = _corrected_spectrum(raw, shift)[: n - 1]
 
-        actual = np.asarray(
-            PCoAAnalyzer().analyze(distance_matrix, n - 1, correction=method).eigenvalues
-        )
+        actual = np.asarray(PCoAAnalyzer().analyze(distance_matrix, n - 1, correction=method).eigenvalues)
         assert_allclose(actual, expected, atol=1e-9)
 
     @pytest.mark.parametrize("method", _CORRECTING)
@@ -117,9 +111,7 @@ class TestCorrectionActuallyShifts:
         """The defining property: c = 2|lambda_min| puts the minimum at 0."""
         distance_matrix = _bray_curtis_case()
         eigenvalues = np.asarray(
-            PCoAAnalyzer().analyze(
-                distance_matrix, len(distance_matrix) - 1, correction=method
-            ).eigenvalues
+            PCoAAnalyzer().analyze(distance_matrix, len(distance_matrix) - 1, correction=method).eigenvalues
         )
         assert eigenvalues.min() == pytest.approx(0.0, abs=1e-9)
         assert (eigenvalues >= -1e-12).all()
@@ -138,9 +130,7 @@ class TestCmdscaleRemainsTheDefault:
         distance_matrix = _bray_curtis_case()
         n = len(distance_matrix)
         raw = _raw_eigenvalues(distance_matrix)
-        actual = np.asarray(
-            PCoAAnalyzer().analyze(distance_matrix, n - 1, correction=method).eigenvalues
-        )
+        actual = np.asarray(PCoAAnalyzer().analyze(distance_matrix, n - 1, correction=method).eigenvalues)
         assert_allclose(actual, raw[: n - 1], atol=1e-12)
 
     def test_omitting_the_argument_equals_cmdscale(self):
@@ -171,9 +161,7 @@ class TestCorrectionDoesNotDistortOrdering:
         """A uniform shift preserves ordering, so axis 1 stays the largest."""
         distance_matrix = _bray_curtis_case()
         eigenvalues = np.asarray(
-            PCoAAnalyzer().analyze(
-                distance_matrix, len(distance_matrix) - 1, correction=method
-            ).eigenvalues
+            PCoAAnalyzer().analyze(distance_matrix, len(distance_matrix) - 1, correction=method).eigenvalues
         )
         positive = eigenvalues[eigenvalues > 0]
         assert np.all(np.diff(positive) <= 1e-12), "eigenvalues must stay sorted descending"

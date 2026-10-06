@@ -138,8 +138,7 @@ class TaskScheduler:
         # black hole.
         if self._shutdown_event.is_set():
             raise RuntimeError(
-                "This scheduler has been shut down and cannot accept new "
-                "tasks; create a new TaskScheduler."
+                "This scheduler has been shut down and cannot accept new tasks; create a new TaskScheduler."
             )
 
         if task_id is None:
@@ -323,16 +322,12 @@ class TaskScheduler:
                 # and then get a TimeoutError that reads like the task was
                 # merely slow.
                 if task_id not in self._tasks:
-                    raise KeyError(
-                        f"Unknown task id {task_id!r}. "
-                        f"{len(self._tasks)} task(s) known to this scheduler."
-                    )
+                    raise KeyError(f"Unknown task id {task_id!r}. {len(self._tasks)} task(s) known to this scheduler.")
 
                 if not self._running and not self._shutdown_event.is_set():
                     # The worker loop is gone, so this task can never finish.
                     raise RuntimeError(
-                        f"Task {task_id} cannot complete: the scheduler was "
-                        f"never started. Call start() first."
+                        f"Task {task_id} cannot complete: the scheduler was never started. Call start() first."
                     )
 
             if timeout and (time.time() - start_time) > timeout:
@@ -364,8 +359,7 @@ class TaskScheduler:
                 # timeout=None, and nothing will ever decrement `pending`.
                 if not self._running and not self._shutdown_event.is_set():
                     raise RuntimeError(
-                        f"{pending} task(s) cannot complete: the scheduler was "
-                        f"never started. Call start() first."
+                        f"{pending} task(s) cannot complete: the scheduler was never started. Call start() first."
                     )
 
             if timeout and (time.time() - start_time) > timeout:

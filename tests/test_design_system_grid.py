@@ -101,22 +101,17 @@ def _stylesheet_template() -> str:
             if isinstance(sub, ast.Return) and isinstance(sub.value, ast.JoinedStr):
                 parts = []
                 for part in sub.value.values:
-                    if isinstance(part, ast.Constant) and isinstance(
-                        part.value, str
-                    ):
+                    if isinstance(part, ast.Constant) and isinstance(part.value, str):
                         parts.append(part.value)
                     elif isinstance(part, ast.FormattedValue):
                         parts.append(_placeholder_text(part))
                 return "".join(parts)
     raise AssertionError(
-        "get_modern_stylesheet no longer returns an f-string; this check has "
-        "to be taught where the template moved"
+        "get_modern_stylesheet no longer returns an f-string; this check has to be taught where the template moved"
     )
 
 
-@pytest.mark.parametrize(
-    "palette", [ColorPalette, ColorPaletteDark], ids=["light", "dark"]
-)
+@pytest.mark.parametrize("palette", [ColorPalette, ColorPaletteDark], ids=["light", "dark"])
 def test_generated_stylesheet_respects_the_grid(palette):
     off_grid = []
     for match in SPACING_PROPERTY.finditer(get_modern_stylesheet(palette)):
@@ -127,9 +122,8 @@ def test_generated_stylesheet_respects_the_grid(palette):
                 continue  # geometric compensation, see module docstring
             if value % GRID:
                 off_grid.append(f"{declaration}  ({value}px)")
-    assert not off_grid, (
-        f"{len(off_grid)} spacing values are off the {GRID}px grid:\n  "
-        + "\n  ".join(sorted(set(off_grid)))
+    assert not off_grid, f"{len(off_grid)} spacing values are off the {GRID}px grid:\n  " + "\n  ".join(
+        sorted(set(off_grid))
     )
 
 
@@ -149,13 +143,12 @@ def test_every_spacing_token_is_referenced():
     """
     template = _stylesheet_template()
     unused = [
-        name for name in ("xs", "sm", "md", "lg", "xl", "xxl")
-        if "{spacing." + name + "}" not in template
-        and name not in RESERVED_SPACING_TOKENS
+        name
+        for name in ("xs", "sm", "md", "lg", "xl", "xxl")
+        if "{spacing." + name + "}" not in template and name not in RESERVED_SPACING_TOKENS
     ]
     assert not unused, (
-        f"Spacing tokens never interpolated: {unused}. A token nothing reads "
-        "is documentation, not a scale."
+        f"Spacing tokens never interpolated: {unused}. A token nothing reads is documentation, not a scale."
     )
 
 
@@ -167,8 +160,7 @@ def test_reserved_spacing_tokens_still_exist():
     """
     for name in RESERVED_SPACING_TOKENS:
         assert hasattr(Spacing, name), (
-            f"RESERVED_SPACING_TOKENS names {name!r}, but Spacing no longer "
-            "defines it; drop the reservation"
+            f"RESERVED_SPACING_TOKENS names {name!r}, but Spacing no longer defines it; drop the reservation"
         )
 
 
@@ -183,8 +175,7 @@ def test_template_has_no_hardcoded_colours():
     template = _stylesheet_template()
     literals = re.findall(r"#[0-9A-Fa-f]{6}\b", template)
     assert not literals, (
-        f"hardcoded colours in the stylesheet template: {sorted(set(literals))}"
-        " -- use a ColorPalette token"
+        f"hardcoded colours in the stylesheet template: {sorted(set(literals))} -- use a ColorPalette token"
     )
 
 

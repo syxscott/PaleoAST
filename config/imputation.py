@@ -258,9 +258,7 @@ def impute_knn(data: np.ndarray, k: int = 5, distance_metric: str = "euclidean")
         # downstream mean, PCA and PERMANOVA result.
         raise ValueError(f"k must be >= 1, got {k}")
     if distance_metric != "euclidean":
-        raise ValueError(
-            f"unsupported distance_metric {distance_metric!r}; only 'euclidean' is implemented"
-        )
+        raise ValueError(f"unsupported distance_metric {distance_metric!r}; only 'euclidean' is implemented")
 
     logger.info(f"Performing KNN imputation with k={k}")
     result_data = data.copy().astype(float)

@@ -482,23 +482,17 @@ def _guess_von_bertalanffy(
     return _guess_asymptotic(t, y, slope_factor=1.0)
 
 
-def _guess_gompertz(
-    t: npt.NDArray, y: npt.NDArray
-) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+def _guess_gompertz(t: npt.NDArray, y: npt.NDArray) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
     """``L'(t0) = linf * b / e``, so ``b0 = e * rate / linf0``."""
     return _guess_asymptotic(t, y, slope_factor=float(np.e))
 
 
-def _guess_logistic(
-    t: npt.NDArray, y: npt.NDArray
-) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+def _guess_logistic(t: npt.NDArray, y: npt.NDArray) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
     """``L'(t0) = K * b / 4``, so ``b0 = 4 * rate / K0``."""
     return _guess_asymptotic(t, y, slope_factor=4.0)
 
 
-def _guess_gaussian(
-    t: npt.NDArray, y: npt.NDArray
-) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+def _guess_gaussian(t: npt.NDArray, y: npt.NDArray) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
     """``L'(t0) = K * b * phi(0)``, so ``b0 = rate / (K0 * phi(0))``."""
     return _guess_asymptotic(t, y, slope_factor=1.0 / _STD_NORMAL_PDF_AT_ZERO)
 
@@ -583,9 +577,7 @@ def _sinusoid_grid_fit(t: npt.NDArray, y: npt.NDArray) -> tuple[float, float, fl
     return period, mean, amplitude, t0, float(best[4])
 
 
-def _guess_sinusoidal(
-    t: npt.NDArray, y: npt.NDArray
-) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+def _guess_sinusoidal(t: npt.NDArray, y: npt.NDArray) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
     """Starting level, amplitude, period and phase from a period grid search."""
     span = float(np.ptp(t))
     y_lo, y_hi = float(np.min(y)), float(np.max(y))
@@ -697,7 +689,7 @@ def resolve_model_name(model: str) -> str:
     key = _MODEL_ALIASES.get(key, key)
     if key not in GROWTH_MODELS:
         raise ValidationError(
-            _('Unknown growth model: {0}').format(model),
+            _("Unknown growth model: {0}").format(model),
             details={"model": str(model), "available": list(GROWTH_MODELS)},
         )
     return key
@@ -795,18 +787,16 @@ class GrowthModelResult:
     def summary(self) -> str:
         """Multi-line human-readable summary of the fit."""
         spec = _CURVES[self.model]
-        params = ", ".join(
-            f"{name}={value:.5g}" for name, value in zip(self.param_names, self.params, strict=True)
-        )
+        params = ", ".join(f"{name}={value:.5g}" for name, value in zip(self.param_names, self.params, strict=True))
         return "\n".join(
             [
-                _('Growth Model Fit: {0}').format(spec.label),
+                _("Growth Model Fit: {0}").format(spec.label),
                 "=" * 40,
-                _('Observations: {0}').format(self.fit.n_obs),
-                _('Parameters: {0}').format(params),
-                _('R-squared: {0}').format(f"{self.r_squared:.4f}"),
-                _('RMSE: {0}').format(f"{self.rmse:.5g}"),
-                _('AIC: {0}, AICc: {1}').format(f"{self.fit.aic:.2f}", f"{self.aicc:.2f}"),
+                _("Observations: {0}").format(self.fit.n_obs),
+                _("Parameters: {0}").format(params),
+                _("R-squared: {0}").format(f"{self.r_squared:.4f}"),
+                _("RMSE: {0}").format(f"{self.rmse:.5g}"),
+                _("AIC: {0}, AICc: {1}").format(f"{self.fit.aic:.2f}", f"{self.aicc:.2f}"),
             ]
         )
 
@@ -912,9 +902,7 @@ class GrowthModelAnalyzer:
         start = np.asarray(guess if p0 is None else p0, dtype=float)
         if start.shape != (len(spec.param_names),):
             raise ValidationError(
-                _('{0}: p0 must supply {1} values, got {2}').format(
-                    spec.label, len(spec.param_names), start.size
-                ),
+                _("{0}: p0 must supply {1} values, got {2}").format(spec.label, len(spec.param_names), start.size),
                 details={"model": key, "expected": len(spec.param_names), "got": int(start.size)},
             )
         if bounds is None:
@@ -925,7 +913,7 @@ class GrowthModelAnalyzer:
             hi = np.asarray(bounds[1], dtype=float)
             if lo.shape != hi.shape or lo.shape != start.shape:
                 raise ValidationError(
-                    _('{0}: bounds must be two arrays of {1} values').format(spec.label, len(spec.param_names)),
+                    _("{0}: bounds must be two arrays of {1} values").format(spec.label, len(spec.param_names)),
                     details={"model": key, "expected": len(spec.param_names)},
                 )
 
@@ -941,7 +929,7 @@ class GrowthModelAnalyzer:
         )
         if not np.all(np.isfinite(fit_result.params)):
             raise ComputationError(
-                _('{0}: the fit returned non-finite parameters').format(spec.label),
+                _("{0}: the fit returned non-finite parameters").format(spec.label),
                 details={"model": key, "params": [float(p) for p in fit_result.params]},
             )
 
@@ -996,16 +984,14 @@ class GrowthModelAnalyzer:
         """
         if not models:
             raise ValidationError(
-                _('fit_all needs at least one model, got none'),
+                _("fit_all needs at least one model, got none"),
                 details={"available": list(GROWTH_MODELS)},
             )
         results: dict[str, GrowthModelResult] = {}
         for model in models:
             result = self.fit(model, times, values, confidence=confidence)
             if result.model in results:
-                self._logger.debug(
-                    "Growth model %s requested twice; keeping the first fit", result.model
-                )
+                self._logger.debug("Growth model %s requested twice; keeping the first fit", result.model)
                 continue
             results[result.model] = result
         ranking = dict(sorted(((name, r.aicc) for name, r in results.items()), key=lambda kv: kv[1]))
@@ -1052,51 +1038,51 @@ def _validate_series(
         y = np.asarray(values, dtype=float)
     except (TypeError, ValueError) as exc:
         raise ValidationError(
-            _('Growth data must be numeric: {0}').format(exc),
+            _("Growth data must be numeric: {0}").format(exc),
             details={"model": spec.key},
         ) from exc
 
     if t.ndim != 1 or y.ndim != 1:
         raise ValidationError(
-            _('Growth data must be one-dimensional, got {0}-d and {1}-d').format(t.ndim, y.ndim),
+            _("Growth data must be one-dimensional, got {0}-d and {1}-d").format(t.ndim, y.ndim),
             details={"model": spec.key},
         )
     if t.size != y.size:
         raise ValidationError(
-            _('Growth data must pair up: {0} times and {1} values').format(t.size, y.size),
+            _("Growth data must pair up: {0} times and {1} values").format(t.size, y.size),
             details={"model": spec.key, "n_times": int(t.size), "n_values": int(y.size)},
         )
     if t.size == 0:
         raise ValidationError(
-            _('Growth data are empty'),
+            _("Growth data are empty"),
             details={"model": spec.key},
         )
     if not np.all(np.isfinite(t)) or not np.all(np.isfinite(y)):
         bad = int(np.count_nonzero(~np.isfinite(t))) + int(np.count_nonzero(~np.isfinite(y)))
         raise ValidationError(
-            _('Growth data contain {0} non-finite value(s); remove or interpolate them first').format(bad),
+            _("Growth data contain {0} non-finite value(s); remove or interpolate them first").format(bad),
             details={"model": spec.key, "n_non_finite": bad},
         )
     if np.any(np.diff(t) <= 0.0):
         raise ValidationError(
-            _('Time must increase strictly: the time axis has repeated or reversed values'),
+            _("Time must increase strictly: the time axis has repeated or reversed values"),
             details={"model": spec.key, "first_time": float(t[0]), "last_time": float(t[-1])},
         )
     if np.any(y < 0.0):
         raise ValidationError(
-            _('Growth measurements must be non-negative; got a minimum of {0}').format(float(np.min(y))),
+            _("Growth measurements must be non-negative; got a minimum of {0}").format(float(np.min(y))),
             details={"model": spec.key, "minimum": float(np.min(y))},
         )
     if float(np.ptp(y)) == 0.0:
         raise ValidationError(
-            _('Every measurement is {0}: there is no growth to fit').format(float(y[0])),
+            _("Every measurement is {0}: there is no growth to fit").format(float(y[0])),
             details={"model": spec.key, "value": float(y[0])},
         )
 
     n_required = len(spec.param_names) + _MIN_EXTRA_POINTS
     if t.size < n_required:
         raise ValidationError(
-            _('{0} needs at least {1} points for {2} parameters, got {3}').format(
+            _("{0} needs at least {1} points for {2} parameters, got {3}").format(
                 spec.label, n_required, len(spec.param_names), int(t.size)
             ),
             details={

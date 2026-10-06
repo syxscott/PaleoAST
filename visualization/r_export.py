@@ -82,16 +82,16 @@ class RPlotSpec:
     and ``ggsave(dpi=)`` here.
     """
 
-    theme: str = "classic"           # classic | bw | minimal | grey
-    base_size: float = 9.0           # ggplot2 base_size, in points
-    figsize: tuple[float, float] = (7.0, 5.5)   # inches
+    theme: str = "classic"  # classic | bw | minimal | grey
+    base_size: float = 9.0  # ggplot2 base_size, in points
+    figsize: tuple[float, float] = (7.0, 5.5)  # inches
     dpi: int = 300
     point_size: float = 2.0
     alpha: float = 0.85
-    show_ellipse: bool = True        # 95% confidence ellipse
+    show_ellipse: bool = True  # 95% confidence ellipse
     annotate_samples: bool = False
     reverse_time_axis: bool = False  # stratigraphic convention: oldest at the bottom
-    point_shape: int = 16            # 16 = filled circle (no stroke, theme-safe)
+    point_shape: int = 16  # 16 = filled circle (no stroke, theme-safe)
     # coord_fixed(): one data unit the same size on both axes, so apparent
     # spread is real spread. Correct for an ordination, and OFF by default
     # because PC1 usually spans far more than PC2 -- equal units then leaves
@@ -99,8 +99,8 @@ class RPlotSpec:
     # it on when the metric proportions matter more than the panel filling.
     equal_aspect: bool = False
     color_palette: str = "okabeito"  # name resolved inside the R script
-    r_executable: str = ""           # "" => auto-detect
-    output_format: str = "pdf"       # pdf | svg | png
+    r_executable: str = ""  # "" => auto-detect
+    output_format: str = "pdf"  # pdf | svg | png
 
     def theme_line(self) -> str:
         """The single line a user edits when retargeting a journal template.
@@ -117,7 +117,7 @@ class RPlotSpec:
         fmt = self.output_format
         return (
             f'ggsave("{stem}.{fmt}", plot = p, width = {self.figsize[0]:g}, '
-            f"height = {self.figsize[1]:g}, dpi = {self.dpi}, units = \"in\")"
+            f'height = {self.figsize[1]:g}, dpi = {self.dpi}, units = "in")'
         )
 
 
@@ -158,8 +158,14 @@ class RExportResult:
 
 # Anything the R parser cannot read but Python's repr happily prints.
 _PYTHON_LEAKS = (
-    "np.float64", "np.int64", "np.float32", "np.bool_", "dtype=",
-    "array([", "nan", "inf",
+    "np.float64",
+    "np.int64",
+    "np.float32",
+    "np.bool_",
+    "dtype=",
+    "array([",
+    "nan",
+    "inf",
 )
 
 
@@ -198,13 +204,7 @@ def _fmt_string(value: str) -> str:
     are exactly the place where these show up ("O'Brien sp.", a backslash in
     a file path, a newline in a malformed label).
     """
-    out = (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("\t", "\\t")
-    )
+    out = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
     return f'"{out}"'
 
 
@@ -292,11 +292,11 @@ cat("wrote {stem}.{spec.output_format}\\n")
 """
 
 
-def _assemble(title: str, stamp: str, data_name: str, stem: str,
-              body: str, spec: RPlotSpec, r_version_note: str) -> str:
+def _assemble(
+    title: str, stamp: str, data_name: str, stem: str, body: str, spec: RPlotSpec, r_version_note: str
+) -> str:
     return (
-        _HEADER.format(title=title, stamp=stamp, data_name=data_name,
-                       stem=stem, r_version_note=r_version_note)
+        _HEADER.format(title=title, stamp=stamp, data_name=data_name, stem=stem, r_version_note=r_version_note)
         + body
         + _footer(spec, stem)
     )
@@ -359,9 +359,7 @@ def validate_r_script(text: str) -> list[str]:
                 break
             opener, opened = stack.pop()
             if "([{".index(opener) != ")]}".index(ch):
-                problems.append(
-                    f"mismatched '{opener}' (line {opened}) closed by '{ch}' at line {line}"
-                )
+                problems.append(f"mismatched '{opener}' (line {opened}) closed by '{ch}' at line {line}")
                 break
         i += 1
     if stack and not problems:
@@ -376,11 +374,9 @@ def validate_r_script(text: str) -> list[str]:
             # These are legitimate inside words/comments; only flag standalone
             # numeric positions, which is where a numpy scalar would land.
             for m in re.finditer(rf"(?<![\w.]){leak}(?![\w])", text):
-                ctx = text[max(0, m.start() - 20):m.end() + 20]
+                ctx = text[max(0, m.start() - 20) : m.end() + 20]
                 if not ctx.lstrip().startswith("#"):
-                    problems.append(
-                        f"Python-style '{leak}' at offset {m.start()}: {ctx!r}"
-                    )
+                    problems.append(f"Python-style '{leak}' at offset {m.start()}: {ctx!r}")
                     break
         elif leak in text:
             m = re.search(re.escape(leak), text)
@@ -406,17 +402,12 @@ class RScriptExporter:
         self._r_version_note = r_version_note
 
     # -- internal -----------------------------------------------------
-    def _write(self, out_dir: Path, stem: str, data_name: str, title: str,
-               body: str, spec: RPlotSpec) -> RExportResult:
+    def _write(self, out_dir: Path, stem: str, data_name: str, title: str, body: str, spec: RPlotSpec) -> RExportResult:
         out_dir.mkdir(parents=True, exist_ok=True)
-        text = _assemble(title, self._stamp, data_name, stem, body, spec,
-                         self._r_version_note)
+        text = _assemble(title, self._stamp, data_name, stem, body, spec, self._r_version_note)
         problems = validate_r_script(text)
         if problems:
-            raise ValueError(
-                "generated R script failed its own structural check: "
-                + "; ".join(problems)
-            )
+            raise ValueError("generated R script failed its own structural check: " + "; ".join(problems))
         script_path = out_dir / f"{stem}.R"
         script_path.write_text(text, encoding="utf-8")
         digest = hashlib.sha256(script_path.read_bytes()).hexdigest()
@@ -483,9 +474,7 @@ class RScriptExporter:
         aes_parts = [f"x = .data$PC{pc1 + 1}", f"y = .data$PC{pc2 + 1}"]
         if group_col:
             aes_parts.append(
-                "colour = factor(group, levels = c("
-                + ", ".join(_fmt_string(v) for v in group_col[2])
-                + "))"
+                "colour = factor(group, levels = c(" + ", ".join(_fmt_string(v) for v in group_col[2]) + "))"
             )
         aes_expr = "aes(" + ", ".join(aes_parts) + ")"
 
@@ -516,8 +505,8 @@ p <- ggplot(data, {aes_expr}) +
         # layer must live in this list -- none may come from the template
         # above, or it misses its operator.
         layers: list[str] = [
-            "geom_hline(yintercept = 0, linewidth = 0.3, colour = \"grey70\")",
-            "geom_vline(xintercept = 0, linewidth = 0.3, colour = \"grey70\")",
+            'geom_hline(yintercept = 0, linewidth = 0.3, colour = "grey70")',
+            'geom_vline(xintercept = 0, linewidth = 0.3, colour = "grey70")',
         ]
         if group_col:
             # Shape follows the group as well as colour. Above ~8 groups no
@@ -554,7 +543,7 @@ p <- ggplot(data, {aes_expr}) +
                 # discards the colour aesthetic. geom_path keeps it.
                 layers.append(
                     f"geom_path(data = if (is.null(ellipse_data)) {empty} else ellipse_data,\n"
-                    '             aes(x = x, y = y, group = group,\n'
+                    "             aes(x = x, y = y, group = group,\n"
                     "                 colour = factor(group)),\n"
                     "             linewidth = 0.5, show.legend = FALSE)"
                 )
@@ -568,10 +557,7 @@ p <- ggplot(data, {aes_expr}) +
                 )
 
         if spec.annotate_samples and label_col:
-            layers.append(
-                "geom_text(aes(label = label), size = 3, vjust = -0.8,\n"
-                "            show.legend = FALSE)"
-            )
+            layers.append("geom_text(aes(label = label), size = 3, vjust = -0.8,\n            show.legend = FALSE)")
 
         layers.append(
             "labs(\n"
@@ -601,8 +587,7 @@ p <- ggplot(data, {aes_expr}) +
         body += "\n".join("  " + lay + " +" for lay in layers[:-1])
         body += "\n  " + layers[-1] + "\n"
 
-        return self._write(out_dir, stem, data_name,
-                           "PCA score plot (ggplot2)", body, spec)
+        return self._write(out_dir, stem, data_name, "PCA score plot (ggplot2)", body, spec)
 
     # -- PCA scree ----------------------------------------------------
     def export_pca_scree(
@@ -670,8 +655,7 @@ p <- ggplot(data, aes(x = factor(component))) +
         axis.text.y.right = element_text(colour = "#D55E00"),
         plot.margin = margin(r = 12))
 """
-        return self._write(out_dir, stem, data_name,
-                           "PCA scree plot (ggplot2)", body, spec)
+        return self._write(out_dir, stem, data_name, "PCA scree plot (ggplot2)", body, spec)
 
     # -- shared ------------------------------------------------------
     @staticmethod

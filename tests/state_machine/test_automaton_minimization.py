@@ -52,9 +52,7 @@ class TestMinimisationPreservesTheLanguage:
             f"minimising /{pattern}/ invented {sorted(after - before)} -- "
             "the minimised DFA accepts strings the original rejects"
         )
-        assert sorted(before - after) == [], (
-            f"minimising /{pattern}/ dropped {sorted(before - after)}"
-        )
+        assert sorted(before - after) == [], f"minimising /{pattern}/ dropped {sorted(before - after)}"
 
     def test_optional_single_character_does_not_become_star(self):
         """The concrete over-acceptance: /a?/ must stay /a?/.
@@ -67,9 +65,7 @@ class TestMinimisationPreservesTheLanguage:
         assert dfa.accepts_string("a")
         for rejected in ("aa", "aaa", "aaaa"):
             assert not dfa.accepts_string(rejected)
-            assert not minimized.accepts_string(rejected), (
-                f"the minimised /a?/ accepts {rejected!r}"
-            )
+            assert not minimized.accepts_string(rejected), f"the minimised /a?/ accepts {rejected!r}"
 
     def test_minimisation_actually_reduces_states(self):
         """A fix that stopped splitting anything would pass the tests above.
@@ -79,23 +75,17 @@ class TestMinimisationPreservesTheLanguage:
         """
         for pattern in ("a*", "(a|b)*"):
             dfa, minimized = _minimized(pattern)
-            assert len(minimized._states) < len(dfa._states), (
-                f"/{pattern}/ should have fewer states after minimisation"
-            )
+            assert len(minimized._states) < len(dfa._states), f"/{pattern}/ should have fewer states after minimisation"
 
     def test_equivalence_under_repetition(self):
         """Re-check beyond the sampled depth: no divergence at longer lengths."""
         dfa, minimized = _minimized("a?")
         for n in range(1, 25):
             s = "a" * n
-            assert dfa.accepts_string(s) == minimized.accepts_string(s), (
-                f"disagreement at {s!r}"
-            )
+            assert dfa.accepts_string(s) == minimized.accepts_string(s), f"disagreement at {s!r}"
 
     def test_alternation_is_not_merged_into_something_larger(self):
         """A state machine's practical failure mode: accepting a superset."""
         dfa, minimized = _minimized("ab?")
         for s in _strings():
-            assert dfa.accepts_string(s) == minimized.accepts_string(s), (
-                f"/ab?/ diverges on {s!r}"
-            )
+            assert dfa.accepts_string(s) == minimized.accepts_string(s), f"/ab?/ diverges on {s!r}"

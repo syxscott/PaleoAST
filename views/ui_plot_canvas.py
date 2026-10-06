@@ -2496,9 +2496,7 @@ class InteractivePlotCanvas(QWidget):
             # Convert the pixel dodge back into data units. Annotate's
             # ``xytext`` is in data coords here so the offset stays put
             # even when the user zooms or pans.
-            target_x, target_y = inv(
-                (pts_pix[i][0] + offsets_px[i, 0], pts_pix[i][1] + offsets_px[i, 1])
-            )
+            target_x, target_y = inv((pts_pix[i][0] + offsets_px[i, 0], pts_pix[i][1] + offsets_px[i, 1]))
             va = "center"
             self._ax.annotate(
                 labels[i],
@@ -2876,20 +2874,27 @@ class InteractivePlotCanvas(QWidget):
 
         if len(unique_groups) <= 1:
             self._ax.scatter(
-                x, y,
-                c="#2C3E50", s=80, alpha=0.7,
-                edgecolors="white", linewidths=0.5,
+                x,
+                y,
+                c="#2C3E50",
+                s=80,
+                alpha=0.7,
+                edgecolors="white",
+                linewidths=0.5,
             )
         else:
             sorted_groups = sorted(unique_groups.tolist())
             for i, group_id in enumerate(sorted_groups):
                 mask = groups_arr == group_id
                 self._ax.scatter(
-                    x[mask], y[mask],
+                    x[mask],
+                    y[mask],
                     c=[self.COLORS[i % len(self.COLORS)]],
                     label=group_label_map.get(int(group_id), f"Group {group_id + 1}"),
-                    s=80, alpha=0.7,
-                    edgecolors="white", linewidths=0.5,
+                    s=80,
+                    alpha=0.7,
+                    edgecolors="white",
+                    linewidths=0.5,
                 )
 
         # Regression line: numpy raises if x has only one unique value,
@@ -2902,9 +2907,7 @@ class InteractivePlotCanvas(QWidget):
         r1 = float(correlations[0]) if correlations.size > 0 else 0.0
         self._ax.set_xlabel(_("Block A PLS Score (Comp 1)"))
         self._ax.set_ylabel(_("Block B PLS Score (Comp 1)"))
-        self._ax.set_title(
-            _("Two-Block PLS (r₁ = {0:.4f}, integration = {1:.4f})").format(r1, integration_index)
-        )
+        self._ax.set_title(_("Two-Block PLS (r₁ = {0:.4f}, integration = {1:.4f})").format(r1, integration_index))
 
         self._apply_axes_theme()
         if len(unique_groups) > 1:
@@ -2945,10 +2948,18 @@ class InteractivePlotCanvas(QWidget):
             payload = {
                 k: getattr(result, k)
                 for k in (
-                    "left_scores", "right_scores", "pls_correlations",
-                    "integration_index", "rv_coefficient", "pls1_pvalue",
-                    "pls1_z", "singular_values", "covariance_explained",
-                    "cumulative_covariance", "n_components", "n_specimens",
+                    "left_scores",
+                    "right_scores",
+                    "pls_correlations",
+                    "integration_index",
+                    "rv_coefficient",
+                    "pls1_pvalue",
+                    "pls1_z",
+                    "singular_values",
+                    "covariance_explained",
+                    "cumulative_covariance",
+                    "n_components",
+                    "n_specimens",
                 )
                 if hasattr(result, k)
             }

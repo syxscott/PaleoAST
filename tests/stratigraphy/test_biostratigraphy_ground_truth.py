@@ -28,6 +28,7 @@ Truth definitions (independent of the production code):
 
 All tests use fixed seeds (where randomness appears) and are deterministic.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -47,9 +48,7 @@ from utils.exceptions import ComputationError, DataValidationError
 # ---------------------------------------------------------------------------
 
 
-def _events_overlap_in_section(
-    fad_row: np.ndarray, lad_row: np.ndarray, i: int, j: int
-) -> bool:
+def _events_overlap_in_section(fad_row: np.ndarray, lad_row: np.ndarray, i: int, j: int) -> bool:
     """Return True iff events ``i`` and ``j`` overlap (strict) in one section.
 
     Mirrors the rule in ``UAAnalyzer._build_overlap_graph``.
@@ -57,9 +56,7 @@ def _events_overlap_in_section(
     return fad_row[i] < lad_row[j] and fad_row[j] < lad_row[i]
 
 
-def _build_overlap_graph(
-    fad: np.ndarray, lad: np.ndarray
-) -> dict[int, set[int]]:
+def _build_overlap_graph(fad: np.ndarray, lad: np.ndarray) -> dict[int, set[int]]:
     """Independent adjacency from FAD/LAD, matching the implementation's rule."""
     n_events = fad.shape[1]
     graph: dict[int, set[int]] = {i: set() for i in range(n_events)}
@@ -72,9 +69,7 @@ def _build_overlap_graph(
     return graph
 
 
-def _brute_force_maximal_cliques(
-    fad: np.ndarray, lad: np.ndarray, min_size: int = 2
-) -> list[frozenset[int]]:
+def _brute_force_maximal_cliques(fad: np.ndarray, lad: np.ndarray, min_size: int = 2) -> list[frozenset[int]]:
     """Enumerate every subset of events of size >= ``min_size`` and return the
     maximal cliques of the per-section overlap graph.
 
@@ -193,9 +188,7 @@ class TestUAExhaustiveMaximalCliques:
         _brute_force_maximal_cliques(fad, lad, min_size=2)
         truth_sets = {frozenset({"A", "B"}), frozenset({"B", "C"}), frozenset({"C", "D"})}
         got_sets = set(_result_zones_as_sets(result))
-        assert got_sets == truth_sets, (
-            f"Implementation cliques {got_sets} != brute-force truth {truth_sets}"
-        )
+        assert got_sets == truth_sets, f"Implementation cliques {got_sets} != brute-force truth {truth_sets}"
         # Sanity: there should be exactly 3 zones, no larger cliques.
         assert len(result.zones) == 3
         assert all(len(z.events) == 2 for z in result.zones)
@@ -280,8 +273,7 @@ class TestUAExhaustiveMaximalCliques:
             )
             got_sets = set(_result_zones_as_sets(result))
             assert got_sets == truth_sets, (
-                f"trial={trial} (sections={n_sections}, events={n_events}) "
-                f"got={got_sets} truth={truth_sets}"
+                f"trial={trial} (sections={n_sections}, events={n_events}) got={got_sets} truth={truth_sets}"
             )
 
 
@@ -312,10 +304,7 @@ class TestUAInvariants:
                     if _events_overlap_in_section(fad[s], lad[s], name_to_idx[a], name_to_idx[b]):
                         found = True
                         break
-                assert found, (
-                    f"Zone {zone.name} contains non-overlapping pair "
-                    f"({a!r}, {b!r})"
-                )
+                assert found, f"Zone {zone.name} contains non-overlapping pair ({a!r}, {b!r})"
 
     def test_zone_fad_lad_within_input_range(self):
         """A zone's recorded FAD/LAD for any event must equal the minimum FAD
@@ -377,8 +366,8 @@ class TestUACyclicContradictions:
         """Section 1: A before B; Section 2: B before A -> one contradiction."""
         fad = np.array(
             [
-                [0.0, 10.0, 0.0],   # A,B,C FADs in section 0
-                [10.0, 0.0, 0.0],   # A,B,C FADs in section 1
+                [0.0, 10.0, 0.0],  # A,B,C FADs in section 0
+                [10.0, 0.0, 0.0],  # A,B,C FADs in section 1
             ]
         )
         lad = fad + 5.0  # arbitrary; we only need FADs for the detector
@@ -604,9 +593,7 @@ class TestRASCBruteForceOptimum:
             names = result.events
             cost = _ranking_score(result.ranking, d, names)
             opt = _brute_force_rasc_optimal_score(d)
-            assert cost >= opt, (
-                f"trial={trial}: cost {cost} < brute-force optimum {opt}"
-            )
+            assert cost >= opt, f"trial={trial}: cost {cost} < brute-force optimum {opt}"
 
     def test_random_n3_optimal_when_reachable(self):
         """For n=3, sample a handful of distance matrices and check that the
@@ -632,8 +619,7 @@ class TestRASCBruteForceOptimum:
                 result = RASCAnalyzer().analyze(distance_matrix=d)
                 cost = _ranking_score(result.ranking, d, result.events)
                 assert cost == opt, (
-                    f"trial={trial}: cost {cost} > opt {opt}; "
-                    f"winners={winners}; ranking={result.ranking}"
+                    f"trial={trial}: cost {cost} > opt {opt}; winners={winners}; ranking={result.ranking}"
                 )
 
     def test_deterministic(self):
@@ -683,9 +669,7 @@ class TestRASCBruteForceOptimum:
 
         result = RASCAnalyzer().analyze(distance_matrix=dist)
         cost = _ranking_score(result.ranking, dist, result.events)
-        assert cost == pytest.approx(opt), (
-            f"adjacent-swap search returned {cost}, brute-force optimum is {opt}"
-        )
+        assert cost == pytest.approx(opt), f"adjacent-swap search returned {cost}, brute-force optimum is {opt}"
         # And specifically: the first position must be free to change.
         assert not result.ranking[0].endswith("Event_1"), (
             "ranking still starts with the initial event, so position 0 is frozen"

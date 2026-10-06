@@ -37,9 +37,7 @@ class TableGenerator:
                 f"table is a LaTeX 'extra alignment tab' compile error."
             )
         if headers is not None and len(headers) != n_cols:
-            raise ValueError(
-                f"from_matrix: headers has {len(headers)} entries but the data has {n_cols} column(s)"
-            )
+            raise ValueError(f"from_matrix: headers has {len(headers)} entries but the data has {n_cols} column(s)")
         col_spec = "|".join(["c"] * n_cols)
         lines = [f"\\begin{{tabular}}{{|{col_spec}|}}"]
         lines.append("\\hline")

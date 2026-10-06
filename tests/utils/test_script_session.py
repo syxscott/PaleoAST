@@ -143,9 +143,7 @@ def test_unclosed_quote_does_not_wedge_the_session(session: ScriptSession) -> No
 
 def test_indented_block_with_trailing_expression(session: ScriptSession) -> None:
     """A function definition followed by a call still echoes the call."""
-    result = session.execute(
-        "def double(v):\n    return v * 2\ndouble(21)"
-    )
+    result = session.execute("def double(v):\n    return v * 2\ndouble(21)")
     assert result.ok
     assert result.value == "42"
 
@@ -210,6 +208,7 @@ def test_public_keys_excludes_injected_names(session: ScriptSession) -> None:
 
 def test_a_raising_data_provider_yields_none() -> None:
     """A provider that throws must not kill the console."""
+
     def boom() -> object:
         raise RuntimeError("no data")
 
@@ -252,9 +251,7 @@ def test_data_supports_the_ordinary_array_operations(
     assert sheet_session.execute("data[0, 2]").value == "2.0"
 
 
-def test_data_is_live_not_a_snapshot(
-    sheet_session: ScriptSession, sheet: dict
-) -> None:
+def test_data_is_live_not_a_snapshot(sheet_session: ScriptSession, sheet: dict) -> None:
     """The property that justifies the proxy's existence.
 
     A snapshot would report the array the sheet held when the console
@@ -268,9 +265,7 @@ def test_data_is_live_not_a_snapshot(
     assert after == "1200.0"
 
 
-def test_snapshot_materialises_a_fixed_array(
-    sheet_session: ScriptSession, sheet: dict
-) -> None:
+def test_snapshot_materialises_a_fixed_array(sheet_session: ScriptSession, sheet: dict) -> None:
     """An explicit request for a fixed array gets one."""
     fixed = sheet_session.namespace["data"].snapshot()
     assert isinstance(fixed, np.ndarray)
@@ -479,9 +474,7 @@ def test_format_falls_back_to_repr() -> None:
 
 def test_execution_result_text_combines_channels() -> None:
     """text() is what a console would display."""
-    result = ExecutionResult(
-        ok=False, output="printed\n", value="42", error="Traceback...\n"
-    )
+    result = ExecutionResult(ok=False, output="printed\n", value="42", error="Traceback...\n")
     text = result.text
     assert "printed" in text
     assert "42" in text

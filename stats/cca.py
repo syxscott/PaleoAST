@@ -123,9 +123,7 @@ class CCAResult:
             )
 
         lines.append("")
-        lines.append(
-            f"{_('Total constrained variance: {0}%').format(f'{self.constrained_variance:.2f}')}"
-        )
+        lines.append(f"{_('Total constrained variance: {0}%').format(f'{self.constrained_variance:.2f}')}")
         lines.append(f"{_('Inertia (total): {0:.4f}').format(self.inertia)}")
         lines.append("")
         lines.append(f"{_('Overall F: {0:.4f}').format(self.f_statistic)}")
@@ -235,8 +233,12 @@ class CCAAnalyzer:
 
             # Permutation-based significance test (shuffles Y rows).
             f_overall, f_per_axis, wilks_lambda, p_overall, p_per_axis = self._permutation_test(
-                Y_arr, X_arr, n_components, method,
-                n_permutations=n_permutations, random_seed=random_seed,
+                Y_arr,
+                X_arr,
+                n_components,
+                method,
+                n_permutations=n_permutations,
+                random_seed=random_seed,
             )
             result.f_statistic = float(f_overall)
             result.f_per_axis = np.asarray(f_per_axis, dtype=float)
@@ -757,9 +759,7 @@ class CCAAnalyzer:
         for i in range(n_permutations):
             perm_idx = rng.permutation(n_samples)
             Y_perm = Y[perm_idx]
-            perm_eigs, _, _, _, _ = self._constrained_eigenvalues(
-                Y_perm, X, n_components, method
-            )
+            perm_eigs, _, _, _, _ = self._constrained_eigenvalues(Y_perm, X, n_components, method)
             if len(perm_eigs) == 0:
                 f_overall_perm[i] = 0.0
                 f_per_axis_perm[i, :] = 0.0
@@ -778,9 +778,7 @@ class CCAAnalyzer:
             # of the permutation; the denominator they are measured against
             # does not, so recomputing it per permutation would be wasted work
             # and would invite a subtly different bug.
-            f_p, f_pa, _ = self._F_from_eigenvalues(
-                perm_eigs, total_inertia, total_SS, n_eff, n_q
-            )
+            f_p, f_pa, _ = self._F_from_eigenvalues(perm_eigs, total_inertia, total_SS, n_eff, n_q)
             f_overall_perm[i] = f_p
             # A permutation can lose a further axis (its zero-total structure
             # may differ from the observed table's); fit instead of assigning
@@ -796,8 +794,7 @@ class CCAAnalyzer:
         n_ge_overall = int(np.sum(f_overall_perm >= f_overall))
         p_overall = float((1 + n_ge_overall) / (1 + n_permutations))
         p_per_axis = np.array(
-            [(1 + int(np.sum(f_per_axis_perm[:, k] >= f_per_axis[k]))) / (1 + n_permutations)
-             for k in range(n_axes)],
+            [(1 + int(np.sum(f_per_axis_perm[:, k] >= f_per_axis[k]))) / (1 + n_permutations) for k in range(n_axes)],
             dtype=float,
         )
 

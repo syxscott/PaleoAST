@@ -162,7 +162,7 @@ class DirectionalAnalyzer:
         # though arctan2(S, C) still returns a finite value. Compute Z
         # first so the threshold is principled.
         Z = n * R_bar**2
-        mean_dir_undef = (Z < 1.0)
+        mean_dir_undef = Z < 1.0
         if mean_dir_undef:
             mean_dir = None
             mean_dir_deg: float | None = None

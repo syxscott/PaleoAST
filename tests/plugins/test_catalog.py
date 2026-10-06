@@ -78,11 +78,7 @@ def _analyzer_classes_in_source() -> set[tuple[str, str]]:
             except Exception:  # pragma: no cover - optional dependency
                 continue
             for name, obj in vars(module).items():
-                if (
-                    inspect.isclass(obj)
-                    and obj.__module__ == modname
-                    and name.endswith("Analyzer")
-                ):
+                if inspect.isclass(obj) and obj.__module__ == modname and name.endswith("Analyzer"):
                     found.add((modname, name))
     return found
 
@@ -116,16 +112,11 @@ def test_every_entry_resolves() -> None:
         else:
             target = getattr(module, entry.class_name, None)
             if target is None:
-                broken.append(
-                    f"{entry.name}: {entry.module} has no {entry.class_name}"
-                )
+                broken.append(f"{entry.name}: {entry.module} has no {entry.class_name}")
                 continue
             target = target()  # type: ignore[operator]
         if not callable(getattr(target, entry.method, None)):
-            broken.append(
-                f"{entry.name}: {entry.module}.{entry.class_name or ''}"
-                f".{entry.method} is not callable"
-            )
+            broken.append(f"{entry.name}: {entry.module}.{entry.class_name or ''}.{entry.method} is not callable")
     assert not broken, "catalog entries that do not resolve:\n" + "\n".join(broken)
 
 
@@ -156,11 +147,7 @@ def test_catalog_covers_every_analyzer_in_the_source() -> None:
     ``SomeNewAnalyzer`` to stats/ and the plugin registry, the UI and
     the controller never learn about it, and nothing complains.
     """
-    covered = {
-        (e.module, e.class_name)
-        for e in BUILTIN_ANALYSES
-        if e.class_name is not None
-    }
+    covered = {(e.module, e.class_name) for e in BUILTIN_ANALYSES if e.class_name is not None}
     present = _analyzer_classes_in_source()
     missing = sorted(present - covered)
     assert not missing, (
@@ -180,12 +167,10 @@ def test_catalog_does_not_name_classes_that_do_not_exist() -> None:
     stale = sorted(
         (e.module, e.class_name)
         for e in BUILTIN_ANALYSES
-        if e.class_name is not None and e.class_name.endswith("Analyzer")
-        and (e.module, e.class_name) not in present
+        if e.class_name is not None and e.class_name.endswith("Analyzer") and (e.module, e.class_name) not in present
     )
-    assert not stale, (
-        "catalog names analyzer classes not found in the source tree:\n  "
-        + "\n  ".join(f"{m}.{c}" for m, c in stale)
+    assert not stale, "catalog names analyzer classes not found in the source tree:\n  " + "\n  ".join(
+        f"{m}.{c}" for m, c in stale
     )
 
 

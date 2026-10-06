@@ -13,6 +13,7 @@ Both were hit while writing this file.
 
 usage: python check_wxs.py <file> [<file> ...]
 """
+
 from __future__ import annotations
 
 import re
@@ -33,9 +34,7 @@ def check(path: Path) -> list[str]:
         body = m.group(1)
         if "--" in body:
             line = text[: m.start()].count("\n") + 1
-            problems.append(
-                f"{path.name}:{line}  ' -- ' is illegal inside a comment"
-            )
+            problems.append(f"{path.name}:{line}  ' -- ' is illegal inside a comment")
         if "<" in body:
             line = text[: m.start()].count("\n") + 1
             problems.append(f"{path.name}:{line}  bare '<' inside a comment")

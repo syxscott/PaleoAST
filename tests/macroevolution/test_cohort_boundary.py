@@ -43,10 +43,9 @@ class TestCohortBoundaryTaxaWarning:
 
         warnings_text = [str(w.message) for w in caught]
         # At least one warning should mention the boundary issue.
-        assert any(
-            "FAD" in msg or "boundary" in msg.lower() or "t_end" in msg
-            for msg in warnings_text
-        ), f"expected boundary warning, got: {warnings_text}"
+        assert any("FAD" in msg or "boundary" in msg.lower() or "t_end" in msg for msg in warnings_text), (
+            f"expected boundary warning, got: {warnings_text}"
+        )
 
     def test_lad_at_oldest_bin_t_start_warns(self):
         """A taxon with LAD exactly equal to the oldest bin's t_start would
@@ -62,8 +61,7 @@ class TestCohortBoundaryTaxaWarning:
 
         warnings_text = [str(w.message) for w in caught]
         assert any(
-            "LAD" in msg or "boundary" in msg.lower() or "t_start" in msg or "t_end" in msg
-            for msg in warnings_text
+            "LAD" in msg or "boundary" in msg.lower() or "t_start" in msg or "t_end" in msg for msg in warnings_text
         ), f"expected boundary warning, got: {warnings_text}"
 
     def test_no_warning_when_all_taxa_visible(self):
@@ -77,9 +75,9 @@ class TestCohortBoundaryTaxaWarning:
 
         # No FAD/LAD boundary warning expected.
         relevant = [
-            w for w in caught
-            if "FAD" in str(w.message) or "LAD" in str(w.message)
-            or "boundary" in str(w.message).lower()
+            w
+            for w in caught
+            if "FAD" in str(w.message) or "LAD" in str(w.message) or "boundary" in str(w.message).lower()
         ]
         assert len(relevant) == 0, f"unexpected warnings: {[str(w.message) for w in relevant]}"
 

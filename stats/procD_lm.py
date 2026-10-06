@@ -294,9 +294,7 @@ def procD_lm(
             perm_units = rng.permutation(unit_ids)
             # each unit takes over the residual block of the unit it was
             # swapped with; unit values -> first observation index
-            mapping = {
-                u: unit_first_pos[swap] for u, swap in zip(unit_ids.tolist(), perm_units.tolist(), strict=True)
-            }
+            mapping = {u: unit_first_pos[swap] for u, swap in zip(unit_ids.tolist(), perm_units.tolist(), strict=True)}
             perm_idx = np.array([mapping[u] for u in units.tolist()], dtype=int)
             for term_idx, (red_cols, fit_red, resid_red, f_obs) in test_stat.items():
                 y_perm = fit_red + resid_red[perm_idx]

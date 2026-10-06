@@ -211,9 +211,7 @@ class StatisticsController:
                 f"run_pcoa called with distance matrix shape={distance_matrix.shape if distance_matrix is not None else None}, metric='{metric}', correction='{correction}'"
             )
             distance_matrix = self._ensure_distance_matrix(distance_matrix, None, metric)
-            result = self._pcoa_analyzer.analyze(
-                distance_matrix, n_components, metric=metric, correction=correction
-            )
+            result = self._pcoa_analyzer.analyze(distance_matrix, n_components, metric=metric, correction=correction)
             self._state.cache_result("pcoa_result", result)
             self._state.cache_result("pcoa_metric", metric)
             self._logger.info(
@@ -1176,7 +1174,9 @@ class StatisticsController:
     # the engines stay the single source of truth.
     # =========================================================================
 
-    def _records_from_matrix(self, fad_col: int, lad_col: int, data: npt.NDArray | None = None) -> list[tuple[float, float]]:
+    def _records_from_matrix(
+        self, fad_col: int, lad_col: int, data: npt.NDArray | None = None
+    ) -> list[tuple[float, float]]:
         """Read (FAD, LAD) ranges for each row from ``data`` or the loaded matrix.
 
         FAD = first appearance date, LAD = last appearance date, both in Ma
@@ -1308,7 +1308,12 @@ class StatisticsController:
         with self._lock:
             matrix = self._ensure_data(data)
             n_vars = matrix.shape[1]
-            for col, name in ((time_a, "A duration"), (event_a, "A event"), (time_b, "B duration"), (event_b, "B event")):
+            for col, name in (
+                (time_a, "A duration"),
+                (event_a, "A event"),
+                (time_b, "B duration"),
+                (event_b, "B event"),
+            ):
                 if not 0 <= col < n_vars:
                     raise ValidationError(f"Column {col} ({name}) is out of range: the data has {n_vars} column(s)")
 
@@ -1388,17 +1393,19 @@ class StatisticsController:
                 arr = _np.asarray(target, dtype=float)
                 if arr.ndim != 2 or arr.shape[1] != 3:
                     raise ValueError(
-                        "run_tps3d needs 3-D landmarks (n, 3) to derive a "
-                        f"deformation grid, got shape {arr.shape}"
+                        f"run_tps3d needs 3-D landmarks (n, 3) to derive a deformation grid, got shape {arr.shape}"
                     )
                 lo = arr.min(axis=0)
                 hi = arr.max(axis=0)
                 # a zero-extent axis would collapse the axis to a single plane
                 pad = _np.where(hi - lo > 0, 0.0, 1.0)
                 grid_range = (
-                    float(lo[0]), float(hi[0]),
-                    float(lo[1]), float(hi[1]),
-                    float(lo[2]), float(hi[2] + pad[2]) if hi[2] - lo[2] <= 0 else float(hi[2]),
+                    float(lo[0]),
+                    float(hi[0]),
+                    float(lo[1]),
+                    float(hi[1]),
+                    float(lo[2]),
+                    float(hi[2] + pad[2]) if hi[2] - lo[2] <= 0 else float(hi[2]),
                 )
             if resolution is None:
                 resolution = (10, 10, 10)
@@ -1451,10 +1458,7 @@ class StatisticsController:
                     )
                 arr = arr.reshape(n_rows, n_cols // n_dims, n_dims)
             if arr.ndim != 3:
-                raise ValidationError(
-                    "Aligned configurations must be a 3D array "
-                    "(n_specimens, n_landmarks, n_dims)."
-                )
+                raise ValidationError("Aligned configurations must be a 3D array (n_specimens, n_landmarks, n_dims).")
             return arr
 
         cached = self._state.get_cached_result("gpa_result")
@@ -1466,9 +1470,7 @@ class StatisticsController:
             )
         aligned_attr = getattr(cached, "aligned_configurations", None)
         if aligned_attr is None:
-            raise ValidationError(
-                "The cached GPA result has no aligned_configurations attribute."
-            )
+            raise ValidationError("The cached GPA result has no aligned_configurations attribute.")
         return np.asarray(aligned_attr, dtype=float)
 
     def _resolve_pre_gpa_centroid_sizes(self, aligned: npt.NDArray | None) -> npt.NDArray | None:
@@ -1582,9 +1584,7 @@ class StatisticsController:
             analyzer = IntegrationAnalyzer()
             if block_a is None or block_b is None:
                 configurations = self._resolve_aligned_configurations(None)
-                a, b = analyzer.divide_configuration_into_blocks(
-                    configurations, division=division, random_seed=seed
-                )
+                a, b = analyzer.divide_configuration_into_blocks(configurations, division=division, random_seed=seed)
             else:
                 a = np.asarray(block_a, dtype=float)
                 b = np.asarray(block_b, dtype=float)
@@ -1592,9 +1592,7 @@ class StatisticsController:
                 f"analyze_pls called with block_a {a.shape}, block_b {b.shape}, "
                 f"n_components={n_components}, permutations={permutations}"
             )
-            result = analyzer.analyze_pls(
-                a, b, n_components=n_components, permutations=permutations, seed=seed
-            )
+            result = analyzer.analyze_pls(a, b, n_components=n_components, permutations=permutations, seed=seed)
             self._state.cache_result("pls_result", result)
             return result
 
@@ -1640,9 +1638,7 @@ class StatisticsController:
                 from plugins.catalog import register_builtin_analyses
 
                 registered = register_builtin_analyses()
-                self._logger.info(
-                    "Registered %d built-in analysis plugins", len(registered)
-                )
+                self._logger.info("Registered %d built-in analysis plugins", len(registered))
             except Exception:  # a broken catalog must not break the app
                 self._logger.warning(
                     "Could not register built-in analysis plugins",

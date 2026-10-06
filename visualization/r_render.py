@@ -114,8 +114,7 @@ def find_rscript(configured: str = "") -> Path | None:
     if which:
         return Path(which)
 
-    candidates = (_iter_windows_candidates() if os.name == "nt"
-                  else _iter_posix_candidates())
+    candidates = _iter_windows_candidates() if os.name == "nt" else _iter_posix_candidates()
     return candidates[0] if candidates else None
 
 
@@ -187,11 +186,7 @@ ggsave({out!r}, plot = p, width = {w}, height = {h}, dpi = {dpi}, units = "in")
 
 def _snapshot(directory: Path) -> dict[str, float]:
     try:
-        return {
-            p.name: p.stat().st_mtime
-            for p in directory.iterdir()
-            if p.is_file()
-        }
+        return {p.name: p.stat().st_mtime for p in directory.iterdir() if p.is_file()}
     except OSError:
         return {}
 
@@ -224,8 +219,12 @@ def _make_preview(
     try:
         proc = subprocess.run(
             [str(rscript), helper.name],
-            capture_output=True, text=True, timeout=timeout, cwd=str(work_dir),
-            encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(work_dir),
+            encoding="utf-8",
+            errors="replace",
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -277,8 +276,12 @@ def run_r_script(
     try:
         proc = subprocess.run(
             [str(exe), script_path.name],
-            capture_output=True, text=True, timeout=timeout, cwd=str(work_dir),
-            encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(work_dir),
+            encoding="utf-8",
+            errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         result.timed_out = True
@@ -308,9 +311,7 @@ def run_r_script(
             "opens a viewer instead of calling ggsave(), save it to a file."
         )
 
-    if result.ok and make_preview and not any(
-        p.suffix.lower() == ".png" for p in result.produced
-    ):
+    if result.ok and make_preview and not any(p.suffix.lower() == ".png" for p in result.produced):
         result.preview_png = _make_preview(script_path, work_dir, exe, timeout)
 
     return result
@@ -342,8 +343,13 @@ if __name__ == "__main__":  # pragma: no cover - manual smoke test
     exe = find_rscript(os.environ.get("RSCRIPT", ""))
     print("Rscript:", exe or "NOT FOUND")
     if exe:
-        print(subprocess.run(
-            [str(exe), "-e", "cat(R.version.string)"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-        ).stdout)
+        print(
+            subprocess.run(
+                [str(exe), "-e", "cat(R.version.string)"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            ).stdout
+        )
     sys.exit(0 if exe else 1)

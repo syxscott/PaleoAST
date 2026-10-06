@@ -67,11 +67,7 @@ class TestDATParserMissingSentinels:
         ["?", "*", "-", "NA", "N/A", "NaN", "None", "NULL", "nan"],
     )
     def test_token_becomes_nan(self, token):
-        content = (
-            f"Name\tLength\tWidth\n"
-            f"Specimen1\t{token}\t5.2\n"
-            f"Specimen2\t12.3\t{token}\n"
-        )
+        content = f"Name\tLength\tWidth\nSpecimen1\t{token}\t5.2\nSpecimen2\t12.3\t{token}\n"
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".dat", delete=False) as f:
             f.write(content)
             f.flush()
@@ -86,11 +82,7 @@ class TestDATParserMissingSentinels:
             Path(path).unlink()
 
     def test_all_cells_missing_row(self):
-        content = (
-            "Name\tLength\tWidth\n"
-            "Specimen1\t?\t*\n"
-            "Specimen2\tNA\t-\n"
-        )
+        content = "Name\tLength\tWidth\nSpecimen1\t?\t*\nSpecimen2\tNA\t-\n"
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".dat", delete=False) as f:
             f.write(content)
             f.flush()
@@ -131,11 +123,7 @@ class TestDATParserFieldCountError:
 
     def test_error_message_mentions_sentinels(self):
         """Users must be told about ? and * as the right way to mark missing."""
-        content = (
-            "Name\tLength\tWidth\n"
-            "Specimen1\t10.5\t5.2\n"
-            "Specimen2\t12.3\n"
-        )
+        content = "Name\tLength\tWidth\nSpecimen1\t10.5\t5.2\nSpecimen2\t12.3\n"
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".dat", delete=False) as f:
             f.write(content)
             f.flush()
@@ -177,9 +165,7 @@ class TestTPSParserMissingSentinels:
         # to open it -- but the handle itself is closed by the `with` rather
         # than by its reference count dropping, which is what happened
         # before and left the write racing the read on Windows.
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", suffix=".tps", delete=False
-        ) as handle:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".tps", delete=False) as handle:
             handle.write(content)
             return handle.name
 
@@ -223,12 +209,7 @@ class TestTPSParserMissingSentinels:
             Path(path).unlink()
 
     def test_na_landmark_becomes_nan(self):
-        content = (
-            "LM=2\n"
-            "ID=spec_a\n"
-            "NA NA\n"
-            "1.0 1.0\n"
-        )
+        content = "LM=2\nID=spec_a\nNA NA\n1.0 1.0\n"
         path = self._write(content)
         try:
             tps = TPSParser().parse(path)

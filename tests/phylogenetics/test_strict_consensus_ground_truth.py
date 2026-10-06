@@ -126,11 +126,7 @@ def _expected_strict_clades(trees: list[PhyloTree], all_taxa: frozenset[str]) ->
     for tree in trees:
         for clade in _clades_by_name(tree):
             counts[clade] = counts.get(clade, 0) + 1
-    return {
-        clade
-        for clade, cnt in counts.items()
-        if cnt == n and 1 < len(clade) < len(full)
-    }
+    return {clade for clade, cnt in counts.items() if cnt == n and 1 < len(clade) < len(full)}
 
 
 def _expected_majority_clades(
@@ -155,11 +151,7 @@ def _expected_majority_clades(
     for tree in trees:
         for clade in _clades_by_name(tree):
             counts[clade] = counts.get(clade, 0) + 1
-    return {
-        clade
-        for clade, cnt in counts.items()
-        if cnt > cutoff and 1 < len(clade) < len(full)
-    }
+    return {clade for clade, cnt in counts.items() if cnt > cutoff and 1 < len(clade) < len(full)}
 
 
 def _pairwise_compatible_subset(
@@ -323,10 +315,7 @@ class TestConsensusArithmetic:
         trees = [t1, t2, t3]
 
         expected_strict = _expected_strict_clades(trees, frozenset(labels))
-        assert expected_strict == set(), (
-            "fixture is supposed to share no non-trivial clades; "
-            f"got {expected_strict}"
-        )
+        assert expected_strict == set(), f"fixture is supposed to share no non-trivial clades; got {expected_strict}"
 
         consensus = StrictConsensusTree().build(trees)
 
@@ -429,9 +418,7 @@ class TestSplitAlgebra:
 
         for i, s1 in enumerate(non_trivial):
             for s2 in non_trivial[i + 1 :]:
-                assert s1.is_compatible_with(s2), (
-                    f"tree's own splits {s1!r} and {s2!r} marked incompatible"
-                )
+                assert s1.is_compatible_with(s2), f"tree's own splits {s1!r} and {s2!r} marked incompatible"
 
 
 # =============================================================================
@@ -519,9 +506,7 @@ class TestBoundaryAndDegeneracy:
                 build()
             msg = str(excinfo.value).lower()
             assert (
-                isinstance(excinfo.value, (ValueError, TypeError, PaleoASTError))
-                or "leaf" in msg
-                or "taxon" in msg
+                isinstance(excinfo.value, (ValueError, TypeError, PaleoASTError)) or "leaf" in msg or "taxon" in msg
             ), f"{label} returned {excinfo.type.__name__}: {excinfo.value!r} instead of rejecting"
 
     def test_result_leaf_set_matches_input_union(self):
@@ -530,8 +515,9 @@ class TestBoundaryAndDegeneracy:
         catches the off-by-one on the first / subsequent tree."""
         labels = ["A", "B", "C", "D"]
         trees = _make_trees(labels, n_trees=3)
-        expected_union = frozenset(trees[0].leaf_names) | frozenset(trees[1].leaf_names) \
-            | frozenset(trees[2].leaf_names)
+        expected_union = (
+            frozenset(trees[0].leaf_names) | frozenset(trees[1].leaf_names) | frozenset(trees[2].leaf_names)
+        )
 
         consensus_strict = StrictConsensusTree().build(trees)
         consensus_majority = StrictConsensusTree().build_majority_rule(trees, threshold=0.5)
@@ -609,9 +595,7 @@ class TestNamingDifferentiation:
             rng = R.np.random.default_rng(SEED + trial)
             trial_trees = [R.random_binary_tree(labels, rng) for _ in range(5)]
             s = _non_trivial_by_name(StrictConsensusTree().build(trial_trees))
-            m = _non_trivial_by_name(
-                StrictConsensusTree().build_majority_rule(trial_trees, threshold=0.5)
-            )
+            m = _non_trivial_by_name(StrictConsensusTree().build_majority_rule(trial_trees, threshold=0.5))
             if m > s:
                 return  # found a case where the two diverge -> bug class avoided
         pytest.fail(

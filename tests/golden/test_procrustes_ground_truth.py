@@ -71,9 +71,7 @@ def _min_2d(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     # 0.0001 rad resolution is ~7 orders of magnitude finer than the
     # tolerances used by the shapes this is checked against.
     for theta in np.linspace(0.0, 2.0 * np.pi, 100_001):
-        rotation = np.array(
-            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
-        )
+        rotation = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
         for transform in (rotation, rotation @ np.diag([1.0, -1.0])):
             handedness = int(np.sign(np.linalg.det(transform)))
             value = _residual(a, b, transform)
@@ -85,9 +83,7 @@ def _min_2d(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
 def _rotation_3d(axis: np.ndarray, theta: float) -> np.ndarray:
     """Rodrigues' rotation formula for a 3-D rotation."""
     unit = axis / np.linalg.norm(axis)
-    skew = np.array(
-        [[0.0, -unit[2], unit[1]], [unit[2], 0.0, -unit[0]], [-unit[1], unit[0], 0.0]]
-    )
+    skew = np.array([[0.0, -unit[2], unit[1]], [unit[2], 0.0, -unit[0]], [-unit[1], unit[0], 0.0]])
     return np.eye(3) + np.sin(theta) * skew + (1.0 - np.cos(theta)) * (skew @ skew)
 
 
@@ -153,9 +149,7 @@ def _mirrored(config: np.ndarray) -> np.ndarray:
 
 def _asymmetric_2d() -> np.ndarray:
     """A shape with no symmetry, so reflection genuinely changes it."""
-    return np.array(
-        [[0.0, 0.0], [2.3, 0.4], [3.1, 1.9], [1.2, 2.7], [-0.6, 1.5]]
-    )
+    return np.array([[0.0, 0.0], [2.3, 0.4], [3.1, 1.9], [1.2, 2.7], [-0.6, 1.5]])
 
 
 def _asymmetric_3d() -> np.ndarray:
@@ -184,12 +178,8 @@ class TestTwoDimensional:
         assert full == pytest.approx(0.0, abs=1e-6)
         assert proper > 0.5, "a proper rotation cannot reach the mirror image"
 
-        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(
-            np.sqrt(full), abs=1e-6
-        )
-        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(
-            np.sqrt(proper), abs=1e-6
-        )
+        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(np.sqrt(full), abs=1e-6)
+        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(np.sqrt(proper), abs=1e-6)
 
     def test_default_is_the_reflection_allowed_minimum(self):
         """The default must never exceed the proper-rotation-only distance.
@@ -213,23 +203,15 @@ class TestTwoDimensional:
         b = generator.normal(size=(6, 2))
         proper, full = _ground_truth(a, b)
 
-        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(
-            np.sqrt(proper), abs=1e-6
-        )
-        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(
-            np.sqrt(full), abs=1e-6
-        )
+        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(np.sqrt(proper), abs=1e-6)
+        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(np.sqrt(full), abs=1e-6)
 
     def test_asymmetric_shape_mirror(self):
         a = _asymmetric_2d()
         b = _mirrored(a)
         proper, full = _ground_truth(a, b)
-        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(
-            np.sqrt(full), abs=1e-6
-        )
-        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(
-            np.sqrt(proper), abs=1e-6
-        )
+        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(np.sqrt(full), abs=1e-6)
+        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(np.sqrt(proper), abs=1e-6)
 
 
 class TestThreeDimensional:
@@ -238,21 +220,15 @@ class TestThreeDimensional:
         b = a[::-1].copy() + 0.4  # reordering + shift: a genuinely different fit
         proper, full = _ground_truth(a, b)
 
-        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(
-            np.sqrt(proper), abs=1e-4
-        )
-        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(
-            np.sqrt(full), abs=1e-4
-        )
+        assert procrustes_distance(a, b, no_reflect=True) == pytest.approx(np.sqrt(proper), abs=1e-4)
+        assert procrustes_distance(a, b, no_reflect=False) == pytest.approx(np.sqrt(full), abs=1e-4)
 
     def test_default_is_never_larger_than_proper_only(self):
         generator = np.random.default_rng(3)
         for _ in range(4):
             a = generator.normal(size=(6, 3))
             b = generator.normal(size=(6, 3))
-            assert procrustes_distance(a, b, no_reflect=False) <= (
-                procrustes_distance(a, b, no_reflect=True) + _TOL
-            )
+            assert procrustes_distance(a, b, no_reflect=False) <= (procrustes_distance(a, b, no_reflect=True) + _TOL)
 
 
 class TestInvariancesUnaffectedByTheBranchChoice:
@@ -261,18 +237,12 @@ class TestInvariancesUnaffectedByTheBranchChoice:
     @pytest.mark.parametrize("no_reflect", [True, False])
     def test_identical_is_zero(self, no_reflect):
         a = _asymmetric_2d()
-        assert procrustes_distance(a, a, no_reflect=no_reflect) == pytest.approx(
-            0.0, abs=1e-12
-        )
+        assert procrustes_distance(a, a, no_reflect=no_reflect) == pytest.approx(0.0, abs=1e-12)
 
     @pytest.mark.parametrize("no_reflect", [True, False])
     def test_similarity_transform_is_zero(self, no_reflect):
         a = _asymmetric_2d()
         theta = 0.6
-        rotation = np.array(
-            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
-        )
+        rotation = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
         b = 3.7 * (a @ rotation.T) + np.array([12.0, -5.0])
-        assert procrustes_distance(a, b, no_reflect=no_reflect) == pytest.approx(
-            0.0, abs=1e-9
-        )
+        assert procrustes_distance(a, b, no_reflect=no_reflect) == pytest.approx(0.0, abs=1e-9)

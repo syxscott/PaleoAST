@@ -200,17 +200,13 @@ class CoverageRarefactionDialog(BaseBetaDialog):
         self._endpoint_spin = QSpinBox()
         self._endpoint_spin.setRange(10, 1000)
         self._endpoint_spin.setValue(100)
-        self._endpoint_spin.setToolTip(
-            _("Number of coverage levels to evaluate between 0.10 and 0.99 (n_points).")
-        )
+        self._endpoint_spin.setToolTip(_("Number of coverage levels to evaluate between 0.10 and 0.99 (n_points)."))
         opts_layout.addRow(_("Coverage levels (n_points):"), self._endpoint_spin)
 
         self._n_boot_spin = QSpinBox()
         self._n_boot_spin.setRange(0, 5000)
         self._n_boot_spin.setValue(200)
-        self._n_boot_spin.setToolTip(
-            _("Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap.")
-        )
+        self._n_boot_spin.setToolTip(_("Number of multinomial bootstrap replicates for the CI. 0 skips the bootstrap."))
         opts_layout.addRow(_("Bootstrap replicates (0 = skip):"), self._n_boot_spin)
 
         self._seed_spin = QSpinBox()

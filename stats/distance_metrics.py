@@ -149,9 +149,7 @@ def compute_distance_matrix(
                 UserWarning,
                 stacklevel=2,
             )
-            logger.warning(
-                "Jaccard called on quantitative input: magnitudes will be discarded."
-            )
+            logger.warning("Jaccard called on quantitative input: magnitudes will be discarded.")
         scipy_metric = _METRIC_MAP.get(metric_lower, metric_lower)
         try:
             condensed = pdist(X, metric=scipy_metric)

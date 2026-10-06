@@ -93,7 +93,10 @@ def test_parser_still_reads_the_group_lines(tmp_path):
     p.write_text(DAT_WITH_GROUPS, encoding="utf-8")
     result = parse_dat_file(str(p))
     assert result.groups == [
-        "Habitat A", "Habitat A", "Habitat B", "Habitat B",
+        "Habitat A",
+        "Habitat A",
+        "Habitat B",
+        "Habitat B",
     ], result.groups
 
 
@@ -103,9 +106,7 @@ def test_parser_reports_none_for_rows_before_the_first_group(tmp_path):
     p.write_text(DAT_WITH_UNLABELLED_HEAD, encoding="utf-8")
     result = parse_dat_file(str(p))
     assert result.groups == [None, None, "Habitat A", "Habitat A"], result.groups
-    assert _metadata(result.groups, 4) is None, (
-        "an unlabelled head must refuse the grouping, not invent a group"
-    )
+    assert _metadata(result.groups, 4) is None, "an unlabelled head must refuse the grouping, not invent a group"
 
 
 def test_complete_grouping_becomes_specimen_metadata():
@@ -145,7 +146,10 @@ def test_dropped_dat_file_ends_up_grouped(qapp, tmp_path, monkeypatch):
     handler._logger = _SilentLog()
     parsed = FileDropHandler._parse_dat(handler, str(p))
     assert parsed["groups"] == [
-        "Habitat A", "Habitat A", "Habitat B", "Habitat B",
+        "Habitat A",
+        "Habitat A",
+        "Habitat B",
+        "Habitat B",
     ]
 
     meta = _metadata(parsed["groups"], len(parsed["data"]))

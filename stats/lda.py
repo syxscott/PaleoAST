@@ -41,9 +41,7 @@ from utils.validators import validate_data_array
 logger = logging.getLogger(__name__)
 
 
-def _compute_canonical_eigenvalues(
-    data: npt.NDArray, groups: npt.NDArray, n_components: int
-) -> npt.NDArray:
+def _compute_canonical_eigenvalues(data: npt.NDArray, groups: npt.NDArray, n_components: int) -> npt.NDArray:
     """
     Compute the canonical roots of the generalized eigenproblem
         S_W^{-1} S_B w = lambda w
@@ -172,9 +170,7 @@ class LDAResult:
             "-" * 50,
         ]
         cum = 0.0
-        for i, (ev, vr) in enumerate(
-            zip(self.eigenvalues, self.explained_variance_ratio, strict=False)
-        ):
+        for i, (ev, vr) in enumerate(zip(self.eigenvalues, self.explained_variance_ratio, strict=False)):
             cum += vr
             lines.append(f"LD{i + 1:<4} {ev:>12.4f} {vr:>14.2%} {cum:>11.2%}")
 
@@ -297,9 +293,11 @@ class LDAAnalyzer:
             within_class_spread = spread.std(axis=0)
             degenerate = np.flatnonzero(within_class_spread <= 0.0)
             if degenerate.size:
-                names = [str(v) for v in np.asarray(variable_names)[degenerate]] if variable_names is not None else [
-                    f"variable {i}" for i in degenerate
-                ]
+                names = (
+                    [str(v) for v in np.asarray(variable_names)[degenerate]]
+                    if variable_names is not None
+                    else [f"variable {i}" for i in degenerate]
+                )
                 raise ComputationError(
                     f"LDA cannot proceed: {', '.join(names[:5])}"
                     f"{' ...' if names and len(names) > 5 else ''} has zero variance across "
@@ -343,9 +341,7 @@ class LDAAnalyzer:
             # We compute S_W and S_B directly from the data; degenerate
             # cases (S_W singular, n_components > min(n_classes-1, n_vars))
             # leave ``eigenvalues_canonical`` as an empty array.
-            eigenvalues_canonical = _compute_canonical_eigenvalues(
-                data_grouped, groups_codes, n_components
-            )
+            eigenvalues_canonical = _compute_canonical_eigenvalues(data_grouped, groups_codes, n_components)
 
             # Class means in LD space
             class_means = lda.transform(lda.means_)

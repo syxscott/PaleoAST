@@ -11,6 +11,7 @@ them.
 These tests do not require Qt — they exercise the controller path
 directly, which is what the GUI now invokes under the hood.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -80,9 +81,7 @@ class TestAnalyzePLS:
         configs = _synthetic_aligned_configurations(n_specimens=12)
         flat = configs.reshape(configs.shape[0], -1)
         mid = flat.shape[1] // 2
-        result = ctrl.analyze_pls(
-            block_a=flat[:, :mid], block_b=flat[:, mid:], permutations=49, seed=123
-        )
+        result = ctrl.analyze_pls(block_a=flat[:, :mid], block_b=flat[:, mid:], permutations=49, seed=123)
         assert result.pls1_pvalue is not None
         assert 0.0 <= result.pls1_pvalue <= 1.0
         assert result.pls1_z is not None

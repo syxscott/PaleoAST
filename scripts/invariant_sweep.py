@@ -83,10 +83,7 @@ for trial in range(3):
     got = np.asarray(result.expected_taxa, dtype=float)
     sizes = np.asarray(result.sample_sizes, dtype=int)
     # E[S_n] = sum_i (1 - C(N - n_i, n) / C(N, n))  (Hurlbert 1971), exact.
-    expected = np.array([
-        sum(1 - comb(total - int(x), n) / comb(total, n) for x in abundances)
-        for n in sizes
-    ])
+    expected = np.array([sum(1 - comb(total - int(x), n) / comb(total, n) for x in abundances) for n in sizes])
     check(
         f"rarefaction trial {trial}: whole curve matches Hurlbert",
         got.shape == expected.shape and np.allclose(got, expected, rtol=1e-4, atol=1e-5),
@@ -138,8 +135,11 @@ from ecology.dtw import DTWAnalyzer
 
 d = DTWAnalyzer()
 series_a = rng.normal(size=20).cumsum()
+
+
 def dtw(a, b):
     return float(np.ravel(np.asarray(d.compute(a, b).distance, dtype=float))[0])
+
 
 # The defining property: an identical series has DTW distance exactly zero.
 result = run("dtw: identical series", lambda: dtw(series_a, series_a))
@@ -174,11 +174,12 @@ if result is not None:
     axis = np.ravel(np.asarray(result.row_species_axis, dtype=float))
     check("paleoenv: axis is finite", bool(np.all(np.isfinite(axis))))
     check("paleoenv: axis length matches heights", len(axis) == len(heights), f"len={len(axis)}")
-    check("paleoenv: singular values descending",
-          bool(np.all(np.diff(np.asarray(result.singular_values, dtype=float)) <= 1e-9)))
+    check(
+        "paleoenv: singular values descending",
+        bool(np.all(np.diff(np.asarray(result.singular_values, dtype=float)) <= 1e-9)),
+    )
     corr = float(result.pearson_corr_axis_vs_height)
-    check("paleoenv: axis/height correlation in [-1, 1]", -1.0 - 1e-9 <= corr <= 1.0 + 1e-9,
-          f"r={corr}")
+    check("paleoenv: axis/height correlation in [-1, 1]", -1.0 - 1e-9 <= corr <= 1.0 + 1e-9, f"r={corr}")
 
 # ---------------------------------------------------------------- biostrat
 print("\n=== stratigraphy.biostratigraphy (UA) ===")

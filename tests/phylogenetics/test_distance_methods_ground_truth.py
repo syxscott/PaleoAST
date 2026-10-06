@@ -230,8 +230,7 @@ class TestNJAdditiveRoundtrip:
         rebuilt = build_nj_tree(dm)
 
         assert sorted(rebuilt.leaf_names) == sorted(leaves_p), (
-            f"n={n_taxa}: NJ dropped or renamed leaves: "
-            f"expected {sorted(leaves_p)}, got {sorted(rebuilt.leaf_names)}"
+            f"n={n_taxa}: NJ dropped or renamed leaves: expected {sorted(leaves_p)}, got {sorted(rebuilt.leaf_names)}"
         )
 
 
@@ -259,16 +258,10 @@ class TestNJDistanceAndStructure:
         src_index = {name: i for i, name in enumerate(leaves_p)}
         prod_labels, prod_matrix = _patristic(rebuilt)
         prod_index = {name: i for i, name in enumerate(prod_labels)}
-        src_aligned = matrix[
-            [src_index[n] for n in canonical]
-        ][:, [src_index[n] for n in canonical]]
-        prod_aligned = prod_matrix[
-            [prod_index[n] for n in canonical]
-        ][:, [prod_index[n] for n in canonical]]
+        src_aligned = matrix[[src_index[n] for n in canonical]][:, [src_index[n] for n in canonical]]
+        prod_aligned = prod_matrix[[prod_index[n] for n in canonical]][:, [prod_index[n] for n in canonical]]
         max_diff = float(np.abs(src_aligned - prod_aligned).max())
-        assert max_diff < 1e-9, (
-            f"n={n_taxa}, seed={seed}: NJ max distance error {max_diff:.3e}"
-        )
+        assert max_diff < 1e-9, f"n={n_taxa}, seed={seed}: NJ max distance error {max_diff:.3e}"
 
     @pytest.mark.parametrize("n_taxa", [4, 5, 7, 10])
     def test_nj_binary_internals(self, n_taxa: int) -> None:
@@ -307,8 +300,7 @@ class TestNJDistanceAndStructure:
         rebuilt = build_nj_tree(dm)
         # For n >= 3 the NJ code path always leaves 3 nodes to wire up.
         assert len(rebuilt.root.children) == 3, (
-            f"n={n_taxa}: expected NJ root to have 3 children, "
-            f"got {len(rebuilt.root.children)}"
+            f"n={n_taxa}: expected NJ root to have 3 children, got {len(rebuilt.root.children)}"
         )
 
 
@@ -357,8 +349,7 @@ class TestUPGMAUltrametricRoundtrip:
         dm = DistanceMatrix.from_array(matrix, leaves_p)
         rebuilt = build_upgma_tree(dm)
         assert sorted(rebuilt.leaf_names) == sorted(leaves_p), (
-            f"n={n_taxa}: UPGMA dropped leaves: "
-            f"expected {sorted(leaves_p)}, got {sorted(rebuilt.leaf_names)}"
+            f"n={n_taxa}: UPGMA dropped leaves: expected {sorted(leaves_p)}, got {sorted(rebuilt.leaf_names)}"
         )
 
 
@@ -389,16 +380,10 @@ class TestUPGMADistanceAndStructure:
         src_index = {name: i for i, name in enumerate(leaves_p)}
         prod_labels, prod_matrix = _patristic(rebuilt)
         prod_index = {name: i for i, name in enumerate(prod_labels)}
-        src_aligned = matrix[
-            [src_index[n] for n in canonical]
-        ][:, [src_index[n] for n in canonical]]
-        prod_aligned = prod_matrix[
-            [prod_index[n] for n in canonical]
-        ][:, [prod_index[n] for n in canonical]]
+        src_aligned = matrix[[src_index[n] for n in canonical]][:, [src_index[n] for n in canonical]]
+        prod_aligned = prod_matrix[[prod_index[n] for n in canonical]][:, [prod_index[n] for n in canonical]]
         max_diff = float(np.abs(src_aligned - prod_aligned).max())
-        assert max_diff < 1e-9, (
-            f"n={n_taxa}, seed={seed}: UPGMA max distance error {max_diff:.3e}"
-        )
+        assert max_diff < 1e-9, f"n={n_taxa}, seed={seed}: UPGMA max distance error {max_diff:.3e}"
 
     @pytest.mark.parametrize("n_taxa", [4, 5, 7, 10])
     def test_upgma_output_is_ultrametric(self, n_taxa: int) -> None:
@@ -424,8 +409,7 @@ class TestUPGMADistanceAndStructure:
             leaf_to_root.append(total)
 
         assert max(leaf_to_root) - min(leaf_to_root) < 1e-9, (
-            f"n={n_taxa}: UPGMA output is not ultrametric. "
-            f"Leaf-to-root distances: {leaf_to_root}"
+            f"n={n_taxa}: UPGMA output is not ultrametric. Leaf-to-root distances: {leaf_to_root}"
         )
 
     @pytest.mark.parametrize("n_taxa", [4, 5, 7, 10])
@@ -446,8 +430,7 @@ class TestUPGMADistanceAndStructure:
             if node.is_leaf:
                 continue
             assert len(node.children) == 2, (
-                f"n={n_taxa}: UPGMA produced a non-binary internal node "
-                f"({node.name}, arity={len(node.children)})"
+                f"n={n_taxa}: UPGMA produced a non-binary internal node ({node.name}, arity={len(node.children)})"
             )
 
 
@@ -709,20 +692,15 @@ class TestNJHandComputable:
         for node in tree.root.get_all_nodes():
             if node.branch_length is not None:
                 assert node.branch_length >= -1e-9, (
-                    f"Negative branch length on an additive input: "
-                    f"{node.name} = {node.branch_length}"
+                    f"Negative branch length on an additive input: {node.name} = {node.branch_length}"
                 )
 
         # Patristic distances must round-trip within floating-point noise.
         prod_labels, prod_mat = _patristic(tree)
         canonical = sorted(labels)
         prod_index = {name: i for i, name in enumerate(prod_labels)}
-        prod_aligned = prod_mat[
-            [prod_index[n] for n in canonical]
-        ][:, [prod_index[n] for n in canonical]]
-        assert np.abs(mat - prod_aligned).max() < 1e-9, (
-            "NJ must reproduce an additive 4-taxon distance matrix exactly"
-        )
+        prod_aligned = prod_mat[[prod_index[n] for n in canonical]][:, [prod_index[n] for n in canonical]]
+        assert np.abs(mat - prod_aligned).max() < 1e-9, "NJ must reproduce an additive 4-taxon distance matrix exactly"
 
 
 # =============================================================================
@@ -759,13 +737,9 @@ class TestDistanceMatrixSymmetryAndDiagonal:
         # Diagonal must be zero.
         assert np.all(np.diag(m_arr) == 0.0), f"Diagonal not zero: {np.diag(m_arr)}"
         # Matrix must be symmetric.
-        assert np.allclose(m_arr, m_arr.T), (
-            f"Matrix not symmetric:\n{m_arr}\nvs transpose:\n{m_arr.T}"
-        )
+        assert np.allclose(m_arr, m_arr.T), f"Matrix not symmetric:\n{m_arr}\nvs transpose:\n{m_arr.T}"
         # And it must equal what we put in.
-        assert np.allclose(m_arr, mat), (
-            f"\nactual:\n{m_arr}\nexpected:\n{mat}"
-        )
+        assert np.allclose(m_arr, mat), f"\nactual:\n{m_arr}\nexpected:\n{mat}"
 
     def test_get_distance_is_symmetric(self) -> None:
         """``get_distance`` must return the same value regardless of argument
@@ -819,8 +793,7 @@ class TestDistanceMatrixConstructors:
         recovered = np.asarray(dm.to_matrix())
         assert recovered.shape == original.shape
         assert np.allclose(recovered, original), (
-            f"Round-trip changed the matrix:\n"
-            f"  original:\n{original}\n  recovered:\n{recovered}"
+            f"Round-trip changed the matrix:\n  original:\n{original}\n  recovered:\n{recovered}"
         )
 
     def test_from_dict_to_matrix_matches_expected(self) -> None:
@@ -944,9 +917,7 @@ class TestDistanceMatrixFromSequences:
             DistanceMatrix.from_sequences({"A": "", "B": "AT"})
         # Must be the project's ValidationError, not a bare ZeroDivisionError.
         # The docstring promises ValidationError.
-        assert "Validation" in type(exc_info.value).__name__ or isinstance(
-            exc_info.value, ValueError
-        )
+        assert "Validation" in type(exc_info.value).__name__ or isinstance(exc_info.value, ValueError)
 
     def test_empty_taxon_set_raises(self) -> None:
         """Calling ``from_sequences({})`` must raise rather than silently
@@ -976,16 +947,12 @@ class TestDistanceMatrixEdgeCases:
         # The two branch lengths should sum to the input distance.
         children = nj_tree.root.children
         lengths = sum(c.branch_length or 0.0 for c in children)
-        assert lengths == pytest.approx(1.5), (
-            f"NJ 2-taxa: branch lengths sum to {lengths}, expected 1.5"
-        )
+        assert lengths == pytest.approx(1.5), f"NJ 2-taxa: branch lengths sum to {lengths}, expected 1.5"
 
         upgma_tree = build_upgma_tree(dm)
         assert upgma_tree.leaf_count == 2
         lengths = sum(c.branch_length or 0.0 for c in upgma_tree.root.children)
-        assert lengths == pytest.approx(1.5), (
-            f"UPGMA 2-taxa: branch lengths sum to {lengths}, expected 1.5"
-        )
+        assert lengths == pytest.approx(1.5), f"UPGMA 2-taxa: branch lengths sum to {lengths}, expected 1.5"
 
     def test_equal_distances_tie_break_is_deterministic(self) -> None:
         """When multiple pairs share the minimum distance, UPGMA's
@@ -1018,9 +985,7 @@ class TestDistanceMatrixEdgeCases:
     def test_missing_key_raises_keyerror(self) -> None:
         """``get_distance`` for a pair with no entry must raise, not return 0
         (a wrong 0 would silently corrupt the tree-building algorithms)."""
-        dm = DistanceMatrix.from_dict(
-            {"A": {"A": 0.0, "B": 1.0}, "B": {"A": 1.0, "B": 0.0}}
-        )
+        dm = DistanceMatrix.from_dict({"A": {"A": 0.0, "B": 1.0}, "B": {"A": 1.0, "B": 0.0}})
         with pytest.raises(KeyError):
             dm.get_distance("A", "no_such_taxon")
 
@@ -1071,8 +1036,7 @@ class TestUPGMABranchLengthClamping:
         for node in tree.root.get_all_nodes():
             if node.branch_length is not None:
                 assert node.branch_length >= 0.0, (
-                    f"UPGMA produced a negative branch length on a metric "
-                    f"input: {node.name} = {node.branch_length}"
+                    f"UPGMA produced a negative branch length on a metric input: {node.name} = {node.branch_length}"
                 )
 
 
@@ -1112,6 +1076,5 @@ class TestNJNonMetricBehavior:
         for node in tree.root.get_all_nodes():
             if node.branch_length is not None:
                 assert node.branch_length >= 0.0, (
-                    f"NJ produced a negative branch length and did not clamp: "
-                    f"{node.name} = {node.branch_length}"
+                    f"NJ produced a negative branch length and did not clamp: {node.name} = {node.branch_length}"
                 )

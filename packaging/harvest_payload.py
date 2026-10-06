@@ -13,6 +13,7 @@ Emits a fragment included by packaging/PaleoAST.wxs:
 
 Run:  python packaging/harvest_payload.py
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,13 +63,7 @@ def esc(text) -> str:
     """XML-escape. The build tree lives under 'D:\\Program Files\\...', so the
     ampersand is not hypothetical -- and it has to be replaced first, or it
     turns the escapes of the other two into entities of their own."""
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def component_guid(name: str) -> str:
@@ -87,9 +82,7 @@ def main() -> int:
         print(f"no build found at {PAYLOAD}")
         return 1
 
-    files: list[Path] = sorted(
-        p for p in PAYLOAD.rglob("*") if p.is_file()
-    )
+    files: list[Path] = sorted(p for p in PAYLOAD.rglob("*") if p.is_file())
     print(f"harvesting {len(files)} files from {PAYLOAD}")
 
     lines = [
@@ -127,9 +120,7 @@ def main() -> int:
         for a harvested project.
         """
         lines.append(f'{indent}<DirectoryRef Id="{dir_ids[d.parent]}">')
-        lines.append(
-            f'{indent}  <Directory Id="{dir_ids[d]}" Name="{esc(d.name)}" />'
-        )
+        lines.append(f'{indent}  <Directory Id="{dir_ids[d]}" Name="{esc(d.name)}" />')
         lines.append(f"{indent}</DirectoryRef>")
 
     # Flat, ordered by depth so a parent is always declared before any
@@ -151,14 +142,11 @@ def main() -> int:
             continue
         dir_ident = dir_ids[d]
         for start in range(0, len(here), MAX_FILES_PER_COMPONENT):
-            chunk = here[start:start + MAX_FILES_PER_COMPONENT]
+            chunk = here[start : start + MAX_FILES_PER_COMPONENT]
             comp_index += 1
             comp_id = f"C{comp_index:04d}"
             key = chunk[0].relative_to(PAYLOAD).as_posix()
-            lines.append(
-                f'      <Component Id="{comp_id}" '
-                f'Directory="{dir_ident}" Guid="{component_guid(key)}">'
-            )
+            lines.append(f'      <Component Id="{comp_id}" Directory="{dir_ident}" Guid="{component_guid(key)}">')
             for f in chunk:
                 rel = f.relative_to(PAYLOAD).as_posix()
                 # Name is what lands on disk; Source is what gets read. They
@@ -170,10 +158,7 @@ def main() -> int:
                 # files per component, WiX only infers it when a component holds
                 # a single file, so the first of each chunk is marked here.
                 keypath = ' KeyPath="yes"' if f is chunk[0] else ""
-                lines.append(
-                    f'        <File Id="{wid(rel)}" Name="{esc(f.name)}" '
-                    f'Source="{esc(f)}"{keypath} />'
-                )
+                lines.append(f'        <File Id="{wid(rel)}" Name="{esc(f.name)}" Source="{esc(f)}"{keypath} />')
             lines.append("      </Component>")
     lines.append("    </ComponentGroup>")
 

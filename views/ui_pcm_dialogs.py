@@ -268,10 +268,7 @@ class PICDialog(PCMBaseDialog):
         method_layout = self._method_widget.layout()
 
         info_label = QLabel(
-            _(
-                "PIC always standardizes contrasts by branch length "
-                "(Felsenstein 1985); branch lengths are required."
-            )
+            _("PIC always standardizes contrasts by branch length (Felsenstein 1985); branch lengths are required.")
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
@@ -361,9 +358,7 @@ class AncestralStateDialog(PCMBaseDialog):
                 lines.append(f"  {node_name}: {state:.4f}")
             self._results_text.setPlainText("\n".join(lines))
             self._logger.info(f"ASR completed: {len(result.node_states)} nodes")
-            self.resultsReady.emit(
-                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
-            )
+            self.resultsReady.emit(result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()})
         except Exception as e:
             self._logger.error(f"ASR failed: {e}")
             from views.ui_main_window import format_user_error
@@ -427,9 +422,7 @@ class PhyloSignalDialog(PCMBaseDialog):
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Blomberg's K = {result.k:.4f}")
-            self.resultsReady.emit(
-                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
-            )
+            self.resultsReady.emit(result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()})
         except Exception as e:
             self._logger.error(f"Phylogenetic signal failed: {e}")
             from views.ui_main_window import format_user_error
@@ -542,9 +535,7 @@ class PhyloANOVADialog(PCMBaseDialog):
             )
             self._results_text.setPlainText(result.summary())
             self._logger.info(f"Phylo-ANOVA: F={result.f_statistic:.4f}")
-            self.resultsReady.emit(
-                result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()}
-            )
+            self.resultsReady.emit(result.to_dict() if hasattr(result, "to_dict") else {"summary": result.summary()})
         except Exception as e:
             self._logger.error(f"Phylo-ANOVA failed: {e}")
             from views.ui_main_window import format_user_error

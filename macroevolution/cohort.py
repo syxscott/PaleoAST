@@ -298,9 +298,10 @@ class CohortSurvivorshipAnalysis:
                         stacklevel=2,
                     )
                     self._logger.warning(
-                        "record #%d has FAD=%g beyond the oldest bin "
-                        "(t_end=%g); it will not appear in any bin",
-                        idx, o, max_t_end,
+                        "record #%d has FAD=%g beyond the oldest bin (t_end=%g); it will not appear in any bin",
+                        idx,
+                        o,
+                        max_t_end,
                     )
                 # LAD invisible when L == max_t_end with no absorbing bin.
                 if max_t_end <= L and min_t_start < L:
@@ -313,9 +314,10 @@ class CohortSurvivorshipAnalysis:
                         stacklevel=2,
                     )
                     self._logger.warning(
-                        "record #%d has LAD=%g beyond the oldest bin "
-                        "(t_end=%g); it will not appear in any bin",
-                        idx, L, max_t_end,
+                        "record #%d has LAD=%g beyond the oldest bin (t_end=%g); it will not appear in any bin",
+                        idx,
+                        L,
+                        max_t_end,
                     )
 
         interval_data_list = []
@@ -477,9 +479,11 @@ class CohortSurvivorshipAnalysis:
                         stacklevel=2,
                     )
                     self._logger.warning(
-                        "interval %d [%g, %g] has non-positive width dt=%g; "
-                        "per-capita rates are undefined (nan)",
-                        i, t_start, t_end, t_end - t_start,
+                        "interval %d [%g, %g] has non-positive width dt=%g; per-capita rates are undefined (nan)",
+                        i,
+                        t_start,
+                        t_end,
+                        t_end - t_start,
                     )
                     origination_rates[i] = np.nan
                     extinction_rates[i] = np.nan

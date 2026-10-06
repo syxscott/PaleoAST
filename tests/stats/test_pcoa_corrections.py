@@ -14,6 +14,7 @@ These tests pin down the four correction methods documented in
   can surface it.
 * Unknown correction names raise ``ValidationError``.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -58,12 +59,8 @@ class TestPCoACorrectionCmdscale:
             r_explicit = analyzer.analyze(D, metric="bray-curtis", correction="cmdscale")
         np.testing.assert_allclose(r_default.eigenvalues, r_explicit.eigenvalues)
         np.testing.assert_allclose(r_default.coordinates, r_explicit.coordinates)
-        np.testing.assert_allclose(
-            r_default.proportion_explained, r_explicit.proportion_explained
-        )
-        np.testing.assert_allclose(
-            r_default.cumulative_proportion, r_explicit.cumulative_proportion
-        )
+        np.testing.assert_allclose(r_default.proportion_explained, r_explicit.proportion_explained)
+        np.testing.assert_allclose(r_default.cumulative_proportion, r_explicit.cumulative_proportion)
         assert r_default.correction_method == r_explicit.correction_method == "cmdscale"
 
 
@@ -83,9 +80,7 @@ class TestPCoACorrectionEliminateNegatives:
                 result = analyzer.analyze(D, metric="bray-curtis", correction=correction)
             # Clip small numerical slop before asserting.
             eigs = np.asarray(result.eigenvalues, dtype=float)
-            assert np.all(eigs > -1e-6), (
-                f"{correction} left a real negative eigenvalue: {eigs}"
-            )
+            assert np.all(eigs > -1e-6), f"{correction} left a real negative eigenvalue: {eigs}"
             assert result.correction_method == correction
 
     @pytest.mark.parametrize("correction", ["lingoes", "wickoff", "torgerson"])

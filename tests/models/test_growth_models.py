@@ -208,8 +208,7 @@ def test_recovers_known_parameters_from_noisy_data(model: str, analyzer: GrowthM
     truth = _GROUND_TRUTH[model][0]
     for name in result.param_names:
         assert result.param(name) == pytest.approx(truth[name], **_tolerance(model, name, times)), (
-            f"{model}: {name} recovered as {result.param(name):.6g}, "
-            f"generated value {truth[name]:.6g}"
+            f"{model}: {name} recovered as {result.param(name):.6g}, generated value {truth[name]:.6g}"
         )
     # A recovery this good should also leave a residual at the noise level,
     # not merely a high R-squared.
@@ -219,9 +218,7 @@ def test_recovers_known_parameters_from_noisy_data(model: str, analyzer: GrowthM
 
 @pytest.mark.parametrize("model", sorted(_GROUND_TRUTH))
 @pytest.mark.parametrize("seed", [1, 7, 2024])
-def test_recovery_survives_any_noise_draw(
-    model: str, seed: int, analyzer: GrowthModelAnalyzer
-) -> None:
+def test_recovery_survives_any_noise_draw(model: str, seed: int, analyzer: GrowthModelAnalyzer) -> None:
     """The tolerances are not tuned to one lucky noise realisation.
 
     Three further seeds per model: a start-value heuristic that only works for
@@ -233,8 +230,7 @@ def test_recovery_survives_any_noise_draw(
     truth = _GROUND_TRUTH[model][0]
     for name in result.param_names:
         assert result.param(name) == pytest.approx(truth[name], **_tolerance(model, name, times)), (
-            f"{model} (seed {seed}): {name} recovered as {result.param(name):.6g}, "
-            f"generated value {truth[name]:.6g}"
+            f"{model} (seed {seed}): {name} recovered as {result.param(name):.6g}, generated value {truth[name]:.6g}"
         )
 
 
@@ -482,9 +478,7 @@ def test_fit_all_sets_last_result_to_the_winner(analyzer: GrowthModelAnalyzer) -
 
 
 @pytest.mark.parametrize("model", sorted(_GROUND_TRUTH))
-def test_predict_reproduces_the_fitted_curve_inside_the_range(
-    model: str, analyzer: GrowthModelAnalyzer
-) -> None:
+def test_predict_reproduces_the_fitted_curve_inside_the_range(model: str, analyzer: GrowthModelAnalyzer) -> None:
     """``predict`` returns the curve that was fitted, at the fitted points.
 
     Without this, ``predict`` could be an independent re-implementation of
@@ -500,9 +494,7 @@ _SATURATING = ("von_bertalanffy", "gompertz", "michaelis_menten", "logistic", "g
 
 
 @pytest.mark.parametrize("model", _SATURATING)
-def test_predict_extrapolates_past_the_last_measurement(
-    model: str, analyzer: GrowthModelAnalyzer
-) -> None:
+def test_predict_extrapolates_past_the_last_measurement(model: str, analyzer: GrowthModelAnalyzer) -> None:
     """One further window beyond the data is finite and still rising.
 
     Checking an asymptote means evaluating the curve outside the measured
@@ -547,9 +539,7 @@ def test_predict_accepts_a_scalar(analyzer: GrowthModelAnalyzer) -> None:
     """A single age is a valid request, not a shape error."""
     times, values = _synthetic("logistic")
     result = analyzer.fit("logistic", times, values)
-    assert float(result.predict(float(times[0]))) == pytest.approx(
-        float(result.fit.fitted[0]), rel=1e-12
-    )
+    assert float(result.predict(float(times[0]))) == pytest.approx(float(result.fit.fitted[0]), rel=1e-12)
 
 
 # =============================================================================

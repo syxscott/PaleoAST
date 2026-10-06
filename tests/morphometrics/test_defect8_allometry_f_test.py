@@ -142,8 +142,7 @@ class TestAllometryFTestUsesFullShapeSpace:
         legacy_f, _ = _expected_reduced_shape_f(cfgs, n_components=2)
         # the new F-statistic must NOT equal the legacy one.
         assert result.f_statistic != pytest.approx(legacy_f, abs=1e-09), (
-            "Bug not fixed: analyzer's F-statistic matches the legacy "
-            "reduced-space computation."
+            "Bug not fixed: analyzer's F-statistic matches the legacy reduced-space computation."
         )
 
 

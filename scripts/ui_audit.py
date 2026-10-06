@@ -41,8 +41,8 @@ app.setStyle("Fusion")
 # Microsoft YaHei covers both Latin and CJK, which matters here because the UI
 # is bilingual.
 _FONT_CANDIDATES = [
-    r"C:\Windows\Fonts\msyh.ttc",      # Microsoft YaHei (Latin + CJK)
-    r"C:\Windows\Fonts\msjh.ttc",      # Microsoft JhengHei
+    r"C:\Windows\Fonts\msyh.ttc",  # Microsoft YaHei (Latin + CJK)
+    r"C:\Windows\Fonts\msjh.ttc",  # Microsoft JhengHei
     r"C:\Windows\Fonts\segoeui.ttf",
     r"C:\Windows\Fonts\calibri.ttf",
     r"C:\Windows\Fonts\arial.ttf",
@@ -89,10 +89,7 @@ def shoot(widget, name: str, resize=None) -> Path | None:
             note(f"  [FAIL] {name}: grabbed a null/empty pixmap")
             return None
         pixmap.save(str(path))
-        note(
-            f"  [ok]   {name}.png  {pixmap.width()}x{pixmap.height()}"
-            f"{'  (resized)' if resize else ''}"
-        )
+        note(f"  [ok]   {name}.png  {pixmap.width()}x{pixmap.height()}{'  (resized)' if resize else ''}")
         return path
     except Exception as exc:
         note(f"  [ERR]  {name}: {type(exc).__name__}: {exc}")
@@ -275,10 +272,12 @@ for module_name, class_name, size in DIALOGS:
     # would capture whichever class happened to be last. These are called
     # within the same iteration so it cannot bite today, but binding the
     # default makes that a property of the code rather than of the caller.
-    for attempt in (lambda c=cls: c(parent=win, controller=controller),
-                    lambda c=cls: c(win, controller),
-                    lambda c=cls: c(parent=win),
-                    lambda c=cls: c()):
+    for attempt in (
+        lambda c=cls: c(parent=win, controller=controller),
+        lambda c=cls: c(win, controller),
+        lambda c=cls: c(parent=win),
+        lambda c=cls: c(),
+    ):
         try:
             dialog = attempt()
             break

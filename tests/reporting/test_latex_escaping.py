@@ -67,9 +67,7 @@ class TestMatrixConverterEscapesLabels:
         assert _escape_latex(label) in out, f"{label!r} was not escaped"
 
     def test_real_taxon_name_produces_compilable_output(self):
-        out = MatrixConverter.to_latex(
-            MATRIX, ["Globigerinoides_ruber", "Turborotalia_ampla"], ["v1", "v2", "v3"]
-        )
+        out = MatrixConverter.to_latex(MATRIX, ["Globigerinoides_ruber", "Turborotalia_ampla"], ["v1", "v2", "v3"])
         assert r"Globigerinoides\_ruber" in out
         assert "Globigerinoides_ruber &" not in out
 
@@ -110,11 +108,7 @@ class TestMatrixConverterValidatesShapes:
         out = MatrixConverter.to_latex(MATRIX, ["r0", "r1"], ["a", "b", "c"])
         m = re.search(r"\\begin\{tabular\}\{\|(.+)\|\}", out)
         declared = len(m.group(1).split("|"))
-        body = [
-            ln
-            for ln in out.splitlines()
-            if "&" in ln and "hline" not in ln and "begin" not in ln
-        ]
+        body = [ln for ln in out.splitlines() if "&" in ln and "hline" not in ln and "begin" not in ln]
         assert body, "no body rows emitted"
         assert {len(ln.split("&")) for ln in body} == {declared}
 
@@ -151,9 +145,7 @@ class TestSiblingProducersStillEscape:
     """The fix must not have disturbed the ones that already worked."""
 
     def test_table_generator_escapes(self):
-        out = TableGenerator.from_matrix(
-            [["Globigerinoides_ruber", 1.0]], headers=["taxon", "v"]
-        )
+        out = TableGenerator.from_matrix([["Globigerinoides_ruber", 1.0]], headers=["taxon", "v"])
         assert r"\_" in out
 
     def test_figure_handler_escapes(self):

@@ -94,9 +94,7 @@ class TestClassification:
             assert expected in kinds, f"{expected.name} missing from {sorted(k.name for k in kinds)}"
 
     def test_string_beats_identifier(self, lex):
-        literals = [
-            t for t in _keep(lex.tokenize('"abc"')) if t.type == TokenType.STRING
-        ]
+        literals = [t for t in _keep(lex.tokenize('"abc"')) if t.type == TokenType.STRING]
         assert [t.value for t in literals] == ['"abc"']
 
     def test_float_is_one_token_not_three(self, lex):
@@ -112,18 +110,14 @@ class TestPathsAgree:
     @pytest.mark.parametrize("source", WELL_FORMED)
     def test_incremental_matches_batch(self, lex, source):
         batch = [(t.type, t.value, t.line, t.column) for t in lex.tokenize(source)]
-        incremental = [
-            (t.type, t.value, t.line, t.column) for t in lex.tokenize_incremental(source)
-        ]
+        incremental = [(t.type, t.value, t.line, t.column) for t in lex.tokenize_incremental(source)]
         assert batch == incremental
 
     def test_tokenize_lines_matches_tokenize(self, lex):
         source = "a = 1\nb = 2\nc = 3"
         per_line = lex.tokenize_lines(source)
         flat = [t for line in sorted(per_line) for t in _keep(per_line[line])]
-        assert [t.value for t in flat] == [
-            t.value for t in _keep(lex.tokenize(source))
-        ]
+        assert [t.value for t in flat] == [t.value for t in _keep(lex.tokenize(source))]
 
 
 class TestPositions:
@@ -153,8 +147,7 @@ class TestMalformedInput:
         except LexerError:
             return
         assert any(t.type == TokenType.ERROR for t in tokens), (
-            f"{source!r} produced a clean token stream: "
-            f"{[(t.type.name, t.value) for t in tokens]}"
+            f"{source!r} produced a clean token stream: {[(t.type.name, t.value) for t in tokens]}"
         )
 
 

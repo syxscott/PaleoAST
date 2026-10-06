@@ -49,7 +49,7 @@ class TestTPS3DKernelConsistency:
         on the same 3-D configuration up to floating-point noise (1e-9)."""
         rng = np.random.default_rng(11)
         source = rng.normal(size=(8, 3))
-        target = source + 0.4 * (source ** 2 - source.mean(axis=0))
+        target = source + 0.4 * (source**2 - source.mean(axis=0))
         eval_points = rng.normal(size=(5, 3))
 
         # morphometrics.tps — the module under test

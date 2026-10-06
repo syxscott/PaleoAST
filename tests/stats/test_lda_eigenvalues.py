@@ -96,6 +96,5 @@ class TestLDAFieldSemantics:
         result = analyzer.analyze(data, groups, n_components=2)
         # Canonical roots should be substantially > 0 (strong separation)
         assert np.all(result.eigenvalues_canonical > 0.1), (
-            f"Expected canonical roots > 0.1 for separated groups, "
-            f"got {result.eigenvalues_canonical}"
+            f"Expected canonical roots > 0.1 for separated groups, got {result.eigenvalues_canonical}"
         )

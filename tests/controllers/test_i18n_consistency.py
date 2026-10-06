@@ -25,6 +25,7 @@ forgot to add the matching entry in one of the two tables, or the two
 tables drifted apart.  The fix is mechanical — extend ``en``/``zh`` so
 the assertion holds again.
 """
+
 from __future__ import annotations
 
 import ast
@@ -121,15 +122,13 @@ def _duplicates_in(path: Path) -> list[str]:
 
 def test_en_has_no_duplicate_keys() -> None:
     assert not _duplicates_in(CONFIG_DIR / "translations_en.py"), (
-        "Duplicate keys in translations_en.py: "
-        f"{_duplicates_in(CONFIG_DIR / 'translations_en.py')}"
+        f"Duplicate keys in translations_en.py: {_duplicates_in(CONFIG_DIR / 'translations_en.py')}"
     )
 
 
 def test_zh_has_no_duplicate_keys() -> None:
     assert not _duplicates_in(CONFIG_DIR / "translations_zh.py"), (
-        "Duplicate keys in translations_zh.py: "
-        f"{_duplicates_in(CONFIG_DIR / 'translations_zh.py')}"
+        f"Duplicate keys in translations_zh.py: {_duplicates_in(CONFIG_DIR / 'translations_zh.py')}"
     )
 
 
@@ -182,12 +181,9 @@ def test_format_placeholders_match_across_languages(
         en_phs = _placeholder_set(value)
         zh_phs = _placeholder_set(other[key])
         if en_phs != zh_phs:
-            mismatches.append(
-                f"  {key!r}: {lang}={sorted(en_phs)} vs other={sorted(zh_phs)}"
-            )
-    assert not mismatches, (
-        "Placeholder mismatch between translations_en.py and translations_zh.py:\n"
-        + "\n".join(mismatches)
+            mismatches.append(f"  {key!r}: {lang}={sorted(en_phs)} vs other={sorted(zh_phs)}")
+    assert not mismatches, "Placeholder mismatch between translations_en.py and translations_zh.py:\n" + "\n".join(
+        mismatches
     )
 
 
@@ -232,19 +228,16 @@ def test_register_translations_round_trip(zh_translations: dict[str, str]) -> No
         # comes back as the raw key, the EN table was not loaded; if the
         # ZH value matches the raw key, the ZH table was not loaded.
         assert en_value_open != en_probe, (
-            f"Translator returned the raw key for {en_probe!r} in en mode — "
-            "the EN table is not being loaded."
+            f"Translator returned the raw key for {en_probe!r} in en mode — the EN table is not being loaded."
         )
         assert zh_value_open != en_probe, (
-            f"Translator returned the raw key for {en_probe!r} in zh mode — "
-            "the ZH table is not being loaded."
+            f"Translator returned the raw key for {en_probe!r} in zh mode — the ZH table is not being loaded."
         )
         # And confirm the ZH value matches the ZH table entry verbatim
         # — this catches a partial load (e.g. a re-import that only
         # picked up a subset of the table).
         assert zh_value_open == zh_translations[en_probe], (
-            f"Translator returned {zh_value_open!r} for {en_probe!r} in zh mode, "
-            f"expected {zh_translations[en_probe]!r}"
+            f"Translator returned {zh_value_open!r} for {en_probe!r} in zh mode, expected {zh_translations[en_probe]!r}"
         )
     finally:
         _reset_translator()

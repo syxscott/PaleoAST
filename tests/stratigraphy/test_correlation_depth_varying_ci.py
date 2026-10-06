@@ -60,13 +60,9 @@ class TestDepthVaryingHalfWidth:
 
         half_widths = _half_widths(result)
         # h=0: half-width should be ≈ 0.5 * 1.96 = 0.98
-        assert half_widths[0] < 1.0 + 1e-6, (
-            f"At h=0 the half-width is {half_widths[0]}, expected ≈ 0.98"
-        )
+        assert half_widths[0] < 1.0 + 1e-6, f"At h=0 the half-width is {half_widths[0]}, expected ≈ 0.98"
         # h=100: half-width should be ≈ 1.0 * 1.96 = 1.96
-        assert half_widths[-1] > 1.9, (
-            f"At h=100 the half-width is {half_widths[-1]}, expected ≈ 1.96"
-        )
+        assert half_widths[-1] > 1.9, f"At h=100 the half-width is {half_widths[-1]}, expected ≈ 1.96"
         # h=50 (middle of the gap): half-width MUST be larger than both
         # endpoints (it's an undated horizon, so it gets the blended
         # uncertainty which sits between the two constraint values).
@@ -76,12 +72,8 @@ class TestDepthVaryingHalfWidth:
         # between 0.98 and 1.96. The OLD code gave exactly 1.47 at
         # every depth, including the endpoints — that was the bug.
         mid_idx = 5  # h=50
-        assert (
-            half_widths[mid_idx] > half_widths[0] - 1e-6
-            or half_widths[mid_idx] > half_widths[-1] - 1e-6
-        ), (
-            f"Mid-section half-width {half_widths[mid_idx]} is not larger "
-            "than either endpoint"
+        assert half_widths[mid_idx] > half_widths[0] - 1e-6 or half_widths[mid_idx] > half_widths[-1] - 1e-6, (
+            f"Mid-section half-width {half_widths[mid_idx]} is not larger than either endpoint"
         )
 
     def test_half_widths_not_all_equal(self):
@@ -97,8 +89,7 @@ class TestDepthVaryingHalfWidth:
         half_widths = _half_widths(result)
         # Different depths should have different half-widths.
         assert not np.allclose(half_widths, half_widths[0]), (
-            "All half-widths equal — the fix did not produce a "
-            "depth-varying CI."
+            "All half-widths equal — the fix did not produce a depth-varying CI."
         )
 
 

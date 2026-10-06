@@ -195,10 +195,12 @@ def get_scale(
                 # inferred as float | str | None even though MAX_MA/MIN_MA
                 # only ever hold numbers. Coerce at the point of comparison,
                 # as the filter below already does.
-                bounds.extend([
-                    min(float(t[MIN_MA]) for t in matches),
-                    max(float(t[MAX_MA]) for t in matches),
-                ])
+                bounds.extend(
+                    [
+                        min(float(t[MIN_MA]) for t in matches),
+                        max(float(t[MAX_MA]) for t in matches),
+                    ]
+                )
         lo, hi = min(bounds), max(bounds)
         if hi > 4600.0 or lo < 0.0:
             raise DataValidationError(_("interval ages must lie within [0, 4600] Ma"))

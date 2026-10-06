@@ -49,7 +49,8 @@ class TestErezLuzScaleConversion:
         AND NOT a ~-90 °C value from a wrong-direction conversion."""
         analyzer = IsotopeAnalyzer()
         T = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=0.0, delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            delta18O_c=-1.0,
             # default delta18O_sw_scale="vsmow"
         )
         # delta18O_sw_vpdb (E&L convention) = 0 - 0.27 = -0.27
@@ -66,7 +67,8 @@ class TestErezLuzScaleConversion:
         analyzer = IsotopeAnalyzer()
         # delta_diff = 0, T = 17 °C
         T = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=0.0, delta18O_c=0.0,
+            delta18O_sw=0.0,
+            delta18O_c=0.0,
             delta18O_sw_scale="vpdb",
         )
         assert math.isclose(T, 17.0, abs_tol=0.05)
@@ -78,16 +80,17 @@ class TestErezLuzScaleConversion:
         external."""
         analyzer = IsotopeAnalyzer()
         T_vsmow = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=0.0, delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            delta18O_c=-1.0,
             # default scale is vsmow
         )
         T_vpdb = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=-EL_BEMIS_VSMOW_TO_VPDB_OFFSET, delta18O_c=-1.0,
+            delta18O_sw=-EL_BEMIS_VSMOW_TO_VPDB_OFFSET,
+            delta18O_c=-1.0,
             delta18O_sw_scale="vpdb",
         )
         assert math.isclose(T_vsmow, T_vpdb, abs_tol=1e-6), (
-            f"Erez-Luz scale conversion broken: VSMOW input gave "
-            f"{T_vsmow}, equivalent VPDB input gave {T_vpdb}"
+            f"Erez-Luz scale conversion broken: VSMOW input gave {T_vsmow}, equivalent VPDB input gave {T_vpdb}"
         )
 
 
@@ -99,22 +102,24 @@ class TestBemisScaleConversion:
         no genus correction."""
         analyzer = IsotopeAnalyzer()
         T = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, delta18O_sw=0.0, genus="generic",
+            delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            genus="generic",
             # default delta18O_sw_scale="vsmow"
         )
         # δw_eff = (0 - 0.27) + 0 = -0.27
         # delta_diff = -1 - (-0.27) = -0.73
         # T = 16.998 - 4.52 * (-0.73) ≈ 20.30
-        assert 17 < T < 24, (
-            f"Bemis warm-water sample gave T = {T}, expected ~20 °C"
-        )
+        assert 17 < T < 24, f"Bemis warm-water sample gave T = {T}, expected ~20 °C"
 
     def test_genus_correction_still_works(self):
         """The genus-specific Δ (e.g. 0.27 for G. ruber) must still
         add the right offset AFTER the scale conversion."""
         analyzer = IsotopeAnalyzer()
         T_ruber = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, delta18O_sw=0.0, genus="G. ruber",
+            delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            genus="G. ruber",
         )
         # δw_eff = (0 - 0.27) + 0.27 = 0.0
         # delta_diff = -1 - 0 = -1
@@ -126,11 +131,14 @@ class TestBemisScaleConversion:
         and produce the same temperature."""
         analyzer = IsotopeAnalyzer()
         T_vsmow = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, genus="generic",
+            delta18O_c=-1.0,
+            genus="generic",
         )
         T_vpdb = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, delta18O_sw=-EL_BEMIS_VSMOW_TO_VPDB_OFFSET,
-            genus="generic", delta18O_sw_scale="vpdb",
+            delta18O_c=-1.0,
+            delta18O_sw=-EL_BEMIS_VSMOW_TO_VPDB_OFFSET,
+            genus="generic",
+            delta18O_sw_scale="vpdb",
         )
         assert math.isclose(T_vsmow, T_vpdb, abs_tol=1e-6)
 
@@ -152,7 +160,8 @@ class TestValidRangeEnforcement:
         analyzer = IsotopeAnalyzer()
         with pytest.warns(UserWarning):
             analyzer.compute_paleotemperature_bemis(
-                delta18O_c=-15.0, genus="generic",
+                delta18O_c=-15.0,
+                genus="generic",
             )
 
 

@@ -55,10 +55,7 @@ class Mesh3D:
             lowest = int(self.faces.min())
             highest = int(self.faces.max())
             if lowest < 0 or highest >= n_vertices:
-                raise ValueError(
-                    f"Face indices must lie in [0, {n_vertices}), got range "
-                    f"[{lowest}, {highest}]"
-                )
+                raise ValueError(f"Face indices must lie in [0, {n_vertices}), got range [{lowest}, {highest}]")
 
         logger.info(f"Mesh3D created: {len(self.vertices)} vertices, {len(self.faces)} faces")
         if self.normals is None:
@@ -202,8 +199,7 @@ class Mesh3D:
         total_area = areas.sum()
         if not np.isfinite(total_area) or total_area <= 0.0:
             raise ValueError(
-                "Cannot sample a mesh whose faces have zero total area; "
-                "check the geometry or remove degenerate faces."
+                "Cannot sample a mesh whose faces have zero total area; check the geometry or remove degenerate faces."
             )
         weights = areas / total_area
 

@@ -41,53 +41,58 @@ AA_NON_TEXT = 3.0
 
 # (label, foreground token, background token, minimum)
 LIGHT_PAIRS = [
-    ("body on primary surface",   "text_primary",   "bg_primary",   AA_BODY),
-    ("body on secondary surface", "text_primary",   "bg_secondary", AA_BODY),
-    ("body on tertiary surface",  "text_primary",   "bg_tertiary",  AA_BODY),
-    ("secondary on primary",      "text_secondary", "bg_primary",   AA_BODY),
-    ("secondary on secondary",    "text_secondary", "bg_secondary", AA_BODY),
-    ("secondary on tertiary",     "text_secondary", "bg_tertiary",  AA_BODY),
-    ("accent on primary",         "primary",        "bg_primary",   AA_BODY),
-    ("accent on secondary",       "primary",        "bg_secondary", AA_BODY),
-    ("accent on tertiary",        "primary",        "bg_tertiary",  AA_BODY),
-    ("success on primary",        "success",        "bg_primary",   AA_BODY),
-    ("warning on primary",        "warning",        "bg_primary",   AA_BODY),
-    ("error on primary",          "error",          "bg_primary",   AA_BODY),
-    ("info on primary",           "info",           "bg_primary",   AA_BODY),
-    ("on_primary on accent",      "on_primary",     "primary",      AA_BODY),
-    ("on_primary on success",     "on_primary",     "success",      AA_BODY),
-    ("on_primary on error",       "on_primary",     "error",        AA_BODY),
-    ("focus ring on primary",     "border_focus",   "bg_primary",   AA_NON_TEXT),
-    ("medium border on primary",  "border_medium",  "bg_primary",   1.3),
+    ("body on primary surface", "text_primary", "bg_primary", AA_BODY),
+    ("body on secondary surface", "text_primary", "bg_secondary", AA_BODY),
+    ("body on tertiary surface", "text_primary", "bg_tertiary", AA_BODY),
+    ("secondary on primary", "text_secondary", "bg_primary", AA_BODY),
+    ("secondary on secondary", "text_secondary", "bg_secondary", AA_BODY),
+    ("secondary on tertiary", "text_secondary", "bg_tertiary", AA_BODY),
+    ("accent on primary", "primary", "bg_primary", AA_BODY),
+    ("accent on secondary", "primary", "bg_secondary", AA_BODY),
+    ("accent on tertiary", "primary", "bg_tertiary", AA_BODY),
+    ("success on primary", "success", "bg_primary", AA_BODY),
+    ("warning on primary", "warning", "bg_primary", AA_BODY),
+    ("error on primary", "error", "bg_primary", AA_BODY),
+    ("info on primary", "info", "bg_primary", AA_BODY),
+    ("on_primary on accent", "on_primary", "primary", AA_BODY),
+    ("on_primary on success", "on_primary", "success", AA_BODY),
+    ("on_primary on error", "on_primary", "error", AA_BODY),
+    ("focus ring on primary", "border_focus", "bg_primary", AA_NON_TEXT),
+    ("medium border on primary", "border_medium", "bg_primary", 1.3),
 ]
 
 DARK_PAIRS = [
-    ("body on primary surface",   "text_primary",   "bg_primary",   AA_BODY),
-    ("body on secondary surface", "text_primary",   "bg_secondary", AA_BODY),
-    ("body on tertiary surface",  "text_primary",   "bg_tertiary",  AA_BODY),
-    ("secondary on primary",      "text_secondary", "bg_primary",   AA_BODY),
-    ("secondary on secondary",    "text_secondary", "bg_secondary", AA_BODY),
-    ("secondary on tertiary",     "text_secondary", "bg_tertiary",  AA_BODY),
-    ("accent on primary",         "primary",        "bg_primary",   AA_BODY),
-    ("accent on secondary",       "primary",        "bg_secondary", AA_BODY),
-    ("accent on tertiary",        "primary",        "bg_tertiary",  AA_BODY),
-    ("success on primary",        "success",        "bg_primary",   AA_BODY),
-    ("warning on primary",        "warning",        "bg_primary",   AA_BODY),
-    ("error on primary",          "error",          "bg_primary",   AA_BODY),
-    ("info on primary",           "info",           "bg_primary",   AA_BODY),
-    ("on_primary on accent",      "on_primary",     "primary",      AA_BODY),
-    ("on_primary on success",     "on_primary",     "success",      AA_BODY),
-    ("on_primary on error",       "on_primary",     "error",        AA_BODY),
-    ("focus ring on primary",     "border_focus",   "bg_primary",   AA_NON_TEXT),
-    ("medium border on primary",  "border_medium",  "bg_primary",   1.3),
+    ("body on primary surface", "text_primary", "bg_primary", AA_BODY),
+    ("body on secondary surface", "text_primary", "bg_secondary", AA_BODY),
+    ("body on tertiary surface", "text_primary", "bg_tertiary", AA_BODY),
+    ("secondary on primary", "text_secondary", "bg_primary", AA_BODY),
+    ("secondary on secondary", "text_secondary", "bg_secondary", AA_BODY),
+    ("secondary on tertiary", "text_secondary", "bg_tertiary", AA_BODY),
+    ("accent on primary", "primary", "bg_primary", AA_BODY),
+    ("accent on secondary", "primary", "bg_secondary", AA_BODY),
+    ("accent on tertiary", "primary", "bg_tertiary", AA_BODY),
+    ("success on primary", "success", "bg_primary", AA_BODY),
+    ("warning on primary", "warning", "bg_primary", AA_BODY),
+    ("error on primary", "error", "bg_primary", AA_BODY),
+    ("info on primary", "info", "bg_primary", AA_BODY),
+    ("on_primary on accent", "on_primary", "primary", AA_BODY),
+    ("on_primary on success", "on_primary", "success", AA_BODY),
+    ("on_primary on error", "on_primary", "error", AA_BODY),
+    ("focus ring on primary", "border_focus", "bg_primary", AA_NON_TEXT),
+    ("medium border on primary", "border_medium", "bg_primary", 1.3),
 ]
 
 # Every accent must be restated for the dark theme. A token missing here is
 # inherited, and an accent inherited from the light palette is a colour chosen
 # for white backgrounds being used on a near-black one.
 ACCENTS = (
-    "primary", "primary_light", "primary_dark",
-    "success", "warning", "error", "info",
+    "primary",
+    "primary_light",
+    "primary_dark",
+    "success",
+    "warning",
+    "error",
+    "info",
     "on_primary",
 )
 
@@ -99,12 +104,8 @@ def _srgb_to_linear(c: float) -> float:
 def luminance(hex_color: str) -> float:
     assert HEX.match(hex_color), f"not a #rrggbb colour: {hex_color!r}"
     h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    return (
-        0.2126 * _srgb_to_linear(r)
-        + 0.7152 * _srgb_to_linear(g)
-        + 0.0722 * _srgb_to_linear(b)
-    )
+    r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * _srgb_to_linear(r) + 0.7152 * _srgb_to_linear(g) + 0.0722 * _srgb_to_linear(b)
 
 
 def contrast(fg: str, bg: str) -> float:

@@ -926,8 +926,7 @@ class DataMatrix:
         """
         with self._lock:
             return [
-                self._column_metadata.get(label, {}).get("data_type", DataType.CONTINUOUS)
-                for label in self._col_labels
+                self._column_metadata.get(label, {}).get("data_type", DataType.CONTINUOUS) for label in self._col_labels
             ]
 
     def _column_type_set(self) -> set[str]:
@@ -1042,8 +1041,7 @@ class DataMatrix:
             incompatible = types - allowed[method]
             if incompatible:
                 raise DataValidationError(
-                    f"Method '{method}' does not support columns of type "
-                    f"{sorted(incompatible)}",
+                    f"Method '{method}' does not support columns of type {sorted(incompatible)}",
                     details={
                         "method": method,
                         "incompatible_columns": sorted(incompatible),
@@ -1081,9 +1079,7 @@ class DataMatrix:
             # instead of a RuntimeWarning + the silently-zeroed fallback.
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
-                bad_labels = [
-                    self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan
-                ]
+                bad_labels = [self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan]
                 raise DataValidationError(
                     f"impute_mean: {len(bad_labels)} column(s) are entirely "
                     f"NaN and have no defined mean to impute with: "
@@ -1130,9 +1126,7 @@ class DataMatrix:
 
             all_nan_cols = np.all(nan_mask, axis=0)
             if np.any(all_nan_cols):
-                bad_labels = [
-                    self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan
-                ]
+                bad_labels = [self._col_labels[j] for j, is_all_nan in enumerate(all_nan_cols) if is_all_nan]
                 raise DataValidationError(
                     f"impute_median: {len(bad_labels)} column(s) are "
                     f"entirely NaN and have no defined median to impute "

@@ -142,10 +142,7 @@ class KMeansResult:
 
     def cluster_sizes(self) -> dict[int, int]:
         """Number of samples in each cluster."""
-        return {
-            int(label): int(np.sum(self.labels == label))
-            for label in np.unique(self.labels)
-        }
+        return {int(label): int(np.sum(self.labels == label)) for label in np.unique(self.labels)}
 
     def summary(self) -> str:
         lines = [
@@ -154,12 +151,7 @@ class KMeansResult:
             f"{_('Clusters')}: {self.n_clusters}",
             f"{_('Samples')}: {self.n_samples}",
             f"{_('Within-cluster sum of squares')}: {self.inertia:.4f}",
-            f"{_('Silhouette')}: "
-            + (
-                f"{self.silhouette:.4f}"
-                if np.isfinite(self.silhouette)
-                else _("undefined")
-            ),
+            f"{_('Silhouette')}: " + (f"{self.silhouette:.4f}" if np.isfinite(self.silhouette) else _("undefined")),
         ]
         for label, size in sorted(self.cluster_sizes().items()):
             lines.append(f"  {_('Cluster {0}').format(label + 1)}: {size}")
@@ -345,8 +337,7 @@ class ClusteringAnalyzer:
                 # undefined. Returning that would be a number with no
                 # meaning behind it.
                 raise ValidationError(
-                    f"n_clusters ({n_clusters}) must be smaller than the "
-                    f"number of samples ({n_samples})",
+                    f"n_clusters ({n_clusters}) must be smaller than the number of samples ({n_samples})",
                     details={
                         "n_clusters": n_clusters,
                         "n_samples": n_samples,
@@ -371,14 +362,10 @@ class ClusteringAnalyzer:
 
             if not np.all(np.isfinite(X)):
                 raise ComputationError(
-                    "K-means requires finite values; the input contains "
-                    "NaN or Inf. Impute or drop those rows first."
+                    "K-means requires finite values; the input contains NaN or Inf. Impute or drop those rows first."
                 )
             if np.allclose(X.std(axis=0), 0):
-                raise ComputationError(
-                    "K-means cannot partition data with no variation: "
-                    "every variable is constant."
-                )
+                raise ComputationError("K-means cannot partition data with no variation: every variable is constant.")
 
             kmeans_cls, silhouette_fn = _kmeans_backend()
             km = kmeans_cls(
@@ -458,8 +445,7 @@ class ClusteringAnalyzer:
                 )
             if k_max >= n_samples:
                 raise ValidationError(
-                    f"k_max ({k_max}) must be smaller than the number of "
-                    f"samples ({n_samples})",
+                    f"k_max ({k_max}) must be smaller than the number of samples ({n_samples})",
                     details={"k_max": k_max, "n_samples": n_samples},
                 )
 
@@ -472,9 +458,7 @@ class ClusteringAnalyzer:
                 # independently reproducible.
                 seed = int(rng.integers(0, 2**31 - 1))
                 kmeans_cls, _silhouette_fn = _kmeans_backend()
-                km = kmeans_cls(
-                    n_clusters=int(k), n_init=n_init, random_state=seed
-                )
+                km = kmeans_cls(n_clusters=int(k), n_init=n_init, random_state=seed)
                 km.fit(X)
                 inertia[i] = float(km.inertia_)
 

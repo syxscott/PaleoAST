@@ -76,13 +76,15 @@ def pca_result():
     rng = np.random.default_rng(20261003)
     # 5 variables, correlated by a known loading matrix, so PC1 carries real
     # variance instead of the noise-dominated PC1 a plain random matrix gives.
-    loadings = np.array([
-        [3.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.5, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 0.3],
-    ])
+    loadings = np.array(
+        [
+            [3.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.5, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.3],
+        ]
+    )
     matrix = rng.normal(size=(24, 5)) @ loadings
     return PCAAnalyzer().analyze(matrix, n_components=3, method="correlation")
 
@@ -102,7 +104,9 @@ def test_exported_csv_matches_result_scores(pca_result, tmp_path):
     """The PC1/PC2 columns are the result's own scores, to float precision."""
     spec = RPlotSpec(output_format="pdf")
     export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec,
+        pca_result,
+        tmp_path,
+        spec,
         labels=[f"T{i}" for i in range(len(pca_result.scores))],
         groups=["A"] * 12 + ["B"] * 12,
     )
@@ -111,9 +115,7 @@ def test_exported_csv_matches_result_scores(pca_result, tmp_path):
     assert header == ["sample", "PC1", "PC2", "group", "label"]
     assert len(rows) == len(pca_result.scores)
 
-    expected = np.asarray(
-        pca_result.get_scores(n_components=2), dtype=float
-    )
+    expected = np.asarray(pca_result.get_scores(n_components=2), dtype=float)
     for i, row in enumerate(rows):
         assert int(row[0]) == i + 1
         assert float(row[1]) == pytest.approx(expected[i, 0], abs=1e-6)
@@ -130,9 +132,7 @@ def test_explained_variance_percentages_reach_the_script(pca_result, tmp_path):
     as-is. Multiplying again here would print "3469.2% variance" on the axis.
     """
     spec = RPlotSpec(output_format="pdf")
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, spec)
     text = export.script_path.read_text(encoding="utf-8")
     ev = np.asarray(pca_result.explained_variance, dtype=float)
     assert 0.0 < ev[0] <= 100.0
@@ -182,8 +182,7 @@ def test_more_groups_than_colours_never_index_past_the_palette(pca_result, tmp_p
 
     # No direct indexing into the palette by level count any more.
     assert "PALETTE[seq_along" not in script, (
-        "the script indexes PALETTE by level count, which yields NA once the "
-        "groups outnumber the colours"
+        "the script indexes PALETTE by level count, which yields NA once the groups outnumber the colours"
     )
     assert "rep_len(PALETTE" in script
     assert "GROUP_COLOURS" in script and "GROUP_SHAPES" in script
@@ -197,9 +196,7 @@ def test_okabe_ito_is_the_default_palette(pca_result, tmp_path):
     Okabe & Ito (2008) is the palette a biology figure is expected to use, and
     the previous default was a hand-picked set with no citation.
     """
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec(output_format="pdf")
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec(output_format="pdf"))
     script = export.script_path.read_text(encoding="utf-8")
     assert RPlotSpec().color_palette == "okabeito"
     assert 'PALETTE_NAME <- "okabeito"' in script
@@ -231,7 +228,6 @@ def test_ellipses_are_computed_not_stated_by_ggplot(pca_result, tmp_path):
     assert 'd[["PC1"]]' in script or 'd[["PC2"]]' in script
 
 
-
 # ---------------------------------------------------------------------------
 # 2. Generated scripts stay valid, and avoid the R traps
 # ---------------------------------------------------------------------------
@@ -239,9 +235,7 @@ def test_ellipses_are_computed_not_stated_by_ggplot(pca_result, tmp_path):
 
 @pytest.mark.parametrize("fmt", ["pdf", "svg", "png"])
 def test_generated_script_passes_structural_validation(pca_result, tmp_path, fmt):
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec(output_format=fmt)
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec(output_format=fmt))
     assert validate_r_script(export.script_path.read_text(encoding="utf-8")) == []
 
 
@@ -251,24 +245,21 @@ def test_no_leading_plus_continuations(pca_result, tmp_path):
     It parses, it runs, and it silently turns one layer into its own statement
     -- so this cannot be caught by ``validate_r_script`` and needs its own check.
     """
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec()
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec())
     text = export.script_path.read_text(encoding="utf-8")
-    offenders = [
-        line for line in text.splitlines() if re.match(r"^\s*\+", line)
-    ]
+    offenders = [line for line in text.splitlines() if re.match(r"^\s*\+", line)]
     assert offenders == []
 
 
 def test_user_settings_reach_the_script(pca_result, tmp_path):
     spec = RPlotSpec(
-        theme="bw", base_size=12.0, figsize=(8.0, 6.0), dpi=600,
+        theme="bw",
+        base_size=12.0,
+        figsize=(8.0, 6.0),
+        dpi=600,
         output_format="svg",
     )
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, spec)
     text = export.script_path.read_text(encoding="utf-8")
     assert "THEME <- theme_bw(base_size = 12)" in text
     assert 'ggsave("pca_scores.svg"' in text
@@ -282,9 +273,7 @@ def test_user_settings_reach_the_script(pca_result, tmp_path):
 
 
 def test_script_is_unmodified_tracks_a_hand_edit(pca_result, tmp_path):
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec()
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec())
     assert export.exists()
     assert export.script_is_unmodified() is True
 
@@ -298,9 +287,7 @@ def test_script_is_unmodified_tracks_a_hand_edit(pca_result, tmp_path):
     assert export.script_is_unmodified() is False
 
 
-def test_export_refuses_to_clobber_an_edited_script(
-    pca_result, tmp_path, monkeypatch
-):
+def test_export_refuses_to_clobber_an_edited_script(pca_result, tmp_path, monkeypatch):
     """Answering "No" must leave the user's file byte-for-byte intact.
 
     The window here is a stub, not a real MainWindow. Those slots open modal
@@ -316,9 +303,7 @@ def test_export_refuses_to_clobber_an_edited_script(
     # Export first, then simulate the user editing the file: that is the state
     # the guard exists for. Writing the "user's" file first and exporting after
     # would leave it unmodified and the guard would never fire.
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec()
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec())
     script = export.script_path
     script.write_text(
         script.read_text(encoding="utf-8") + "\n# the user's own tweak\n",
@@ -331,9 +316,7 @@ def test_export_refuses_to_clobber_an_edited_script(
     win = SimpleNamespace()
     win._r_output_dir = lambda: str(tmp_path)
     win._last_r_export = export
-    win._logger = SimpleNamespace(
-        info=lambda *a, **k: None, error=lambda *a, **k: None
-    )
+    win._logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
     win._state = SimpleNamespace(has_data=True)
     win._run_r_script_and_show = lambda *a, **k: pytest.fail(
         "must not run anything after the user declines the overwrite"
@@ -346,12 +329,8 @@ def test_export_refuses_to_clobber_an_edited_script(
         return QMessageBox.StandardButton.No
 
     monkeypatch.setattr(mw.QMessageBox, "question", staticmethod(_question))
-    monkeypatch.setattr(mw.QMessageBox, "information", staticmethod(
-        lambda *a, **k: None
-    ))
-    monkeypatch.setattr(mw.QMessageBox, "critical", staticmethod(
-        lambda *a, **k: None
-    ))
+    monkeypatch.setattr(mw.QMessageBox, "information", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(mw.QMessageBox, "critical", staticmethod(lambda *a, **k: None))
 
     mw.MainWindow._on_export_as_r_script(win)
 
@@ -360,31 +339,23 @@ def test_export_refuses_to_clobber_an_edited_script(
 
 
 def test_rerun_never_regenerates_the_script(pca_result, tmp_path, monkeypatch):
-    """"Re-run" must execute the file on disk, not rewrite it.
+    """ "Re-run" must execute the file on disk, not rewrite it.
 
     This is the whole reason the two actions are separate buttons.
     """
     from views import ui_main_window as mw
 
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec()
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec())
     edited = export.script_path.read_text(encoding="utf-8") + "\n# edited\n"
     export.script_path.write_text(edited, encoding="utf-8")
 
     ran = {}
     win = SimpleNamespace()
     win._r_output_dir = lambda: str(tmp_path)
-    win._logger = SimpleNamespace(
-        info=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    win._run_r_script_and_show = lambda path, title: ran.update(
-        path=Path(path), title=title
-    )
+    win._logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
+    win._run_r_script_and_show = lambda path, title: ran.update(path=Path(path), title=title)
 
-    monkeypatch.setattr(mw.QMessageBox, "information", staticmethod(
-        lambda *a, **k: None
-    ))
+    monkeypatch.setattr(mw.QMessageBox, "information", staticmethod(lambda *a, **k: None))
 
     mw.MainWindow._on_rerun_r_script(win)
 
@@ -406,12 +377,8 @@ def test_rerun_without_a_script_reports_instead_of_guessing(tmp_path, monkeypatc
 
     win = SimpleNamespace()
     win._r_output_dir = lambda: str(tmp_path)
-    win._logger = SimpleNamespace(
-        info=lambda *a, **k: None, error=lambda *a, **k: None
-    )
-    win._run_r_script_and_show = lambda *a, **k: pytest.fail(
-        "nothing exists to run"
-    )
+    win._logger = SimpleNamespace(info=lambda *a, **k: None, error=lambda *a, **k: None)
+    win._run_r_script_and_show = lambda *a, **k: pytest.fail("nothing exists to run")
 
     mw.MainWindow._on_rerun_r_script(win)
     assert "title" in shown
@@ -446,15 +413,11 @@ def test_run_finds_a_renamed_output(monkeypatch, tmp_path):
 
     monkeypatch.setattr(r_render.subprocess, "run", _fake_run)
 
-    run = run_r_script(
-        script, rscript=str(fake_r), make_preview=False
-    )
+    run = run_r_script(script, rscript=str(fake_r), make_preview=False)
     assert run.ok is True
     names = [p.name for p in run.produced]
     assert names == ["my_renamed_figure.pdf"]
-    assert "old_plot.pdf" not in names, (
-        "a pre-existing untouched file was reported as produced by this run"
-    )
+    assert "old_plot.pdf" not in names, "a pre-existing untouched file was reported as produced by this run"
 
 
 def test_run_reports_an_r_error_without_raising(monkeypatch, tmp_path):
@@ -468,9 +431,7 @@ def test_run_reports_an_r_error_without_raising(monkeypatch, tmp_path):
     monkeypatch.setattr(
         r_render.subprocess,
         "run",
-        lambda argv, **kw: SimpleNamespace(
-            returncode=1, stdout="", stderr="Error: boom\n"
-        ),
+        lambda argv, **kw: SimpleNamespace(returncode=1, stdout="", stderr="Error: boom\n"),
     )
 
     run = run_r_script(script, rscript=str(fake_r), make_preview=False)
@@ -514,9 +475,7 @@ def test_missing_script_is_reported_not_raised(tmp_path):
 def test_configured_path_wins(monkeypatch, tmp_path):
     target = tmp_path / "Rscript"
     target.write_text("stub", encoding="utf-8")
-    monkeypatch.setattr(
-        "visualization.r_render.shutil.which", lambda name: None
-    )
+    monkeypatch.setattr("visualization.r_render.shutil.which", lambda name: None)
     assert find_rscript(str(target)) == target
 
 
@@ -531,6 +490,7 @@ def test_missing_r_explains_the_fix():
 # ---------------------------------------------------------------------------
 # 6. The dialog -> spec -> script chain
 # ---------------------------------------------------------------------------
+
 
 # The QApplication must outlive every widget built from it, and must NOT
 # outlive this module. Two ways to get that wrong, both fatal:
@@ -567,9 +527,7 @@ def _r_plot_spec_from(values: dict):
     return MainWindow._r_plot_spec(win)
 
 
-def test_preferences_reach_the_script_through_the_real_spec(
-    pca_result, tmp_path, qapp
-):
+def test_preferences_reach_the_script_through_the_real_spec(pca_result, tmp_path, qapp):
     """The dialog's values must survive the trip into the generated script.
 
     The preference keys (``r_theme``, ``r_base_size``, ...) and the
@@ -611,9 +569,7 @@ def test_preferences_reach_the_script_through_the_real_spec(
     assert spec.r_executable == chosen["r_rscript"]
     assert values["r_timeout"] == 42
 
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, spec)
     text = export.script_path.read_text(encoding="utf-8")
     assert f"THEME <- theme_{spec.theme}(base_size = {spec.base_size:g})" in text
     assert f'ggsave("pca_scores.{spec.output_format}"' in text
@@ -628,8 +584,7 @@ def test_every_offered_theme_maps_to_a_ggplot2_theme(pca_result, tmp_path):
     """
     from views.ui_permutation_dialogs import PreferencesDialog
 
-    known = {"classic", "bw", "minimal", "grey", "void", "light", "dark",
-             "default", "linedraw", "test", "ggplot2"}
+    known = {"classic", "bw", "minimal", "grey", "void", "light", "dark", "default", "linedraw", "test", "ggplot2"}
     for theme in PreferencesDialog.R_THEMES:
         assert theme in known, f"'{theme}' is not a ggplot2 theme_*() function"
         spec = RPlotSpec(theme=theme)
@@ -643,6 +598,7 @@ def test_every_offered_theme_maps_to_a_ggplot2_theme(pca_result, tmp_path):
 # 7. Live R (skipped when R is absent)
 # ---------------------------------------------------------------------------
 
+
 # "R is installed" is NOT the same as "R can plot". The GitHub Windows and
 # macOS runner images ship R but not ggplot2, so a skipif on find_rscript()
 # alone let these tests run and fail there with "there is no package called
@@ -655,19 +611,19 @@ def _r_with_ggplot2() -> bool:
         return False
     try:
         proc = subprocess.run(
-            [str(exe), "-e",
-             'suppressMessages(library(ggplot2)); cat("ggplot2-ok")'],
-            capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=300,
+            [str(exe), "-e", 'suppressMessages(library(ggplot2)); cat("ggplot2-ok")'],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
     return proc.returncode == 0 and "ggplot2-ok" in (proc.stdout or "")
 
 
-needs_r = pytest.mark.skipif(
-    not _r_with_ggplot2(), reason="Rscript with ggplot2 is not installed"
-)
+needs_r = pytest.mark.skipif(not _r_with_ggplot2(), reason="Rscript with ggplot2 is not installed")
 
 
 @needs_r
@@ -680,7 +636,9 @@ def test_real_r_runs_the_generated_script(pca_result, tmp_path):
     """
     spec = RPlotSpec(output_format="png", dpi=110)
     export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec,
+        pca_result,
+        tmp_path,
+        spec,
         groups=["A"] * 12 + ["B"] * 12,
     )
 
@@ -690,8 +648,7 @@ def test_real_r_runs_the_generated_script(pca_result, tmp_path):
     figure = tmp_path / "pca_scores.png"
     assert figure.is_file(), f"R exited 0 but wrote no figure. {run.message()}"
     assert figure.stat().st_size > 5000, (
-        f"figure is only {figure.stat().st_size} bytes -- a truncated plot "
-        "still exits 0"
+        f"figure is only {figure.stat().st_size} bytes -- a truncated plot still exits 0"
     )
     # The script already wrote a PNG, so no companion preview is needed. This
     # is the branch that avoids running the script twice.
@@ -706,16 +663,13 @@ def test_real_r_previews_a_vector_only_script(pca_result, tmp_path):
     left behind, which is the only way a vector-only script can be displayed
     without assuming it still looks the way we generated it.
     """
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, RPlotSpec(output_format="pdf")
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, RPlotSpec(output_format="pdf"))
 
     run = run_r_script(export.script_path, make_preview=True)
     assert run.ok, run.message()
     assert (tmp_path / "pca_scores.pdf").is_file()
     assert run.preview_png is not None, (
-        "no PNG companion for a vector-only output; the user would have to "
-        "open the PDF by hand"
+        "no PNG companion for a vector-only output; the user would have to open the PDF by hand"
     )
     assert run.preview_png.is_file()
     assert run.preview_png.stat().st_size > 5000
@@ -750,13 +704,17 @@ def test_real_ggplot2_has_every_theme_the_dialog_offers(pca_result, tmp_path):
     themes = ", ".join(f'"{t}"' for t in PreferencesDialog.R_THEMES)
     proc = subprocess.run(
         [
-            str(exe), "-e",
+            str(exe),
+            "-e",
             "suppressMessages(library(ggplot2));"
             f"cat(paste(sapply(c({themes}), "
             "function(t) paste0(t, '=', exists(paste0('theme_', t), "
             'mode="function"))), collapse=" "))',
         ],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=180,
     )
     assert proc.returncode == 0, proc.stderr
@@ -766,9 +724,7 @@ def test_real_ggplot2_has_every_theme_the_dialog_offers(pca_result, tmp_path):
 
     # And the generated script must actually run with the chosen theme.
     spec = RPlotSpec(theme="bw", output_format="png", dpi=110)
-    export = RScriptExporter(stamp="test").export_pca_scores(
-        pca_result, tmp_path, spec
-    )
+    export = RScriptExporter(stamp="test").export_pca_scores(pca_result, tmp_path, spec)
     run = run_r_script(export.script_path, make_preview=False)
     assert run.ok, run.message()
     assert (tmp_path / "pca_scores.png").is_file()

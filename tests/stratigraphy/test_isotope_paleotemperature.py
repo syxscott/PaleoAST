@@ -30,7 +30,9 @@ class TestPaleotemperatureEquations:
         # delta_diff = -1.0 - 0 = -1.0
         # T = 17.0 - 4.52*(-1) + 0.03*(1) = 21.55
         T = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=0.0, delta18O_c=-1.0, delta18O_sw_scale="vpdb",
+            delta18O_sw=0.0,
+            delta18O_c=-1.0,
+            delta18O_sw_scale="vpdb",
         )
         expected = 21.55
         assert abs(T - expected) < 0.1, f"Expected {expected}, got {T}"
@@ -47,7 +49,8 @@ class TestPaleotemperatureEquations:
         for delta_c in np.linspace(-3, 1, 10):
             for delta_w in np.linspace(-2, 1, 10):
                 T = analyzer.compute_paleotemperature_erez_luz(
-                    delta18O_sw=delta_w, delta18O_c=delta_c,
+                    delta18O_sw=delta_w,
+                    delta18O_c=delta_c,
                     delta18O_sw_scale="vpdb",
                 )
                 assert -10 < T < 40, (
@@ -90,7 +93,9 @@ class TestPaleotemperatureEquations:
 
         # G. ruber correction = 0.27
         T_ruber = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=delta_c, delta18O_sw=0.0, genus="G. ruber",
+            delta18O_c=delta_c,
+            delta18O_sw=0.0,
+            genus="G. ruber",
             delta18O_sw_scale="vpdb",
         )
         # delta_diff = -1.0 - (0 + 0.27) = -1.27
@@ -99,7 +104,9 @@ class TestPaleotemperatureEquations:
 
         # G. sacculifer correction = 0.22
         T_sacculifer = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=delta_c, delta18O_sw=0.0, genus="G. sacculifer",
+            delta18O_c=delta_c,
+            delta18O_sw=0.0,
+            genus="G. sacculifer",
             delta18O_sw_scale="vpdb",
         )
         # delta_diff = -1.0 - (0 + 0.22) = -1.22
@@ -181,7 +188,8 @@ class TestPaleotemperatureEquations:
         # Kim & O'Neil takes δc on VPDB and δw on VSMOW (K&O converts
         # internally)
         T_kim = analyzer.compute_paleotemperature_kim_oneil(
-            delta18O_sw=0.0, delta18O_c=delta_c_vpdb,
+            delta18O_sw=0.0,
+            delta18O_c=delta_c_vpdb,
         )
 
         # Both should land in the warm-water ballpark
@@ -207,17 +215,21 @@ class TestPaleotemperatureEquations:
         delta_c = -1.5  # VPDB
 
         T_erez = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=delta_sw_vpdb_el, delta18O_c=delta_c,
+            delta18O_sw=delta_sw_vpdb_el,
+            delta18O_c=delta_c,
             delta18O_sw_scale="vpdb",
         )
         T_bemis = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=delta_c, delta18O_sw=delta_sw_vpdb_el, genus="G. ruber",
+            delta18O_c=delta_c,
+            delta18O_sw=delta_sw_vpdb_el,
+            genus="G. ruber",
             delta18O_sw_scale="vpdb",
         )
         # Kim & O'Neil takes δc on VPDB (it converts internally) and
         # δw on VSMOW. Pass δc_VPDB and δw_VSMOW directly.
         T_kim = analyzer.compute_paleotemperature_kim_oneil(
-            delta18O_sw=0.0, delta18O_c=delta_c,
+            delta18O_sw=0.0,
+            delta18O_c=delta_c,
         )
 
         # All three should give reasonable warm water temperatures (20-30 C)
@@ -239,7 +251,9 @@ class TestPaleotemperatureEdgeCases:
 
         # When delta_c = delta_sw on the same (VPDB) scale, delta_diff = 0
         T_erez = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=0.0, delta18O_c=0.0, delta18O_sw_scale="vpdb",
+            delta18O_sw=0.0,
+            delta18O_c=0.0,
+            delta18O_sw_scale="vpdb",
         )
         assert T_erez == 17.0, f"Expected 17.0, got {T_erez}"
 
@@ -252,7 +266,9 @@ class TestPaleotemperatureEdgeCases:
         analyzer = IsotopeAnalyzer()
 
         T = analyzer.compute_paleotemperature_erez_luz(
-            delta18O_sw=2.0, delta18O_c=-2.0, delta18O_sw_scale="vpdb",
+            delta18O_sw=2.0,
+            delta18O_c=-2.0,
+            delta18O_sw_scale="vpdb",
         )
         -2.0 - 2.0  # = -4
         expected = 17.0 - 4.52 * (-4) + 0.03 * (16)  # = 17 + 18.08 + 0.48 = 35.56
@@ -263,11 +279,15 @@ class TestPaleotemperatureEdgeCases:
         analyzer = IsotopeAnalyzer()
 
         T_unknown = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, delta18O_sw=0.0, genus="unknown_genus",
+            delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            genus="unknown_genus",
             delta18O_sw_scale="vpdb",
         )
         T_generic = analyzer.compute_paleotemperature_bemis(
-            delta18O_c=-1.0, delta18O_sw=0.0, genus="generic",
+            delta18O_c=-1.0,
+            delta18O_sw=0.0,
+            genus="generic",
             delta18O_sw_scale="vpdb",
         )
 

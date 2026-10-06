@@ -39,8 +39,7 @@ class TestTokensAreClassified:
         *before* that call. Checking its size is the direct guard.
         """
         assert len(lexer._group_rules) > 0, (
-            "_group_rules is empty, so no token can ever be classified and "
-            "every token falls through to UNKNOWN"
+            "_group_rules is empty, so no token can ever be classified and every token falls through to UNKNOWN"
         )
 
     def test_not_everything_is_unknown(self, lexer):
@@ -98,20 +97,12 @@ class TestBothTokenizeApisAgree:
 
     @pytest.mark.parametrize("source", SOURCES)
     def test_incremental_matches_batch(self, lexer, source):
-        batch = [
-            (t.type, t.value) for t in lexer.tokenize(source) if t.type is not TokenType.EOF
-        ]
-        incremental = [
-            (t.type, t.value) for t in lexer.tokenize_incremental(source) if t.type is not TokenType.EOF
-        ]
+        batch = [(t.type, t.value) for t in lexer.tokenize(source) if t.type is not TokenType.EOF]
+        incremental = [(t.type, t.value) for t in lexer.tokenize_incremental(source) if t.type is not TokenType.EOF]
         assert incremental == batch, "the two tokenisation APIs disagree"
 
     def test_incremental_classifies_types(self, lexer):
-        tokens = [
-            t
-            for t in lexer.tokenize_incremental("count = 42")
-            if t.type is not TokenType.EOF
-        ]
+        tokens = [t for t in lexer.tokenize_incremental("count = 42") if t.type is not TokenType.EOF]
         assert {t.type for t in tokens} != {TokenType.UNKNOWN}
 
 

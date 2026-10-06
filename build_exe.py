@@ -39,9 +39,7 @@ def get_conda_python():
         candidate = Path(override)
         if candidate.exists():
             return candidate
-        raise FileNotFoundError(
-            f"PALEOAST_BUILD_PYTHON points at {override!r}, which does not exist"
-        )
+        raise FileNotFoundError(f"PALEOAST_BUILD_PYTHON points at {override!r}, which does not exist")
 
     # Prefer whatever interpreter is running this script, provided it can
     # actually import the project's own dependencies.
@@ -53,7 +51,10 @@ def get_conda_python():
     candidates: list[Path] = []
     if env_name and prefix:
         candidates.append(Path(prefix) / ("python.exe" if sys.platform == "win32" else "bin/python"))
-    base = Path(os.environ.get("CONDA_PREFIX") or (r"D:\Program Files\ananconda3" if sys.platform == "win32" else "/opt/anaconda3"))
+    base = Path(
+        os.environ.get("CONDA_PREFIX")
+        or (r"D:\Program Files\ananconda3" if sys.platform == "win32" else "/opt/anaconda3")
+    )
     for name in ("past", "dev"):
         if sys.platform == "win32":
             candidates.append(base / "envs" / name / "python.exe")
@@ -75,9 +76,7 @@ def _has_build_deps(python: str | Path) -> bool:
     """True when this interpreter can import what the app needs at runtime."""
     try:
         probe = "import PyQt6, numpy, scipy, pandas, matplotlib, sklearn"
-        return subprocess.run(
-            [str(python), "-c", probe], capture_output=True, text=True
-        ).returncode == 0
+        return subprocess.run([str(python), "-c", probe], capture_output=True, text=True).returncode == 0
     except (OSError, ValueError):
         return False
 
@@ -91,9 +90,7 @@ def check_pyinstaller():
         print("正在安装 PyInstaller...")
         # Pin >=6: PaleoAST.spec uses the 6.x Analysis() signature. The 5.x-era
         # kwargs (win_no_prefer_redirects, cipher, ...) were removed in 6.0.
-        subprocess.run(
-            [str(python), "-m", "pip", "install", "pyinstaller>=6"], check=True
-        )
+        subprocess.run([str(python), "-m", "pip", "install", "pyinstaller>=6"], check=True)
         print("PyInstaller 安装完成!")
     else:
         print("PyInstaller 已安装")

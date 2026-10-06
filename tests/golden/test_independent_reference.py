@@ -114,9 +114,7 @@ def _reference_gpa(
             aligned[i] = _scale(aligned[i] @ rotation.T)
 
         consensus = _scale(aligned.mean(axis=0))
-        distances = np.array(
-            [np.sqrt(np.sum((aligned[i] - consensus) ** 2)) for i in range(len(aligned))]
-        )
+        distances = np.array([np.sqrt(np.sum((aligned[i] - consensus) ** 2)) for i in range(len(aligned))])
         final_sse = float(np.sum(distances**2))
 
         if previous_sse - final_sse <= tol:
@@ -152,9 +150,7 @@ def scallops() -> np.ndarray:
 
 class TestAgainstIndependentGPA:
     @pytest.mark.parametrize("fixture_name", ["hummingbirds", "scallops"])
-    def test_production_reaches_an_at_least_as_good_optimum(
-        self, fixture_name, request
-    ):
+    def test_production_reaches_an_at_least_as_good_optimum(self, fixture_name, request):
         """Production's objective must not be worse than the reference's.
 
         This is the falsifiable half of the cross-check. An implementation
@@ -182,9 +178,7 @@ class TestAgainstIndependentGPA:
         data = request.getfixturevalue(fixture_name)
         result = GPAAnalyzer().analyze(data)
         mean_shape = result.aligned_configurations.mean(axis=0)
-        residuals = np.linalg.norm(
-            result.aligned_configurations - mean_shape, axis=(1, 2)
-        )
+        residuals = np.linalg.norm(result.aligned_configurations - mean_shape, axis=(1, 2))
         assert_allclose(residuals, result.procrustes_distances, atol=_TOL)
 
     @pytest.mark.parametrize("fixture_name", ["hummingbirds", "scallops"])
@@ -206,10 +200,7 @@ class TestAgainstIndependentGPA:
 
         consensus = _scale(result.aligned_configurations.mean(axis=0))
         refit = np.array(
-            [
-                _scale(specimen @ _best_fit_rotation(specimen, consensus))
-                for specimen in result.aligned_configurations
-            ]
+            [_scale(specimen @ _best_fit_rotation(specimen, consensus)) for specimen in result.aligned_configurations]
         )
         assert_allclose(_scale(refit.mean(axis=0)), consensus, atol=1e-5)
 
@@ -238,35 +229,25 @@ class TestProcrustesInvariances:
         data = request.getfixturevalue(fixture_name)
         base = data[0]
         shift = np.array([13.7, -4.2, 0.5][: base.shape[1]])
-        assert procrustes_distance(base, base + shift) == pytest.approx(
-            0.0, abs=_TOL
-        )
+        assert procrustes_distance(base, base + shift) == pytest.approx(0.0, abs=_TOL)
 
     def test_rotation_invariance_2d(self, hummingbirds):
         base = hummingbirds[0]
         theta = 0.7341
-        rotation = np.array(
-            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
-        )
-        assert procrustes_distance(base, base @ rotation.T) == pytest.approx(
-            0.0, abs=_TOL
-        )
+        rotation = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        assert procrustes_distance(base, base @ rotation.T) == pytest.approx(0.0, abs=_TOL)
 
     def test_rotation_invariance_3d(self, scallops):
         base = scallops[0]
         # A rotation with no eigenvalue 1, so it is genuinely not the identity.
         theta = 0.9123
         rotation = rodrigues([1.0, 2.0, 3.0], theta)
-        assert procrustes_distance(base, base @ rotation.T) == pytest.approx(
-            0.0, abs=_TOL
-        )
+        assert procrustes_distance(base, base @ rotation.T) == pytest.approx(0.0, abs=_TOL)
 
     @pytest.mark.parametrize("factor", [0.5, 2.0, 137.0])
     def test_scaling_invariance(self, factor, scallops):
         base = scallops[0]
-        assert procrustes_distance(base, base * factor) == pytest.approx(
-            0.0, abs=_TOL
-        )
+        assert procrustes_distance(base, base * factor) == pytest.approx(0.0, abs=_TOL)
 
     def test_per_landmark_perturbation_is_not_invariant(self):
         """The mirror image of that property: deformation must register.
@@ -284,12 +265,7 @@ class TestProcrustesInvariances:
         """Symmetry, zero diagonal, non-negativity, triangle inequality."""
         aligned = GPAAnalyzer().analyze(hummingbirds).aligned_configurations
         n = len(aligned)
-        grid = np.array(
-            [
-                [procrustes_distance(aligned[i], aligned[j]) for j in range(n)]
-                for i in range(n)
-            ]
-        )
+        grid = np.array([[procrustes_distance(aligned[i], aligned[j]) for j in range(n)] for i in range(n)])
         assert_allclose(grid, grid.T, atol=_TOL)
         assert_allclose(np.diag(grid), 0.0, atol=_TOL)
         assert np.all(grid >= -_TOL), "distances must be non-negative"
@@ -304,9 +280,7 @@ class TestProcrustesInvariances:
 
 class TestAnalyticCases:
     def test_identical_configurations_are_zero(self, scallops):
-        assert procrustes_distance(scallops[0], scallops[0]) == pytest.approx(
-            0.0, abs=1e-12
-        )
+        assert procrustes_distance(scallops[0], scallops[0]) == pytest.approx(0.0, abs=1e-12)
 
     def test_tiny_real_displacement_is_not_clamped_to_zero(self, scallops):
         """The zero-clamp must not swallow a genuine difference.
@@ -380,7 +354,5 @@ def rodrigues(axis: list[float] | np.ndarray, theta: float) -> np.ndarray:
     """Rotation matrix about ``axis`` by ``theta`` (Rodrigues' formula)."""
     unit = np.asarray(axis, dtype=float)
     unit = unit / np.linalg.norm(unit)
-    skew = np.array(
-        [[0.0, -unit[2], unit[1]], [unit[2], 0.0, -unit[0]], [-unit[1], unit[0], 0.0]]
-    )
+    skew = np.array([[0.0, -unit[2], unit[1]], [unit[2], 0.0, -unit[0]], [-unit[1], unit[0], 0.0]])
     return np.eye(3) + np.sin(theta) * skew + (1 - np.cos(theta)) * (skew @ skew)

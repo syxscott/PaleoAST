@@ -99,9 +99,7 @@ def test_ca_first_axis_matches_the_textbook_svd(analyzer: DetrendedCAAnalyzer) -
 
     result = analyzer.correspondence(F)
     mine = result.row_scores[:, 0]
-    cosine = abs(
-        float(np.dot(mine, reference) / (np.linalg.norm(mine) * np.linalg.norm(reference)))
-    )
+    cosine = abs(float(np.dot(mine, reference) / (np.linalg.norm(mine) * np.linalg.norm(reference))))
     assert cosine == pytest.approx(1.0, abs=1e-9)
 
 
@@ -225,9 +223,7 @@ def test_dca_without_a_gradient_leaves_axis_one_alone(
     F, _gradient, _block = _gradient_dominant_table()
     ca = analyzer.correspondence(F)
     dca = analyzer.analyze(F, gradient=None)
-    np.testing.assert_allclose(
-        dca.row_scores[:, 0], ca.row_scores[:, 0], rtol=1e-12
-    )
+    np.testing.assert_allclose(dca.row_scores[:, 0], ca.row_scores[:, 0], rtol=1e-12)
     assert dca.retained_variance[0] == pytest.approx(1.0)
     assert dca.gradient is None
 

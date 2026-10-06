@@ -100,9 +100,9 @@ class TestJaccardBinarizationWarning:
             warnings.simplefilter("always")
             compute_distance_matrix(X, metric="jaccard")
             user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
-            assert any(
-                "Jaccard" in str(x.message) for x in user_warnings
-            ), f"Expected a Jaccard-related UserWarning, got: {[str(x.message) for x in w]}"
+            assert any("Jaccard" in str(x.message) for x in user_warnings), (
+                f"Expected a Jaccard-related UserWarning, got: {[str(x.message) for x in w]}"
+            )
 
     def test_binary_input_no_warning(self):
         """A pure 0/1 matrix must NOT trigger the warning."""
@@ -115,13 +115,9 @@ class TestJaccardBinarizationWarning:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             compute_distance_matrix(X, metric="jaccard")
-            jaccard_warnings = [
-                x for x in w
-                if issubclass(x.category, UserWarning) and "Jaccard" in str(x.message)
-            ]
+            jaccard_warnings = [x for x in w if issubclass(x.category, UserWarning) and "Jaccard" in str(x.message)]
             assert len(jaccard_warnings) == 0, (
-                f"Unexpected Jaccard warning on binary input: "
-                f"{[str(x.message) for x in jaccard_warnings]}"
+                f"Unexpected Jaccard warning on binary input: {[str(x.message) for x in jaccard_warnings]}"
             )
 
     def test_count_like_input_warns_and_suggests_bray_curtis(self):
@@ -135,10 +131,7 @@ class TestJaccardBinarizationWarning:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             compute_distance_matrix(X, metric="jaccard")
-            jaccard_warnings = [
-                x for x in w
-                if issubclass(x.category, UserWarning) and "Jaccard" in str(x.message)
-            ]
+            jaccard_warnings = [x for x in w if issubclass(x.category, UserWarning) and "Jaccard" in str(x.message)]
             assert len(jaccard_warnings) == 1
             assert "bray_curtis" in str(jaccard_warnings[0].message).lower()
 
@@ -157,7 +150,5 @@ class _Raises:
         if exc_type is None:
             raise AssertionError("Expected ValueError but no exception was raised")
         if not issubclass(exc_type, ValueError):
-            raise AssertionError(
-                f"Expected ValueError but got {exc_type.__name__}: {exc}"
-            )
+            raise AssertionError(f"Expected ValueError but got {exc_type.__name__}: {exc}")
         return True

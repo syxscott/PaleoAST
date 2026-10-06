@@ -67,15 +67,20 @@ def test_axis_from_a_section_uses_its_ages_and_reports_a_missing_age_model() -> 
     wrong by a factor of a million.
     """
     with_ages = StratigraphicSection(
-        name="Section A", heights=np.array([10.0, 20.0, 30.0]), thicknesses=np.ones(3),
-        lithologies=["s", "sh", "s"], ages=np.array([30.0, 20.0, 10.0]),
+        name="Section A",
+        heights=np.array([10.0, 20.0, 30.0]),
+        thicknesses=np.ones(3),
+        lithologies=["s", "sh", "s"],
+        ages=np.array([30.0, 20.0, 10.0]),
     )
     axis = TimeAxis.from_section(with_ages)
     assert axis.ages_ma.tolist() == [10.0, 20.0, 30.0]
     assert "Section A" in axis.source
 
     without = StratigraphicSection(
-        name="Section B", heights=np.array([10.0, 20.0]), thicknesses=np.ones(2),
+        name="Section B",
+        heights=np.array([10.0, 20.0]),
+        thicknesses=np.ones(2),
         lithologies=["s", "sh"],
     )
     with pytest.raises(DataValidationError, match="Section B"):
@@ -146,9 +151,7 @@ def test_axis_rejects_degenerate_input() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "unit,factor_to_ma", [("Ma", 1.0), ("kyr", 0.001), ("yr", 1e-6), ("KYA", 0.001)]
-)
+@pytest.mark.parametrize("unit,factor_to_ma", [("Ma", 1.0), ("kyr", 0.001), ("yr", 1e-6), ("KYA", 0.001)])
 def test_input_units_are_all_accepted_and_normalised_to_ma(unit: str, factor_to_ma: float) -> None:
     """The declared multipliers are the contract; assert them all at once.
 
@@ -174,9 +177,7 @@ def test_output_unit_conversions_are_exact_multiples() -> None:
     np.testing.assert_allclose(axis.to_kyr(), [0.0, 1000.0, 2500.0], atol=1e-9)
     np.testing.assert_allclose(axis.to_bp_years(), [0.0, 1e6, 2.5e6], rtol=1e-12)
     np.testing.assert_allclose(axis.calendar_years(), [2020.0, -997980.0, -2497980.0], atol=1.0)
-    np.testing.assert_allclose(
-        axis.calendar_years(present_year=1950), [1950.0, -998050.0, -2498050.0], atol=1.0
-    )
+    np.testing.assert_allclose(axis.calendar_years(present_year=1950), [1950.0, -998050.0, -2498050.0], atol=1.0)
     # Round trip through the advertised units.
     np.testing.assert_allclose(TimeAxis.from_ages(axis.to_kyr(), units="kyr").ages_ma, axis.ages_ma)
 
@@ -193,9 +194,7 @@ def test_period_and_frequency_conversion_is_the_hundredfold_rule() -> None:
     assert axis.frequency_per_ma(405.0) == pytest.approx(2.469135802, rel=1e-9)
     assert axis.period_kyr(2.4691358024691358) == pytest.approx(405.0, rel=1e-9)
     periods = np.array([19.0, 23.0, 41.0, 100.0, 400.0])
-    np.testing.assert_allclose(
-        axis.period_kyr(axis.frequency_per_ma(periods)), periods, rtol=1e-12
-    )
+    np.testing.assert_allclose(axis.period_kyr(axis.frequency_per_ma(periods)), periods, rtol=1e-12)
     # Vector and scalar paths must agree.
     assert axis.frequency_per_ma(100.0) == pytest.approx(float(axis.frequency_per_ma([100.0])[0]))
 

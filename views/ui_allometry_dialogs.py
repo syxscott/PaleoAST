@@ -176,9 +176,7 @@ class BaseAllometryDialog(QDialog):
         else:
             n = getattr(cached, "aligned_configurations", None)
             shape = getattr(n, "shape", None)
-            self._gpa_result_label.setText(
-                _("Cached GPA result available: shape = {0}").format(shape)
-            )
+            self._gpa_result_label.setText(_("Cached GPA result available: shape = {0}").format(shape))
 
     def showEvent(self, event) -> None:
         """Refresh the GPA label every time the dialog is shown."""

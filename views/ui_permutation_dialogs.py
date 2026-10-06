@@ -23,6 +23,7 @@ re-used for future additions):
 A short statistical note is included so the user knows what the test
 does, not just how to set it up.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -117,9 +118,7 @@ class PermutationTestDialog(QDialog):
         for label, _value in _METRICS:
             self._metric_combo.addItem(label)
         self._metric_combo.setCurrentText("Bray-Curtis")
-        self._metric_combo.setToolTip(
-            _("Distance metric used to build the sample-sample dissimilarity matrix.")
-        )
+        self._metric_combo.setToolTip(_("Distance metric used to build the sample-sample dissimilarity matrix."))
         form.addRow(_("Distance metric:"), self._metric_combo)
 
         # Permutation count
@@ -129,9 +128,7 @@ class PermutationTestDialog(QDialog):
         self._n_perm_spin.setRange(99, 99999)
         self._n_perm_spin.setSingleStep(100)
         self._n_perm_spin.setValue(9999)
-        self._n_perm_spin.setToolTip(
-            _("Number of random permutations used to estimate the p-value.")
-        )
+        self._n_perm_spin.setToolTip(_("Number of random permutations used to estimate the p-value."))
         n_perm_layout.addWidget(self._n_perm_spin)
         self._slow_warning_label = QLabel()
         self._slow_warning_label.setStyleSheet("color: #c08020;")
@@ -147,9 +144,7 @@ class PermutationTestDialog(QDialog):
         # dedicated "blank" sentinel.  get_parameters() translates it back
         # to ``None`` so downstream code receives a real "no seed" value.
         self._seed_spin.setSpecialValueText(_("(empty — random)"))
-        self._seed_spin.setToolTip(
-            _("Reproducibility seed. Leave empty for a fresh permutation draw.")
-        )
+        self._seed_spin.setToolTip(_("Reproducibility seed. Leave empty for a fresh permutation draw."))
         form.addRow(_("Random seed:"), self._seed_spin)
 
         root.addLayout(form)
@@ -168,9 +163,7 @@ class PermutationTestDialog(QDialog):
         )
         bottom.addWidget(self._seed_warning_check)
         bottom.addStretch(1)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         bottom.addWidget(buttons)
@@ -267,8 +260,7 @@ class PermutationTestDialog(QDialog):
         if self._seed_warning_check.isChecked() and params["random_seed"] is None:
             # Match the stats-layer convention: no seed ⇒ non-reproducible.
             warnings.warn(
-                "PermutationTestDialog: random_seed is None — permutation "
-                "results are not reproducible.",
+                "PermutationTestDialog: random_seed is None — permutation results are not reproducible.",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -366,9 +358,7 @@ class PreferencesDialog(QDialog):
         lang_form = QFormLayout(lang_group)
         self._language_edit = QLineEdit(self._current["language"])
         self._language_edit.setPlaceholderText("en")
-        self._language_edit.setToolTip(
-            _("Language code (e.g. ``en``, ``zh``).  Takes effect on restart.")
-        )
+        self._language_edit.setToolTip(_("Language code (e.g. ``en``, ``zh``).  Takes effect on restart."))
         lang_form.addRow(_("Language:"), self._language_edit)
         root.addWidget(lang_group)
 
@@ -394,9 +384,7 @@ class PreferencesDialog(QDialog):
         plot_form.addRow(_("Figure DPI:"), self._dpi_spin)
         self._figsize_edit = QLineEdit(self._current["plot_figsize"])
         self._figsize_edit.setPlaceholderText("width,height (inches)")
-        self._figsize_edit.setToolTip(
-            _("Two comma-separated numbers, e.g. ``8,6`` for 8 inches wide.")
-        )
+        self._figsize_edit.setToolTip(_("Two comma-separated numbers, e.g. ``8,6`` for 8 inches wide."))
         plot_form.addRow(_("Figure size:"), self._figsize_edit)
         root.addWidget(plot_group)
 
@@ -413,8 +401,10 @@ class PreferencesDialog(QDialog):
         self._r_rscript_edit = QLineEdit(self._current["r_rscript"], path_row)
         self._r_rscript_edit.setPlaceholderText(_("auto-detect"))
         self._r_rscript_edit.setToolTip(
-            _("Leave empty to find Rscript automatically. Otherwise give the full\n"
-              "path, e.g. D:\\Program Files\\R\\R-4.5.2\\bin\\x64\\Rscript.exe")
+            _(
+                "Leave empty to find Rscript automatically. Otherwise give the full\n"
+                "path, e.g. D:\\Program Files\\R\\R-4.5.2\\bin\\x64\\Rscript.exe"
+            )
         )
         path_layout.addWidget(self._r_rscript_edit)
         detect_btn = QPushButton(_("Detect R"), path_row)
@@ -431,9 +421,7 @@ class PreferencesDialog(QDialog):
         self._r_theme_combo = QComboBox(r_group)
         self._r_theme_combo.addItems(list(self.R_THEMES))
         self._r_theme_combo.setCurrentText(self._current["r_theme"])
-        self._r_theme_combo.setToolTip(
-            _("ggplot2 theme written into the script as one THEME line.")
-        )
+        self._r_theme_combo.setToolTip(_("ggplot2 theme written into the script as one THEME line."))
         r_form.addRow(_("Theme:"), self._r_theme_combo)
 
         self._r_size_spin = QDoubleSpinBox(r_group)
@@ -462,9 +450,11 @@ class PreferencesDialog(QDialog):
         idx = self._r_palette_combo.findData(self._current["r_palette"])
         self._r_palette_combo.setCurrentIndex(max(0, idx))
         self._r_palette_combo.setToolTip(
-            _("Colour set for the groups in the figure. Okabe-Ito stays "
-              "separable for colour-blind readers and in greyscale; "
-              "viridis suits a continuous magnitude rather than a class.")
+            _(
+                "Colour set for the groups in the figure. Okabe-Ito stays "
+                "separable for colour-blind readers and in greyscale; "
+                "viridis suits a continuous magnitude rather than a class."
+            )
         )
         r_form.addRow(_("Group colours:"), self._r_palette_combo)
 
@@ -473,9 +463,7 @@ class PreferencesDialog(QDialog):
         self._r_timeout_spin.setSingleStep(30)
         self._r_timeout_spin.setSuffix(_(" s"))
         self._r_timeout_spin.setValue(self._current["r_timeout"])
-        self._r_timeout_spin.setToolTip(
-            _("How long to wait for R before giving up. A huge grid can be slow.")
-        )
+        self._r_timeout_spin.setToolTip(_("How long to wait for R before giving up. A huge grid can be slow."))
         r_form.addRow(_("Timeout:"), self._r_timeout_spin)
         root.addWidget(r_group)
         # Push the action buttons to the bottom while the groups above stay
@@ -485,9 +473,7 @@ class PreferencesDialog(QDialog):
         # original problem of stretched group boxes.
         root.addStretch(1)
         # --- Bottom buttons -----------------------------------------------
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -509,9 +495,7 @@ class PreferencesDialog(QDialog):
 
         exe = find_rscript(self._r_rscript_edit.text().strip())
         if exe is None:
-            self._r_detected.setText(
-                _("Rscript not found. Install R, or set its path above.")
-            )
+            self._r_detected.setText(_("Rscript not found. Install R, or set its path above."))
         else:
             self._r_detected.setText(_("Found: {0}").format(exe))
 

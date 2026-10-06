@@ -91,12 +91,8 @@ class TestSurfaceNormalsOnCurvedSurface:
             cos_angle = abs(float(n @ a))
             if cos_angle < 0.85:
                 bad.append((p, a, n, cos_angle))
-        assert not bad, (
-            "normals disagree with analytic gradient at "
-            + ", ".join(
-                f"point {p}: analytic={a}, pca={n}, cos={c:.3f}"
-                for p, a, n, c in bad[:3]
-            )
+        assert not bad, "normals disagree with analytic gradient at " + ", ".join(
+            f"point {p}: analytic={a}, pca={n}, cos={c:.3f}" for p, a, n, c in bad[:3]
         )
 
     def test_plane_normals_point_out_of_plane(self):
@@ -152,9 +148,7 @@ class TestSlidingProjectionInvariance:
         Q = _rotation(np.random.default_rng(2))
         rotated_consensus = consensus @ Q.T
         rotated_config = config @ Q.T
-        rotated_projected = _slide_surface_tangent_plane(
-            rotated_config.copy(), rotated_consensus, surface, 3
-        )
+        rotated_projected = _slide_surface_tangent_plane(rotated_config.copy(), rotated_consensus, surface, 3)
 
         # rotated(projection) ≈ projection(rotated), modulo the local PCA
         # sign choice; in either case the two must agree within fp64

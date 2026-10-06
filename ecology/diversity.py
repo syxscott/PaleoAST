@@ -414,15 +414,10 @@ class DiversityAnalyzer:
 
             n_samples = abundance_matrix.shape[0]
             sample_sizes = abundance_matrix.sum(axis=1)
-            sample_sizes_unequal = (
-                np.ptp(sample_sizes) > 0 if n_samples > 1 else False
-            )
+            sample_sizes_unequal = np.ptp(sample_sizes) > 0 if n_samples > 1 else False
 
             # Per-sample raw indices (unchanged behaviour)
-            results = [
-                compute_diversity_indices(abundance_matrix[i], sample_names[i])
-                for i in range(n_samples)
-            ]
+            results = [compute_diversity_indices(abundance_matrix[i], sample_names[i]) for i in range(n_samples)]
 
             if not compute_standardized:
                 return results
@@ -438,9 +433,7 @@ class DiversityAnalyzer:
 
             for q in q_values:
                 if q not in (0, 1, 2):
-                    raise ValueError(
-                        f"q must be 0, 1, or 2, got {q}"
-                    )
+                    raise ValueError(f"q must be 0, 1, or 2, got {q}")
                 for i, res in enumerate(results):
                     single_row = abundance_matrix[i : i + 1]
                     raref = coverage_rarefaction_hill(
@@ -455,12 +448,8 @@ class DiversityAnalyzer:
                     meta = res.metadata.setdefault("standardized_hill", {})
                     for c_target in coverage_levels:
                         idx = int(np.argmin(np.abs(cl - c_target)))
-                        meta.setdefault(f"q{q}", {})[f"C={c_target:.2f}"] = float(
-                            raref.expected_richness[idx]
-                        )
-                    meta.setdefault("asymptote", {})[f"q{q}"] = float(
-                        raref.asymptote_estimate[0]
-                    )
+                        meta.setdefault(f"q{q}", {})[f"C={c_target:.2f}"] = float(raref.expected_richness[idx])
+                    meta.setdefault("asymptote", {})[f"q{q}"] = float(raref.asymptote_estimate[0])
 
             # Warning + explanatory note when sample sizes differ
             if sample_sizes_unequal:

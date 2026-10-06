@@ -14,6 +14,7 @@ This test reads both translation files via :mod:`ast`, expands their
 * no key is duplicated within either file;
 * values are non-empty strings.
 """
+
 from __future__ import annotations
 
 import ast
@@ -68,8 +69,7 @@ def test_zh_has_no_duplicate_keys() -> None:
                 if isinstance(target, ast.Name) and target.id == "TRANSLATIONS":
                     keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
                     assert len(keys) == len(set(keys)), (
-                        "Duplicate keys detected in translations_zh.py: "
-                        f"{sorted(k for k in keys if keys.count(k) > 1)}"
+                        f"Duplicate keys detected in translations_zh.py: {sorted(k for k in keys if keys.count(k) > 1)}"
                     )
 
 
@@ -82,8 +82,7 @@ def test_en_has_no_duplicate_keys() -> None:
                 if isinstance(target, ast.Name) and target.id == "TRANSLATIONS":
                     keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
                     assert len(keys) == len(set(keys)), (
-                        "Duplicate keys detected in translations_en.py: "
-                        f"{sorted(k for k in keys if keys.count(k) > 1)}"
+                        f"Duplicate keys detected in translations_en.py: {sorted(k for k in keys if keys.count(k) > 1)}"
                     )
 
 

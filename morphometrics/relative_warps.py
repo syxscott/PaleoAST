@@ -301,9 +301,7 @@ class RelativeWarpsAnalyzer:
             # reports ~0 for a zero eigenvalue, and an extreme α can
             # underflow the weight to 0), so the only configuration
             # consistent with any requested score is the mean shape.
-            self._logger.warning(
-                f"Warp {warp_number} has a non-invertible weight {weight!r}; returning the mean shape"
-            )
+            self._logger.warning(f"Warp {warp_number} has a non-invertible weight {weight!r}; returning the mean shape")
             amplitude = 0.0
         else:
             amplitude = warp_score / weight

@@ -40,9 +40,7 @@ def three_blobs(
     if centers is None:
         centers = np.array([[0.0, 0.0], [8.0, 0.0], [0.0, 8.0]])
     rng = np.random.default_rng(seed)
-    return np.vstack(
-        [c + rng.normal(0, spread, (per_blob, centers.shape[1])) for c in centers]
-    )
+    return np.vstack([c + rng.normal(0, spread, (per_blob, centers.shape[1])) for c in centers])
 
 
 # ---------------------------------------------------------------------------
@@ -52,9 +50,7 @@ def three_blobs(
 
 def test_kmeans_recovers_separated_blobs(analyzer: ClusteringAnalyzer) -> None:
     """Three far-apart blobs must come back as three clusters, one each."""
-    result = analyzer.analyze_kmeans(
-        three_blobs(), n_clusters=3, random_seed=0, n_init=10
-    )
+    result = analyzer.analyze_kmeans(three_blobs(), n_clusters=3, random_seed=0, n_init=10)
     assert result.n_clusters == 3
     assert sorted(result.cluster_sizes().values()) == [20, 20, 20]
     # Each blob internally tight, so the silhouette is close to its maximum.
@@ -67,9 +63,7 @@ def test_kmeans_recovers_separated_blobs(analyzer: ClusteringAnalyzer) -> None:
     # a wide margin that still fails if a blob was split or merged.
     true_centers = np.array([[0.0, 0.0], [8.0, 0.0], [0.0, 8.0]])
     for center in true_centers:
-        nearest = result.centroids[
-            np.argmin(np.linalg.norm(result.centroids - center, axis=1))
-        ]
+        nearest = result.centroids[np.argmin(np.linalg.norm(result.centroids - center, axis=1))]
         assert np.allclose(nearest, center, atol=0.5)
 
 

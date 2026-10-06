@@ -167,8 +167,7 @@ def _as_points(
     )
     if pts.ndim != 2:
         raise MatrixDimensionError(
-            f"{name} must be a 2-D array of points with shape (n, d), got "
-            f"shape {pts.shape}",
+            f"{name} must be a 2-D array of points with shape (n, d), got shape {pts.shape}",
             details={"shape": tuple(int(x) for x in pts.shape)},
         )
     if pts.shape[1] < min_dims:
@@ -273,8 +272,7 @@ def contiguity_weights(
                 w[v, u] = 1.0
     else:
         raise DataValidationError(
-            f"contiguity_weights: method must be 'knn' or 'delaunay', got "
-            f"{method!r}",
+            f"contiguity_weights: method must be 'knn' or 'delaunay', got {method!r}",
             details={"method": method},
         )
 
@@ -640,8 +638,7 @@ class SphericalStatsResult:
         """Generate summary text."""
         if self.concentrated and self.mean_direction is not None:
             where = (
-                f"{_('Azimuth')}: {self.mean_azimuth_deg:.1f} deg, "
-                f"{_('polar angle')}: {self.mean_polar_deg:.1f} deg"
+                f"{_('Azimuth')}: {self.mean_azimuth_deg:.1f} deg, {_('polar angle')}: {self.mean_polar_deg:.1f} deg"
             )
         else:
             where = _("undefined (R-bar ~ 0, no preferred direction)")
@@ -662,11 +659,7 @@ class SphericalStatsResult:
     def to_dict(self) -> dict[str, Any]:
         """JSON-friendly view."""
         return {
-            "mean_direction": (
-                [float(x) for x in self.mean_direction]
-                if self.mean_direction is not None
-                else None
-            ),
+            "mean_direction": ([float(x) for x in self.mean_direction] if self.mean_direction is not None else None),
             "mean_azimuth_deg": float(self.mean_azimuth_deg),
             "mean_polar_deg": float(self.mean_polar_deg),
             "resultant_length": float(self.resultant_length),
@@ -794,17 +787,14 @@ class SpatialStatsAnalyzer:
 
             if weights is None and coordinates is None:
                 raise DataValidationError(
-                    "Moran's I needs either coordinates or a weight matrix; "
-                    "both were None",
+                    "Moran's I needs either coordinates or a weight matrix; both were None",
                     details={"n_obs": n},
                 )
 
             if weights is not None:
                 w, scheme = self._prepare_weights(weights, n)
             else:
-                pts = _as_points(
-                    coordinates, min_points=MORANS_MIN_POINTS, min_dims=2
-                )
+                pts = _as_points(coordinates, min_points=MORANS_MIN_POINTS, min_dims=2)
                 if int(pts.shape[0]) != n:
                     raise MatrixDimensionError(
                         f"Moran's I: got {n} values but {pts.shape[0]} "
@@ -830,11 +820,7 @@ class SpatialStatsAnalyzer:
             )
             null = perm.null_distribution
             null_sd = float(np.std(null, ddof=1)) if null.size > 1 else 0.0
-            z_score = (
-                (observed - float(np.mean(null))) / null_sd
-                if null_sd > 0
-                else float("nan")
-            )
+            z_score = (observed - float(np.mean(null))) / null_sd if null_sd > 0 else float("nan")
 
             result = MoransIResult(
                 statistic=float(observed),
@@ -896,15 +882,12 @@ class SpatialStatsAnalyzer:
             )
         return weights / row_sums, scheme
 
-    def _prepare_weights(
-        self, weights: npt.NDArray, n: int
-    ) -> tuple[npt.NDArray, str]:
+    def _prepare_weights(self, weights: npt.NDArray, n: int) -> tuple[npt.NDArray, str]:
         """Validate a supplied weight matrix and row-standardise it."""
         w = np.asarray(weights, dtype=float)
         if w.ndim != 2 or w.shape[0] != w.shape[1]:
             raise MatrixDimensionError(
-                f"Moran's I: weights must be a square (n, n) matrix, got shape "
-                f"{w.shape}",
+                f"Moran's I: weights must be a square (n, n) matrix, got shape {w.shape}",
                 details={"shape": tuple(int(x) for x in w.shape)},
             )
         if w.shape[0] != n:
@@ -920,8 +903,7 @@ class SpatialStatsAnalyzer:
             )
         if np.any(w < 0):
             raise DataValidationError(
-                "Moran's I: weights must be non-negative; a negative weight "
-                "makes the contiguity meaningless",
+                "Moran's I: weights must be non-negative; a negative weight makes the contiguity meaningless",
                 details={"n_negative": int(np.sum(w < 0))},
             )
         # Symmetrise defensively: an asymmetric W breaks the row
@@ -987,8 +969,7 @@ class SpatialStatsAnalyzer:
             )
             if vals.ndim != 1:
                 raise MatrixDimensionError(
-                    f"grid_interpolate: values must be 1-D with one entry per "
-                    f"sample, got shape {vals.shape}",
+                    f"grid_interpolate: values must be 1-D with one entry per sample, got shape {vals.shape}",
                     details={"shape": tuple(int(x) for x in vals.shape)},
                 )
             if method not in ("idw", "nearest"):
@@ -1004,8 +985,7 @@ class SpatialStatsAnalyzer:
                         details={"method": method},
                     )
                 raise DataValidationError(
-                    f"grid_interpolate: method must be 'idw' or 'nearest', got "
-                    f"{method!r}",
+                    f"grid_interpolate: method must be 'idw' or 'nearest', got {method!r}",
                     details={"method": method},
                 )
             if int(n_points) < 2:
@@ -1015,8 +995,7 @@ class SpatialStatsAnalyzer:
                 )
             if not np.isfinite(power) or float(power) <= 0:
                 raise DataValidationError(
-                    f"grid_interpolate: power must be a positive finite number, "
-                    f"got {power!r}",
+                    f"grid_interpolate: power must be a positive finite number, got {power!r}",
                     details={"power": power},
                 )
 
@@ -1046,12 +1025,10 @@ class SpatialStatsAnalyzer:
             ys = np.linspace(float(pts[:, 1].min()), float(pts[:, 1].max()), int(n_points))
             mesh_x, mesh_y = np.meshgrid(xs, ys, indexing="xy")
 
-            surface = self._evaluate(
-                tree, vals, mesh_x.ravel(), mesh_y.ravel(), method, float(power), kk
-            ).reshape(int(n_points), int(n_points))
-            fitted = self._evaluate(
-                tree, vals, pts[:, 0], pts[:, 1], method, float(power), kk
+            surface = self._evaluate(tree, vals, mesh_x.ravel(), mesh_y.ravel(), method, float(power), kk).reshape(
+                int(n_points), int(n_points)
             )
+            fitted = self._evaluate(tree, vals, pts[:, 0], pts[:, 1], method, float(power), kk)
             residuals = vals - fitted
             rmse = float(np.sqrt(np.mean(residuals**2))) if residuals.size else 0.0
 
@@ -1070,8 +1047,7 @@ class SpatialStatsAnalyzer:
             self._last_interpolation = result
             self._last_result = result
             self._logger.info(
-                "grid_interpolate completed: method=%s, %d samples -> %dx%d grid, "
-                "RMSE=%.3e",
+                "grid_interpolate completed: method=%s, %d samples -> %dx%d grid, RMSE=%.3e",
                 method,
                 n,
                 int(n_points),
@@ -1126,9 +1102,7 @@ class SpatialStatsAnalyzer:
             d = distance[blend]
             # d > 0 on these rows, by construction of ``coincident``.
             weights = 1.0 / np.power(d, power)
-            out[blend] = np.sum(weights * values[index[blend]], axis=1) / np.sum(
-                weights, axis=1
-            )
+            out[blend] = np.sum(weights * values[index[blend]], axis=1) / np.sum(weights, axis=1)
         return out
 
     # -- Nearest neighbour -------------------------------------------------
@@ -1204,15 +1178,13 @@ class SpatialStatsAnalyzer:
             pts = _as_points(coordinates, min_points=3, min_dims=2)
             if int(pts.shape[1]) != 2:
                 raise MatrixDimensionError(
-                    f"nearest_neighbour_stats needs 2-D coordinates (n, 2), got "
-                    f"{pts.shape[1]} columns",
+                    f"nearest_neighbour_stats needs 2-D coordinates (n, 2), got {pts.shape[1]} columns",
                     details={"n_dims": int(pts.shape[1]), "required": 2},
                 )
             _reject_coincident(pts, what="nearest_neighbour_stats")
             if int(n_simulations) < 1:
                 raise DataValidationError(
-                    "nearest_neighbour_stats: n_simulations must be >= 1, got "
-                    f"{n_simulations}",
+                    f"nearest_neighbour_stats: n_simulations must be >= 1, got {n_simulations}",
                     details={"n_simulations": int(n_simulations)},
                 )
 
@@ -1327,11 +1299,7 @@ class SpatialStatsAnalyzer:
             )
             null = perm.null_distribution
             null_sd = float(np.std(null, ddof=1)) if null.size > 1 else 0.0
-            z_score = (
-                (observed - float(np.mean(null))) / null_sd
-                if null_sd > 0
-                else float("nan")
-            )
+            z_score = (observed - float(np.mean(null))) / null_sd if null_sd > 0 else float("nan")
 
             observed_radii: npt.NDArray | None = None
             cumulative: npt.NDArray | None = None
@@ -1340,23 +1308,17 @@ class SpatialStatsAnalyzer:
                 radii = np.asarray(r_values, dtype=float)
                 if radii.ndim != 1 or radii.size == 0:
                     raise DataValidationError(
-                        "nearest_neighbour_stats: r_values must be a non-empty "
-                        f"1-D array, got shape {radii.shape}",
+                        f"nearest_neighbour_stats: r_values must be a non-empty 1-D array, got shape {radii.shape}",
                         details={"shape": tuple(int(x) for x in radii.shape)},
                     )
                 if not np.all(np.isfinite(radii)) or np.any(radii < 0):
                     raise DataValidationError(
-                        "nearest_neighbour_stats: r_values must be finite and "
-                        "non-negative",
+                        "nearest_neighbour_stats: r_values must be finite and non-negative",
                         details={"n_bad": int(np.sum(~np.isfinite(radii) | (radii < 0)))},
                     )
                 observed_radii = np.sort(radii)
-                cumulative = np.array(
-                    [float(np.mean(nn_distances <= r)) for r in observed_radii]
-                )
-                csr_expected = 1.0 - np.exp(
-                    -np.pi * observed_radii**2 * n_used / used_area
-                )
+                cumulative = np.array([float(np.mean(nn_distances <= r)) for r in observed_radii])
+                csr_expected = 1.0 - np.exp(-np.pi * observed_radii**2 * n_used / used_area)
 
             result = NearestNeighbourResult(
                 nn_distances=nn_distances,
@@ -1378,8 +1340,7 @@ class SpatialStatsAnalyzer:
             self._last_nearest_neighbour = result
             self._last_result = result
             self._logger.info(
-                "nearest_neighbour_stats completed: mean_NN=%.4f, expected=%.4f, "
-                "R=%.4f, z=%.2f",
+                "nearest_neighbour_stats completed: mean_NN=%.4f, expected=%.4f, R=%.4f, z=%.2f",
                 result.mean_nn,
                 result.expected_nn,
                 result.index,
@@ -1466,8 +1427,7 @@ class SpatialStatsAnalyzer:
             n = int(vecs.shape[0])
             if n < 3:
                 raise DataValidationError(
-                    f"spherical_stats needs at least 3 vectors for Fisher's "
-                    f"small-sample kappa correction, got {n}",
+                    f"spherical_stats needs at least 3 vectors for Fisher's small-sample kappa correction, got {n}",
                     details={"n_vectors": n, "required": 3},
                 )
             lengths = np.linalg.norm(vecs, axis=1)
@@ -1484,8 +1444,7 @@ class SpatialStatsAnalyzer:
                 w = np.asarray(weights, dtype=float).ravel()
                 if w.size != n:
                     raise MatrixDimensionError(
-                        f"spherical_stats: got {n} vectors but {w.size} weights; "
-                        "there must be one weight per vector",
+                        f"spherical_stats: got {n} vectors but {w.size} weights; there must be one weight per vector",
                         details={"n_vectors": n, "n_weights": int(w.size)},
                     )
                 if not np.all(np.isfinite(w)) or np.any(w < 0):
@@ -1530,12 +1489,8 @@ class SpatialStatsAnalyzer:
                 # the formula is 0/0 rather than a number.
                 kappa = float("inf")
             else:
-                kappa_uncorrected = (
-                    effective_n * r_bar * (1.0 - r_bar**2) / (1.0 - r_bar)
-                )
-                kappa = (2.0 * (effective_n - 1.0) - kappa_uncorrected) / (
-                    effective_n - 2.0
-                )
+                kappa_uncorrected = effective_n * r_bar * (1.0 - r_bar**2) / (1.0 - r_bar)
+                kappa = (2.0 * (effective_n - 1.0) - kappa_uncorrected) / (effective_n - 2.0)
 
             cone_rad = _confidence_cone(kappa)
             if kappa <= 0.0:
@@ -1562,8 +1517,7 @@ class SpatialStatsAnalyzer:
             self._last_spherical = result
             self._last_result = result
             self._logger.info(
-                "spherical_stats completed: R=%.4f, R-bar=%.4f, kappa=%.4f, "
-                "cone=%.2f deg",
+                "spherical_stats completed: R=%.4f, R-bar=%.4f, kappa=%.4f, cone=%.2f deg",
                 result.resultant_length,
                 result.mean_resultant_length,
                 result.kappa,

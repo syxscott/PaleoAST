@@ -77,9 +77,7 @@ class MissingValueReportWidget(QWidget):
 
         # Show rows and columns with NaN
         self.distribution_label.setText(
-            _("Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}").format(
-                rows_with_nan, n_rows, cols_with_nan, n_cols
-            )
+            _("Rows with NaN: {0}/{1} | Columns with NaN: {2}/{3}").format(rows_with_nan, n_rows, cols_with_nan, n_cols)
         )
 
         # Statistics
@@ -224,10 +222,7 @@ class ImputationDialog(BaseAnalysisDialog):
         """Setup the dialog UI."""
         # Header
         header = QLabel(
-            _(
-                "<h2>Missing-Value Centre</h2>"
-                "<p>Missing values were detected in the data — choose a strategy.</p>"
-            )
+            _("<h2>Missing-Value Centre</h2><p>Missing values were detected in the data — choose a strategy.</p>")
         )
         header.setWordWrap(True)
         self.layout().addWidget(header)

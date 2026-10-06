@@ -66,15 +66,23 @@ class TestBootstrapReproducibility:
         r1 = analyzer1.analyze(trait, time_intervals=times, confidence_level=0.95)
         # Now bootstrap with explicit seed
         ci_lower1, ci_upper1 = analyzer1._bootstrap_rate_ci(
-            trait, times, r1.best_model, confidence_level=0.95,
-            n_bootstrap=99, seed=2026,
+            trait,
+            times,
+            r1.best_model,
+            confidence_level=0.95,
+            n_bootstrap=99,
+            seed=2026,
         )
 
         analyzer2 = EvolutionRateAnalyzer()
         r2 = analyzer2.analyze(trait, time_intervals=times, confidence_level=0.95)
         ci_lower2, ci_upper2 = analyzer2._bootstrap_rate_ci(
-            trait, times, r2.best_model, confidence_level=0.95,
-            n_bootstrap=99, seed=2026,
+            trait,
+            times,
+            r2.best_model,
+            confidence_level=0.95,
+            n_bootstrap=99,
+            seed=2026,
         )
         # Bit-identical
         assert ci_lower1 == ci_lower2
@@ -106,9 +114,7 @@ class TestBootstrapAllModelsFinite:
         else:
             trait, times = _trend_series()
         analyzer = EvolutionRateAnalyzer()
-        cl, cu = analyzer._bootstrap_rate_ci(
-            trait, times, model, 0.95, n_bootstrap=49, seed=99
-        )
+        cl, cu = analyzer._bootstrap_rate_ci(trait, times, model, 0.95, n_bootstrap=49, seed=99)
         assert cl is not None and cu is not None
         assert np.isfinite(cl) and np.isfinite(cu)
         assert cl <= cu

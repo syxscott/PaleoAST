@@ -48,9 +48,7 @@ class TestDistanceMatrixRejectsAsymmetricInput:
 
     def test_tiny_asymmetry_within_tolerance_is_accepted(self):
         """Round-off in a computed distance is not a malformed matrix."""
-        near_symmetric = np.array(
-            [[0.0, 2.0, 5.0], [2.0 + 1e-12, 0.0, 6.0], [5.0, 6.0, 0.0]]
-        )
+        near_symmetric = np.array([[0.0, 2.0, 5.0], [2.0 + 1e-12, 0.0, 6.0], [5.0, 6.0, 0.0]])
         matrix = DistanceMatrix.from_array(near_symmetric, ["A", "B", "C"])
         assert matrix.get_distance("A", "B") == pytest.approx(2.0, abs=1e-9)
 
@@ -77,12 +75,23 @@ class TestMeshVolumeRequiresAClosedSurface:
     """
 
     CUBE_VERTICES = np.array(
-        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-         [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], dtype=float
+        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], dtype=float
     )
     CUBE_FACES = np.array(
-        [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4],
-         [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]]
+        [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [0, 1, 5],
+            [0, 5, 4],
+            [1, 2, 6],
+            [1, 6, 5],
+            [2, 3, 7],
+            [2, 7, 6],
+            [3, 0, 4],
+            [3, 4, 7],
+        ]
     )
 
     def test_closed_mesh_volume_is_exact(self):
@@ -111,15 +120,10 @@ class TestMeshVolumeRequiresAClosedSurface:
         from morpho3d.mesh import Mesh3D
 
         shifted = self.CUBE_VERTICES + np.array([5.0, -3.0, 11.0])
-        raw_here = Mesh3D(vertices=self.CUBE_VERTICES, faces=self.CUBE_FACES[:8]).compute_volume(
-            require_closed=False
-        )
-        raw_there = Mesh3D(vertices=shifted, faces=self.CUBE_FACES[:8]).compute_volume(
-            require_closed=False
-        )
+        raw_here = Mesh3D(vertices=self.CUBE_VERTICES, faces=self.CUBE_FACES[:8]).compute_volume(require_closed=False)
+        raw_there = Mesh3D(vertices=shifted, faces=self.CUBE_FACES[:8]).compute_volume(require_closed=False)
         assert raw_here != pytest.approx(raw_there), (
-            "this fixture no longer demonstrates origin-dependence; the "
-            "underlying claim needs a new example"
+            "this fixture no longer demonstrates origin-dependence; the underlying claim needs a new example"
         )
 
     def test_face_indices_are_validated_with_a_clear_message(self):
@@ -203,9 +207,7 @@ class TestTBRReconnectDirection:
         rooted representation, not the bug.
         """
         tree = PhyloTree.from_newick("(((((A,B),(C,D)),E),F),(G,H));")
-        internal = [
-            n for n in tree.root.get_all_nodes() if not n.is_leaf and not n.is_root
-        ]
+        internal = [n for n in tree.root.get_all_nodes() if not n.is_leaf and not n.is_root]
         checked = 0
         for node in internal:
             for child in node.children:

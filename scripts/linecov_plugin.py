@@ -20,9 +20,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 PACKAGES = (
-    "stats", "ecology", "phylogenetics", "stratigraphy",
-    "morphometrics", "morpho3d", "macroevolution", "parsers", "models",
-    "reporting", "state_machine", "plugins", "hpc",
+    "stats",
+    "ecology",
+    "phylogenetics",
+    "stratigraphy",
+    "morphometrics",
+    "morpho3d",
+    "macroevolution",
+    "parsers",
+    "models",
+    "reporting",
+    "state_machine",
+    "plugins",
+    "hpc",
 )
 
 # Which lines are executable. Derived from the AST so that docstrings,

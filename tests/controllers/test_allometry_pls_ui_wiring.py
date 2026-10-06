@@ -11,6 +11,7 @@ We exercise this with a tiny ``FakeController`` so the test does not
 depend on the heavy statistics-engine import chain (PCA / PLS / GPA
 engines all pull in PyQt6 through ``utils.event_bus``).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -62,9 +63,7 @@ def test_allometry_dialog_runs_controller(qapp):
     assert fake.calls, "AllometryDialog._on_run did not call the controller"
     name, kwargs = fake.calls[-1]
     assert name == "analyze_allometry"
-    assert kwargs == {"n_components": 7}, (
-        f"AllometryDialog forwarded the wrong kwargs: {kwargs}"
-    )
+    assert kwargs == {"n_components": 7}, f"AllometryDialog forwarded the wrong kwargs: {kwargs}"
 
 
 def test_allometry_dialog_unchecks_pca_passes_none(qapp):
@@ -138,8 +137,7 @@ def test_macroevolution_dialog_honours_tab_property(qapp):
         # Re-run the setup so the property is read at show time.
         dialog._setup_ui()
         assert dialog._tabs.currentIndex() == tab_index, (
-            f"tab={tab_index} did not switch the active tab "
-            f"(got {dialog._tabs.currentIndex()})"
+            f"tab={tab_index} did not switch the active tab (got {dialog._tabs.currentIndex()})"
         )
 
 
@@ -160,8 +158,7 @@ def test_evolution_rate_dialog_has_no_tree_input(qapp):
     dialog = EvolutionRateDialog(parent=None)
     # Look for the old tree widget name — it must be gone.
     assert not hasattr(dialog, "_tree_input"), (
-        "EvolutionRateDialog still exposes a _tree_input widget that would "
-        "be silently discarded by the analyzer."
+        "EvolutionRateDialog still exposes a _tree_input widget that would be silently discarded by the analyzer."
     )
     # And a notice explaining the design.
     [dialog.findChild(type(lbl)) for lbl in [dialog]]

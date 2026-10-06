@@ -92,10 +92,7 @@ class TestCanonicalRoots:
         rng = np.random.default_rng(seed)
         per_class = 12
         offsets = rng.normal(scale=4.0, size=(n_classes, 3))
-        data = np.vstack([
-            rng.normal(loc=offsets[k], size=(per_class, 3))
-            for k in range(n_classes)
-        ])
+        data = np.vstack([rng.normal(loc=offsets[k], size=(per_class, 3)) for k in range(n_classes)])
         groups = np.repeat(np.arange(n_classes), per_class)
 
         roots = _compute_canonical_eigenvalues(data, groups, n_classes)
@@ -122,8 +119,7 @@ class TestCanonicalRoots:
 
         root = _compute_canonical_eigenvalues(data, groups, 1)[0]
         assert root > 1.0, (
-            f"canonical root {root} is inside [0,1]; that is a variance ratio, "
-            "not a Fisher discriminant root"
+            f"canonical root {root} is inside [0,1]; that is a variance ratio, not a Fisher discriminant root"
         )
 
     def test_singular_within_scatter_returns_empty(self):
@@ -187,6 +183,6 @@ class TestSelfConsistency:
         data = rng.normal(size=(30, 3))
         groups = np.array([0] * 15 + [1] * 15)
         permutation = rng.permutation(len(data))
-        assert _compute_canonical_eigenvalues(
-            data[permutation], groups[permutation], 2
-        ) == pytest.approx(_compute_canonical_eigenvalues(data, groups, 2), rel=1e-10)
+        assert _compute_canonical_eigenvalues(data[permutation], groups[permutation], 2) == pytest.approx(
+            _compute_canonical_eigenvalues(data, groups, 2), rel=1e-10
+        )

@@ -634,10 +634,7 @@ class IsotopeAnalyzer:
         # 计算古温度 (缺陷 1 修复: δsw 一律按 VSMOW 接收, 函数内部换算到 VPDB)
         if compute_paleotemperature:
             if data.d18O is None:
-                self._logger.warning(
-                    "compute_paleotemperature=True but data.d18O is None — "
-                    "skipped"
-                )
+                self._logger.warning("compute_paleotemperature=True but data.d18O is None — skipped")
             else:
                 temps = np.full(len(data.d18O), np.nan, dtype=float)
                 valid = np.zeros(len(data.d18O), dtype=bool)
@@ -671,9 +668,7 @@ class IsotopeAnalyzer:
                         except ValueError:
                             continue
                     else:
-                        raise ValueError(
-                            f"Unknown paleotemperature equation: {equation}"
-                        )
+                        raise ValueError(f"Unknown paleotemperature equation: {equation}")
                     if np.isfinite(t_val) and 0.0 <= t_val <= 35.0:
                         valid[i] = True
                     else:
@@ -778,15 +773,14 @@ class IsotopeAnalyzer:
         elif delta18O_sw_scale == "vpdb":
             delta18O_sw_vpdb = float(delta18O_sw)
         else:
-            raise ValueError(
-                f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'"
-            )
+            raise ValueError(f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'")
 
         delta_diff = delta18O_c - delta18O_sw_vpdb
         T = 17.0 - 4.52 * delta_diff + 0.03 * (delta_diff**2)
 
         if not (0.0 <= T <= 35.0):
             import warnings as _warnings
+
             _warnings.warn(
                 f"Erez & Luz (1983) returns T = {T:.2f} °C, which is outside "
                 f"the calibrated 16-25 °C window — the input (δc - δw) = "
@@ -883,9 +877,7 @@ class IsotopeAnalyzer:
         elif delta18O_sw_scale == "vpdb":
             delta18O_sw_vpdb = float(delta18O_sw)
         else:
-            raise ValueError(
-                f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'"
-            )
+            raise ValueError(f"delta18O_sw_scale must be 'vpdb' or 'vsmow', got '{delta18O_sw_scale}'")
 
         delta_w_effective = delta18O_sw_vpdb + delta_genus
         delta_diff = delta18O_c - delta_w_effective
@@ -893,6 +885,7 @@ class IsotopeAnalyzer:
 
         if not (0.0 <= T <= 35.0):
             import warnings as _warnings
+
             _warnings.warn(
                 f"Bemis et al. (1998) returns T = {T:.2f} °C, which is "
                 f"outside the calibrated 16-25 °C window — the input "

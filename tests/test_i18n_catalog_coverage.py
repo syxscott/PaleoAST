@@ -89,8 +89,7 @@ def _catalog_table(module) -> dict:
         if isinstance(table, dict):
             return table
     raise AssertionError(
-        f"{module.__name__} exposes no TRANSLATIONS dict; the coverage check "
-        "cannot tell what is translated any more"
+        f"{module.__name__} exposes no TRANSLATIONS dict; the coverage check cannot tell what is translated any more"
     )
 
 
@@ -120,8 +119,7 @@ def _underscore_literals(path: Path) -> list[tuple[str, int]]:
     return out
 
 
-_ALL = [(v.name, text, line) for v in _VIEWS
-        for text, line in _underscore_literals(v)]
+_ALL = [(v.name, text, line) for v in _VIEWS for text, line in _underscore_literals(v)]
 
 
 def test_catalogs_agree_on_key_count():
@@ -130,8 +128,7 @@ def test_catalogs_agree_on_key_count():
     only_zh = _ZH - _EN
     assert not only_zh, f"present in zh but not en: {sorted(only_zh)[:10]}"
     assert not only_en, (
-        f"{len(only_en)} keys are in the English catalog but have no Chinese "
-        f"entry: {sorted(only_en)[:10]}"
+        f"{len(only_en)} keys are in the English catalog but have no Chinese entry: {sorted(only_en)[:10]}"
     )
 
 
@@ -162,13 +159,8 @@ def test_translations_keep_every_placeholder():
         want = _placeholders(_EN_TABLE[key])
         got = _placeholders(_ZH_TABLE[key])
         if sorted(want) != sorted(got):
-            broken.append(
-                f"{key!r}: en has {want}, zh has {got}"
-            )
-    assert not broken, (
-        f"{len(broken)} translations changed the format placeholders:\n  "
-        + "\n  ".join(broken[:20])
-    )
+            broken.append(f"{key!r}: en has {want}, zh has {got}")
+    assert not broken, f"{len(broken)} translations changed the format placeholders:\n  " + "\n  ".join(broken[:20])
 
 
 def test_translations_do_not_drop_unformatted_braces():
@@ -178,10 +170,7 @@ def test_translations_do_not_drop_unformatted_braces():
         for lang, table in (("en", _EN_TABLE), ("zh", _ZH_TABLE)):
             if table[key].count("{") != table[key].count("}"):
                 broken.append(f"{lang} {key!r}")
-    assert not broken, (
-        f"unbalanced braces in {len(broken)} translation(s): "
-        f"{broken[:10]}"
-    )
+    assert not broken, f"unbalanced braces in {len(broken)} translation(s): {broken[:10]}"
 
 
 def test_every_view_string_has_a_chinese_entry():
@@ -209,13 +198,8 @@ def test_every_view_string_has_a_chinese_entry():
         f"config/i18n/translations_zh.py AND translations_en.py), list them "
         f"in DELIBERATELY_UNTRANSLATED with a reason, or -- if you closed "
         f"some -- lower MAX_UNTRANSLATED.\n  newly untranslated:\n  "
-        + "\n  ".join(
-            f"{k!r} <- {', '.join(v[:2])}"
-            for k, v in sorted(missing.items())
-            if k in _LAST_KNOWN_BACKLOG
-        )
-        or f"{len(missing) - len(_LAST_KNOWN_BACKLOG)} string(s) that were "
-        "previously translated are now missing"
+        + "\n  ".join(f"{k!r} <- {', '.join(v[:2])}" for k, v in sorted(missing.items()) if k in _LAST_KNOWN_BACKLOG)
+        or f"{len(missing) - len(_LAST_KNOWN_BACKLOG)} string(s) that were previously translated are now missing"
     )
     # Keep the module-level snapshot honest for the next run.
     globals()["_LAST_KNOWN_BACKLOG"] = set(missing)
@@ -232,12 +216,12 @@ def test_figure_strings_are_translated():
     """
     canvas = _PROJECT_ROOT / "views" / "ui_plot_canvas.py"
     missing = [
-        (text, line) for text, line in _underscore_literals(canvas)
+        (text, line)
+        for text, line in _underscore_literals(canvas)
         if text not in _ZH and text not in DELIBERATELY_UNTRANSLATED
     ]
-    assert not missing, (
-        f"{len(missing)} strings drawn on the figure are untranslated: "
-        + "\n  ".join(f"{t!r} (line {ln})" for t, ln in sorted(missing))
+    assert not missing, f"{len(missing)} strings drawn on the figure are untranslated: " + "\n  ".join(
+        f"{t!r} (line {ln})" for t, ln in sorted(missing)
     )
 
 
@@ -247,6 +231,4 @@ def test_catalog_values_are_strings(name):
     table = _catalog_table(module)
     bad = [k for k, v in table.items() if not isinstance(v, str)]
     assert bad == [], f"non-string values in {name}: {bad[:5]}"
-    assert len(table) > 500, (
-        f"{name} has only {len(table)} entries; the table looks truncated"
-    )
+    assert len(table) > 500, f"{name} has only {len(table)} entries; the table looks truncated"

@@ -407,9 +407,10 @@ class NexusLexer(BaseLexer):
             u_line, u_col = self._unterminated_comment
             self._unterminated_comment = None
             content_tokens = [
-                t for t in tokens
-                if t.type not in (NexusTokenType.EOF, NexusTokenType.NEWLINE,
-                                  NexusTokenType.WHITESPACE, NexusTokenType.COMMENT)
+                t
+                for t in tokens
+                if t.type
+                not in (NexusTokenType.EOF, NexusTokenType.NEWLINE, NexusTokenType.WHITESPACE, NexusTokenType.COMMENT)
             ]
             if content_tokens:
                 raise LexerError(
@@ -487,8 +488,7 @@ class NexusLexer(BaseLexer):
             # test_nexus_lexer.py::test_unclosed_comment pins that shape).
             self._unterminated_comment = (start_line, start_column)
             self._logger.warning(
-                "Unterminated comment opened at line %d, column %d; "
-                "consumed the rest of the input",
+                "Unterminated comment opened at line %d, column %d; consumed the rest of the input",
                 start_line,
                 start_column,
             )

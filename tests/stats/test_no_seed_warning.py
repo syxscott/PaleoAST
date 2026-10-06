@@ -50,12 +50,10 @@ class TestNoSeedRuntimeWarning:
             warnings.simplefilter("always")
             analyzer.analyze(D, groups, n_permutations=9)
             runtime_warnings = [
-                x for x in w
-                if issubclass(x.category, RuntimeWarning) and "PERMANOVA" in str(x.message)
+                x for x in w if issubclass(x.category, RuntimeWarning) and "PERMANOVA" in str(x.message)
             ]
             assert len(runtime_warnings) >= 1, (
-                f"Expected a PERMANOVA RuntimeWarning about no random_seed, "
-                f"got: {[str(x.message) for x in w]}"
+                f"Expected a PERMANOVA RuntimeWarning about no random_seed, got: {[str(x.message) for x in w]}"
             )
 
     def test_anosim_warns_without_seed(self):
@@ -64,13 +62,9 @@ class TestNoSeedRuntimeWarning:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             analyzer.analyze(D, groups, n_permutations=9)
-            runtime_warnings = [
-                x for x in w
-                if issubclass(x.category, RuntimeWarning) and "ANOSIM" in str(x.message)
-            ]
+            runtime_warnings = [x for x in w if issubclass(x.category, RuntimeWarning) and "ANOSIM" in str(x.message)]
             assert len(runtime_warnings) >= 1, (
-                f"Expected an ANOSIM RuntimeWarning about no random_seed, "
-                f"got: {[str(x.message) for x in w]}"
+                f"Expected an ANOSIM RuntimeWarning about no random_seed, got: {[str(x.message) for x in w]}"
             )
 
     def test_no_warning_with_seed(self):
@@ -81,13 +75,13 @@ class TestNoSeedRuntimeWarning:
             warnings.simplefilter("always")
             analyzer.analyze(D, groups, n_permutations=9, random_seed=42)
             runtime_warnings = [
-                x for x in w
+                x
+                for x in w
                 if issubclass(x.category, RuntimeWarning)
                 and ("random_seed" in str(x.message) or "reproducible" in str(x.message))
             ]
             assert len(runtime_warnings) == 0, (
-                f"Did not expect a no-seed RuntimeWarning, got: "
-                f"{[str(x.message) for x in runtime_warnings]}"
+                f"Did not expect a no-seed RuntimeWarning, got: {[str(x.message) for x in runtime_warnings]}"
             )
 
     def test_anosim_no_warning_with_seed(self):
@@ -97,7 +91,8 @@ class TestNoSeedRuntimeWarning:
             warnings.simplefilter("always")
             analyzer.analyze(D, groups, n_permutations=9, random_seed=42)
             runtime_warnings = [
-                x for x in w
+                x
+                for x in w
                 if issubclass(x.category, RuntimeWarning)
                 and ("random_seed" in str(x.message) or "reproducible" in str(x.message))
             ]

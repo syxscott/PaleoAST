@@ -22,6 +22,7 @@ They cover:
 The tests use the same headless PyQt6 pattern as
 ``tests/controllers/test_allometry_pls_ui_wiring.py``.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -181,12 +182,9 @@ def test_lda_dialog_has_no_silent_cross_validate_flag(qapp):
     dialog = LDADialog(parent=None)
     params = dialog.get_parameters()
     assert "cross_validate" not in params, (
-        f"LDADialog still exposes a cross_validate flag the controller "
-        f"ignores: {params}"
+        f"LDADialog still exposes a cross_validate flag the controller ignores: {params}"
     )
-    assert not hasattr(dialog, "_cv_check"), (
-        "LDADialog still has the dead _cv_check checkbox."
-    )
+    assert not hasattr(dialog, "_cv_check"), "LDADialog still has the dead _cv_check checkbox."
 
 
 def test_biostrat_dialog_has_no_silent_min_events_flag(qapp):
@@ -195,13 +193,10 @@ def test_biostrat_dialog_has_no_silent_min_events_flag(qapp):
     from views.ui_dialogs import BiostratigraphyDialog
 
     dialog = BiostratigraphyDialog(parent=None)
-    assert not hasattr(dialog, "_min_events_spin"), (
-        "BiostratigraphyDialog still has the dead _min_events_spin."
-    )
+    assert not hasattr(dialog, "_min_events_spin"), "BiostratigraphyDialog still has the dead _min_events_spin."
     params = dialog.get_parameters()
     assert "min_events" not in params, (
-        f"BiostratigraphyDialog still exposes a min_events flag the UA "
-        f"analyzer ignores: {params}"
+        f"BiostratigraphyDialog still exposes a min_events flag the UA analyzer ignores: {params}"
     )
 
 
@@ -227,9 +222,7 @@ def test_pic_dialog_has_no_silent_use_branch_lengths_checkbox(qapp):
     from views.ui_pcm_dialogs import PICDialog
 
     dialog = PICDialog(parent=None)
-    assert not hasattr(dialog, "_check_branch_lengths"), (
-        "PICDialog still has the dead _check_branch_lengths checkbox."
-    )
+    assert not hasattr(dialog, "_check_branch_lengths"), "PICDialog still has the dead _check_branch_lengths checkbox."
 
 
 def test_allometry_dialog_has_no_silent_confidence_level_spin(qapp):
@@ -248,14 +241,11 @@ def test_allometry_dialog_has_no_silent_confidence_level_spin(qapp):
 
     ctrl = FakeController()
     dialog = AllometryDialog(parent=None, controller=ctrl)
-    assert not hasattr(dialog, "_ci_spin"), (
-        "AllometryDialog still has the dead _ci_spin."
-    )
+    assert not hasattr(dialog, "_ci_spin"), "AllometryDialog still has the dead _ci_spin."
     dialog._on_run()
     assert ctrl.calls, "AllometryDialog._on_run did not call the controller"
     assert "confidence_level" not in ctrl.calls[-1], (
-        f"Forwarded a confidence_level argument the engine ignores: "
-        f"{ctrl.calls[-1]}"
+        f"Forwarded a confidence_level argument the engine ignores: {ctrl.calls[-1]}"
     )
 
 
@@ -265,12 +255,8 @@ def test_beta_diversity_dialog_has_no_silent_transform_or_pairwise(qapp):
     from views.ui_beta_diversity_dialogs import BetaDiversityDialog
 
     dialog = BetaDiversityDialog(parent=None)
-    assert not hasattr(dialog, "_transform_combo"), (
-        "BetaDiversityDialog still has the dead _transform_combo."
-    )
-    assert not hasattr(dialog, "_show_pairwise_check"), (
-        "BetaDiversityDialog still has the dead _show_pairwise_check."
-    )
+    assert not hasattr(dialog, "_transform_combo"), "BetaDiversityDialog still has the dead _transform_combo."
+    assert not hasattr(dialog, "_show_pairwise_check"), "BetaDiversityDialog still has the dead _show_pairwise_check."
 
 
 def test_coverage_rarefaction_dialog_routes_to_hill_analyzer(qapp, monkeypatch):
@@ -312,8 +298,7 @@ def test_coverage_rarefaction_dialog_routes_to_hill_analyzer(qapp, monkeypatch):
     assert int(captured["n_bootstrap"]) == 123
     assert int(captured["seed"]) == 99
     assert FakeAnalyzer.analyze_called is False, (
-        "Dialog routed through .analyze(), which silently ignores "
-        "n_bootstrap and seed."
+        "Dialog routed through .analyze(), which silently ignores n_bootstrap and seed."
     )
 
 

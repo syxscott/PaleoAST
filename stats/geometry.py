@@ -245,9 +245,7 @@ class GeometryAnalyzer:
         n, dim = pts.shape
 
         if dim < 2:
-            raise ComputationError(
-                f"Convex hull volume needs at least 2 dimensions, got {dim}"
-            )
+            raise ComputationError(f"Convex hull volume needs at least 2 dimensions, got {dim}")
 
         if n <= dim:
             raise ComputationError(

@@ -186,9 +186,7 @@ def _split_two_groups(
     _check_group_length(groups, data.shape[0])
     unique_groups = sorted(set(groups))
     if len(unique_groups) != 2:
-        raise ComputationError(
-            f"{label} requires exactly 2 groups, got {len(unique_groups)}"
-        )
+        raise ComputationError(f"{label} requires exactly 2 groups, got {len(unique_groups)}")
 
     g0, g1 = unique_groups
     idx_0 = [i for i, g in enumerate(groups) if g == g0]
@@ -203,8 +201,7 @@ def _split_two_groups(
     if paired:
         if len(vals_0) != len(vals_1):
             raise ComputationError(
-                f"{label}: a paired design requires equal sample sizes, got "
-                f"{len(vals_0)} and {len(vals_1)}"
+                f"{label}: a paired design requires equal sample sizes, got {len(vals_0)} and {len(vals_1)}"
             )
         complete = ~np.isnan(vals_0) & ~np.isnan(vals_1)
         return (
@@ -251,13 +248,10 @@ class PairedRankTestResult:
         lines = [
             _("Paired Nonparametric Test"),
             "=" * 50,
-            f"{self.test_type}: {stat_label} = {self.statistic:.4f}, "
-            f"p = {self.p_value:.4f} {sig}",
+            f"{self.test_type}: {stat_label} = {self.statistic:.4f}, p = {self.p_value:.4f} {sig}",
             f"{_('Pairs')}: {self.n_pairs}",
             f"{_('Median difference')}: {self.median_difference:.4f}",
-            f"{_('Positive')}: {self.n_positive}, "
-            f"{_('Negative')}: {self.n_negative}, "
-            f"{_('Ties')}: {self.n_ties}",
+            f"{_('Positive')}: {self.n_positive}, {_('Negative')}: {self.n_negative}, {_('Ties')}: {self.n_ties}",
         ]
         return "\n".join(lines)
 
@@ -457,9 +451,7 @@ class UnivariateAnalyzer:
         with self._lock:
             if groups is None:
                 raise ComputationError("Groups required for t-test")
-            vals_0, vals_1, _g0, _g1 = _split_two_groups(
-                data, column, groups, paired, label="t-test"
-            )
+            vals_0, vals_1, _g0, _g1 = _split_two_groups(data, column, groups, paired, label="t-test")
 
             if len(vals_0) < 2 or len(vals_1) < 2:
                 raise ComputationError(
@@ -535,9 +527,7 @@ class UnivariateAnalyzer:
         """
         with self._lock:
             if method not in ("wilcoxon", "sign"):
-                raise ValidationError(
-                    f"method must be 'wilcoxon' or 'sign', got {method!r}"
-                )
+                raise ValidationError(f"method must be 'wilcoxon' or 'sign', got {method!r}")
             if groups is None:
                 raise ComputationError("Groups required for a paired test")
 
@@ -545,10 +535,7 @@ class UnivariateAnalyzer:
                 data, column, groups, paired=True, label=f"{method} paired test"
             )
             if len(vals_0) < 2:
-                raise ComputationError(
-                    f"Not enough complete pairs after NaN filtering: "
-                    f"{len(vals_0)} pair(s) remain"
-                )
+                raise ComputationError(f"Not enough complete pairs after NaN filtering: {len(vals_0)} pair(s) remain")
 
             diff = vals_0 - vals_1
             n_pos = int(np.sum(diff > 0))
@@ -556,10 +543,7 @@ class UnivariateAnalyzer:
             n_zero = int(np.sum(diff == 0))
             n_used = n_pos + n_neg
             if n_used == 0:
-                raise ComputationError(
-                    f"{method} paired test: every difference is zero, so "
-                    f"there is nothing to test"
-                )
+                raise ComputationError(f"{method} paired test: every difference is zero, so there is nothing to test")
 
             if method == "sign":
                 # Binomial test on the split of non-zero differences.
@@ -578,9 +562,7 @@ class UnivariateAnalyzer:
                 # behaviour, made explicit.
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    w_stat, p_val = sp_stats.wilcoxon(
-                        vals_0, vals_1, zero_method="wilcox", method="auto"
-                    )
+                    w_stat, p_val = sp_stats.wilcoxon(vals_0, vals_1, zero_method="wilcox", method="auto")
                 statistic = float(w_stat)
                 test_type = "wilcoxon"
 

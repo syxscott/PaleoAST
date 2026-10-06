@@ -252,10 +252,9 @@ def _ar1_threshold(
         # -- for the threshold we just need the per-frequency
         # distribution of LS powers under the null.
         sim_power = np.zeros(len(omega))
-        sim_power[valid] = (
-            (sim_centered[None, :] * sin_t).sum(axis=1)[valid] ** 2 / sum_sin2[valid]
-            + (sim_centered[None, :] * cos_t).sum(axis=1)[valid] ** 2 / sum_cos2[valid]
-        )
+        sim_power[valid] = (sim_centered[None, :] * sin_t).sum(axis=1)[valid] ** 2 / sum_sin2[valid] + (
+            sim_centered[None, :] * cos_t
+        ).sum(axis=1)[valid] ** 2 / sum_cos2[valid]
         sim_var = np.var(sim_centered)
         if sim_var > 0:
             sim_power /= 2 * sim_var
@@ -379,8 +378,7 @@ class SpectralResult:
 
         if self.ar1_phi is not None:
             lines.append(
-                _("AR(1) red-noise null: phi = {0:.3f}, "
-                  "5% FAP power threshold = {1:.3f}").format(
+                _("AR(1) red-noise null: phi = {0:.3f}, 5% FAP power threshold = {1:.3f}").format(
                     self.ar1_phi, self.ar1_fap_5pct
                 )
             )
@@ -737,15 +735,7 @@ class SpectralAnalyzer:
         # against a Morlet frequency axis, and every reported period came
         # out 3.85x too small (a 385 kyr obliquity band labelled 100 kyr).
         sampling_rate = 1.0 / dt if dt > 0 else 1.0
-        frequencies = (
-            np.array(
-                [
-                    _wavelet_fourier_frequency(s, wavelet.lower())
-                    for s in scales
-                ]
-            )
-            * sampling_rate
-        )
+        frequencies = np.array([_wavelet_fourier_frequency(s, wavelet.lower()) for s in scales]) * sampling_rate
 
         # Find peak
         peak_idx = np.unravel_index(np.argmax(power), power.shape)

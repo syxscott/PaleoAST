@@ -38,8 +38,7 @@ class TestDetrending:
         # Pure sine + huge linear drift
         x = _pure_sine(t, 10) + 5 * t
         analyzer = SpectralAnalyzer()
-        result = analyzer.analyze(t, x, frequency_range=(0.01, 5.0),
-                                  n_frequencies=200, detrend=True)
+        result = analyzer.analyze(t, x, frequency_range=(0.01, 5.0), n_frequencies=200, detrend=True)
         assert result.ar1_phi is not None
 
     def test_detrend_removes_low_frequency_drift(self):
@@ -50,12 +49,20 @@ class TestDetrending:
 
         analyzer = SpectralAnalyzer()
         r_detrend = analyzer.analyze(
-            t, x, frequency_range=(0.01, 5.0), n_frequencies=200,
-            detrend=True, ar1_significance=False,
+            t,
+            x,
+            frequency_range=(0.01, 5.0),
+            n_frequencies=200,
+            detrend=True,
+            ar1_significance=False,
         )
         r_no_detrend = analyzer.analyze(
-            t, x, frequency_range=(0.01, 5.0), n_frequencies=200,
-            detrend=False, ar1_significance=False,
+            t,
+            x,
+            frequency_range=(0.01, 5.0),
+            n_frequencies=200,
+            detrend=False,
+            ar1_significance=False,
         )
         # Lowest-frequency bin power must shrink after detrending.
         low_freq_idx = 0  # lowest frequency bin
@@ -71,8 +78,7 @@ class TestDetrending:
         t = np.linspace(0, 100, 200)
         x = _pure_sine(t, 10) + 5 * t
         analyzer = SpectralAnalyzer()
-        r = analyzer.analyze(t, x, frequency_range=(0.01, 5.0),
-                             n_frequencies=200, detrend=False)
+        r = analyzer.analyze(t, x, frequency_range=(0.01, 5.0), n_frequencies=200, detrend=False)
         # Just sanity: should run without error and produce a result
         assert r.power is not None
         assert np.all(np.isfinite(r.power))
@@ -85,8 +91,7 @@ class TestAR1NullModel:
         t = np.linspace(0, 100, 200)
         # An AR(1) series with phi = 0.7
         x = _ar1_series(len(t), phi=0.7, seed=42)
-        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0),
-                                            n_frequencies=100)
+        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0), n_frequencies=100)
         assert result.ar1_phi is not None
         # Estimated phi should be in the same ballpark as the true phi
         assert abs(result.ar1_phi - 0.7) < 0.2
@@ -94,8 +99,7 @@ class TestAR1NullModel:
     def test_ar1_significance_mask_is_boolean(self):
         t = np.linspace(0, 100, 200)
         x = _ar1_series(len(t), phi=0.7, seed=42)
-        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0),
-                                            n_frequencies=100)
+        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0), n_frequencies=100)
         assert result.ar1_significant is not None
         assert result.ar1_significant.dtype == bool
         assert len(result.ar1_significant) == len(result.frequencies)
@@ -106,8 +110,7 @@ class TestAR1NullModel:
         np.random.default_rng(123)
         t = np.linspace(0, 100, 200)
         x = _ar1_series(len(t), phi=0.7, seed=42)
-        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0),
-                                            n_frequencies=100)
+        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0), n_frequencies=100)
         # ar1_fap_5pct is the power threshold above which a peak is
         # significant at the 5 % level under the AR(1) null. For a
         # pure AR(1) signal, only ~5 % of the periodogram points
@@ -115,17 +118,16 @@ class TestAR1NullModel:
         frac_sig = float(np.mean(result.ar1_significant))
         # Loose bounds: between 0 and 25 %
         assert 0.0 <= frac_sig <= 0.25, (
-            f"AR(1) null gives {frac_sig * 100:.1f}% significant points; "
-            "expected ~5 % (0-25 % acceptable)"
+            f"AR(1) null gives {frac_sig * 100:.1f}% significant points; expected ~5 % (0-25 % acceptable)"
         )
 
     def test_ar1_significance_off(self):
         """When ar1_significance=False, AR(1) fields must be None."""
         t = np.linspace(0, 100, 200)
         x = _ar1_series(len(t), phi=0.7, seed=42)
-        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0),
-                                            n_frequencies=100,
-                                            ar1_significance=False)
+        result = SpectralAnalyzer().analyze(
+            t, x, frequency_range=(0.01, 5.0), n_frequencies=100, ar1_significance=False
+        )
         assert result.ar1_phi is None
         assert result.ar1_fap_5pct is None
         assert result.ar1_significant is None
@@ -139,11 +141,9 @@ class TestStrongSignalRejectedOnlyWithLowFAP:
         rng = np.random.default_rng(7)
         t = np.linspace(0, 100, 300)
         x = _pure_sine(t, period=10.0, amplitude=3.0) + rng.normal(0, 0.3, len(t))
-        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.05, 2.0),
-                                            n_frequencies=200)
+        result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.05, 2.0), n_frequencies=200)
         # The peak power should comfortably exceed the AR(1) 5% FAP
         # threshold — the signal is far above the noise.
         assert result.peak_power > result.ar1_fap_5pct, (
-            f"Pure sine peak power {result.peak_power} is below AR(1) "
-            f"5% FAP threshold {result.ar1_fap_5pct}"
+            f"Pure sine peak power {result.peak_power} is below AR(1) 5% FAP threshold {result.ar1_fap_5pct}"
         )

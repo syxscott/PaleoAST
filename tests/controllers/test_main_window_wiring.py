@@ -8,6 +8,7 @@ the test finishes in <100 ms.
 Each test corresponds to one of the ten defects called out in the
 session brief.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -271,8 +272,11 @@ def main_window(qapp, tmp_path, monkeypatch):
     window._evict_excess_result_tabs = MagicMock()
 
     class _StubStatus:
-        def setInfo(self, *args, **kwargs): pass
-        def setProgress(self, *args, **kwargs): pass
+        def setInfo(self, *args, **kwargs):
+            pass
+
+        def setProgress(self, *args, **kwargs):
+            pass
 
     window._status_bar = _StubStatus()
     window._spreadsheet_index = 0
@@ -369,6 +373,7 @@ def test_execute_pca_passes_through_main_window(main_window, monkeypatch):
 
     # Now drive on_success and inspect what plot_pca_scores received.
     captured = {}
+
     class _Spy:
         def plot_pca_scores(self, *a, **kw):
             captured["args"] = a
@@ -400,6 +405,7 @@ def test_execute_pcoa_passes_labels_and_groups(main_window, monkeypatch):
     _work, on_success, _on_fail, _title = args[0]
 
     captured = {}
+
     class _Spy:
         def plot_pcoa_scores(self, *a, **kw):
             captured["kwargs"] = kw
@@ -434,9 +440,7 @@ def test_execute_anosim_passes_dialog_params(main_window, monkeypatch):
         work()
 
     main_window._run_analysis_async.side_effect = _capture
-    main_window._execute_anosim(
-        {"metric": "jaccard", "n_permutations": 199, "random_seed": 7}
-    )
+    main_window._execute_anosim({"metric": "jaccard", "n_permutations": 199, "random_seed": 7})
 
     assert captured["title"] == "ANOSIM"
     name, kwargs = main_window._statistics_controller.calls[-1]
@@ -450,9 +454,7 @@ def test_execute_permanova_is_async(main_window):
 
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
-    main_window._execute_permanova(
-        {"metric": "manhattan", "n_permutations": 499, "random_seed": None}
-    )
+    main_window._execute_permanova({"metric": "manhattan", "n_permutations": 499, "random_seed": None})
     assert main_window._run_analysis_async.called
     title = main_window._run_analysis_async.call_args[0][3]
     assert title == "PERMANOVA"
@@ -465,9 +467,7 @@ def test_execute_permanova_calls_controller(main_window):
         work()
 
     main_window._run_analysis_async = MagicMock(side_effect=_fake_async)
-    main_window._execute_permanova(
-        {"metric": "euclidean", "n_permutations": 999, "random_seed": 5}
-    )
+    main_window._execute_permanova({"metric": "euclidean", "n_permutations": 999, "random_seed": 5})
     name, kwargs = main_window._statistics_controller.calls[-1]
     assert name == "analyze_permanova"
     assert kwargs["metric"] == "euclidean"
@@ -486,6 +486,7 @@ def test_evolution_rate_handler_emits_plot_or_text(main_window, monkeypatch):
 
     class _Spy:
         calls: list[dict] = []
+
         def plot_evolution_rate(self, payload):
             _Spy.calls.append(payload)
             return None
@@ -601,10 +602,17 @@ def test_lda_handler_runs_controller(main_window, monkeypatch):
         accepted = True
         result_kwargs = {"n_components": 5, "cross_validate": True}
 
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1  # Accepted
-        def get_parameters(self): return dict(self.result_kwargs)
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1  # Accepted
+
+        def get_parameters(self):
+            return dict(self.result_kwargs)
 
     monkeypatch.setattr(mw, "LDADialog", _StubDialog)
     main_window._on_run_lda()
@@ -648,7 +656,6 @@ def test_biostrat_handler_forwards_occurrence_threshold(main_window, monkeypatch
 
     monkeypatch.setattr(bio, "UAAnalyzer", _StubAnalyzer)
 
-
     class _StubDialog:
         params = {
             "method": "ua",
@@ -656,10 +663,18 @@ def test_biostrat_handler_forwards_occurrence_threshold(main_window, monkeypatch
             "uaz_similarity_threshold": 0.8,
             "enable_cyclic_check": True,
         }
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "BiostratigraphyDialog", _StubDialog)
     # The fixture builds MainWindow without running QMainWindow.__init__, so
@@ -694,25 +709,27 @@ def test_directional_handler_uses_column_index(main_window, monkeypatch):
 
     class _StubDialog:
         params = {"n_bins": 8}
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "DirectionalDialog", _StubDialog)
     main_window._on_run_directional()
 
     # The fake controller's last call must carry column_index=2.
-    directional_calls = [
-        c for c in main_window._statistics_controller.calls
-        if c[0] == "analyze_directional"
-    ]
+    directional_calls = [c for c in main_window._statistics_controller.calls if c[0] == "analyze_directional"]
     assert directional_calls, "analyze_directional was not called"
     assert directional_calls[-1][1]["column_index"] == 2
-    bin_calls = [
-        c for c in main_window._statistics_controller.calls
-        if c[0] == "bin_rose_diagram"
-    ]
+    bin_calls = [c for c in main_window._statistics_controller.calls if c[0] == "bin_rose_diagram"]
     assert bin_calls[-1][1]["column_index"] == 2
     assert bin_calls[-1][1]["n_bins"] == 8
 
@@ -731,7 +748,6 @@ def test_cca_handler_forwards_permutation_params(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-
     class _StubDialog:
         params = {
             "method": "cca",
@@ -740,11 +756,21 @@ def test_cca_handler_forwards_permutation_params(main_window, monkeypatch):
             "n_permutations": 499,
             "random_seed": 17,
         }
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def set_column_names(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def set_column_names(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "CCADialog", _StubDialog)
     main_window._on_run_cca()
@@ -775,11 +801,21 @@ def test_cca_handler_maps_zero_seed_to_none(main_window, monkeypatch):
             "n_permutations": 199,
             "random_seed": 0,
         }
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def set_column_names(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def set_column_names(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "CCADialog", _StubDialog)
     main_window._on_run_cca()
@@ -795,20 +831,24 @@ def test_diversity_handler_runs_for_all_rows(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-
     class _StubDialog:
         params = {"sample_name": ""}
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "DiversityDialog", _StubDialog)
     main_window._on_run_diversity()
-    diversity_calls = [
-        c for c in main_window._statistics_controller.calls
-        if c[0] == "analyze_diversity"
-    ]
+    diversity_calls = [c for c in main_window._statistics_controller.calls if c[0] == "analyze_diversity"]
     assert len(diversity_calls) == 4, diversity_calls
 
 
@@ -818,20 +858,24 @@ def test_rarefaction_handler_runs_per_selected_sample(main_window, monkeypatch):
     _install_minimal_data(main_window)
     main_window._run_analysis_async = MagicMock()
 
-
     class _StubDialog:
         params = {"samples": ["Site_1", "Site_2"], "max_n": 100, "step": 5}
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     monkeypatch.setattr(mw, "RarefactionDialog", _StubDialog)
     main_window._on_run_rarefaction()
-    rarefaction_calls = [
-        c for c in main_window._statistics_controller.calls
-        if c[0] == "analyze_rarefaction"
-    ]
+    rarefaction_calls = [c for c in main_window._statistics_controller.calls if c[0] == "analyze_rarefaction"]
     assert len(rarefaction_calls) == 2, rarefaction_calls
 
 
@@ -880,10 +924,18 @@ def test_preferences_handler_uses_dialog(main_window, monkeypatch):
             "plot_dpi": 120,
             "plot_figsize": "8,6",
         }
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_preferences(self): return dict(self.out)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_preferences(self):
+            return dict(self.out)
 
     monkeypatch.setattr(mw, "PreferencesDialog", _StubDialog)
     main_window._apply_preferences = MagicMock()
@@ -915,17 +967,25 @@ def test_long_running_handlers_use_async_pool(handler_name, main_window, monkeyp
     from PyQt6.QtWidgets import QMessageBox
 
     monkeypatch.setattr(
-        QMessageBox, "question",
+        QMessageBox,
+        "question",
         staticmethod(lambda *a, **kw: QMessageBox.StandardButton.Yes),
     )
 
-
     class _AcceptAllDialog:
         params: dict = {}
-        def __init__(self, *a, **kw): pass
-        def setDarkTheme(self, *a, **kw): pass
-        def exec(self): return 1
-        def get_parameters(self): return dict(self.params)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def setDarkTheme(self, *a, **kw):
+            pass
+
+        def exec(self):
+            return 1
+
+        def get_parameters(self):
+            return dict(self.params)
 
     if handler_name == "_on_run_simper":
         monkeypatch.setattr(mw, "SimperDialog", _AcceptAllDialog)
@@ -942,9 +1002,7 @@ def test_long_running_handlers_use_async_pool(handler_name, main_window, monkeyp
         # does not implement every analyser. What matters is that the
         # async wrapper was called.
         pass
-    assert main_window._run_analysis_async.called, (
-        f"{handler_name} did not go through _run_analysis_async"
-    )
+    assert main_window._run_analysis_async.called, f"{handler_name} did not go through _run_analysis_async"
 
 
 # ---------------------------------------------------------------------------
@@ -1008,9 +1066,7 @@ def test_cohort_survivorship_does_not_double_accept(main_window):
                 seen_exec = True
                 continue
             if seen_exec and called.endswith(".accept"):
-                pytest.fail(
-                    f"_on_run_cohort_survivorship calls {called} after exec(); dead code"
-                )
+                pytest.fail(f"_on_run_cohort_survivorship calls {called} after exec(); dead code")
 
 
 def test_drain_thread_pool_returns_bool(main_window):

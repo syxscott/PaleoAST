@@ -204,21 +204,17 @@ class MantelAnalyzer:
 
     # -- internals --------------------------------------------------------
 
-    def _validate_matrices(
-        self, matrix_a: npt.NDArray, matrix_b: npt.NDArray
-    ) -> tuple[npt.NDArray, npt.NDArray]:
+    def _validate_matrices(self, matrix_a: npt.NDArray, matrix_b: npt.NDArray) -> tuple[npt.NDArray, npt.NDArray]:
         """Check two distance matrices are square, symmetric and co-sized."""
         for name, m in (("matrix A", matrix_a), ("matrix B", matrix_b)):
             if m.ndim != 2 or m.shape[0] != m.shape[1]:
                 raise MatrixDimensionError(
-                    f"Mantel test: {name} must be a square distance matrix, "
-                    f"got shape {m.shape}",
+                    f"Mantel test: {name} must be a square distance matrix, got shape {m.shape}",
                     details={"shape": tuple(int(x) for x in m.shape)},
                 )
         if matrix_a.shape != matrix_b.shape:
             raise MatrixDimensionError(
-                f"Mantel test: both matrices must have the same shape, got "
-                f"{matrix_a.shape} and {matrix_b.shape}",
+                f"Mantel test: both matrices must have the same shape, got {matrix_a.shape} and {matrix_b.shape}",
                 details={
                     "a": tuple(int(x) for x in matrix_a.shape),
                     "b": tuple(int(x) for x in matrix_b.shape),
@@ -227,8 +223,7 @@ class MantelAnalyzer:
         n = matrix_a.shape[0]
         if n < 4:
             raise ValidationError(
-                f"Mantel test needs at least 4 objects to have 6 distinct "
-                f"pairs, got {n}",
+                f"Mantel test needs at least 4 objects to have 6 distinct pairs, got {n}",
                 details={"n_objects": n},
             )
         return matrix_a, matrix_b
@@ -292,14 +287,9 @@ class MantelAnalyzer:
         MantelResult
         """
         if correlation not in VALID_CORRELATIONS:
-            raise ValidationError(
-                f"correlation must be one of {VALID_CORRELATIONS}, "
-                f"got {correlation!r}"
-            )
+            raise ValidationError(f"correlation must be one of {VALID_CORRELATIONS}, got {correlation!r}")
         if scheme not in VALID_SCHEMES:
-            raise ValidationError(
-                f"scheme must be one of {VALID_SCHEMES}, got {scheme!r}"
-            )
+            raise ValidationError(f"scheme must be one of {VALID_SCHEMES}, got {scheme!r}")
 
         A = validate_data_array(data_a, name="mantel_a")
         B = A if data_b is None else validate_data_array(data_b, name="mantel_b")
@@ -308,8 +298,7 @@ class MantelAnalyzer:
         # the ordinary use, and the distance matrices are the thing compared.
         if A.shape[0] != B.shape[0]:
             raise MatrixDimensionError(
-                f"Mantel test: both inputs must describe the same number of "
-                f"objects, got {A.shape[0]} and {B.shape[0]}",
+                f"Mantel test: both inputs must describe the same number of objects, got {A.shape[0]} and {B.shape[0]}",
                 details={
                     "a": tuple(int(x) for x in A.shape),
                     "b": tuple(int(x) for x in B.shape),
@@ -317,9 +306,7 @@ class MantelAnalyzer:
             )
 
         d_a = compute_distance_matrix(A, metric=metric_a, labels=labels).matrix
-        d_b = d_a if data_b is None else compute_distance_matrix(
-            B, metric=metric_b, labels=labels
-        ).matrix
+        d_b = d_a if data_b is None else compute_distance_matrix(B, metric=metric_b, labels=labels).matrix
         matrix_a, matrix_b = self._validate_matrices(d_a, d_b)
 
         result = self._permute(
@@ -361,10 +348,7 @@ class MantelAnalyzer:
         coordinates that a distance matrix no longer carries.
         """
         if correlation not in VALID_CORRELATIONS:
-            raise ValidationError(
-                f"correlation must be one of {VALID_CORRELATIONS}, "
-                f"got {correlation!r}"
-            )
+            raise ValidationError(f"correlation must be one of {VALID_CORRELATIONS}, got {correlation!r}")
         if scheme != "dd":
             raise ValidationError(
                 "analyze_from_matrices only supports scheme='dd': jitter "
@@ -429,29 +413,20 @@ class MantelAnalyzer:
                     iu = np.triu_indices(shuffled.shape[0], k=1)
                     shuffled[iu] = shuffled[iu][rng.permutation(iu[0].size)]
                     return _safe_correlate(vec_a, _upper_triangle(shuffled), correlation)
-                permuted_b = compute_distance_matrix(
-                    raw_b[rng.permutation(raw_b.shape[0])], metric=metric_for_b
-                ).matrix
-                return _safe_correlate(
-                    vec_a, _upper_triangle(permuted_b), correlation
-                )
+                permuted_b = compute_distance_matrix(raw_b[rng.permutation(raw_b.shape[0])], metric=metric_for_b).matrix
+                return _safe_correlate(vec_a, _upper_triangle(permuted_b), correlation)
             if raw_b is None:
                 raise ValidationError(
-                    f"scheme={scheme!r} needs raw coordinates; use "
-                    "analyze_from_matrices with scheme='dd' instead",
+                    f"scheme={scheme!r} needs raw coordinates; use analyze_from_matrices with scheme='dd' instead",
                     details={"scheme": scheme},
                 )
             # Jitter: shuffle the coordinate values among objects, which
             # destroys the spatial structure while preserving the marginal
             # distribution of each variable.
-            jittered = np.column_stack(
-                [rng.permutation(raw_b[:, j]) for j in range(raw_b.shape[1])]
-            )
+            jittered = np.column_stack([rng.permutation(raw_b[:, j]) for j in range(raw_b.shape[1])])
             return _safe_correlate(
                 vec_a,
-                _upper_triangle(
-                    compute_distance_matrix(jittered, metric=metric_for_b).matrix
-                ),
+                _upper_triangle(compute_distance_matrix(jittered, metric=metric_for_b).matrix),
                 correlation,
             )
 
@@ -535,9 +510,7 @@ class MantelAnalyzer:
                 )
 
         d_a = compute_distance_matrix(A, metric=metric_a, labels=labels).matrix
-        d_b = d_a if data_b is None else compute_distance_matrix(
-            B, metric=metric_b, labels=labels
-        ).matrix
+        d_b = d_a if data_b is None else compute_distance_matrix(B, metric=metric_b, labels=labels).matrix
         d_c = compute_distance_matrix(C, metric=control_metric, labels=labels).matrix
         self._validate_matrices(d_a, d_b)
 
@@ -608,9 +581,7 @@ class MantelAnalyzer:
             r_b_control=r_b_c,
         )
         self._last_result = result
-        self._logger.info(
-            "Partial Mantel completed: r=%.4f, p=%.4f", result.statistic, result.p_value
-        )
+        self._logger.info("Partial Mantel completed: r=%.4f, p=%.4f", result.statistic, result.p_value)
         return result
 
     @property

@@ -128,6 +128,7 @@ def topology_of(tree: PhyloTree) -> str:
     Two trees with the same rooted topology produce the same string, which is
     the right notion of "same tree" when branch lengths are not the question.
     """
+
     def render(node) -> str:
         if node.is_leaf:
             return leaf_key(node)
@@ -166,6 +167,7 @@ def unrooted_splits(tree: PhyloTree) -> frozenset[frozenset[frozenset[str]]]:
 
 def canonical_newick(tree: PhyloTree, places: int = 9) -> str:
     """Newick including branch lengths, for exact numeric comparison."""
+
     def render(node) -> str:
         length = float(node.branch_length or 0.0)
         if node.is_leaf:
@@ -370,9 +372,7 @@ def reference_upgma(labels: Sequence[str], distances: np.ndarray) -> PhyloTree:
         for other in list(active):
             if other in (a, b):
                 continue
-            put(next_id, other, (
-                sizes[a] * get(a, other) + sizes[b] * get(b, other)
-            ) / (sizes[a] + sizes[b]))
+            put(next_id, other, (sizes[a] * get(a, other) + sizes[b] * get(b, other)) / (sizes[a] + sizes[b]))
         clusters[next_id] = merged
         sizes[next_id] = sizes[a] + sizes[b]
         heights[next_id] = node_height
@@ -426,10 +426,7 @@ def reference_nj(labels: Sequence[str], distances: np.ndarray) -> PhyloTree:
     while len(active) > 2:
         m = len(active)
         row_sums = {i: sum(get(i, j) for j in active if j != i) for i in active}
-        q = {
-            (i, j): (m - 2) * get(i, j) - row_sums[i] - row_sums[j]
-            for i, j in itertools.combinations(active, 2)
-        }
+        q = {(i, j): (m - 2) * get(i, j) - row_sums[i] - row_sums[j] for i, j in itertools.combinations(active, 2)}
         a, b = min(q, key=lambda pair: (q[pair], pair))
 
         limb_a = 0.5 * get(a, b) + (row_sums[a] - row_sums[b]) / (2.0 * (m - 2))

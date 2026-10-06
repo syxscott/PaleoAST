@@ -171,7 +171,7 @@ class TestAnalyticAreaVolume:
         m.vertices = m.vertices * k
         # Recompute faces unchanged: rebuild mesh so __post_init__ re-runs
         scaled = Mesh3D(vertices=m.vertices * 1.0, faces=m.faces.copy())
-        assert abs(scaled.compute_volume() - k ** 3) < 1e-8
+        assert abs(scaled.compute_volume() - k**3) < 1e-8
 
     def test_cube_scaling_area_quadratic(self):
         """Surface area of side-k cube must equal 6 k^2."""
@@ -186,9 +186,7 @@ class TestAnalyticAreaVolume:
         m = unit_cube()
         for shift in (5.0, -3.2, np.array([7.0, -2.0, 11.0])):
             shifted = Mesh3D(vertices=m.vertices + shift, faces=m.faces.copy())
-            assert abs(shifted.compute_volume() - 1.0) < 1e-9, (
-                f"volume changed under translation by {shift}"
-            )
+            assert abs(shifted.compute_volume() - 1.0) < 1e-9, f"volume changed under translation by {shift}"
 
 
 # ---------------------------------------------------------------------------
@@ -221,9 +219,7 @@ class TestVertexNormals:
         # Allow either orientation (the cross-product convention depends
         # on vertex winding in the triangulation).
         cos = np.abs(m.normals @ analytic)
-        assert np.all(cos > 0.999), (
-            f"max deviation from analytic normal = {1 - cos.max():.3e}"
-        )
+        assert np.all(cos > 0.999), f"max deviation from analytic normal = {1 - cos.max():.3e}"
 
     def test_normals_are_unit_length(self):
         """Every vertex normal must be exactly unit length (or (0,0,0)
@@ -232,8 +228,7 @@ class TestVertexNormals:
         norms = np.linalg.norm(m.normals, axis=1)
         non_dangling = norms > 0
         assert np.allclose(norms[non_dangling], 1.0, atol=1e-9), (
-            f"non-unit normals: min={norms[non_dangling].min()}, "
-            f"max={norms[non_dangling].max()}"
+            f"non-unit normals: min={norms[non_dangling].min()}, max={norms[non_dangling].max()}"
         )
 
     def test_area_weighted_merge_biases_toward_big_face(self):
@@ -267,10 +262,7 @@ class TestVertexNormals:
         big_normal = np.array([0.0, 0.0, 1.0])
         # The shared vertex (0) should have normal very close to ±z.
         cos = abs(m.normals[0] @ big_normal)
-        assert cos > 0.99, (
-            f"area-weighted merge did not bias to big face: "
-            f"normal={m.normals[0]}, cosine={cos}"
-        )
+        assert cos > 0.99, f"area-weighted merge did not bias to big face: normal={m.normals[0]}, cosine={cos}"
 
 
 # ---------------------------------------------------------------------------
@@ -309,12 +301,12 @@ class TestSurfaceSampling:
         """
         verts = np.array(
             [
-                [0.0, 0.0, 0.0],   # 0
+                [0.0, 0.0, 0.0],  # 0
                 [10.0, 0.0, 0.0],  # 1
                 [0.0, 10.0, 0.0],  # 2
-                [5.0, 5.0, 0.0],   # 3 small-tri vertex
-                [5.1, 5.0, 0.0],   # 4
-                [5.0, 5.1, 0.0],   # 5
+                [5.0, 5.0, 0.0],  # 3 small-tri vertex
+                [5.1, 5.0, 0.0],  # 4
+                [5.0, 5.1, 0.0],  # 5
             ],
             dtype=float,
         )
@@ -341,10 +333,7 @@ class TestSurfaceSampling:
         expected = 0.005 / (0.005 + 50.0)  # = 1/10001
         # Generous interval: 10 sigma binomial SE = 10*sqrt(p(1-p)/N)
         se = np.sqrt(expected * (1 - expected) / 20000)
-        assert abs(frac - expected) < 10 * se, (
-            f"sample share={frac:.5f}, expected={expected:.5f}, "
-            f"10*SE={10 * se:.5f}"
-        )
+        assert abs(frac - expected) < 10 * se, f"sample share={frac:.5f}, expected={expected:.5f}, 10*SE={10 * se:.5f}"
 
 
 # ---------------------------------------------------------------------------
@@ -363,9 +352,7 @@ class TestSurfaceInterpolator:
         interp = SurfaceInterpolator(m)
         np.random.seed(7)
         got = interp.interpolate_values(values, m.vertices.copy())
-        assert np.allclose(got, values, atol=1e-6), (
-            f"identity violated; max abs diff = {np.abs(got - values).max()}"
-        )
+        assert np.allclose(got, values, atol=1e-6), f"identity violated; max abs diff = {np.abs(got - values).max()}"
 
     def test_finite_for_arbitrary_queries(self):
         """Any 3D query point must yield a finite scalar (even far away)."""
@@ -400,9 +387,7 @@ class TestSurfaceInterpolator:
             ]
         )
         got = interp.interpolate_values(values, queries)
-        assert np.allclose(got, c, atol=1e-9), (
-            f"constant not preserved: got={got}"
-        )
+        assert np.allclose(got, c, atol=1e-9), f"constant not preserved: got={got}"
 
 
 # ---------------------------------------------------------------------------

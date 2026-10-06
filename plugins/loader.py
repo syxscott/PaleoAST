@@ -16,6 +16,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 # The first-party analyses used to be listed here, as a 7-entry tuple
 # that no code read and whose docstring claimed it was a complete
 # inventory when it named 7 of 23. The real list is

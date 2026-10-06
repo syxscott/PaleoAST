@@ -65,10 +65,16 @@ if text:
     check("has a preamble", "\\documentclass" in text and "\\begin{document}" in text)
     braces = text.count("{") - text.count("}")
     check("braces balance", braces == 0, f"off by {braces}")
-    check("no unescaped % outside comments", text.count("%") - text.count("\\%") <= text.count("\\begin{comment}") + 2,
-          "a bare % starts a LaTeX comment and silently eats the rest of the line")
-    check("no unescaped _ in prose", not re.search(r"(?<!\\)_[a-zA-Z]", text.replace("\\\\_", "")),
-          "a bare _ is a LaTeX error outside math mode")
+    check(
+        "no unescaped % outside comments",
+        text.count("%") - text.count("\\%") <= text.count("\\begin{comment}") + 2,
+        "a bare % starts a LaTeX comment and silently eats the rest of the line",
+    )
+    check(
+        "no unescaped _ in prose",
+        not re.search(r"(?<!\\)_[a-zA-Z]", text.replace("\\\\_", "")),
+        "a bare _ is a LaTeX error outside math mode",
+    )
     check("title present", "A test of the report builder" in text)
     check("author present", "A. Researcher" in text)
 
@@ -79,8 +85,11 @@ if text:
     p_mentioned = "0.041" in text
     check("p-value rendered", p_mentioned, "the p-value never made it into the document")
     check("df rendered", "4" in text)
-    check("no unfilled {statistic}-style placeholder", "None" not in text.split("\\begin{document}")[-1][:4000],
-          "a Python None leaked into the body")
+    check(
+        "no unfilled {statistic}-style placeholder",
+        "None" not in text.split("\\begin{document}")[-1][:4000],
+        "a Python None leaked into the body",
+    )
 
 print()
 print("=== 4. preamble / escaping ===")

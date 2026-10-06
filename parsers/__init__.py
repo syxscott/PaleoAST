@@ -59,4 +59,3 @@ __all__ = [
     "parse_dat_file",
     "parse_tps_file",
 ]
-

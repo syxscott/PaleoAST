@@ -61,8 +61,7 @@ class TestANOSIMPAICorrection:
         # = (R + 1/(n-1)) / (n/(n-1)) - R = ((n-1)R + 1)/n - R
         # = (R - 1)/n, which for R near 1 is approximately 0
         assert abs(result.r_pai - result.statistic) < 0.02, (
-            f"Balanced groups: |R_PAI - R| = {abs(result.r_pai - result.statistic):.4f} "
-            f"should be tiny"
+            f"Balanced groups: |R_PAI - R| = {abs(result.r_pai - result.statistic):.4f} should be tiny"
         )
 
     def test_unbalanced_groups_correction_is_substantial(self):

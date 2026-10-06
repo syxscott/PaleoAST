@@ -354,12 +354,8 @@ def _depth_varying_half_width(
         sigma_blend[i] = float(np.sum(w * constraint_errors) / np.sum(w))
 
     # Distance-to-nearest-dated-horizon penalty
-    dist_to_nearest = np.min(
-        np.abs(section_heights[:, None] - constraint_heights[None, :]), axis=1
-    )
-    in_range = (section_heights >= constraint_heights.min()) & (
-        section_heights <= constraint_heights.max()
-    )
+    dist_to_nearest = np.min(np.abs(section_heights[:, None] - constraint_heights[None, :]), axis=1)
+    in_range = (section_heights >= constraint_heights.min()) & (section_heights <= constraint_heights.max())
     # Penalty: 1 in-range, grows linearly outside, capped at extrapolation_floor
     penalty = np.where(
         in_range,

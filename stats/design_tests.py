@@ -304,16 +304,13 @@ def _as_label_array(labels: Sequence[Any], n_rows: int, name: str) -> npt.NDArra
     for position, label in enumerate(array):
         if isinstance(label, float) and np.isnan(label):
             raise DataValidationError(
-                f"{name}: observation {position} has no factor label. "
-                f"Every observation must be assigned to a level.",
+                f"{name}: observation {position} has no factor label. Every observation must be assigned to a level.",
                 details={"position": int(position)},
             )
     return array
 
 
-def _as_1d_response(
-    values: npt.NDArray, name: str, allow_nan: bool = True
-) -> npt.NDArray:
+def _as_1d_response(values: npt.NDArray, name: str, allow_nan: bool = True) -> npt.NDArray:
     """Flatten the response to one finite float per row.
 
     A two-dimensional input is accepted only when it carries a single
@@ -338,8 +335,7 @@ def _as_1d_response(
         array = array.ravel()
     elif array.ndim != 1:
         raise MatrixDimensionError(
-            f"{name}: expected a 1-D response, got an array of shape "
-            f"{array.shape}",
+            f"{name}: expected a 1-D response, got an array of shape {array.shape}",
             details={"shape": tuple(int(x) for x in array.shape)},
         )
     if array.size == 0:
@@ -511,8 +507,9 @@ class TwoWayANOVAResult:
         lines.append(f"{_('total'):<18} {self.ss_total:>12.4f} {self.df_total:>4}")
         lines.append("")
         lines.append(
-            _("Permutation of the response (free exchangeability assumed): "
-               "{0} permutation(s), seed {1}").format(self.n_permutations, self.random_seed)
+            _("Permutation of the response (free exchangeability assumed): {0} permutation(s), seed {1}").format(
+                self.n_permutations, self.random_seed
+            )
         )
         if self.significant_terms:
             lines.append(_("Significant terms: {0}").format(", ".join(self.significant_terms)))
@@ -596,8 +593,7 @@ class RepeatedMeasuresResult:
         lines = [
             _("Repeated-Measures ANOVA"),
             "=" * 72,
-            _("Design: {0} subjects x {1} measurements in {2} group(s) "
-               "({3} per group)").format(
+            _("Design: {0} subjects x {1} measurements in {2} group(s) ({3} per group)").format(
                 self.n_subjects, self.n_measurements, self.n_groups, self.n_per_group
             ),
             _("Grand mean: {0}").format(f"{self.grand_mean:.6g}"),
@@ -682,15 +678,19 @@ class ICCResult:
         )
         components = ", ".join(f"{k} = {v:.4g}" for k, v in self.variance_components.items())
         negative_note = (
-            _("\nNote: at least one variance component was estimated below zero and "
-               "reported as 0; the ICC point estimate is left unclipped because "
-               "that bias is part of the estimator.")
+            _(
+                "\nNote: at least one variance component was estimated below zero and "
+                "reported as 0; the ICC point estimate is left unclipped because "
+                "that bias is part of the estimator."
+            )
             if any(v == 0.0 for v in self.variance_components.values())
             else ""
         )
-        interval = _("95% CI: [{0}, {1}]").format(
-            f"{self.ci_lower:.4f}", f"{self.ci_upper:.4f}"
-        ).replace("95%", f"{round(self.confidence * 100)}%")
+        interval = (
+            _("95% CI: [{0}, {1}]")
+            .format(f"{self.ci_lower:.4f}", f"{self.ci_upper:.4f}")
+            .replace("95%", f"{round(self.confidence * 100)}%")
+        )
         mean_squares = _("MS targets = {0}, MS raters = {1}, MS error = {2}").format(
             f"{self.ms_targets:.4g}", f"{self.ms_raters:.4g}", f"{self.ms_error:.4g}"
         )
@@ -759,14 +759,11 @@ class ContingencyResult:
     def summary(self) -> str:
         """Generate summary text."""
         warning = (
-            _("\nWarning: a cell has an expected count below 5; the chi-square "
-               "approximation is unreliable here.")
+            _("\nWarning: a cell has an expected count below 5; the chi-square approximation is unreliable here.")
             if self.min_expected < 5.0
             else ""
         )
-        totals = _("N: {0}, smallest expected count: {1}").format(
-            self.n_obs, f"{self.min_expected:.2f}"
-        )
+        totals = _("N: {0}, smallest expected count: {1}").format(self.n_obs, f"{self.min_expected:.2f}")
         return (
             f"{_('Contingency Chi-Square')}\n"
             f"{'=' * 40}\n"
@@ -797,9 +794,7 @@ class ContingencyResult:
 # =============================================================================
 
 
-def _f_ratio_interval(
-    observed: float, df1: int, df2: int, alpha: float
-) -> tuple[float, float]:
+def _f_ratio_interval(observed: float, df1: int, df2: int, alpha: float) -> tuple[float, float]:
     """Interval for a ratio of two independent mean squares.
 
     ``MS1 = m1 * chi2(df1)/df1`` and ``MS2 = m2 * chi2(df2)/df2``
@@ -946,9 +941,7 @@ class DesignTestAnalyzer:
             n_a, n_b = len(levels_a), len(levels_b)
             df_error = n_obs - n_a * n_b
             if df_error <= 0:
-                empty = sorted(
-                    f"{a} x {b}" for a in levels_a for b in levels_b if counts[a][b] == 0
-                )
+                empty = sorted(f"{a} x {b}" for a in levels_a for b in levels_b if counts[a][b] == 0)
                 raise DataValidationError(
                     f"Two-way ANOVA needs at least 2 observations per cell to "
                     f"estimate the residual: {n_obs} observations in {n_a}x{n_b} "
@@ -1100,8 +1093,7 @@ class DesignTestAnalyzer:
             group_levels = _ordered_levels(groups)
             if len(subject_levels) < 2:
                 raise ValidationError(
-                    f"Repeated-measures ANOVA needs at least 2 subjects, got "
-                    f"{len(subject_levels)}",
+                    f"Repeated-measures ANOVA needs at least 2 subjects, got {len(subject_levels)}",
                     details={"n_subjects": len(subject_levels)},
                 )
 
@@ -1133,17 +1125,12 @@ class DesignTestAnalyzer:
             n_measurements = len(measurement_levels)
             if n_measurements < 2:
                 raise ValidationError(
-                    f"Repeated-measures ANOVA needs at least 2 measurements per "
-                    f"subject, got {n_measurements}",
+                    f"Repeated-measures ANOVA needs at least 2 measurements per subject, got {n_measurements}",
                     details={"n_measurements": n_measurements},
                 )
 
             expected = set(measurement_levels)
-            incomplete = sorted(
-                str(s)
-                for s in subject_levels
-                if set(measurement_labels[subjects == s]) != expected
-            )
+            incomplete = sorted(str(s) for s in subject_levels if set(measurement_labels[subjects == s]) != expected)
             if incomplete:
                 raise MatrixDimensionError(
                     f"Repeated-measures ANOVA requires every subject to carry "
@@ -1164,17 +1151,11 @@ class DesignTestAnalyzer:
             # measurement levels were first seen, then reshape.
             subject_position = {s: i for i, s in enumerate(subject_levels)}
             measurement_position = {m: j for j, m in enumerate(measurement_levels)}
-            keys = np.asarray(
-                [subject_position[s] for s in subjects], dtype=int
-            ) * n_measurements + np.asarray(
+            keys = np.asarray([subject_position[s] for s in subjects], dtype=int) * n_measurements + np.asarray(
                 [measurement_position[m] for m in measurement_labels], dtype=int
             )
-            matrix = response[np.argsort(keys, kind="stable")].reshape(
-                len(subject_levels), n_measurements
-            )
-            group_by_subject = np.asarray(
-                [subject_group[s] for s in subject_levels], dtype=object
-            )
+            matrix = response[np.argsort(keys, kind="stable")].reshape(len(subject_levels), n_measurements)
+            group_by_subject = np.asarray([subject_group[s] for s in subject_levels], dtype=object)
             sizes = np.asarray([np.sum(group_by_subject == g) for g in group_levels], dtype=int)
             if np.unique(sizes).size != 1:
                 raise MatrixDimensionError(
@@ -1185,9 +1166,7 @@ class DesignTestAnalyzer:
                     f"multivariate missing-data machinery, not a Type I "
                     f"decomposition.",
                     details={
-                        "group_sizes": {
-                            str(k): int(v) for k, v in zip(group_levels, sizes, strict=True)
-                        },
+                        "group_sizes": {str(k): int(v) for k, v in zip(group_levels, sizes, strict=True)},
                         "group_sizes_per_group": int(sizes[0]) if sizes.size else 0,
                     },
                 )
@@ -1229,12 +1208,8 @@ class DesignTestAnalyzer:
                     eta_squared=float(ss["subjects"] / ss["total"]) if ss["total"] > 0 else 0.0,
                     partial_eta_squared=0.0,
                 ),
-                term_measurement=_term(
-                    measurement_name, "measurement", "error", df["error"]
-                ),
-                term_interaction=_term(
-                    f"{measurement_name}:{group_name}", "interaction", "error", df["error"]
-                ),
+                term_measurement=_term(measurement_name, "measurement", "error", df["error"]),
+                term_interaction=_term(f"{measurement_name}:{group_name}", "interaction", "error", df["error"]),
                 term_error=ANOVATerm(
                     name=f"{subject_name}:{measurement_name} (error)",
                     ss=float(ss["error"]),
@@ -1253,8 +1228,7 @@ class DesignTestAnalyzer:
             )
             self._last_result = result
             self._logger.info(
-                "Repeated-measures ANOVA completed: %d subjects x %d measurements "
-                "in %d groups; F(%s)=%.4f, F(%s)=%.4f",
+                "Repeated-measures ANOVA completed: %d subjects x %d measurements in %d groups; F(%s)=%.4f, F(%s)=%.4f",
                 result.n_subjects,
                 result.n_measurements,
                 result.n_groups,
@@ -1370,32 +1344,22 @@ class DesignTestAnalyzer:
                     },
                     n_targets=int(n_targets),
                     n_raters=int(n_raters),
-                    interval_method=_(
-                        "degenerate: zero residual variance, the estimate has no "
-                        "sampling error"
-                    ),
+                    interval_method=_("degenerate: zero residual variance, the estimate has no sampling error"),
                 )
                 return self._last_result
 
             alpha = 1.0 - confidence
             df1 = n_targets - 1
             if form == "3,1":
-                a_lower, a_upper = _component_bounds(
-                    ms_targets / ms_error, df1, df_error, alpha, float(n_raters)
-                )
+                a_lower, a_upper = _component_bounds(ms_targets / ms_error, df1, df_error, alpha, float(n_raters))
                 ci_lower, ci_upper = a_lower / (1.0 + a_lower), a_upper / (1.0 + a_upper)
-                interval_method = _(
-                    "exact F inversion of MS_targets/MS_error, alpha = 0.05 split "
-                    "into two tails"
-                )
+                interval_method = _("exact F inversion of MS_targets/MS_error, alpha = 0.05 split into two tails")
             else:
                 # Two mean squares share MS_error, so their intervals are not
                 # independent; each is built at alpha/2 and combined
                 # (Bonferroni), which keeps joint coverage at or above
                 # 1 - alpha at the cost of width.
-                a_lower, a_upper = _component_bounds(
-                    ms_targets / ms_error, df1, df_error, alpha / 2.0, float(n_raters)
-                )
+                a_lower, a_upper = _component_bounds(ms_targets / ms_error, df1, df_error, alpha / 2.0, float(n_raters))
                 b_lower, b_upper = _component_bounds(
                     (ms_raters - ms_error) / ms_error,
                     n_raters - 1,
@@ -1406,8 +1370,7 @@ class DesignTestAnalyzer:
                 ci_lower = a_lower / (a_lower + b_upper + 1.0)
                 ci_upper = a_upper / (a_upper + b_lower + 1.0)
                 interval_method = _(
-                    "exact F inversion of both mean-square ratios, Bonferroni at "
-                    "alpha/2 because they share MS_error"
+                    "exact F inversion of both mean-square ratios, Bonferroni at alpha/2 because they share MS_error"
                 )
 
             icc = self._icc_value(form, ms_targets, ms_raters, ms_error, n_targets, n_raters)
@@ -1490,8 +1453,7 @@ class DesignTestAnalyzer:
             if not np.all(np.isfinite(matrix)):
                 bad = int(np.sum(~np.isfinite(matrix)))
                 raise DataValidationError(
-                    f"Intraclass correlation: {bad} cell(s) are missing or "
-                    f"infinite; the table must be complete.",
+                    f"Intraclass correlation: {bad} cell(s) are missing or infinite; the table must be complete.",
                     details={"n_invalid": bad},
                 )
             if targets is not None:
@@ -1518,8 +1480,7 @@ class DesignTestAnalyzer:
             )
         if np.ptp(matrix) == 0:
             raise ComputationError(
-                f"Intraclass correlation is undefined for a constant table "
-                f"(every value is {matrix.flat[0]})",
+                f"Intraclass correlation is undefined for a constant table (every value is {matrix.flat[0]})",
                 details={"constant_value": float(matrix.flat[0])},
             )
         return matrix, n_targets, n_raters
@@ -1532,11 +1493,7 @@ class DesignTestAnalyzer:
         if form == "3,1":
             denominator = ms_targets + (n_raters - 1) * ms_error
         else:
-            denominator = (
-                ms_targets
-                + (n_raters - 1) * ms_error
-                + n_raters * (ms_raters - ms_error) / n_targets
-            )
+            denominator = ms_targets + (n_raters - 1) * ms_error + n_raters * (ms_raters - ms_error) / n_targets
         if denominator == 0:
             return _NAN
         return float((ms_targets - ms_error) / denominator)
@@ -1576,8 +1533,7 @@ class DesignTestAnalyzer:
             observed = np.asarray(table, dtype=float)
             if observed.ndim != 2 or observed.shape[0] < 2 or observed.shape[1] < 2:
                 raise MatrixDimensionError(
-                    f"Contingency chi-square needs a table of at least 2x2, got "
-                    f"shape {observed.shape}",
+                    f"Contingency chi-square needs a table of at least 2x2, got shape {observed.shape}",
                     details={"shape": tuple(int(x) for x in observed.shape)},
                 )
             if not np.all(np.isfinite(observed)) or np.any(observed < 0):
@@ -1760,9 +1716,7 @@ def _two_way_permutation_p(
 
     ss, df, _ = _two_way_sums_of_squares(response, labels_a, labels_b, levels_a, levels_b)
     ms_error = ss["error"] / df["error"] if df["error"] else _NAN
-    observed = {
-        key: (ss[key] / df[key]) / ms_error for key in ("A", "B", "AB") if df[key] and ms_error > 0
-    }
+    observed = {key: (ss[key] / df[key]) / ms_error for key in ("A", "B", "AB") if df[key] and ms_error > 0}
 
     def _permuted_term(rng: np.random.Generator) -> dict[str, float]:
         shuffled = _two_way_sums_of_squares(
@@ -1771,10 +1725,7 @@ def _two_way_permutation_p(
         ms_error_shuffled = shuffled["error"] / df["error"] if df["error"] else _NAN
         if not np.isfinite(ms_error_shuffled) or ms_error_shuffled <= 0:
             return {key: _NAN for key in observed}
-        return {
-            key: (shuffled[key] / df[key]) / ms_error_shuffled
-            for key in observed
-        }
+        return {key: (shuffled[key] / df[key]) / ms_error_shuffled for key in observed}
 
     def _statistic(key: str) -> Any:
         def _inner(rng: np.random.Generator) -> float:
@@ -1829,9 +1780,7 @@ def _repeated_measures_sums_of_squares(
     subject_means = np.mean(matrix, axis=1)
 
     group_levels = _ordered_levels(group_by_subject)
-    group_means = np.asarray(
-        [float(np.mean(subject_means[group_by_subject == g])) for g in group_levels]
-    )
+    group_means = np.asarray([float(np.mean(subject_means[group_by_subject == g])) for g in group_levels])
     ss_total = float(np.sum((matrix - grand) ** 2))
     ss_groups = float(n_measurements * n_per_group * np.sum((group_means - grand) ** 2))
     ss_subjects = float(n_measurements * np.sum((subject_means - grand) ** 2))
@@ -1839,16 +1788,12 @@ def _repeated_measures_sums_of_squares(
 
     centred = matrix - subject_means[:, None]
     measurement_means = np.mean(centred, axis=0)
-    cell_group_means = np.vstack(
-        [np.mean(centred[group_by_subject == g], axis=0) for g in group_levels]
-    )
+    cell_group_means = np.vstack([np.mean(centred[group_by_subject == g], axis=0) for g in group_levels])
     ss_measurement = float(n_subjects * np.sum(measurement_means**2))
     # Each group x measurement cell holds n_per_group subject means, and
     # the group means of the subject-centred data already sum to zero over
     # measurements, so the interaction contrast needs no further correction.
-    ss_interaction = float(
-        n_per_group * np.sum((cell_group_means - measurement_means) ** 2)
-    )
+    ss_interaction = float(n_per_group * np.sum((cell_group_means - measurement_means) ** 2))
     ss_error = float(np.sum(centred**2) - ss_measurement - ss_interaction)
 
     g_count = len(group_levels)

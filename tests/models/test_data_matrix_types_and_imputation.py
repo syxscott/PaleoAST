@@ -18,7 +18,7 @@ from utils.exceptions import DataValidationError
 def _make_matrix(data, *, data_types: list[str] | None = None) -> DataMatrix:
     """Build a DataMatrix with per-column data_type metadata."""
     n_cols = np.asarray(data).shape[1]
-    col_labels = [f"Var_{j+1}" for j in range(n_cols)]
+    col_labels = [f"Var_{j + 1}" for j in range(n_cols)]
     column_metadata = {}
     if data_types is not None:
         for label, dt in zip(col_labels, data_types, strict=False):

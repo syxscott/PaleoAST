@@ -63,15 +63,11 @@ class TestReportIsWellFormed:
     def test_document_environment_is_closed(self, generated_report):
         assert "\\begin{document}" in generated_report
         assert "\\end{document}" in generated_report
-        assert generated_report.index("\\begin{document}") < generated_report.index(
-            "\\end{document}"
-        )
+        assert generated_report.index("\\begin{document}") < generated_report.index("\\end{document}")
 
     def test_documentclass_is_declared_before_the_body(self, generated_report):
         assert "\\documentclass" in generated_report
-        assert generated_report.index("\\documentclass") < generated_report.index(
-            "\\begin{document}"
-        )
+        assert generated_report.index("\\documentclass") < generated_report.index("\\begin{document}")
 
     def test_braces_balance(self, generated_report):
         assert generated_report.count("{") == generated_report.count("}"), (
@@ -139,9 +135,7 @@ class TestStatisticsRenderAsNumbers:
 class TestPreamble:
     def test_documentclass_line(self):
         preamble = LatexPreamble(DocumentClass.ARTICLE)
-        assert preamble.generate_documentclass() == (
-            "\\documentclass[11pt,a4paper]{article}"
-        )
+        assert preamble.generate_documentclass() == ("\\documentclass[11pt,a4paper]{article}")
 
     @pytest.mark.parametrize(
         "doc_class,expected",

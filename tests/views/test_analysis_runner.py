@@ -107,10 +107,7 @@ def test_most_parameters_are_renderable(registry) -> None:
             if spec.kind == "unsupported":
                 unsupported += 1
     assert total > 250, f"expected a large parameter surface, got {total}"
-    assert unsupported / total < 0.08, (
-        f"{unsupported} of {total} parameters are unrenderable; "
-        f"the coverage bar is 8%"
-    )
+    assert unsupported / total < 0.08, f"{unsupported} of {total} parameters are unrenderable; the coverage bar is 8%"
 
 
 def test_unsupported_parameters_say_why(registry) -> None:
@@ -118,9 +115,7 @@ def test_unsupported_parameters_say_why(registry) -> None:
     for entry in BUILTIN_ANALYSES:
         for spec in build_specs(entry, registry.get(entry.name)):
             if spec.kind == "unsupported":
-                assert spec.detail.strip(), (
-                    f"{entry.name}.{spec.name} is unsupported with no reason"
-                )
+                assert spec.detail.strip(), f"{entry.name}.{spec.name} is unsupported with no reason"
 
 
 def test_integer_parameters_get_sensible_bounds(registry) -> None:
@@ -245,11 +240,7 @@ def test_dialog_lists_every_analysis(dialog) -> None:
     """One row per catalogued analysis, plus a header per category."""
     from PyQt6.QtCore import Qt
 
-    selectable = sum(
-        1
-        for i in range(dialog._list.count())
-        if dialog._list.item(i).data(Qt.ItemDataRole.UserRole)
-    )
+    selectable = sum(1 for i in range(dialog._list.count()) if dialog._list.item(i).data(Qt.ItemDataRole.UserRole))
     assert selectable == len(BUILTIN_ANALYSES)
 
 

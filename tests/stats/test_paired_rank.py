@@ -59,9 +59,7 @@ def test_sign_test_matches_the_exact_binomial(analyzer: UnivariateAnalyzer) -> N
     n = 12
     before = [1.0] * n
     after = [2.0] * n
-    result = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(n), method="sign"
-    )
+    result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(n), method="sign")
     expected = 2.0 * (0.5**n)
     assert result.p_value == pytest.approx(expected, rel=1e-9)
     assert result.statistic == float(n)
@@ -77,9 +75,7 @@ def test_sign_test_with_ties_discards_them(analyzer: UnivariateAnalyzer) -> None
     """Zero differences carry no direction, so they are not counted."""
     before = [1.0, 1.0, 1.0, 1.0]
     after = [2.0, 1.0, 3.0, 1.0]  # two ties
-    result = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(4), method="sign"
-    )
+    result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(4), method="sign")
     assert result.n_ties == 2
     assert result.n_positive == 2
     assert result.n_negative == 0
@@ -93,12 +89,8 @@ def test_sign_test_is_symmetric(analyzer: UnivariateAnalyzer) -> None:
     """Flipping the direction of every difference must not move the p-value."""
     before = [1.0] * 8
     forward = [2.0] * 6 + [1.0] * 2
-    result_a = analyzer.paired_rank_test(
-        _paired(forward, before), groups=_groups(8), method="sign"
-    )
-    result_b = analyzer.paired_rank_test(
-        _paired(before, forward), groups=_groups(8), method="sign"
-    )
+    result_a = analyzer.paired_rank_test(_paired(forward, before), groups=_groups(8), method="sign")
+    result_b = analyzer.paired_rank_test(_paired(before, forward), groups=_groups(8), method="sign")
     assert result_a.p_value == pytest.approx(result_b.p_value, rel=1e-12)
     assert (result_a.n_positive, result_a.n_negative) == (
         result_b.n_negative,
@@ -117,9 +109,7 @@ def test_sign_test_ignores_the_magnitude_of_differences(
     n = 10
     before = [0.0] * n
     after = [0.1] * 5 + [-0.1] * 4 + [1000.0]
-    result = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(n), method="sign"
-    )
+    result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(n), method="sign")
     assert result.n_positive == 6
     assert result.n_negative == 4
     # 6 of 10 is nowhere near significant.
@@ -136,17 +126,11 @@ def test_wilcoxon_reverses_with_the_data(analyzer: UnivariateAnalyzer) -> None:
     """Swapping the two columns must mirror the statistic, not change it."""
     before = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     after = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
-    forward = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(6), method="wilcoxon"
-    )
-    reverse = analyzer.paired_rank_test(
-        _paired(before, after), groups=_groups(6), method="wilcoxon"
-    )
+    forward = analyzer.paired_rank_test(_paired(after, before), groups=_groups(6), method="wilcoxon")
+    reverse = analyzer.paired_rank_test(_paired(before, after), groups=_groups(6), method="wilcoxon")
     assert forward.statistic == pytest.approx(reverse.statistic, abs=1e-9)
     assert forward.p_value == pytest.approx(reverse.p_value, rel=1e-12)
-    assert forward.median_difference == pytest.approx(
-        -reverse.median_difference
-    )
+    assert forward.median_difference == pytest.approx(-reverse.median_difference)
 
 
 def test_wilcoxon_is_affected_by_an_outlier_that_the_sign_test_ignores(
@@ -156,12 +140,8 @@ def test_wilcoxon_is_affected_by_an_outlier_that_the_sign_test_ignores(
     n = 10
     before = [0.0] * n
     after = [0.1] * 5 + [-0.1] * 4 + [100.0]
-    sign = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(n), method="sign"
-    )
-    wilcoxon = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(n), method="wilcoxon"
-    )
+    sign = analyzer.paired_rank_test(_paired(after, before), groups=_groups(n), method="sign")
+    wilcoxon = analyzer.paired_rank_test(_paired(after, before), groups=_groups(n), method="wilcoxon")
     assert not sign.significant
     assert wilcoxon.p_value < sign.p_value
 
@@ -181,9 +161,6 @@ def test_wilcoxon_agrees_with_scipy(analyzer: UnivariateAnalyzer) -> None:
     assert result.p_value == pytest.approx(expected_p, rel=1e-12)
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # Pairing behaviour shared by both
 # ---------------------------------------------------------------------------
@@ -199,9 +176,7 @@ def test_a_pair_is_dropped_when_either_side_is_missing(
     """
     before = [1.0, 2.0, 3.0, 4.0]
     after = [2.0, np.nan, 4.0, 5.0]
-    result = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(4), method="sign"
-    )
+    result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(4), method="sign")
     # Pair 1 has a missing "after", so it goes even though its "before" is
     # present. The survivors are pairs 0, 2 and 3, all of which differ by
     # exactly +1 -- which is the assertion that matters: if the survivors
@@ -265,9 +240,7 @@ def test_all_zero_differences_are_rejected(analyzer: UnivariateAnalyzer) -> None
     values = [1.0, 2.0, 3.0, 4.0]
     for method in ("sign", "wilcoxon"):
         with pytest.raises(ComputationError):
-            analyzer.paired_rank_test(
-                _paired(values, values), groups=_groups(4), method=method
-            )
+            analyzer.paired_rank_test(_paired(values, values), groups=_groups(4), method=method)
 
 
 def test_wilcoxon_counts_ties_without_discarding_the_rest(
@@ -276,9 +249,7 @@ def test_wilcoxon_counts_ties_without_discarding_the_rest(
     """A few ties do not stop the Wilcoxon test, unlike the sign test."""
     before = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     after = [2.0, 2.0, 4.0, 4.0, 6.0, 6.0]  # three ties, three doubles
-    result = analyzer.paired_rank_test(
-        _paired(after, before), groups=_groups(6), method="wilcoxon"
-    )
+    result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(6), method="wilcoxon")
     assert result.n_ties == 3
     assert result.n_positive == 3
     assert result.n_negative == 0
@@ -306,9 +277,7 @@ def test_result_serialises(analyzer: UnivariateAnalyzer) -> None:
     before = [1.0] * 10
     after = [2.0] * 10
     for method in ("sign", "wilcoxon"):
-        result = analyzer.paired_rank_test(
-            _paired(after, before), groups=_groups(10), method=method
-        )
+        result = analyzer.paired_rank_test(_paired(after, before), groups=_groups(10), method=method)
         payload = result.to_dict()
         assert payload["test_type"] == method
         assert set(payload) >= {"statistic", "p_value", "n_positive", "n_ties"}

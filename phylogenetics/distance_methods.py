@@ -174,17 +174,14 @@ class DistanceMatrix:
         n = len(labels)
         if matrix.shape != (n, n):
             raise ValueError(
-                f"Distance matrix is {matrix.shape} but {n} labels were given; "
-                "expected a square (n, n) matrix."
+                f"Distance matrix is {matrix.shape} but {n} labels were given; expected a square (n, n) matrix."
             )
 
         asymmetry = float(np.abs(matrix - matrix.T).max()) if n > 1 else 0.0
         if not np.isfinite(asymmetry) or asymmetry > 1e-8:
             worst = None
             if n > 1:
-                i, j = np.unravel_index(
-                    int(np.argmax(np.abs(matrix - matrix.T))), matrix.shape
-                )
+                i, j = np.unravel_index(int(np.argmax(np.abs(matrix - matrix.T))), matrix.shape)
                 worst = (labels[i], labels[j], float(matrix[i, j]), float(matrix[j, i]))
             detail = f" (worst: {worst[0]}/{worst[1]} = {worst[2]} vs {worst[3]})" if worst else ""
             raise ValueError(

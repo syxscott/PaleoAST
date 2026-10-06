@@ -28,9 +28,7 @@ class TestRawPathBackwardCompatible:
                 [0, 2, 0, 7],
             ]
         )
-        results = DiversityAnalyzer().analyze_multiple(
-            abundance, compute_standardized=False
-        )
+        results = DiversityAnalyzer().analyze_multiple(abundance, compute_standardized=False)
         assert len(results) == 3
         for r in results:
             assert "shannon" in r.indices
@@ -78,17 +76,14 @@ class TestStandardizedHill:
         )
         with caplog.at_level(logging.WARNING):
             results = DiversityAnalyzer().analyze_multiple(abundance)
-        notes = [
-            r.metadata.get("standardized_hill", {}).get("note")
-            for r in results
-        ]
+        notes = [r.metadata.get("standardized_hill", {}).get("note") for r in results]
         assert any(n is not None and "differ" in n for n in notes)
 
     def test_equal_sample_sizes_no_note(self):
         abundance = np.array(
             [
                 [10, 5, 2, 1],  # N = 18
-                [8, 6, 3, 1],   # N = 18
+                [8, 6, 3, 1],  # N = 18
             ]
         )
         results = DiversityAnalyzer().analyze_multiple(abundance)
@@ -105,9 +100,7 @@ class TestStandardizedHill:
                 [12, 8, 5, 3, 1, 1],
             ]
         )
-        results = DiversityAnalyzer().analyze_multiple(
-            abundance, coverage_levels=(0.50,)
-        )
+        results = DiversityAnalyzer().analyze_multiple(abundance, coverage_levels=(0.50,))
         for r in results:
             v = r.metadata["standardized_hill"]["q0"]["C=0.50"]
             assert np.isfinite(v)

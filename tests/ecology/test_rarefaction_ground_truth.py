@@ -38,9 +38,7 @@ SEED = 9
 
 def _hurlbert(occurrences: np.ndarray, n_total: int, k: int) -> float:
     """E[S_k] = sum_i [ 1 - C(N - n_i, k) / C(N, k) ]  (Hurlbert 1971)."""
-    return sum(
-        1.0 - comb(n_total - int(a), k) / comb(n_total, k) for a in occurrences
-    )
+    return sum(1.0 - comb(n_total - int(a), k) / comb(n_total, k) for a in occurrences)
 
 
 class TestIndividualBased:
@@ -53,14 +51,10 @@ class TestIndividualBased:
         total = int(abundances.sum())
         max_n = min(10, total - 1)
 
-        result = compute_rarefaction(
-            abundances.astype(float), max_n=max_n, n_points=max_n
-        )
+        result = compute_rarefaction(abundances.astype(float), max_n=max_n, n_points=max_n)
         sizes = np.ravel(result.sample_sizes)
         values = np.ravel(result.expected_taxa)
-        expected = np.array(
-            [_hurlbert(abundances, total, int(k)) for k in sizes]
-        )
+        expected = np.array([_hurlbert(abundances, total, int(k)) for k in sizes])
         assert values == pytest.approx(expected, rel=1e-4, abs=1e-5)
 
     def test_curve_is_monotone_and_bounded(self):
@@ -76,12 +70,8 @@ class TestIndividualBased:
         rng = np.random.default_rng(6)
         abundances = rng.integers(1, 12, size=7)
         total = int(abundances.sum())
-        result = compute_rarefaction(
-            abundances.astype(float), max_n=total, n_points=total
-        )
-        assert np.ravel(result.expected_taxa)[-1] == pytest.approx(
-            len(abundances), rel=1e-6
-        )
+        result = compute_rarefaction(abundances.astype(float), max_n=total, n_points=total)
+        assert np.ravel(result.expected_taxa)[-1] == pytest.approx(len(abundances), rel=1e-6)
 
     def test_exact_beyond_the_stirling_threshold(self):
         """N >= 60 used to switch to a Stirling approximation.
@@ -95,14 +85,10 @@ class TestIndividualBased:
         total = int(abundances.sum())
         assert total > 60, "fixture must exceed the Stirling threshold"
 
-        at_one = compute_rarefaction(
-            abundances.astype(float), max_n=1, n_points=1
-        )
+        at_one = compute_rarefaction(abundances.astype(float), max_n=1, n_points=1)
         assert np.ravel(at_one.expected_taxa)[0] == pytest.approx(1.0, abs=1e-12)
 
-        at_max = compute_rarefaction(
-            abundances.astype(float), max_n=min(20, total - 1), n_points=20
-        )
+        at_max = compute_rarefaction(abundances.astype(float), max_n=min(20, total - 1), n_points=20)
         sizes = np.ravel(at_max.sample_sizes)
         values = np.ravel(at_max.expected_taxa)
         expected = np.array([_hurlbert(abundances, total, int(k)) for k in sizes])
@@ -142,15 +128,11 @@ class TestSampleBased:
         values = np.ravel(result.expected_taxa)
         assert list(sizes) == list(requested.astype(int))
 
-        expected = np.array(
-            [_hurlbert(occurrences, n_samples, int(k)) for k in sizes]
-        )
+        expected = np.array([_hurlbert(occurrences, n_samples, int(k)) for k in sizes])
         assert values == pytest.approx(expected, rel=1e-9, abs=1e-12)
 
     def test_curve_is_monotone_and_bounded(self, occurrence_matrix):
-        result = compute_sample_based_rarefaction(
-            occurrence_matrix, np.array([1, 3, 6, 10], dtype=float)
-        )[0]
+        result = compute_sample_based_rarefaction(occurrence_matrix, np.array([1, 3, 6, 10], dtype=float))[0]
         values = np.ravel(result.expected_taxa)
         richness = int(occurrence_matrix.sum(axis=0).astype(bool).sum())
         assert np.all(np.diff(values) >= -1e-9)
@@ -159,12 +141,8 @@ class TestSampleBased:
     def test_one_site_expects_that_site_s_mean_richness(self, occurrence_matrix):
         """Drawing a single site: the expectation is the mean richness."""
         per_site = occurrence_matrix.sum(axis=1)
-        result = compute_sample_based_rarefaction(
-            occurrence_matrix, np.array([1.0])
-        )[0]
-        assert np.ravel(result.expected_taxa)[0] == pytest.approx(
-            per_site.mean(), rel=1e-9
-        )
+        result = compute_sample_based_rarefaction(occurrence_matrix, np.array([1.0]))[0]
+        assert np.ravel(result.expected_taxa)[0] == pytest.approx(per_site.mean(), rel=1e-9)
 
     def test_sizes_beyond_the_sample_count_are_clipped(self, occurrence_matrix):
         """k > N is undefined; the curve must stop at N, not blow up."""

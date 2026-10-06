@@ -134,12 +134,10 @@ class TestNexusNoUnreachableGlyphRule:
         claimants = [
             rule
             for rule in lexer._rules
-            if rule.pattern.match(glyph) is not None
-            and rule.pattern.match(glyph).group() == glyph
+            if rule.pattern.match(glyph) is not None and rule.pattern.match(glyph).group() == glyph
         ]
         assert len(claimants) == 1, (
-            f"{glyph!r} is claimed by {[r.token_type.name for r in claimants]}; "
-            "all but one are unreachable"
+            f"{glyph!r} is claimed by {[r.token_type.name for r in claimants]}; all but one are unreachable"
         )
         assert claimants[0].token_type is NexusTokenType.MISSING
 
@@ -147,9 +145,7 @@ class TestNexusNoUnreachableGlyphRule:
 class TestSentinelSetIsActuallyCaseInsensitive:
     """Defect 4: documented as case-insensitive, behaved as uppercase-only."""
 
-    @pytest.mark.parametrize(
-        "token", ["na", "NA", "nan", "NaN", "NAN", "none", "None", "null", "NULL"]
-    )
+    @pytest.mark.parametrize("token", ["na", "NA", "nan", "NaN", "NAN", "none", "None", "null", "NULL"])
     def test_membership_folds_case(self, token):
         # Before the fix only the uppercase spellings were members, so
         # `"na" in MISSING_SENTINELS` was False -- a missed missing value.

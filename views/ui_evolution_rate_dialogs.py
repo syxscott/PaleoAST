@@ -117,9 +117,7 @@ class EvolutionRateDialog(QDialog):
             )
         )
         notice.setWordWrap(True)
-        notice.setStyleSheet(
-            f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;"
-        )
+        notice.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         layout.addWidget(notice)
 
         # Trait data input
@@ -133,9 +131,7 @@ class EvolutionRateDialog(QDialog):
             )
         )
         trait_info.setWordWrap(True)
-        trait_info.setStyleSheet(
-            f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;"
-        )
+        trait_info.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; font-size: 11px;")
         trait_layout.addWidget(trait_info)
 
         self._trait_input = QTextEdit()
@@ -274,9 +270,7 @@ class EvolutionRateDialog(QDialog):
                 2: ["directional"],
                 3: ["stasis"],
             }
-            models = model_map.get(
-                self._models_combo.currentIndex(), ["random_walk", "directional", "stasis"]
-            )
+            models = model_map.get(self._models_combo.currentIndex(), ["random_walk", "directional", "stasis"])
 
             analyzer = EvolutionRateAnalyzer()
             n_bootstrap = int(self._bootstrap_spin.value())
@@ -293,9 +287,7 @@ class EvolutionRateDialog(QDialog):
             self._results_text.setPlainText(result.summary())
             self.resultsReady.emit(result.to_dict())
 
-            QMessageBox.information(
-                self, _("Results"), _("Analysis complete. Results displayed above.")
-            )
+            QMessageBox.information(self, _("Results"), _("Analysis complete. Results displayed above."))
 
         except ImportError as e:
             self._logger.error(f"Missing dependency: {e}")

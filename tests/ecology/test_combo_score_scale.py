@@ -33,10 +33,7 @@ class TestComboScoreScale:
         m = _perfect_checkerboard(6)
         analyzer = NullModelAnalyzer()
         score = analyzer._compute_combo_score(m)
-        assert 0.0 <= score <= 1.0 + 1e-9, (
-            f"Combo score {score} outside [0, 1] — components are on "
-            "different scales"
-        )
+        assert 0.0 <= score <= 1.0 + 1e-9, f"Combo score {score} outside [0, 1] — components are on different scales"
 
     def test_combo_score_high_for_segregated(self):
         """A perfectly segregated matrix must give a combo score

@@ -194,21 +194,17 @@ class TestNNINeighborhoodSize:
         search = _nni_only_search()
         edges = search._collect_internal_edges(tree.root)
         true_int_edges = sum(1 for e in edges if not e[0].is_leaf and not e[1].is_leaf)
-        assert true_int_edges == n - 2, (
-            f"expected {n - 2} internal-on-both-ends edges, got {true_int_edges}"
-        )
+        assert true_int_edges == n - 2, f"expected {n - 2} internal-on-both-ends edges, got {true_int_edges}"
 
         neighbours = search._generate_neighbors(tree)
         assert len(neighbours) <= 2 * (n - 3) + 2, (
-            f"NNI produced {len(neighbours)} neighbours, more than the "
-            f"textbook bound for n = {n}"
+            f"NNI produced {len(neighbours)} neighbours, more than the textbook bound for n = {n}"
         )
         if n >= 5:
             assert neighbours, f"no NNI neighbour produced for n = {n}"
         else:
             assert neighbours == [], (
-                "a 4-taxon tree has only the root-adjacent internal edge, "
-                "which a rooted representation cannot NNI"
+                "a 4-taxon tree has only the root-adjacent internal edge, which a rooted representation cannot NNI"
             )
 
     @pytest.mark.parametrize("n", [4, 5, 6, 7, 8])
@@ -247,9 +243,7 @@ class TestNNINeighborhoodTopology:
             assert n == 4, f"NNI neighbourhood unexpectedly empty for n={n}"
             return
         for nb in neighbours:
-            assert _is_binary(nb), (
-                f"NNI neighbour is not strictly binary: {nb.to_newick(branch_lengths=False)}"
-            )
+            assert _is_binary(nb), f"NNI neighbour is not strictly binary: {nb.to_newick(branch_lengths=False)}"
 
     @pytest.mark.parametrize("n", [4, 5, 6, 7, 8])
     def test_all_nni_neighbours_have_same_leaf_set(self, n: int):
@@ -259,8 +253,7 @@ class TestNNINeighborhoodTopology:
 
         for nb in neighbours:
             assert set(nb.leaf_names) == set(labels), (
-                f"NNI neighbour dropped/added taxa: "
-                f"in={set(labels)} out={set(nb.leaf_names)}"
+                f"NNI neighbour dropped/added taxa: in={set(labels)} out={set(nb.leaf_names)}"
             )
 
     @pytest.mark.parametrize("n", [4, 5, 6, 7, 8])
@@ -275,10 +268,7 @@ class TestNNINeighborhoodTopology:
         neighbours = _nni_only_search()._generate_neighbors(tree)
 
         for nb in neighbours:
-            assert nb.to_newick() != orig_newick, (
-                f"NNI neighbour equals the input tree (rooted Newick match); "
-                f"n = {n}"
-            )
+            assert nb.to_newick() != orig_newick, f"NNI neighbour equals the input tree (rooted Newick match); n = {n}"
 
     @pytest.mark.parametrize("n", [4, 5, 6, 7, 8])
     def test_no_duplicate_nni_neighbours(self, n: int):
@@ -288,8 +278,7 @@ class TestNNINeighborhoodTopology:
 
         newicks = [nb.to_newick() for nb in neighbours]
         assert len(newicks) == len(set(newicks)), (
-            f"NNI neighbourhood contains duplicates; n = {n}, "
-            f"counts: total={len(newicks)}, unique={len(set(newicks))}"
+            f"NNI neighbourhood contains duplicates; n = {n}, counts: total={len(newicks)}, unique={len(set(newicks))}"
         )
 
     def test_each_internal_edge_contributes_two_alternatives(self):
@@ -388,9 +377,7 @@ class TestTBRStructuralInvariants:
         tree = _binary_tree(labels, seed=42)
         neighbours = _tbr_only_search()._generate_neighbors(tree)
         for nb in neighbours:
-            assert _is_binary(nb), (
-                f"TBR neighbour is not strictly binary: {nb.to_newick(branch_lengths=False)}"
-            )
+            assert _is_binary(nb), f"TBR neighbour is not strictly binary: {nb.to_newick(branch_lengths=False)}"
 
     @pytest.mark.parametrize("n", [5, 7, 8, 9])
     def test_tbr_neighbourhood_is_larger_than_nni(self, n: int):
@@ -450,9 +437,7 @@ class TestTBRStructuralInvariants:
         orig_newick = tree.to_newick()
         neighbours = _tbr_only_search()._generate_neighbors(tree)
         for nb in neighbours:
-            assert nb.to_newick() != orig_newick, (
-                f"TBR returned the input tree unchanged; n = {n}"
-            )
+            assert nb.to_newick() != orig_newick, f"TBR returned the input tree unchanged; n = {n}"
 
 
 class TestTBRSymmetry:
@@ -485,8 +470,7 @@ class TestTBRSymmetry:
             if orig_splits not in back_splits:
                 violations += 1
         assert violations == 0, (
-            f"TBR symmetry violated for n = {n}: {violations} of "
-            f"{len(tbr_neighbors)} neighbours did not reach back"
+            f"TBR symmetry violated for n = {n}: {violations} of {len(tbr_neighbors)} neighbours did not reach back"
         )
 
 
@@ -516,9 +500,7 @@ class TestNNIisSubsetOfTBR:
         # checking the subset relation.
         nni_new = nni_splits - {R.unrooted_splits(tree)}
         missing = nni_new - tbr_splits
-        assert not missing, (
-            f"NNI topologies missing from TBR for n = {n}: {missing}"
-        )
+        assert not missing, f"NNI topologies missing from TBR for n = {n}: {missing}"
 
 
 # =============================================================================
@@ -709,9 +691,7 @@ class TestCollectInternalEdges:
         edges = s._collect_internal_edges(tree.root)
         # Every collected edge has the parent endpoint non-leaf.
         for parent, _child in edges:
-            assert not parent.is_leaf, (
-                f"edge has a leaf parent: parent={parent.name}"
-            )
+            assert not parent.is_leaf, f"edge has a leaf parent: parent={parent.name}"
 
 
 if __name__ == "__main__":

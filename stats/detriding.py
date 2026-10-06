@@ -123,9 +123,7 @@ class CorrespondenceResult:
             f"{_('Rows')}: {self.n_rows}, {_('columns')}: {self.n_columns}",
             f"{_('Total inertia')}: {self.inertia:.6f}",
         ]
-        for i, (ev, ratio) in enumerate(
-            zip(self.eigenvalues, self.explained_ratio, strict=True), start=1
-        ):
+        for i, (ev, ratio) in enumerate(zip(self.eigenvalues, self.explained_ratio, strict=True), start=1):
             lines.append(f"  {_('Axis {0}').format(i)}: {ev:.6f} ({ratio * 100:.2f}%)")
         return "\n".join(lines)
 
@@ -193,14 +191,9 @@ class DetrendedCAResult:
             "=" * 50,
             f"{_('Rows')}: {self.n_rows}, {_('columns')}: {self.n_columns}",
             f"{_('Gradient detrended on axis 1')}: "
-            + (
-                _("yes")
-                if self.gradient is not None
-                else _("no (axis 1 kept as-is)")
-            ),
+            + (_("yes") if self.gradient is not None else _("no (axis 1 kept as-is)")),
             "",
-            f"{_('Axis'):>5}  {'CA eigenvalue':>14}  {'retained':>9}  "
-            f"{'R-squared':>10}  {'Detrended':>12}",
+            f"{_('Axis'):>5}  {'CA eigenvalue':>14}  {'retained':>9}  {'R-squared':>10}  {'Detrended':>12}",
         ]
         for i in range(len(self.ca_eigenvalues)):
             lines.append(
@@ -210,10 +203,7 @@ class DetrendedCAResult:
                 f"{self.detrended_eigenvalues[i]:>12.6f}"
             )
         lines.append("")
-        lines.append(
-            f"{_('Most important independent axis')}: "
-            f"{_('axis {0}').format(self.first_independent_axis())}"
-        )
+        lines.append(f"{_('Most important independent axis')}: {_('axis {0}').format(self.first_independent_axis())}")
         return "\n".join(lines)
 
     def to_dict(self) -> dict[str, object]:
@@ -277,14 +267,12 @@ class DetrendedCAAnalyzer:
         F = np.asarray(table, dtype=float)
         if F.ndim != 2:
             raise MatrixDimensionError(
-                f"DCA: the contingency table must be 2-dimensional, got "
-                f"{F.ndim} dimensions",
+                f"DCA: the contingency table must be 2-dimensional, got {F.ndim} dimensions",
                 details={"shape": tuple(int(x) for x in F.shape)},
             )
         if F.shape[0] < 2 or F.shape[1] < 2:
             raise MatrixDimensionError(
-                f"DCA: the contingency table needs at least 2 rows and 2 "
-                f"columns, got {F.shape[0]}x{F.shape[1]}",
+                f"DCA: the contingency table needs at least 2 rows and 2 columns, got {F.shape[0]}x{F.shape[1]}",
                 details={"shape": (int(F.shape[0]), int(F.shape[1]))},
             )
         if not np.all(np.isfinite(F)):
@@ -292,20 +280,14 @@ class DetrendedCAAnalyzer:
         if np.any(F < 0):
             n_neg = int(np.sum(F < 0))
             raise ValidationError(
-                f"DCA: a contingency table holds counts and cannot contain "
-                f"negatives; found {n_neg}",
+                f"DCA: a contingency table holds counts and cannot contain negatives; found {n_neg}",
                 details={"n_negative": n_neg},
             )
         if float(np.sum(F)) <= 0:
-            raise ComputationError(
-                "DCA: the contingency table sums to zero, so its "
-                "chi-square distances are undefined"
-            )
+            raise ComputationError("DCA: the contingency table sums to zero, so its chi-square distances are undefined")
         return F
 
-    def correspondence(
-        self, table: npt.NDArray, n_components: int | None = None
-    ) -> CorrespondenceResult:
+    def correspondence(self, table: npt.NDArray, n_components: int | None = None) -> CorrespondenceResult:
         """Run an unconstrained correspondence analysis.
 
         Parameters
@@ -323,8 +305,8 @@ class DetrendedCAAnalyzer:
         F = self._validate_table(table)
         total = float(np.sum(F))
         P = F / total
-        r = P.sum(axis=1)          # row masses
-        c = P.sum(axis=0)          # column masses
+        r = P.sum(axis=1)  # row masses
+        c = P.sum(axis=0)  # column masses
         expected = np.outer(r, c)
         with np.errstate(divide="ignore", invalid="ignore"):
             S = (P - expected) / np.sqrt(expected)
@@ -339,10 +321,7 @@ class DetrendedCAAnalyzer:
         c_used = c[c_valid]
 
         if S.size == 0:
-            raise ComputationError(
-                "DCA: every row or column of the table is zero, so there is "
-                "no structure to analyse"
-            )
+            raise ComputationError("DCA: every row or column of the table is zero, so there is no structure to analyse")
 
         U, sigma, Vt = np.linalg.svd(S, full_matrices=False)
         eigenvalues = (sigma**2) / total
@@ -354,9 +333,7 @@ class DetrendedCAAnalyzer:
         else:
             n_keep = min(int(n_components), max_axes)
         if n_keep < 1:
-            raise ValidationError(
-                f"DCA: n_components must be at least 1, got {n_components}"
-            )
+            raise ValidationError(f"DCA: n_components must be at least 1, got {n_components}")
 
         # Row principal coordinates: U_k * sigma_k / sqrt(r). Column
         # coordinates are the symmetric construction on the right singular
@@ -373,9 +350,7 @@ class DetrendedCAAnalyzer:
             n_columns=int(c_used.size),
         )
         self._last_ca = result
-        self._logger.info(
-            "CA complete: %dx%d table, inertia=%.6f", result.n_rows, result.n_columns, inertia
-        )
+        self._logger.info("CA complete: %dx%d table, inertia=%.6f", result.n_rows, result.n_columns, inertia)
         return result
 
     def analyze(
@@ -414,8 +389,7 @@ class DetrendedCAAnalyzer:
             g = np.asarray(gradient, dtype=float).ravel()
             if g.size != F.shape[0]:
                 raise MatrixDimensionError(
-                    f"DCA: the gradient needs one value per row ({F.shape[0]}), "
-                    f"got {g.size}",
+                    f"DCA: the gradient needs one value per row ({F.shape[0]}), got {g.size}",
                     details={"rows": int(F.shape[0]), "gradient": int(g.size)},
                 )
             if not np.all(np.isfinite(g)):
@@ -471,8 +445,7 @@ class DetrendedCAAnalyzer:
                 retained = 0.0
                 degenerate.append(k + 1)
                 self._logger.warning(
-                    "DCA: axis %d is completely explained by %s; its "
-                    "detrended eigenvalue is 0",
+                    "DCA: axis %d is completely explained by %s; its detrended eigenvalue is 0",
                     k + 1,
                     "the gradient" if k == 0 else "the preceding axes",
                 )

@@ -243,9 +243,7 @@ def test_redfit_recovers_a_known_cycle() -> None:
     meaningless.
     """
     t, signal = _cycle_record()
-    result = redfit(
-        t, signal, n_periods=REDFIT_NPER, window=REDFIT_WINDOW, random_seed=4
-    )
+    result = redfit(t, signal, n_periods=REDFIT_NPER, window=REDFIT_WINDOW, random_seed=4)
 
     n = t.size
     f_min = 1.0 / (n * DT_MA)
@@ -378,9 +376,7 @@ def test_redfit_false_alarm_level_is_of_the_right_order_on_white_noise() -> None
     """
     n = 2430
     white = np.random.default_rng(21).normal(size=n)
-    result = redfit(
-        np.arange(n) * DT_MA, white, n_periods=1215, window=0.15, random_seed=3
-    )
+    result = redfit(np.arange(n) * DT_MA, white, n_periods=1215, window=0.15, random_seed=3)
     rate = float(np.mean(result.fap <= 0.05))
     assert 0.02 < rate < 0.15, f"white-noise rejection rate {rate:.4f} is not near 0.05"
 
@@ -409,9 +405,7 @@ def test_redfit_resamples_an_unevenly_sampled_record() -> None:
     uneven_t = t * (1.0 + 0.5 * (t / SPAN_MA))
     uneven_t = uneven_t - uneven_t[0]
     uneven_y = np.interp(uneven_t, t, signal)
-    result = redfit(
-        uneven_t, uneven_y, n_periods=REDFIT_NPER, window=REDFIT_WINDOW, random_seed=4
-    )
+    result = redfit(uneven_t, uneven_y, n_periods=REDFIT_NPER, window=REDFIT_WINDOW, random_seed=4)
     assert result.significant_periods
     top = result.significant_periods[0]["period"]
     assert abs(top - CYCLE_MA) / CYCLE_MA < 0.01, f"recovered {top:.6f} Ma"
@@ -565,9 +559,7 @@ def test_cross_correlation_band_widens_with_mutual_autocorrelation() -> None:
     # band is tanh(1.96 / sqrt(280 - 3)) = 0.1171, within 1 % of what the
     # module reports (the small difference is the sampling error in the two
     # estimated lag-1 coefficients, which are not exactly zero).
-    expected = np.tanh(
-        float(sp_stats.norm.ppf(0.975)) / np.sqrt(int(independent.n_pairs[0]) - 3)
-    )
+    expected = np.tanh(float(sp_stats.norm.ppf(0.975)) / np.sqrt(int(independent.n_pairs[0]) - 3))
     assert independent.confidence[0] == pytest.approx(expected, rel=0.01)
 
 
@@ -735,9 +727,7 @@ def test_pre_whitening_fixes_the_anticonservative_mann_kendall() -> None:
     assert not corrected.significant
     # The correction must leave a trendless white-noise series alone.
     white = np.random.default_rng(8).normal(size=200)
-    assert mann_kendall(white, pre_whitened=True).p_value == pytest.approx(
-        mann_kendall(white).p_value, rel=0.5
-    )
+    assert mann_kendall(white, pre_whitened=True).p_value == pytest.approx(mann_kendall(white).p_value, rel=0.5)
 
 
 def test_mann_kendall_counts_ties() -> None:
@@ -798,9 +788,7 @@ def test_autoassociation_peaks_at_every_multiple_of_a_cosine_period() -> None:
     for m in (1, 2, 3, 4):
         expected = m * period
         nearest = min(peaks, key=lambda p: abs(p - expected))
-        assert abs(nearest - expected) <= result.bin_width, (
-            f"no peak within one bin of {expected}"
-        )
+        assert abs(nearest - expected) <= result.bin_width, f"no peak within one bin of {expected}"
     # The similarity at the first peak is cos(0) = 1 up to the finite-record
     # detail of which lags share the bin. The bin is 0.01995 Ma wide, so it
     # holds the lag-0.40 pairs (360 of them, all giving cos(0) = 1) together
@@ -981,9 +969,7 @@ def test_orbital_amplitudes_respect_the_defensible_orderings() -> None:
     assert all(row["relative_amplitude"] > 0 for row in table.values())
     assert all(np.isfinite(row["relative_amplitude"]) for row in table.values())
     assert table["long_period_precession"]["role"] == "modulation"
-    assert all(
-        row["role"] == "forcing" for name, row in table.items() if name != "long_period_precession"
-    )
+    assert all(row["role"] == "forcing" for name, row in table.items() if name != "long_period_precession")
     assert all(row["band"] == "precession" for name, row in table.items() if "precession" in name)
     assert table["obliquity_41"]["band"] == "obliquity"
     # The frequency column is the 1000x Ma/kyr conversion, not a copy.

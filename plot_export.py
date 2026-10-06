@@ -195,9 +195,7 @@ def _apply_grayscale(figure: Figure) -> Callable[[], None]:
                 # matplotlib accessor, so the luma expression is inferred as
                 # `float | Any` and column_stack's argument list no longer
                 # type-checks against a (4, N) float array.
-                luma: np.ndarray = (
-                    0.299 * face[:, 0] + 0.587 * face[:, 1] + 0.114 * face[:, 2]
-                )
+                luma: np.ndarray = 0.299 * face[:, 0] + 0.587 * face[:, 1] + 0.114 * face[:, 2]
                 # Same reason as `luma`: an integer column index makes numpy
                 # infer a union for the slice.
                 alpha: np.ndarray = np.asarray(face[:, 3], dtype=float)

@@ -16,6 +16,7 @@ single-shot timer. Instead of reproducing that fragility, this test replaces
 defect lives entirely inside the ``work`` callback, so invoking that callback
 is precisely the code under test, and it becomes deterministic.
 """
+
 import os
 import sys
 
@@ -65,9 +66,7 @@ def _build_window(monkeypatch, params):
         # what this file is testing, so make close a no-op.
         win.closeEvent = lambda event: None
         win._state.set_data_matrix(
-            DataMatrix(data,
-                       row_labels=[str(i) for i in range(n)],
-                       col_labels=[f"V{j}" for j in range(p)])
+            DataMatrix(data, row_labels=[str(i) for i in range(n)], col_labels=[f"V{j}" for j in range(p)])
         )
 
         class FakeDialog:
@@ -93,7 +92,7 @@ def _build_window(monkeypatch, params):
             seen["label"] = label
             try:
                 result = work()
-            except Exception as exc:            # the failure we are hunting
+            except Exception as exc:  # the failure we are hunting
                 seen["raised"] = exc
                 on_fail(exc)
                 return
@@ -129,8 +128,7 @@ def test_pca_dialog_path_executes_the_work_closure(monkeypatch):
         assert "result" in seen, "the work closure never returned a result"
 
         stack = win._workspace.findChildren(QStackedWidget)[0]
-        classes = [stack.widget(i).metaObject().className()
-                   for i in range(stack.count())]
+        classes = [stack.widget(i).metaObject().className() for i in range(stack.count())]
         assert classes.count("InteractivePlotCanvas") >= 1, f"no plot: {classes}"
         assert stack.currentWidget().metaObject().className() == "InteractivePlotCanvas", (
             f"workspace did not rest on the score plot; current="
@@ -171,9 +169,7 @@ def test_pca_dialog_path_keeps_min_variance_semantics(monkeypatch):
 
     n_low = retained(low)
     n_high = retained(high)
-    assert n_high <= n_low, (
-        f"80% threshold kept {n_high} components but 1% kept {n_low}"
-    )
+    assert n_high <= n_low, f"80% threshold kept {n_high} components but 1% kept {n_low}"
 
 
 def test_trim_helper_handles_falsy_n_components():
@@ -197,4 +193,3 @@ def test_trim_helper_handles_falsy_n_components():
 
     out2 = MainWindow._trim_components_to_variance(NoSpec(), 0.0)
     assert isinstance(out2, int) and out2 >= 1, f"-> {out2!r}"
-

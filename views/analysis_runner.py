@@ -89,9 +89,7 @@ _UNANNOTATED_LABEL_LISTS = frozenset({"groups", "group_labels", "labels"})
 # Unannotated parameters that are data objects, not strings. Listed so
 # the form says "unsupported" with a reason instead of offering a text
 # field that could never satisfy the analyzer.
-_UNANNOTATED_OBJECTS = frozenset(
-    {"section", "sections", "result", "tree", "working_tree"}
-)
+_UNANNOTATED_OBJECTS = frozenset({"section", "sections", "result", "tree", "working_tree"})
 
 # Annotation fragments a text field cannot produce. Stored lowercase
 # and matched against a lowercased annotation -- a callback renders as
@@ -245,9 +243,7 @@ def _find_choices(module: Any, parameter: str) -> tuple[str, ...]:
                 continue
             if not any(token in name for token in tokens):
                 continue
-            if isinstance(value, (tuple, list)) and value and all(
-                isinstance(v, str) for v in value
-            ):
+            if isinstance(value, (tuple, list)) and value and all(isinstance(v, str) for v in value):
                 return tuple(value)
         return ()
 
@@ -531,11 +527,7 @@ class AnalysisRunnerDialog(QDialog):
             if spec.kind == "unsupported":
                 self._form.addRow(
                     spec.name,
-                    QLabel(
-                        _("Unsupported here: {0}. Use the script console.").format(
-                            spec.detail or "?"
-                        )
-                    ),
+                    QLabel(_("Unsupported here: {0}. Use the script console.").format(spec.detail or "?")),
                 )
             else:
                 self._form.addRow(spec.name, spec.widget)
@@ -601,17 +593,13 @@ class AnalysisRunnerDialog(QDialog):
             try:
                 value = spec.value()
             except (ValueError, TypeError) as exc:
-                self._output.setPlainText(
-                    _("Could not read {0}: {1}").format(spec.name, exc)
-                )
+                self._output.setPlainText(_("Could not read {0}: {1}").format(spec.name, exc))
                 return
             if value is not None:
                 kwargs[spec.name] = value
         plugin = self._registry.get(self._entry.name)
         if plugin is None:
-            self._output.setPlainText(
-                _("No analysis named {0}.").format(self._entry.name)
-            )
+            self._output.setPlainText(_("No analysis named {0}.").format(self._entry.name))
             return
         self._output.setPlainText(_("Running {0} ...").format(self._entry.name))
         try:
@@ -622,7 +610,4 @@ class AnalysisRunnerDialog(QDialog):
             self._output.setPlainText(traceback.format_exc())
             return
         self._output.setPlainText(_format_result(outcome))
-        self._logger.info(
-            "analysis runner: %s completed", self._entry.name
-        )
-
+        self._logger.info("analysis runner: %s completed", self._entry.name)
