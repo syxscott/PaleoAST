@@ -245,21 +245,20 @@ class LDAAnalyzer:
             # numpy _UFuncNoLoopError, so the controller's error formatting
             # never saw a ComputationError.
             if np.issubdtype(np.asarray(groups_clean).dtype, np.number):
-                grouped_mask = groups_clean >= 0
+                keep = np.flatnonzero(groups_clean >= 0)
             else:
-                # A mask that excludes nothing.
+                # Non-numeric labels exclude nothing, so keep every row.
                 #
-                # Written as empty+fill rather than ones(n, dtype=bool) for a
-                # type-stub reason: numpy 2.x binds the *fill value* of ones()
-                # to a numeric ScalarT, and a boolean mask is not one. full()
-                # and array() fail the same way because each constrains a
-                # different parameter. empty() takes no fill value at all, so
-                # it is unaffected -- and this way the result does not depend
-                # on which numpy version happens to be installed.
-                grouped_mask = np.empty(groups_clean.shape[0], dtype=bool)
-                grouped_mask[:] = True
-            data_grouped = data_clean[grouped_mask]
-            groups_grouped = groups_clean[grouped_mask]
+                # Expressed as an index array rather than an all-True boolean
+                # mask because numpy 2.5's type stubs bind the ScalarT of
+                # ones(), full(), array() *and* empty() to a numeric scalar,
+                # so every way of building a bool array is a type error there.
+                # An index array is built from integers and no constructor in
+                # it has a dtype-scalar parameter, so the result does not
+                # depend on which numpy the checker runs against.
+                keep = np.arange(groups_clean.shape[0])
+            data_grouped = data_clean[keep]
+            groups_grouped = groups_clean[keep]
 
             # Relabel to 0..k-1. np.bincount() assumes contiguous 0-based
             # integers, so groups=[2,4,5,7] produced
