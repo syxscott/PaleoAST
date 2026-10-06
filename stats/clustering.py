@@ -30,8 +30,6 @@ import numpy as np
 import numpy.typing as npt
 from scipy.cluster.hierarchy import cophenet, fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
-from sklearn.cluster import KMeans as _SklearnKMeans
-from sklearn.metrics import silhouette_score
 
 from config.i18n import _
 from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
@@ -39,6 +37,33 @@ from utils.statistics_core import make_rng
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
+
+
+def _kmeans_backend():
+    """Import scikit-learn lazily, or explain that it is missing.
+
+    A module-level import would make every package that reaches
+    ``stats.clustering`` -- and that is ``controllers``, and therefore
+    ``views`` -- fail to import on a base install, because
+    scikit-learn lives in the ``full`` extra rather than in the base
+    dependencies. The Wheel Build & Import Smoke job installs base
+    dependencies only, so it caught this where a local environment with
+    the full extra set could not. The hierarchical path here needs only
+    scipy and must keep working without scikit-learn.
+
+    Follows the convention already used in stats/lda.py: import inside
+    the function, raise the project's own error naming the package.
+    """
+    try:
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import silhouette_score
+    except ImportError as exc:
+        raise ComputationError(
+            "k-means requires scikit-learn. Install the full extra: "
+            "pip install 'PaleoAST[full]', or pip install scikit-learn",
+            original_exception=exc,
+        ) from exc
+    return KMeans, silhouette_score
 
 
 @dataclass
@@ -355,7 +380,8 @@ class ClusteringAnalyzer:
                     "every variable is constant."
                 )
 
-            km = _SklearnKMeans(
+            kmeans_cls, silhouette_fn = _kmeans_backend()
+            km = kmeans_cls(
                 n_clusters=n_clusters,
                 n_init=n_init,
                 max_iter=max_iter,
@@ -367,7 +393,7 @@ class ClusteringAnalyzer:
             silhouette = float("nan")
             if compute_silhouette and 1 < n_clusters < n_samples:
                 try:
-                    silhouette = float(silhouette_score(X, labels))
+                    silhouette = float(silhouette_fn(X, labels))
                 except ValueError:
                     # sklearn raises when a cluster ends up empty after
                     # relabelling, which is a degenerate partition rather
@@ -445,7 +471,8 @@ class ClusteringAnalyzer:
                 # so the whole curve is reproducible and each k is
                 # independently reproducible.
                 seed = int(rng.integers(0, 2**31 - 1))
-                km = _SklearnKMeans(
+                kmeans_cls, _silhouette_fn = _kmeans_backend()
+                km = kmeans_cls(
                     n_clusters=int(k), n_init=n_init, random_state=seed
                 )
                 km.fit(X)

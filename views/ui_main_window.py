@@ -1443,6 +1443,10 @@ class MainWindow(QMainWindow):
         self._statistics_controller = StatisticsController()
         # Kept across open/close so a batch script's variables survive.
         self._script_console: Any = None
+        # Separate instance from the console: a namespace and a parameter
+        # form are different state, and sharing one window would lose
+        # whichever the user had set up.
+        self._analysis_runner: Any = None
 
         # Is dark theme
         self._is_dark_theme = False
@@ -2413,6 +2417,16 @@ class MainWindow(QMainWindow):
         script_action.triggered.connect(self._on_open_script_console)
         file_menu.addAction(script_action)
         self._register_data_action(script_action)
+
+        runner_action = QAction(_("Run &Analysis..."), self)
+        runner_action.setToolTip(
+            _(
+                "Pick any of the registered analyses and fill in its "
+                "parameters, for the ones that have no dedicated dialog"
+            )
+        )
+        runner_action.triggered.connect(self._on_open_analysis_runner)
+        file_menu.addAction(runner_action)
 
         file_menu.addSeparator()
 
@@ -6938,7 +6952,8 @@ class MainWindow(QMainWindow):
         self._status_bar.setInfo(_("Script console"))
 
     def _console_data(self) -> Any:
-        """The current spreadsheet for the script console, or None.
+        """The current spreadsheet for the script console and the analysis
+        runner, or None.
 
         A missing spreadsheet is not an error here: the console is
         perfectly usable for inspecting a taxon list or fitting a curve
@@ -6952,6 +6967,27 @@ class MainWindow(QMainWindow):
         if data is None or getattr(data, "size", 0) == 0:
             return None
         return data
+
+    def _on_open_analysis_runner(self) -> None:
+        """Open the generated parameter form for any catalogued analysis.
+
+        Kept as a second instance rather than shared with the console: the
+        two hold different state -- a namespace versus a parameter form --
+        and reusing one window for both would lose whichever the user had
+        set up.
+        """
+        if self._analysis_runner is None:
+            from views.analysis_runner import AnalysisRunnerDialog
+
+            self._analysis_runner = AnalysisRunnerDialog(
+                parent=self,
+                controller=self._statistics_controller,
+                data_provider=self._console_data,
+            )
+        self._analysis_runner.show()
+        self._analysis_runner.raise_()
+        self._analysis_runner.activateWindow()
+        self._status_bar.setInfo(_("Run Analysis"))
 
 
 def main() -> None:

@@ -522,7 +522,17 @@ def _format_result(value: Any) -> str:
     codebase writes that text for display, and it beats a dataclass repr
     by a wide margin. ``to_dict()`` is used when there is no summary but
     there is a dict. Everything else falls back to ``repr``.
+
+    NumPy scalars are unwrapped first, and this is not cosmetic. Under
+    numpy 1.26 ``repr(np.int64(3))`` is ``3``; under numpy 2 it is
+    ``np.int64(3)``. A console that printed the scalar's type back at
+    the user would look fine on one version and wrong on the other, and
+    the test that pinned it would pass on one machine and fail on CI --
+    which is exactly what happened.
     """
+    if isinstance(value, np.generic) or (isinstance(value, np.ndarray) and value.ndim == 0):
+        value = value.item()
+
     summary = getattr(value, "summary", None)
     if callable(summary):
         try:

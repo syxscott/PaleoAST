@@ -262,3 +262,53 @@ def test_hierarchical_overrides_ward_to_euclidean(
     """Ward linkage is only defined for Euclidean distance."""
     result = analyzer.analyze(three_blobs(), method="ward", metric="manhattan")
     assert result.metric == "euclidean"
+
+
+def test_kmeans_does_not_break_import_without_scikit_learn() -> None:
+    """stats.clustering must import on a base install.
+
+    scikit-learn is in the ``full`` extra, not in the base dependencies,
+    so a module-level import made every package that reaches this one --
+    ``controllers``, and therefore ``views`` -- fail to import with only
+    the base dependencies installed. The Wheel Build & Import Smoke job
+    installs base dependencies only, so CI caught this and a local
+    environment with the full extra set could not.
+    """
+    import builtins
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = (
+        "import sys, builtins\n"
+        "real = builtins.__import__\n"
+        "def blocked(name, *a, **k):\n"
+        "    if name == 'sklearn' or name.startswith('sklearn.'):\n"
+        "        raise ImportError(name)\n"
+        "    return real(name, *a, **k)\n"
+        "builtins.__import__ = blocked\n"
+        "import stats.clustering as C\n"
+        "import numpy as np\n"
+        "r = C.ClusteringAnalyzer().analyze("
+        "np.random.default_rng(0).normal(size=(12, 3)), n_clusters=2)\n"
+        "assert r.n_clusters == 2, 'hierarchical path must not need sklearn'\n"
+        "try:\n"
+        "    C.ClusteringAnalyzer().analyze_kmeans(\n"
+        "        np.random.default_rng(0).normal(size=(12, 3)), n_clusters=2)\n"
+        "except Exception as exc:\n"
+        "    assert 'scikit-learn' in str(exc), str(exc)\n"
+        "    print('OK')\n"
+        "else:\n"
+        "    raise AssertionError('k-means should have refused')\n"
+    )
+    root = Path(__file__).resolve().parent.parent.parent
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=str(root),
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "OK" in result.stdout
+    assert builtins is not None  # keep the import referenced for linters
