@@ -2,20 +2,46 @@
 # FILE: tests/stats/test_permanova_ss.py
 # =============================================================================
 """
-Tests for PERMANOVA sum-of-squares divisor correctness.
+Tests for the PERMANOVA sum-of-squares divisors.
 
-The PERMANOVA pseudo-F formula follows Anderson (2001):
+The pseudo-F of Anderson (2001), computed over UNORDERED pairs:
 
-    SS_T = (1 / (n - 1)) * sum_{i<j} d^2_ij
-    SS_W = sum_g (1 / (n_g - 1)) * sum_{i<j in g} d^2_ij
+    SS_T = (1 / n) * sum_{i<j} d^2_ij
+    SS_W = sum_g (1 / n_g) * sum_{i<j in g} d^2_ij
     SS_B = SS_T - SS_W
     F    = (SS_B / (g - 1)) / (SS_W / (n - g))
 
-The (n-1) and (n_g - 1) divisors are required for F to have a meaningful
-distribution under H0. R's ``vegan::adonis2`` uses these divisors. The
-previous PaleoAST implementation used ``n`` and ``n_g`` (an off-by-one that
-inflated F when groups were unequal, because the two scaling factors do NOT
-cancel out -- only ``n = n_g`` would make them equivalent).
+WHY THE UNORDERED FORM
+----------------------
+The full squared matrix holds every pair twice, so ``sum(D**2)/(2n)`` and
+``sum over upper-triangle pairs / n`` are the same number. The divisor is
+the sample count.
+
+This file previously asserted the OPPOSITE -- ``n - 1`` and ``n_g - 1`` --
+and cited ``vegan::adonis2`` as doing the same. It does not. Checked
+against vegan 2.7.6 on this repository's cross-validation fixture
+(16 samples, two groups of eight, five variates, seed 11):
+
+                            this file claimed   adonis2     this file now
+    SS_T (total)            436.39789701        409.12302844 409.12302844
+    SS_W (residual)          63.75686326         55.78725536  55.78725536
+    R^2                      0.8539019924        0.8636418596 0.8636418596
+
+The distance matrix is identical on both sides -- ``sum(D**2)/(2n)`` agrees
+to the last digit -- so the difference was never the distances. It was the
+divisors, and because the two terms were scaled by different factors they
+did not cancel.
+
+The permutation p-value would never have shown this. A uniform scaling of
+both terms leaves the permutation distribution's shape alone; only the
+R-squared and F carry the evidence, which is why the cross-validation
+job exists.
+
+WHAT GUARDS IT NOW
+------------------
+test_total_ss_is_the_distance_matrix_total is the assertion that does not
+depend on anyone's memory of the formula. If someone changes a divisor
+again, that test fails regardless of which divisor the author believed.
 """
 
 import os
@@ -25,50 +51,108 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 
 from stats.permanova import PERMANOVAAnalyzer
 
 
-def _ss_t(D: np.ndarray) -> float:
-    """Hand-computed SS_T = sum_{i<j} d^2_ij / (n - 1)."""
+def _reference(D: np.ndarray, groups: np.ndarray) -> tuple[float, float, float, float]:
+    """(SS_T, SS_W, SS_B, F) from the definitions, computed independently."""
     n = D.shape[0]
-    iu = np.triu_indices(n, k=1)
-    return float(np.sum(D[iu] ** 2) / (n - 1))
-
-
-def _ss_within(D: np.ndarray, groups: np.ndarray) -> float:
-    """Hand-computed SS_W = sum_g (1 / (n_g - 1)) sum_{i<j in g} d^2_ij."""
-    total = 0.0
+    g = len(np.unique(groups))
+    upper = np.triu_indices(n, k=1)
+    ss_t = float(np.sum(D[upper] ** 2) / n)
+    ss_w = 0.0
     for grp in np.unique(groups):
         idx = np.where(groups == grp)[0]
         n_g = len(idx)
         if n_g < 2:
             continue
         sub = D[np.ix_(idx, idx)]
-        iu = np.triu_indices(n_g, k=1)
-        total += float(np.sum(sub[iu] ** 2) / (n_g - 1))
-    return total
-
-
-def _adonis2_like_f(D: np.ndarray, groups: np.ndarray) -> tuple[float, float, float]:
-    """Hand-computed F and SS_T, SS_W matching Anderson 2001 / vegan::adonis2."""
-    n = D.shape[0]
-    g = len(np.unique(groups))
-    ss_t = _ss_t(D)
-    ss_w = _ss_within(D, groups)
+        ss_w += float(np.sum(sub[np.triu_indices(n_g, k=1)] ** 2) / n_g)
     ss_b = ss_t - ss_w
-    ms_b = ss_b / (g - 1)
-    ms_w = ss_w / (n - g)
-    f = ms_b / ms_w
-    return f, ss_t, ss_w
+    f = (ss_b / (g - 1)) / (ss_w / (n - g))
+    return ss_t, ss_w, ss_b, f
 
 
-class TestPERMANOVASSDivisors:
-    """Verify the (n-1) and (n_g-1) divisors used by Anderson (2001)."""
+D6 = np.array(
+    [
+        [0.0, 1.0, 2.0, 5.0, 6.0, 5.5],
+        [1.0, 0.0, 2.5, 5.5, 6.5, 6.0],
+        [2.0, 2.5, 0.0, 4.5, 5.5, 5.0],
+        [5.0, 5.5, 4.5, 0.0, 1.0, 1.5],
+        [6.0, 6.5, 5.5, 1.0, 0.0, 1.0],
+        [5.5, 6.0, 5.0, 1.5, 1.0, 0.0],
+    ]
+)
+G6 = np.array(["A", "A", "A", "B", "B", "B"])
 
-    def test_observed_ss_t_uses_n_minus_1(self):
-        """SS_T = sum_{i<j} d^2 / (n-1); the bug used /n."""
+
+class TestPERMANOVADivisors:
+    """The divisors are the sample and group counts."""
+
+    def test_total_ss_is_the_distance_matrix_total(self):
+        """SS_T must equal sum(D**2) / (2n).
+
+        This is the assertion that does not depend on remembering the
+        formula: it says the total is the total of the matrix that was
+        handed in. Any divisor other than n fails it. It is the check the
+        previous version of this file lacked, which is why a wrong
+        divisor sat here being asserted as correct.
+        """
+        result = PERMANOVAAnalyzer().analyze(D6, list(G6), n_permutations=9, random_seed=0)
+        n = D6.shape[0]
+        expected_total = float(np.sum(D6**2)) / (2 * n)
+        assert_allclose(
+            float(result.ss_between) + float(result.ss_within),
+            expected_total,
+            rtol=1e-12,
+            err_msg=("ss_between + ss_within must equal the total sum of squares of the distance matrix"),
+        )
+
+    def test_divisors_match_the_reference(self):
+        """SS_T, SS_W and F match a computation from the definitions."""
+        result = PERMANOVAAnalyzer().analyze(D6, list(G6), n_permutations=9, random_seed=0)
+        _ss_t, ss_w, _ss_b, f = _reference(D6, G6)
+        assert_allclose(float(result.ss_within), ss_w, rtol=1e-12)
+        assert_allclose(float(result.f_statistic), f, rtol=1e-12)
+
+    def test_pinned_values(self):
+        """Exact values, so a divisor change cannot hide inside a tolerance.
+
+        SS_T = 48.4583333, SS_W = 5.1666667, SS_B = 43.2916667,
+        F = 33.51612903. The divisor this file previously asserted
+        gives SS_T = 58.15 and F = 26.0129.
+        """
+        result = PERMANOVAAnalyzer().analyze(D6, list(G6), n_permutations=9, random_seed=0)
+        ss_t, ss_w, ss_b, f = _reference(D6, G6)
+        assert_allclose(float(result.ss_between) + float(result.ss_within), 48.458333333333336, atol=1e-10)
+        assert_allclose(float(result.ss_within), 5.166666666666667, atol=1e-10)
+        assert_allclose(float(result.ss_between), 43.291666666666664, atol=1e-10)
+        assert_allclose(float(result.f_statistic), 33.516129032258064, atol=1e-10)
+        assert (ss_t, ss_w, ss_b, f) == pytest.approx(
+            (48.458333333333336, 5.166666666666667, 43.291666666666664, 33.516129032258064)
+        )
+
+    def test_unequal_group_sizes(self):
+        """n = 5 with groups of 3 and 2.
+
+        Unequal sizes are where a divisor error shows most clearly,
+        because the two terms are then scaled by different factors and
+        the error cannot cancel.
+        """
+        coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [11.0, 10.0]])
+        diff = coords[:, None, :] - coords[None, :, :]
+        D = np.sqrt((diff**2).sum(axis=2))
+        groups = np.array(["A", "A", "A", "B", "B"])
+
+        result = PERMANOVAAnalyzer().analyze(D, list(groups), n_permutations=9, random_seed=0)
+        _ss_t, _ss_w, _ss_b, f = _reference(D, groups)
+        assert_allclose(float(result.f_statistic), f, rtol=1e-12)
+
+    def test_small_matrix(self):
+        """n = 4 with groups of 2 and 2."""
         D = np.array(
             [
                 [0.0, 1.0, 2.0, 3.0],
@@ -78,76 +162,8 @@ class TestPERMANOVASSDivisors:
             ]
         )
         groups = np.array(["A", "A", "B", "B"])
-        analyzer = PERMANOVAAnalyzer()
-        # Use a very small permutation count -- we are only checking the SS
-        # decomposition and observed F, not the permutation p-value.
-        result = analyzer.analyze(D, list(groups), n_permutations=9, random_seed=0)
-
-        hand_f, hand_ss_t, hand_ss_w = _adonis2_like_f(D, groups)
-        # SS_T = SS_B + SS_W (Anderson 2001)
-        assert_allclose(result.ss_between + result.ss_within, hand_ss_t, rtol=1e-10)
-        assert_allclose(result.ss_within, hand_ss_w, rtol=1e-10)
-        assert_allclose(result.f_statistic, hand_f, rtol=1e-10)
-
-    def test_unequal_group_sizes_no_cancellation(self):
-        """
-        With unequal group sizes the (n-1) and (n_g-1) factors do NOT cancel
-        out, so the bug shifted F away from the vegan::adonis2 value.
-
-        Hand-computed F on a tiny 5-sample example (n=5, groups 1:3 and 4:5)
-        against a euclidean distance matrix computed from coordinates so we
-        have a reproducible reference.
-        """
-        # Coordinates in R^2, n=5, group sizes 3 and 2.
-        coords = np.array(
-            [
-                [0.0, 0.0],  # A
-                [1.0, 0.0],  # A
-                [0.0, 1.0],  # A
-                [10.0, 10.0],  # B
-                [11.0, 10.0],  # B
-            ]
-        )
-        # euclidean distance matrix
-        diff = coords[:, None, :] - coords[None, :, :]
-        D = np.sqrt((diff**2).sum(axis=2))
-        groups = np.array(["A", "A", "A", "B", "B"])
-
-        analyzer = PERMANOVAAnalyzer()
-        result = analyzer.analyze(D, list(groups), n_permutations=9, random_seed=0)
-
-        hand_f, _, _ = _adonis2_like_f(D, groups)
-        # This is the exact value R's vegan::adonis2 would return
-        # (with the by='terms' sum-of-squares, single term).
-        assert_allclose(result.f_statistic, hand_f, rtol=1e-10)
-
-    def test_known_value_against_vegan_reference(self):
-        """
-        Pin a numerical value so any silent regression to the old buggy
-        divisor (which divided SS_T by n and SS_W by n_g) breaks this test.
-
-        For the matrix below (n=6, groups 1:3 and 4:6) we compute the
-        Anderson-2001 F by hand and pin it to 4dp precision. The bug would
-        have produced F_buggy = F_correct * (n/(n-1)) * ((n-g)/(n-g)) = ... ,
-        which is not equal to F_correct here because of the n_g-1 vs n_g
-        weighting inside SS_W.
-        """
-        D = np.array(
-            [
-                [0.0, 1.0, 2.0, 5.0, 6.0, 5.5],
-                [1.0, 0.0, 2.5, 5.5, 6.5, 6.0],
-                [2.0, 2.5, 0.0, 4.5, 5.5, 5.0],
-                [5.0, 5.5, 4.5, 0.0, 1.0, 1.5],
-                [6.0, 6.5, 5.5, 1.0, 0.0, 1.0],
-                [5.5, 6.0, 5.0, 1.5, 1.0, 0.0],
-            ]
-        )
-        groups = np.array(["A", "A", "A", "B", "B", "B"])
-        analyzer = PERMANOVAAnalyzer()
-        result = analyzer.analyze(D, list(groups), n_permutations=9, random_seed=0)
-
-        # Pinned reference (matches R vegan::adonis2 with euclidean distance).
-        # Hand computed by the helper above: SS_T=58.15, SS_W=7.75,
-        # SS_B=50.4, MS_B/MS_W = (50.4/1) / (7.75/4) = 26.0129.
-        assert_allclose(result.f_statistic, 26.01290322580645, atol=1e-6)
-        assert_allclose(result.ss_between + result.ss_within, 58.15, atol=1e-6)
+        result = PERMANOVAAnalyzer().analyze(D, list(groups), n_permutations=9, random_seed=0)
+        ss_t, ss_w, _ss_b, f = _reference(D, groups)
+        assert_allclose(float(result.ss_within), ss_w, rtol=1e-12)
+        assert_allclose(float(result.f_statistic), f, rtol=1e-12)
+        assert_allclose(float(result.ss_between) + float(result.ss_within), ss_t, rtol=1e-12)

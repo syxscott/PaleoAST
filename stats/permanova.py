@@ -214,11 +214,23 @@ class PERMANOVAAnalyzer:
         """
         Compute PERMANOVA F statistic from distance matrix.
 
-        Uses Anderson (2001) formula:
-            SS_T = (1/n) * Σ_i Σ_j d²_ij
-            SS_W = Σ_g (1/n_g) * Σ_{i<j in g} d²_ij
+        Uses Anderson (2001), over UNORDERED pairs:
+
+            SS_T = (1/n) * sum over i<j of d2_ij
+            SS_W = sum over g of (1/n_g) * sum over i<j in g of d2_ij
             SS_B = SS_T - SS_W
             F = (SS_B / (g-1)) / (SS_W / (n-g))
+
+        Both denominators are the sample or group COUNT, never one less.
+        An earlier pass here "corrected" them to n-1 and n_g-1, reasoning
+        that the full squared matrix double-counts every pair. It does --
+        but that factor of 2 belongs to the full matrix, which divides by
+        2n; taking the upper triangle and then dividing by n-1 inflated
+        every sum of squares by n/(n-1). On the cross-validation fixture
+        that reported a total of 436.3979 where the distance matrix
+        supports 409.1230, and an R-squared of 0.8539 where
+        vegan::adonis2 gives 0.8636. Because the two terms were scaled by
+        different factors the error did not cancel.
 
         Parameters:
             D: Square distance matrix
@@ -243,17 +255,15 @@ class PERMANOVAAnalyzer:
         # Square distances
         D_sq = D**2
 
-        # Total sum of squares (Anderson 2001, eq. 3): sum over unordered
-        # pairs only. The full squared distance matrix contains each
-        # pair twice, so use the upper triangle. The denominator is
-        # ``n - 1`` (NOT ``n``); the same off-by-one issue applies to the
-        # within-group term below. The two denominators do NOT cancel out
-        # when group sizes are unequal, so the bug biased ``F``.
-        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / (n - 1)
+        # Total sum of squares (Anderson 2001, eq. 3), over unordered
+        # pairs. The upper triangle carries the same information as the
+        # full matrix at half its length, and the denominator is n -- the
+        # sample count. See the docstring: this was n - 1 for a while.
+        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
 
         # Within-group sum of squares (vectorized)
         # For each group g with n_g samples, compute sum of squared distances
-        # ss_within = sum_g (1/(n_g-1)) * sum_{i<j in g} d_ij^2
+        # ss_within = sum_g (1/n_g) * sum_{i<j in g} d_ij^2
         # Use upper triangle of distance matrix for unordered pairs
         ss_within = 0.0
         triu_idx = np.triu_indices(n, k=1)
@@ -272,7 +282,7 @@ class PERMANOVAAnalyzer:
             in_grp_j = grp_mask[idx_j]
             grp_pair_mask = in_grp_i & in_grp_j
             grp_sum = np.sum(D_sq_triu[grp_pair_mask])
-            ss_within += (1.0 / (n_g - 1)) * grp_sum
+            ss_within += (1.0 / n_g) * grp_sum
 
         # Between-group sum of squares
         ss_between = SS_T - ss_within

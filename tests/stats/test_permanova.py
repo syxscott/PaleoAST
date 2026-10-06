@@ -102,13 +102,21 @@ class TestPERMANOVA(unittest.TestCase):
 
         result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
 
-        # SS_T computed from full matrix (upper triangle scaled by n-1).
-        # Anderson (2001) uses (n-1) -- using n is the bug we're guarding
-        # against in tests/stats/test_permanova_ss.py.
+        # SS_T is the total sum of squares of the DISTANCE MATRIX, over
+        # unordered pairs. The upper triangle carries the same information
+        # as the full matrix at half its length, so the divisor is n --
+        # the sample count.
+        #
+        # This test previously asserted / (n - 1) and pointed at
+        # tests/stats/test_permanova_ss.py to say that n was the bug.
+        # That file was itself asserting the same wrong divisors, citing
+        # vegan::adonis2, which does not. Stating the invariant in terms
+        # of the matrix rather than the formula is what stops the two
+        # from agreeing on the same mistake again.
         D_sq = D**2
-        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / (n - 1)
-        # Allow small numerical error
+        SS_T = np.sum(D_sq[np.triu_indices(n, k=1)]) / n
         assert_allclose(SS_T, result.ss_between + result.ss_within, rtol=1e-10)
+        assert_allclose(SS_T, np.sum(D_sq) / (2 * n), rtol=1e-12)
 
     def test_reproducibility_with_seed(self) -> None:
         """Same seed should produce identical results."""
@@ -162,7 +170,7 @@ class TestPERMANOVA(unittest.TestCase):
             for i in range(len(grp_indices)):
                 for j in range(i + 1, len(grp_indices)):
                     grp_sum += D_sq[grp_indices[i], grp_indices[j]]
-            ss_within_ref += (1.0 / (n_g - 1)) * grp_sum
+            ss_within_ref += (1.0 / n_g) * grp_sum
 
         # Vectorized version
         result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
