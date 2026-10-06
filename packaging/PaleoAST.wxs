@@ -76,6 +76,18 @@
       <ComponentGroupRef Id="Shortcuts" />
     </Feature>
 
+    <!--
+      Level 101 is what makes "opt-in" real. The default INSTALLLEVEL is 100,
+      and the Windows Installer skips any feature whose level is above it
+      unless that feature is named explicitly - so a quiet /qn install leaves
+      the desktop clean. Declaring a second feature is also what makes WixUI
+      render the Features page, so the choice is reachable by clicking
+      "Advanced" instead of only by passing ADDLOCAL on a command line.
+    -->
+    <Feature Id="DesktopIcon" Title="Desktop shortcut" Level="101">
+      <ComponentGroupRef Id="DesktopShortcutGroup" />
+    </Feature>
+
     <UIRef Id="WixUI_InstallDir" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
@@ -110,8 +122,13 @@
                        Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
-      <!-- An opt-in desktop shortcut. A desktop icon nobody asked for is the
-           most common complaint about an installer. -->
+      </ComponentGroup>
+
+    <!-- An opt-in desktop shortcut. A desktop icon nobody asked for is the
+         most common complaint about an installer, so this lives in its own
+         component group and its own Feature (below) rather than riding along
+         with the Start Menu entry. -->
+    <ComponentGroup Id="DesktopShortcutGroup">
       <Component Id="DesktopShortcut" Directory="DesktopFolder"
                  Guid="{3D7E2C1B-8A5F-4D6E-9B2C-4E6F8A9B0C1D}">
         <Shortcut Id="DesktopAppShortcut"
