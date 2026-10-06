@@ -57,7 +57,18 @@ class PaleoASTError(Exception):
         """
         super().__init__(message)
         self.message = message
-        self.details = details if details is not None else {}
+        # ``details`` is reached for its items() in __str__, which is on the
+        # error path: a caller who passes a plain string here gets an
+        # AttributeError while the exception is being *formatted*, replacing a
+        # useful message with "str has no attribute items". Wrapping a
+        # non-mapping is cheap and turns a crash in the error path into the
+        # message the caller meant to write.
+        if details is None:
+            self.details: dict[str, Any] = {}
+        elif isinstance(details, dict):
+            self.details = details
+        else:
+            self.details = {"detail": details}
         self.original_exception = original_exception
 
     def __str__(self) -> str:
@@ -143,10 +154,14 @@ class MatrixDimensionError(PaleoASTError):
         For matrix multiplication A @ B, requires A.shape[1] == B.shape[0]
         For matrix addition A + B, requires A.shape == B.shape
 
-    Attributes:
-        expected_shape: The expected matrix dimensions (n_rows, n_cols)
-        actual_shape: The actual matrix dimensions received
-        operation: The operation that was being attempted
+    Details (passed inside the ``details`` dict -- this exception takes
+    ``message``, ``details`` and ``original_exception``; there are no
+    ``expected_shape`` keyword arguments, and trusting the old Attributes list
+    raised TypeError):
+
+        expected:  The expected dimensions, e.g. "(3, 4)"
+        actual:    The dimensions received, e.g. "(3, 5)"
+        operation: The operation being attempted
 
     Example:
         >>> raise MatrixDimensionError(
