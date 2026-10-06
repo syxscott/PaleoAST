@@ -13,6 +13,7 @@ version: 1.1.0
 
 import logging
 import threading
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -163,6 +164,116 @@ def _check_group_length(groups: list, n_rows: int) -> None:
             f"Number of group labels ({len(groups)}) must match the number of data rows ({n_rows})",
             details={"n_groups": len(groups), "n_rows": n_rows},
         )
+
+
+def _split_two_groups(
+    data: npt.NDArray,
+    column: int,
+    groups: list,
+    paired: bool,
+    label: str = "two-group test",
+) -> tuple[npt.NDArray, npt.NDArray, object, object]:
+    """Split rows into exactly two groups and return their measurements.
+
+    Shared by the paired and unpaired tests so the pairing rule lives in
+    one place. A paired test compares the i-th member of group 0 with the
+    i-th member of group 1, so the two vectors must stay positionally
+    aligned: a pair is dropped when *either* of its measurements is
+    missing. Filtering NaN independently per group (the unpaired rule)
+    shifts the remaining values against each other and tests arbitrary,
+    wrong pairings.
+    """
+    _check_group_length(groups, data.shape[0])
+    unique_groups = sorted(set(groups))
+    if len(unique_groups) != 2:
+        raise ComputationError(
+            f"{label} requires exactly 2 groups, got {len(unique_groups)}"
+        )
+
+    g0, g1 = unique_groups
+    idx_0 = [i for i, g in enumerate(groups) if g == g0]
+    idx_1 = [i for i, g in enumerate(groups) if g == g1]
+    if data.ndim == 2:
+        vals_0 = data[idx_0, column]
+        vals_1 = data[idx_1, column]
+    else:
+        vals_0 = data[idx_0]
+        vals_1 = data[idx_1]
+
+    if paired:
+        if len(vals_0) != len(vals_1):
+            raise ComputationError(
+                f"{label}: a paired design requires equal sample sizes, got "
+                f"{len(vals_0)} and {len(vals_1)}"
+            )
+        complete = ~np.isnan(vals_0) & ~np.isnan(vals_1)
+        return (
+            np.asarray(vals_0[complete], dtype=float),
+            np.asarray(vals_1[complete], dtype=float),
+            g0,
+            g1,
+        )
+    return (
+        np.asarray(vals_0[~np.isnan(vals_0)], dtype=float),
+        np.asarray(vals_1[~np.isnan(vals_1)], dtype=float),
+        g0,
+        g1,
+    )
+
+
+@dataclass
+class PairedRankTestResult:
+    """Result of a paired nonparametric test (sign test or Wilcoxon).
+
+    ``n_positive`` / ``n_negative`` / ``n_ties`` count the paired
+    differences ``a - b``. The sign test uses only the first two and
+    discards ties; the Wilcoxon signed-rank test ranks their magnitudes
+    and keeps them, so the two answer slightly different questions.
+    """
+
+    statistic: float
+    p_value: float
+    test_type: str
+    n_pairs: int
+    n_positive: int
+    n_negative: int
+    n_ties: int
+    median_difference: float
+    significant: bool
+
+    def summary(self) -> str:
+        """Generate summary text."""
+        sig = "**" if self.p_value < 0.01 else ("*" if self.p_value < 0.05 else "ns")
+        # The sign test's statistic is a count of positive differences; the
+        # Wilcoxon statistic is a sum of ranks. Labelling them W and b keeps
+        # the summary honest about which number is on screen.
+        stat_label = "W" if self.test_type == "wilcoxon" else "b"
+        lines = [
+            _("Paired Nonparametric Test"),
+            "=" * 50,
+            f"{self.test_type}: {stat_label} = {self.statistic:.4f}, "
+            f"p = {self.p_value:.4f} {sig}",
+            f"{_('Pairs')}: {self.n_pairs}",
+            f"{_('Median difference')}: {self.median_difference:.4f}",
+            f"{_('Positive')}: {self.n_positive}, "
+            f"{_('Negative')}: {self.n_negative}, "
+            f"{_('Ties')}: {self.n_ties}",
+        ]
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict[str, object]:
+        """JSON-friendly view."""
+        return {
+            "statistic": float(self.statistic),
+            "p_value": float(self.p_value),
+            "test_type": self.test_type,
+            "n_pairs": int(self.n_pairs),
+            "n_positive": int(self.n_positive),
+            "n_negative": int(self.n_negative),
+            "n_ties": int(self.n_ties),
+            "median_difference": float(self.median_difference),
+            "significant": bool(self.significant),
+        }
 
 
 class UnivariateAnalyzer:
@@ -346,38 +457,9 @@ class UnivariateAnalyzer:
         with self._lock:
             if groups is None:
                 raise ComputationError("Groups required for t-test")
-            _check_group_length(groups, data.shape[0])
-
-            unique_groups = sorted(set(groups))
-            if len(unique_groups) != 2:
-                raise ComputationError(f"t-test requires exactly 2 groups, got {len(unique_groups)}")
-
-            g0, g1 = unique_groups
-            idx_0 = [i for i, g in enumerate(groups) if g == g0]
-            idx_1 = [i for i, g in enumerate(groups) if g == g1]
-            if data.ndim == 2:
-                vals_0 = data[idx_0, column]
-                vals_1 = data[idx_1, column]
-            else:
-                vals_0 = data[idx_0]
-                vals_1 = data[idx_1]
-
-            if paired:
-                # A paired test compares the i-th member of group 0 with the
-                # i-th member of group 1, so the two vectors must stay
-                # positionally aligned: drop a pair when *either* of its two
-                # measurements is missing.  Filtering NaN independently per
-                # group (as the unpaired branch below does) shifts the
-                # remaining values against each other and tests arbitrary,
-                # wrong pairings.
-                if len(vals_0) != len(vals_1):
-                    raise ComputationError("Paired t-test requires equal sample sizes")
-                complete = ~np.isnan(vals_0) & ~np.isnan(vals_1)
-                vals_0 = vals_0[complete]
-                vals_1 = vals_1[complete]
-            else:
-                vals_0 = vals_0[~np.isnan(vals_0)]
-                vals_1 = vals_1[~np.isnan(vals_1)]
+            vals_0, vals_1, _g0, _g1 = _split_two_groups(
+                data, column, groups, paired, label="t-test"
+            )
 
             if len(vals_0) < 2 or len(vals_1) < 2:
                 raise ComputationError(
@@ -400,6 +482,118 @@ class UnivariateAnalyzer:
                 mean1=float(np.mean(vals_0)),
                 mean2=float(np.mean(vals_1)),
                 significant=p_val < 0.05,
+            )
+
+    def paired_rank_test(
+        self,
+        data: npt.NDArray,
+        column: int = 0,
+        groups: list | None = None,
+        method: str = "wilcoxon",
+    ) -> PairedRankTestResult:
+        """
+        Perform a paired nonparametric test: sign test or Wilcoxon signed-rank.
+
+        These are the nonparametric counterparts of ``t_test(paired=True)``
+        and answer the same question -- did the treatment shift the
+        measurement? -- without assuming the paired differences are
+        normally distributed. That assumption is the one paired t-tests
+        make and the one most often violated by measurement series with a
+        handful of large differences.
+
+        The two tests are not interchangeable:
+
+        * ``"sign"`` uses only the direction of each difference and throws
+          away its magnitude. It assumes only that the difference is
+          more often positive than negative, so it survives an
+          outlying difference that would dominate a rank-based test.
+        * ``"wilcoxon`` ranks the absolute differences and keeps them, so
+          it is more powerful when the differences are symmetric about
+          their median -- which is exactly the assumption it makes. With
+          strongly asymmetric differences the sign test is the safer of
+          the two, and a disagreement between them is informative rather
+          than a nuisance.
+
+        Ties in the difference are handled differently by each, matching
+        their definitions: the sign test discards them (``wilcox`` zero
+        handling), and the Wilcoxon test gives them their average rank.
+
+        Parameters:
+            data: Data matrix
+            column: Column to test
+            groups: Group labels, exactly 2 unique values
+            method: 'wilcoxon' or 'sign'
+
+        Returns:
+            PairedRankTestResult
+
+        Raises:
+            ComputationError: if the groups do not define exactly two
+                samples, the design is unpaired in size, too few complete
+                pairs remain, or no non-zero difference is left to test.
+            ValidationError: if ``method`` is not one of the two above.
+        """
+        with self._lock:
+            if method not in ("wilcoxon", "sign"):
+                raise ValidationError(
+                    f"method must be 'wilcoxon' or 'sign', got {method!r}"
+                )
+            if groups is None:
+                raise ComputationError("Groups required for a paired test")
+
+            vals_0, vals_1, _g0, _g1 = _split_two_groups(
+                data, column, groups, paired=True, label=f"{method} paired test"
+            )
+            if len(vals_0) < 2:
+                raise ComputationError(
+                    f"Not enough complete pairs after NaN filtering: "
+                    f"{len(vals_0)} pair(s) remain"
+                )
+
+            diff = vals_0 - vals_1
+            n_pos = int(np.sum(diff > 0))
+            n_neg = int(np.sum(diff < 0))
+            n_zero = int(np.sum(diff == 0))
+            n_used = n_pos + n_neg
+            if n_used == 0:
+                raise ComputationError(
+                    f"{method} paired test: every difference is zero, so "
+                    f"there is nothing to test"
+                )
+
+            if method == "sign":
+                # Binomial test on the split of non-zero differences.
+                # A normal approximation is not used: with a handful of
+                # pairs the exact binomial is both available and the only
+                # trustworthy answer.
+                binom = sp_stats.binomtest(n_pos, n_used, 0.5, alternative="two-sided")
+                statistic = float(n_pos)
+                p_val = float(binom.pvalue)
+                test_type = "sign"
+            else:
+                # zero_method="wilcox" discards zero differences, matching
+                # the sign test's treatment so the two count the same
+                # pairs. scipy switches to the normal approximation above
+                # 25 non-zero pairs and warns; method="auto" is that
+                # behaviour, made explicit.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    w_stat, p_val = sp_stats.wilcoxon(
+                        vals_0, vals_1, zero_method="wilcox", method="auto"
+                    )
+                statistic = float(w_stat)
+                test_type = "wilcoxon"
+
+            return PairedRankTestResult(
+                statistic=statistic,
+                p_value=float(p_val),
+                test_type=test_type,
+                n_pairs=len(diff),
+                n_positive=n_pos,
+                n_negative=n_neg,
+                n_ties=n_zero,
+                median_difference=float(np.median(diff)),
+                significant=bool(p_val < 0.05),
             )
 
     def one_way_anova(self, data: npt.NDArray, groups: list[int], column: int = 0, tukey: bool = True) -> ANOVAResult:
