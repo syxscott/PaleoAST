@@ -448,7 +448,6 @@ class PCADialog(BaseAnalysisDialog):
         self._method_combo.addItems(
             [_("Correlation Matrix (Standardize)"), _("Covariance Matrix (Center only)"), _("SPCS (Specialized)")]
         )
-        self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_layout.addWidget(QLabel(_("Similarity Matrix:")))
         method_layout.addWidget(self._method_combo)
 
@@ -504,24 +503,18 @@ class PCADialog(BaseAnalysisDialog):
         advanced_group = self.add_parameter_group(_("Advanced Options"))
         advanced_layout = QVBoxLayout(advanced_group)
 
-        self._use_correlation_check = QCheckBox(_("Use correlation matrix (Z-score standardization)"))
-        self._use_correlation_check.setChecked(True)
-        advanced_layout.addWidget(self._use_correlation_check)
-
+        # A "Use correlation matrix" checkbox used to sit here, kept in step
+        # with the Similarity Matrix combo by _on_method_changed. get_parameters
+        # never read it -- it reads the combo -- so unticking the checkbox did
+        # nothing at all while looking like it should. The combo already states
+        # the choice (Correlation / Covariance / SPCS) and is what reaches the
+        # engine, so the mirror went rather than being wired up in parallel.
         self._impute_missing_check = QCheckBox(_("Impute missing values (pairwise deletion)"))
         advanced_layout.addWidget(self._impute_missing_check)
 
         self._parallel_check = QCheckBox(_("Use parallel computation"))
         self._parallel_check.setChecked(True)
         advanced_layout.addWidget(self._parallel_check)
-
-    def _on_method_changed(self, index: int) -> None:
-        """Handle method selection change."""
-        if index == 0:  # Correlation
-            self._use_correlation_check.setChecked(True)
-        elif index == 1:  # Covariance
-            self._use_correlation_check.setChecked(False)
-        # index == 2 (SPCS) is handled in get_parameters via combo index
 
     def get_parameters(self) -> dict[str, Any]:
         """Get PCA parameters."""

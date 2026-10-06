@@ -25,7 +25,6 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -403,10 +402,6 @@ class Morpho3DDialog(QDialog):
         self._n_landmarks.setValue(12)
         self._n_landmarks.setToolTip(_("Landmarks per specimen"))
         form.addRow(_("Landmarks per specimen:"), self._n_landmarks)
-
-        self._use_concensus = QComboBox()
-        self._use_concensus.addItems([_("Consensus (recommended)"), _("First specimen")])
-        form.addRow(_("Starting consensus from:"), self._use_concensus)
 
         run = QPushButton(_("Run"))
         run.clicked.connect(self._on_run)

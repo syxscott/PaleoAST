@@ -1,0 +1,1212 @@
+[
+ {
+  "menu": "Welcome / installation",
+  "feature": "Welcome to the PAST!",
+  "page": 9
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "Installation",
+  "page": 10
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "Windows",
+  "page": 10
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "Mac",
+  "page": 10
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "Quick start",
+  "page": 10
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "How do I export graphics?",
+  "page": 10
+ },
+ {
+  "menu": "Welcome / installation",
+  "feature": "How do I organize data into groups?",
+  "page": 10
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "The spreadsheet and the Edit menu",
+  "page": 12
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Entering data",
+  "page": 12
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Selecting areas",
+  "page": 12
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Moving a row or a column",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Renaming rows and columns",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Increasing the size of the array",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Cut, copy, paste",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Remove",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Row colors and symbols",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Selecting datatypes for columns, and specifying groups",
+  "page": 13
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Remove uninformative rows/columns",
+  "page": 14
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Transpose",
+  "page": 14
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Grouped columns to multivar",
+  "page": 14
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Grouped rows to multivar",
+  "page": 15
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Stack grouped rows into columns",
+  "page": 15
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Rows, cols, values to table",
+  "page": 15
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Value pairs to matrix",
+  "page": 15
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Samples to events (UA to RASC)",
+  "page": 15
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Events to samples (RASC to UA)",
+  "page": 16
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Loading and saving data",
+  "page": 16
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Importing data from Excel",
+  "page": 17
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Reading and writing Nexus files",
+  "page": 17
+ },
+ {
+  "menu": "Edit menu (data handling)",
+  "feature": "Counter",
+  "page": 17
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Transform menu",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Logarithm",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Subtract mean",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Remove trend",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Row percentage",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Row normalize length",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Box-Cox",
+  "page": 18
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Compositional data transforms",
+  "page": 19
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Remove size from distances",
+  "page": 21
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Landmarks, Procrustes fitting",
+  "page": 21
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Landmarks, Bookstein fitting",
+  "page": 22
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Project to tangent space (not yet in Past 4)",
+  "page": 22
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Remove size from landmarks (not yet in Past 4)",
+  "page": 22
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Transform landmarks",
+  "page": 23
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Regular interpolation",
+  "page": 23
+ },
+ {
+  "menu": "Transform menu",
+  "feature": "Evaluate expression",
+  "page": 23
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Plot menu",
+  "page": 25
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Graph",
+  "page": 25
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "XY graph",
+  "page": 26
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "XY graph with error bars",
+  "page": 27
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Histogram",
+  "page": 28
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Bar chart/box plot",
+  "page": 29
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Pie chart",
+  "page": 31
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Stacked chart",
+  "page": 32
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Percentiles",
+  "page": 33
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Normal probability plot",
+  "page": 34
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Ternary",
+  "page": 35
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Bubble plot",
+  "page": 36
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Matrix plot",
+  "page": 37
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Mosaic plot",
+  "page": 38
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Venn diagram",
+  "page": 39
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Radar chart",
+  "page": 41
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Polar plot",
+  "page": 42
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Vector plot",
+  "page": 43
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "Network plot",
+  "page": 44
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "3D scatter/bubble/line plot",
+  "page": 46
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "3D surface plot",
+  "page": 47
+ },
+ {
+  "menu": "Plot menu",
+  "feature": "3D parametric surface plot",
+  "page": 48
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Univariate menu",
+  "page": 49
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Summary statistics",
+  "page": 49
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "One-sample tests",
+  "page": 52
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Two-sample tests",
+  "page": 54
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "t test and related tests for equal means",
+  "page": 54
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "F test for equal variances",
+  "page": 57
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Mann-Whitney test for statistic equality",
+  "page": 57
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Brunner-Munzel test for stochastic equality",
+  "page": 59
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Mood’s median test for equal medians",
+  "page": 59
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Kolmogorov-Smirnov test for equal distributions",
+  "page": 60
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Anderson-Darling test for equal distributions",
+  "page": 61
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Epps-Singleton test for equal distributions",
+  "page": 62
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Coefficient of variation (Fligner-Kileen test)",
+  "page": 63
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "F and t tests from parameters",
+  "page": 64
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Two-sample paired tests (t, sign, Wilcoxon)",
+  "page": 65
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Several-sample tests",
+  "page": 67
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Several-samples repeated measures tests",
+  "page": 74
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Two-way ANOVA",
+  "page": 78
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Two-way ANOVA without replication",
+  "page": 81
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Two-way repeated measures ANOVA",
+  "page": 82
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "One-way ANCOVA",
+  "page": 83
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Correlation table",
+  "page": 84
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Intraclass correlation",
+  "page": 89
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Normality tests",
+  "page": 91
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Outlier tests",
+  "page": 94
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Contingency table (chi2 etc.)",
+  "page": 96
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Cochran-Mantel-Haenszel test",
+  "page": 98
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Risk/odds",
+  "page": 99
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Single proportion",
+  "page": 101
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Multiple proportion confidence intervals",
+  "page": 102
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Ratio of counts confidence interval",
+  "page": 103
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Survival analysis (Kaplan-Meier curves, log-rank test etc.)",
+  "page": 104
+ },
+ {
+  "menu": "Univariate menu",
+  "feature": "Combine errors",
+  "page": 106
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Principal components",
+  "page": 107
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Principal coordinates",
+  "page": 112
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Non-metric MDS",
+  "page": 113
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Correspondence analysis",
+  "page": 115
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Detrended correspondence analysis",
+  "page": 117
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Canonical correspondence",
+  "page": 118
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Seriation",
+  "page": 119
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "CABFAC factor analysis",
+  "page": 120
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Discriminant analysis",
+  "page": 121
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Two-block PLS",
+  "page": 123
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Redundancy analysis (RDA)",
+  "page": 124
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Nonlinear ordination (UMAP)",
+  "page": 125
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Nonlinear ordination (ISOMAP)",
+  "page": 127
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Classical cluster analysis",
+  "page": 128
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Neighbour joining",
+  "page": 130
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "K-means clustering",
+  "page": 131
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "K-medoids clustering",
+  "page": 132
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "DBSCAN clustering",
+  "page": 132
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "K-nearest neighbors classifier",
+  "page": 133
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Naïve Bayes classifier",
+  "page": 134
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Parsimony (cladistic)",
+  "page": 135
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Phylogenetically independent contrasts",
+  "page": 138
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Phylogenetic generalized least squares (PGLS)",
+  "page": 139
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Multivariate normality",
+  "page": 140
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Box’s M",
+  "page": 141
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "MANOVA",
+  "page": 142
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "One-way ANOSIM",
+  "page": 143
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "One-way PERMANOVA",
+  "page": 144
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Two-way ANOSIM",
+  "page": 146
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Two-way ANOSIM without replication",
+  "page": 146
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Two-way PERMANOVA",
+  "page": 146
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Test for multivariate dispersion (PERMDISP)",
+  "page": 147
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Mantel test and partial Mantel test",
+  "page": 148
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "SIMPER",
+  "page": 150
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Indicator species analysis (IndVal)",
+  "page": 151
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Paired Hotelling",
+  "page": 152
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Modern Analog Technique",
+  "page": 153
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Weighted averaging calibration (WA)",
+  "page": 155
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Weighted averaging partial least squares (WA-PLS)",
+  "page": 156
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Similarity and distance indices",
+  "page": 158
+ },
+ {
+  "menu": "Multivariate menu",
+  "feature": "Genetic sequence stats",
+  "page": 164
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Model menu",
+  "page": 165
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Linear, bivariate",
+  "page": 165
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Linear, multivariate (one independent, n dependent)",
+  "page": 170
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Linear, multiple (one dependent, n independent)",
+  "page": 171
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Linear, multivariate multiple (m independent, n dependent)",
+  "page": 172
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Generalized Linear Model",
+  "page": 173
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Polynomial regression",
+  "page": 175
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Nonlinear",
+  "page": 176
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Sinusoidal regression",
+  "page": 179
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Smoothing spline",
+  "page": 181
+ },
+ {
+  "menu": "Model menu",
+  "feature": "LOESS smoothing",
+  "page": 182
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Mixture analysis",
+  "page": 184
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Abundance models",
+  "page": 186
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Species packing (Gaussian)",
+  "page": 188
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Logarithmic spiral",
+  "page": 189
+ },
+ {
+  "menu": "Model menu",
+  "feature": "Changepoint modeling",
+  "page": 190
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Diversity menu",
+  "page": 192
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Alpha diversity indices",
+  "page": 192
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Quadrat richness",
+  "page": 197
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Beta diversity",
+  "page": 200
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Taxonomic",
+  "page": 202
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Individual rarefaction",
+  "page": 204
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Shareholder Quorum Subsampling (SQS)",
+  "page": 207
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Sample rarefaction (Mao’s tau)",
+  "page": 208
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "SHE analysis",
+  "page": 210
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Diversity permutation test",
+  "page": 211
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Diversity t test",
+  "page": 212
+ },
+ {
+  "menu": "Diversity menu",
+  "feature": "Diversity profiles",
+  "page": 213
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Time series menu",
+  "page": 214
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Simple periodogram",
+  "page": 214
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "REDFIT spectral analysis",
+  "page": 215
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Multitaper spectral analysis",
+  "page": 217
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Walsh transform",
+  "page": 218
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Evolutive Fourier transform",
+  "page": 219
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Wavelet transform",
+  "page": 220
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Wavelets for unequal spacing",
+  "page": 222
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Point events spectrum",
+  "page": 223
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Autocorrelation",
+  "page": 225
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Autoassociation",
+  "page": 226
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Cross-correlation",
+  "page": 228
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Mantel correlogram (and periodogram)",
+  "page": 229
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Runs test",
+  "page": 231
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Mann-Kendall trend test",
+  "page": 232
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Point events",
+  "page": 233
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Markov chain",
+  "page": 235
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "ARMA (and intervention analysis)",
+  "page": 236
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Simple smoothers",
+  "page": 238
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "FIR filter",
+  "page": 240
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Insolation (solar forcing) model",
+  "page": 242
+ },
+ {
+  "menu": "Time series menu",
+  "feature": "Date/time conversion",
+  "page": 243
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Geometrical menu",
+  "page": 244
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Circular (one sample)",
+  "page": 244
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Circular (two samples)",
+  "page": 247
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Circular correlation",
+  "page": 249
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Spherical (one sample)",
+  "page": 250
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Point pattern analysis - nearest neighbours",
+  "page": 252
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Ripley’s K point pattern analysis",
+  "page": 254
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Correlation length analysis",
+  "page": 256
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Minimal spanning tree analysis",
+  "page": 257
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Kernel density",
+  "page": 258
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Point alignments",
+  "page": 259
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Quadrat counts",
+  "page": 260
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Spatial autocorrelation (Moran’s I)",
+  "page": 262
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Gridding (spatial interpolation)",
+  "page": 264
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Multivariate allometry",
+  "page": 267
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "PCA of 2D landmarks (relative warps)",
+  "page": 268
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Thin-plate splines for 2D landmarks",
+  "page": 269
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Linear regression of 2D landmarks",
+  "page": 269
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Common Allometric Component analysis for 2D landmarks",
+  "page": 270
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "PCA of 3D landmarks",
+  "page": 271
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Linear regression of 3D landmarks",
+  "page": 271
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Common Allometric Component analysis for 3D landmarks",
+  "page": 271
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Size from landmarks (2D or 3D) NOT YET IN PAST 4",
+  "page": 272
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "All distances from landmarks (EDMA) NOT YET IN PAST 3",
+  "page": 273
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Edit landmark lines/polygons",
+  "page": 274
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Elliptic Fourier shape analysis",
+  "page": 275
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Hangle Fourier shape analysis",
+  "page": 276
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Eigenshapes",
+  "page": 277
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Coordinate transformation",
+  "page": 278
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Open Street Map",
+  "page": 279
+ },
+ {
+  "menu": "Geometrical menu",
+  "feature": "Measure on image",
+  "page": 280
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Stratigraphy menu",
+  "page": 281
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Unitary Associations",
+  "page": 281
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Ranking-Scaling",
+  "page": 286
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Range confidence intervals",
+  "page": 289
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Distribution-free range confidence intervals",
+  "page": 290
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Stratigraphic chart",
+  "page": 291
+ },
+ {
+  "menu": "Stratigraphy menu",
+  "feature": "Radiocarbon calibration",
+  "page": 293
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Scripting",
+  "page": 296
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Language structure",
+  "page": 296
+ },
+ {
+  "menu": "Scripting",
+  "feature": "The output window",
+  "page": 303
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Accessing the main Past spreadsheet and menus",
+  "page": 305
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Array and vector operations",
+  "page": 306
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Scalar math functions",
+  "page": 306
+ },
+ {
+  "menu": "Scripting",
+  "feature": "File I/O",
+  "page": 307
+ },
+ {
+  "menu": "Scripting",
+  "feature": "String operations",
+  "page": 308
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Other functions",
+  "page": 310
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Calling dll functions (Windows only)",
+  "page": 311
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Libraries and classes",
+  "page": 312
+ },
+ {
+  "menu": "Scripting",
+  "feature": "Forms and components",
+  "page": 313
+ }
+]

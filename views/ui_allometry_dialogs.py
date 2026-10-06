@@ -240,13 +240,19 @@ class AllometryDialog(BaseAllometryDialog):
         self._n_components_spin.setEnabled(False)
         opts_layout.addRow(_("Number of components:"), self._n_components_spin)
 
-        # Regression method — currently exposed for transparency; the
-        # multivariate regression in AllometryAnalyzer is OLS (the
-        # size-shape regression is symmetric in X), but the option is
-        # kept here so a future RMA implementation slots in cleanly.
-        self._method_combo = QComboBox()
-        self._method_combo.addItems([_("OLS"), _("RMA (reduced major axis)")])
-        opts_layout.addRow(_("Regression method:"), self._method_combo)
+        # The "Regression method" combo offered OLS and RMA and was wired to
+        # NOTHING: it was constructed, filled and added to the layout, and no
+        # code path ever read ``_method_combo.currentIndex()``. Picking RMA ran
+        # the OLS regression and labelled the result RMA. That is worse than
+        # offering nothing, because the numbers come out looking right.
+        #
+        # It is removed rather than made to work, for now: RMA needs a real
+        # implementation in morphometrics/allometry.py, which is a separate
+        # piece of work with its own assumptions to state (it fits both axes'
+        # error, so it needs measurement error estimates that the dialog does
+        # not collect). The confidence-level spinner below was removed earlier
+        # for exactly the same reason -- a control that cannot affect the
+        # result should not be on screen. When RMA lands it comes back, wired.
 
         # NOTE: the previous "Confidence level" spinner was a dead
         # control — ``AllometryAnalyzer.analyze_allometry`` and

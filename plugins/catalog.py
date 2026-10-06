@@ -335,6 +335,14 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
     ),
     _e("she", "ecology.advanced", "SHEAnalyzer", "analyze", "diversity", "SHE analysis for diversity"),
     _e(
+        "abundance_models",
+        "ecology.advanced",
+        "AbundanceModelFitter",
+        "fit_all",
+        "diversity",
+        "Abundance model fitting: log-series, log-normal, geometric and broken-stick, ranked by AIC",
+    ),
+    _e(
         "dtw",
         "ecology.dtw",
         "DTWAnalyzer",

@@ -7,7 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A machine-readable inventory of PAST 4's features**
+  (`docs/parity/past4_features.json`), transcribed from the official PAST 4
+  reference manual: 242 entries across twelve menus, each with its page. The
+  aim is that "reproduce everything PAST has" becomes a state that can be
+  checked rather than one that has to be judged by eye. No test consumes it
+  yet.
+- **Abundance model fitting** is now reachable by name
+  (`run("abundance_models")`). The four models -- log-series, log-normal,
+  geometric and broken-stick -- have been in `ecology/advanced.py` with
+  cross-validation tests against R, but nothing pointed a user at them. The
+  catalog is 79 analyses in 12 categories.
+- **A structural test for dead interactive controls**
+  (`tests/views/test_dead_controls.py`). A widget that is built, filled and
+  laid out but never asked for its value looks like a choice and silently has
+  none.
+
 ### Fixed
+- **Three controls did nothing while appearing to do something.** All three
+  were the same defect, and none was caught by a behavioural test, because
+  every dialog still ran and still returned a result:
+  - the allometry dialog's **"RMA (reduced major axis)"** combo. Constructed,
+    filled with OLS and RMA, added to the layout -- and never read. Picking
+    RMA ran the OLS regression and labelled the output RMA. Removed rather
+    than wired up: RMA fits error in both axes and so needs measurement-error
+    estimates the dialog does not collect, making it an engine change rather
+    than a wiring change.
+  - the PCA dialog's **"Use correlation matrix"** checkbox. A mirror of the
+    Similarity Matrix combo, kept in step by `_on_method_changed`, while
+    `get_parameters` read only the combo -- untick the box by hand and nothing
+    happened. The combo already states the choice and is what reaches the
+    engine, so the mirror went rather than being wired in parallel.
+  - the macroevolution dialog's **"Starting consensus from:"** combo, offering
+    "Consensus (recommended)" and "First specimen". Never read, and the engine
+    has no first-specimen mode to read.
+
+  The new test found the second and third on its first run against a tree
+  where the first had already been removed, which is the point of having it.
+  It counts a control as alive only when a getter is called on it, or when it
+  is passed to something that is not a layout method: an earlier version that
+  treated any appearance as a read reported all three as healthy.
 - **The figure on screen and the figure you export were not the same
   figure.** The interactive plotters hard-coded `get_color_scheme("default")`
   (Paul Tol's colours) while the R export defaulted to Okabe-Ito, so every
