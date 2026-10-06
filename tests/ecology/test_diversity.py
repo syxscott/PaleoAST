@@ -66,7 +66,7 @@ class TestChao1ConfidenceInterval:
         from ecology.diversity import chao1_confidence_interval
 
         abundances = np.array([1, 1, 2, 2, 3, 0, 0])
-        chao1, ci_lower, ci_upper = chao1_confidence_interval(abundances)
+        chao1, _ci_lower, _ci_upper = chao1_confidence_interval(abundances)
 
         # Same as basic test - zeros should be ignored, S=5, f1=2, f2=2 -> Chao1=6
         assert chao1 == pytest.approx(6.0, abs=1e-3)

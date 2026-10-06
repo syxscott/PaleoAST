@@ -148,7 +148,7 @@ class TestINEXTBootstrapCoverageLevels:
 
         # CI width at high coverage (last quartile) should typically be
         # larger than at medium coverage (middle quartile)
-        low_idx = len(ci_widths) // 4
+        len(ci_widths) // 4
         high_idx = 3 * len(ci_widths) // 4
 
         # This is a heuristic - the relationship isn't strictly monotonic

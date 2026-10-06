@@ -66,7 +66,7 @@ class TestPICBasic:
         tree = PhyloTree.from_newick("(A:1,B:1)Root:0;")
         traits = {"A": 0.0, "B": 1.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         expected = (0.0 - 1.0) / np.sqrt(1 + 1)
         np.testing.assert_almost_equal(contrasts[0], expected, decimal=10)
@@ -88,7 +88,7 @@ class TestPICBasic:
         tree = PhyloTree.from_newick("(A:2,B:1)Root:0;")
         traits = {"A": 1.0, "B": 2.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         expected = (1.0 - 2.0) / np.sqrt(2 + 1)
         np.testing.assert_almost_equal(contrasts[0], expected, decimal=10)
@@ -114,7 +114,7 @@ class TestPICBasic:
         tree = PhyloTree.from_newick("(A:1,(C:1)Node1:1,B:1)Root:1;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # 应该有2个对比: Node1 的 (A,C) 和 Root 的 (Node1, B)
         assert len(contrasts) == 2
@@ -156,7 +156,7 @@ class TestPICPolytomy:
         tree = PhyloTree.from_newick("(A:1,B:1,C:1)Root:0;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # k=3 应产生 k-1 = 2 个对比
         assert len(contrasts) == 2, f"Expected 2 contrasts for trichotomy, got {len(contrasts)}"
@@ -192,7 +192,7 @@ class TestPICPolytomy:
         tree = PhyloTree.from_newick("(A:1,B:1,C:1,D:1)Root:0;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # k=4 应产生 k-1 = 3 个对比
         assert len(contrasts) == 3, f"Expected 3 contrasts for quadfurcation, got {len(contrasts)}"
@@ -342,7 +342,7 @@ class TestPICAncestralStates:
         tree = PhyloTree.from_newick("(A:1,B:1)Root:1;")
         traits = {"A": 2.0, "B": 4.0}
 
-        contrasts, pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
+        _contrasts, _pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
 
         # Root 的祖先状态应为 A 和 B 的平均
         assert "Root" in ancestral or "_internal_" in str(list(ancestral.keys()))
@@ -360,7 +360,7 @@ class TestPICAncestralStates:
         tree = PhyloTree.from_newick("((((A:1,B:1):1,C:1):1,D:1):1,E:1):0;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0}
 
-        contrasts, pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
+        _contrasts, _pairs, ancestral = compute_pic_with_ancestral_states(tree, traits)
 
         # 4 个无名内部节点 => 4 个不同键
         assert len(ancestral) == 4, ancestral

@@ -51,7 +51,7 @@ class TestPICVariance4TaxaTree:
         对于二叉树，父节点方差 = v0 + v1，其中 v0/v1 已包含子节点枝长
         不应该重复加 bl0 + bl1 (旧代码的错误)
         """
-        contrasts, pairs = compute_pic(tree_4taxa, traits_simple)
+        contrasts, _pairs = compute_pic(tree_4taxa, traits_simple)
 
         # 4-taxa 树应有 3 个独立对比 (n-1 for binary tree)
         assert len(contrasts) == 3, f"Expected 3 contrasts for 4-taxa tree, got {len(contrasts)}"
@@ -67,7 +67,7 @@ class TestPICVariance4TaxaTree:
         旧代码: node_var = v0 + v1 + bl0 + bl1 (错误 - 双重计算)
         新代码: node_var = v0 + v1 (正确 - Felsenstein 1985)
         """
-        contrasts, pairs = compute_pic(tree_4taxa, traits_simple)
+        contrasts, _pairs = compute_pic(tree_4taxa, traits_simple)
 
         # 如果 v0/v1 已经包含 bl0/bl1，则 node_var = v0 + v1
         # 我们可以通过检查对比值的合理性来间接验证
@@ -110,7 +110,7 @@ class TestPICVariancePolytomy:
 
     def test_polytomy_pic_computation(self, tree_5taxa_polytomy, traits_5taxa):
         """验证 polytomy 树的 PIC 仍能正确计算"""
-        contrasts, pairs = compute_pic(tree_5taxa_polytomy, traits_5taxa)
+        contrasts, _pairs = compute_pic(tree_5taxa_polytomy, traits_5taxa)
 
         # 5-taxa 树应有 4 个独立对比
         # 其中 2 个来自 D 节点的 3-furcation (k-1 = 2)
@@ -125,7 +125,7 @@ class TestPICVariancePolytomy:
         旧代码: running_var = v0 + v1 + bl0 + bl1 (错误)
         新代码: running_var = v0 + v1 (正确)
         """
-        contrasts, pairs = compute_pic(tree_5taxa_polytomy, traits_5taxa)
+        contrasts, _pairs = compute_pic(tree_5taxa_polytomy, traits_5taxa)
 
         # 所有对比值应该有限且合理
         for c in contrasts:
@@ -141,7 +141,7 @@ class TestPICVarianceEdgeCases:
         tree = PhyloTree.from_newick("(A:1, B:2);")
         traits = {"A": 1.0, "B": 3.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # 2-taxa 树应有 1 个对比
         assert len(contrasts) == 1
@@ -155,7 +155,7 @@ class TestPICVarianceEdgeCases:
         tree = PhyloTree.from_newick("(A:0.1, (B:0.2, (C:0.3, D:0.4)E:0.5)F:0.6)G:0;")
         traits = {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # 4-taxa 不平衡树应有 3 个对比
         assert len(contrasts) == 3
@@ -179,7 +179,7 @@ class TestPICVarianceFormula:
         tree = PhyloTree.from_newick("(A:1, B:2)C:0;")
         traits = {"A": 1.0, "B": 3.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # v_A = 1 (A 的枝长), v_B = 2 (B 的枝长)
         # node_var at C should be v_A + v_B = 3
@@ -193,7 +193,7 @@ class TestPICVarianceFormula:
         tree = PhyloTree.from_newick("(A:10, B:1)C:0;")
         traits = {"A": 2.0, "B": 1.0}
 
-        contrasts, pairs = compute_pic(tree, traits)
+        contrasts, _pairs = compute_pic(tree, traits)
 
         # v_A = 10, v_B = 1
         # node_var = 11

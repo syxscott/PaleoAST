@@ -120,7 +120,7 @@ def test_foote2000_simplified_rates():
 
     result = analysis.analyze(records, intervals)
 
-    interval_data = result.intervals[0]
+    result.intervals[0]
 
     # n_t = n_bt + n_bl = 2 + 2 = 4
     # p_F = n_ft / n_t = 2 / 4 = 0.5

@@ -57,7 +57,7 @@ class TestProcrustesDistance:
         R = _rotation_matrix_2d(0.7)
         rotated = np.stack([cfg @ R for cfg in shape_set])
         # d² = 2 - 2·ΣS suffers ~1 ulp cancellation; the sqrt leaves ~1e-8
-        for a, b in zip(shape_set, rotated):
+        for a, b in zip(shape_set, rotated, strict=False):
             assert procrustes_distance(a, b) == pytest.approx(0.0, abs=1e-4)
 
     def test_scaled_copy_is_zero(self, shape_set):

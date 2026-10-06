@@ -84,7 +84,7 @@ class TestKabschRotation(unittest.TestCase):
         # Since the Kabsch algorithm finds R = Vt.T @ U.T from SVD of target.T @ reference
         # Let's verify det(R) = +1
         H = target.T @ reference
-        U, S, Vt = np.linalg.svd(H)
+        U, _S, Vt = np.linalg.svd(H)
         R = Vt.T @ U.T
 
         # det(R) should be +1 for a pure rotation
@@ -108,7 +108,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # The Kabsch algorithm should detect and correct the reflection
         H = target.T @ reference
-        U, S, Vt = np.linalg.svd(H)
+        U, _S, Vt = np.linalg.svd(H)
         R_initial = Vt.T @ U.T
 
         # Initial R may have det < 0 (reflection)
@@ -170,7 +170,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # Kabsch
         H = ref_scaled.T @ tgt_scaled
-        U, S, Vt = np.linalg.svd(H)
+        U, _S, Vt = np.linalg.svd(H)
         R = Vt.T @ U.T
 
         # Kabsch's SVD has an inherent sign ambiguity: the recovered rotation
@@ -211,7 +211,7 @@ class TestKabschRotation(unittest.TestCase):
 
         # Kabsch
         H = target.T @ reference
-        U, S, Vt = np.linalg.svd(H)
+        U, _S, Vt = np.linalg.svd(H)
         R = Vt.T @ U.T
 
         # Apply fix

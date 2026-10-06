@@ -103,7 +103,7 @@ class TestAR1NullModel:
     def test_ar1_significant_5pct_threshold_reasonable(self):
         """A pure AR(1) series should give a small fraction of
         significant peaks (5 % at the α=0.05 level by construction)."""
-        rng = np.random.default_rng(123)
+        np.random.default_rng(123)
         t = np.linspace(0, 100, 200)
         x = _ar1_series(len(t), phi=0.7, seed=42)
         result = SpectralAnalyzer().analyze(t, x, frequency_range=(0.01, 5.0),

@@ -1,6 +1,8 @@
 """Tests for stratigraphy/time_bins.py — W6 palaeoverse port (DP equal-length bins,
 bin_time five methods, FAD/LAD ranges, range-through expansion)."""
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -64,7 +66,7 @@ class TestTimeBinsDP:
         # contiguous coverage from old to young
         assert tb[0]["max_ma"] == pytest.approx(538.8)
         assert tb[-1]["min_ma"] == pytest.approx(0.0)
-        for older, younger in zip(tb, tb[1:]):
+        for older, younger in itertools.pairwise(tb):
             assert older["min_ma"] == pytest.approx(younger["max_ma"])
 
     def test_size_wins_over_n_bins(self, user_scale):

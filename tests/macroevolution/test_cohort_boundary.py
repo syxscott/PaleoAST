@@ -39,7 +39,7 @@ class TestCohortBoundaryTaxaWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            result = CohortSurvivorshipAnalysis().analyze(records, intervals)
+            CohortSurvivorshipAnalysis().analyze(records, intervals)
 
         warnings_text = [str(w.message) for w in caught]
         # At least one warning should mention the boundary issue.
@@ -58,7 +58,7 @@ class TestCohortBoundaryTaxaWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            result = CohortSurvivorshipAnalysis().analyze(records, intervals)
+            CohortSurvivorshipAnalysis().analyze(records, intervals)
 
         warnings_text = [str(w.message) for w in caught]
         assert any(

@@ -67,6 +67,7 @@ from phylogenetics.distance_methods import (
     build_upgma_tree,
 )
 from phylogenetics.tree import PhyloTree
+from utils.exceptions import DataValidationError
 
 # =============================================================================
 # Test-local helpers
@@ -950,13 +951,13 @@ class TestDistanceMatrixFromSequences:
     def test_empty_taxon_set_raises(self) -> None:
         """Calling ``from_sequences({})`` must raise rather than silently
         produce a 0x0 matrix."""
-        with pytest.raises(Exception):
+        with pytest.raises(DataValidationError):
             DistanceMatrix.from_sequences({})
 
     def test_uneven_sequence_lengths_raise(self) -> None:
         """Aligned sequences of different lengths must raise -- the p-distance
         is undefined when the comparison runs off the end of one sequence."""
-        with pytest.raises(Exception):
+        with pytest.raises(DataValidationError):
             DistanceMatrix.from_sequences({"A": "AT", "B": "ATG"})
 
 

@@ -21,7 +21,7 @@ def _make_matrix(data, *, data_types: list[str] | None = None) -> DataMatrix:
     col_labels = [f"Var_{j+1}" for j in range(n_cols)]
     column_metadata = {}
     if data_types is not None:
-        for label, dt in zip(col_labels, data_types):
+        for label, dt in zip(col_labels, data_types, strict=False):
             column_metadata[label] = {"data_type": dt}
     return DataMatrix(
         data,

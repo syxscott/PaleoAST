@@ -59,7 +59,7 @@ class TestComputeAicc:
 
     def test_n_less_than_k_raises_value_error(self):
         """Should raise ValueError when n - k - 1 <= 0."""
-        with pytest.raises(ValueError, match="n_params.*must be less than n_obs"):
+        with pytest.raises(ValueError, match=r"n_params.*must be less than n_obs"):
             compute_aicc(-10.0, n_params=10, n_obs=10)
 
     def test_n_minus_k_minus_one_zero_raises(self):

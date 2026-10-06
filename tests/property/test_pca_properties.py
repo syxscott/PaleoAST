@@ -99,7 +99,6 @@ def test_pca_loadings_diagonal_gramian(data):
     L = result.loadings
     gramian = L.T @ L
     # gramian should be diagonal with eigenvalues on diagonal
-    n = result.n_components
     expected_diag = np.diag(result.eigenvalues)
     diag_str = np.array2string(np.diag(result.eigenvalues), precision=4)
     gramian_str = np.array2string(gramian, precision=4)

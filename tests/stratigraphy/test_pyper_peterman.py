@@ -35,7 +35,7 @@ def test_pyper_peterman_white_noise():
     x = np.random.randn(n)
     y = np.random.randn(n)
 
-    r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    _r, _p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
 
     # For white noise, n_eff should be close to n
     assert n_orig == n, f"Original n should be {n}, got {n_orig}"
@@ -56,7 +56,7 @@ def test_pyper_peterman_ar1_high_autocorrelation():
     x = _generate_ar1(n, phi)
     y = _generate_ar1(n, phi)
 
-    r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    _r, _p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
 
     assert n_orig == n
     # With phi=0.9, effective sample size should be much smaller
@@ -76,7 +76,7 @@ def test_pyper_peterman_ar1_low_autocorrelation():
     x = _generate_ar1(n, phi)
     y = _generate_ar1(n, phi)
 
-    r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    _r, _p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
 
     assert n_orig == n
     # With phi=0.3, n_eff should be somewhat smaller but not as dramatic
@@ -100,8 +100,8 @@ def test_pyper_peterman_vs_pearsonr():
     x = _generate_ar1(n, phi)
     y = x + 0.5 * np.random.randn(n)  # y correlated with x
 
-    r_uncorr, p_uncorr = stats.pearsonr(x, y)
-    r_corr, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    _r_uncorr, p_uncorr = stats.pearsonr(x, y)
+    _r_corr, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
 
     # The corrected p-value should be larger than uncorrected
     # for autocorrelated data (more conservative)
@@ -125,7 +125,7 @@ def test_pyper_peterman_nan_handling():
     x[25] = np.nan
     y[30] = np.nan
 
-    r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    r, p_corr, _n_eff, n_orig = pyper_peterman_correction(x, y)
 
     # Should handle NaNs gracefully
     assert n_orig == n - 3, f"Expected n_orig={n - 3}, got {n_orig}"
@@ -143,7 +143,7 @@ def test_pyper_peterman_short_series():
     x = np.random.randn(3)
     y = np.random.randn(3)
 
-    r, p_corr, n_eff, n_orig = pyper_peterman_correction(x, y)
+    r, p_corr, _n_eff, _n_orig = pyper_peterman_correction(x, y)
 
     # Should return nan for very short series
     assert np.isnan(r) and np.isnan(p_corr)

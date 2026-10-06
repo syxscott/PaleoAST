@@ -142,7 +142,7 @@ def _ranking_score(ranking: list[str], dist: np.ndarray, names: list[str]) -> fl
     """Compute the cost of a name-based ranking against a distance matrix."""
     name_to_idx = {n: i for i, n in enumerate(names)}
     score = 0.0
-    for a, b in zip(ranking, ranking[1:], strict=False):
+    for a, b in itertools.pairwise(ranking):
         score += float(dist[name_to_idx[a], name_to_idx[b]])
     return score
 
@@ -190,7 +190,7 @@ class TestUAExhaustiveMaximalCliques:
             uaz_similarity_threshold=0.0,  # disable merging for clarity
         )
 
-        truth = _brute_force_maximal_cliques(fad, lad, min_size=2)
+        _brute_force_maximal_cliques(fad, lad, min_size=2)
         truth_sets = {frozenset({"A", "B"}), frozenset({"B", "C"}), frozenset({"C", "D"})}
         got_sets = set(_result_zones_as_sets(result))
         assert got_sets == truth_sets, (
@@ -215,7 +215,7 @@ class TestUAExhaustiveMaximalCliques:
             uaz_similarity_threshold=0.0,
         )
 
-        truth = _brute_force_maximal_cliques(fad, lad)
+        _brute_force_maximal_cliques(fad, lad)
         truth_sets = {frozenset({"Event_1", "Event_2"})}
         got_sets = set(_result_zones_as_sets(result))
         assert got_sets == truth_sets
@@ -449,8 +449,8 @@ class TestUAZMerge:
         # We can force two cliques of size 2 in a UA-like configuration by
         # passing data where two pairs overlap but the pairs don't overlap
         # each other, then forcing identical cliques via the merging step.
-        fad = np.array([[0.0, 2.0, 6.0], [0.0, 2.0, 6.0]])
-        lad = np.array([[5.0, 7.0, 11.0], [5.0, 7.0, 11.0]])
+        np.array([[0.0, 2.0, 6.0], [0.0, 2.0, 6.0]])
+        np.array([[5.0, 7.0, 11.0], [5.0, 7.0, 11.0]])
         # Cliques: {A,B}, {B,C} -- dissimilar (share only B).
         # To force merging we need two highly similar cliques. Easiest: build
         # an instance with two identical cliques via a single connected

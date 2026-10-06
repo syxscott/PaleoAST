@@ -55,11 +55,11 @@ class TestProcDLM:
         x = rng.normal(size=n)
         design = np.column_stack([np.ones(n), x])
         res = procD_lm(shapes, design, n_permutations=199, seed=8)
-        x_term = [t for t in res.terms if t.term == "X1"][0]
+        x_term = next(t for t in res.terms if t.term == "X1")
         assert x_term.p_value > 0.05
 
     def test_dict_design_names(self, correlated_shape_data):
-        shapes, design, x = correlated_shape_data
+        shapes, _design, x = correlated_shape_data
         res = procD_lm(shapes, {"Intercept": np.ones(len(x)), "size": x}, n_permutations=49, seed=1)
         term_names = [t.term for t in res.terms]
         assert term_names == ["Intercept", "size"]

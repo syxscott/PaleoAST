@@ -61,7 +61,7 @@ class TestDistanceMatrixRejectsAsymmetricInput:
             assert matrix.get_distance(a, b) == matrix.get_distance(b, a)
 
     def test_shape_mismatch_is_rejected(self):
-        with pytest.raises(ValueError, match="square|shape"):
+        with pytest.raises(ValueError, match=r"square|shape"):
             DistanceMatrix.from_array(np.zeros((3, 2)), ["A", "B", "C"])
 
 
@@ -95,7 +95,7 @@ class TestMeshVolumeRequiresAClosedSurface:
         from morpho3d.mesh import Mesh3D
 
         mesh = Mesh3D(vertices=self.CUBE_VERTICES, faces=self.CUBE_FACES[:8])
-        with pytest.raises(ValueError, match="open|boundary"):
+        with pytest.raises(ValueError, match=r"open|boundary"):
             mesh.compute_volume()
 
     def test_open_mesh_can_be_opted_into(self):

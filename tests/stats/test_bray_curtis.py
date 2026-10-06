@@ -126,7 +126,7 @@ class TestBrayCurtisLargeMatrix:
     def test_large_matrix_consistency(self):
         """Large matrices should use chunked path but produce same results."""
         np.random.seed(42)
-        X = np.random.rand(100, 10) * 10  # 100 samples, 10 features
+        np.random.rand(100, 10) * 10  # 100 samples, 10 features
 
         # Compute using small matrix path (n=100 > 500? no, so this uses small path)
         # Actually n=100 <= 500, so it uses small path. Let's test with n=600

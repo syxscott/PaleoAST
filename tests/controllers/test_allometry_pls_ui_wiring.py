@@ -164,7 +164,7 @@ def test_evolution_rate_dialog_has_no_tree_input(qapp):
         "be silently discarded by the analyzer."
     )
     # And a notice explaining the design.
-    labels = [dialog.findChild(type(lbl)) for lbl in [dialog]]
+    [dialog.findChild(type(lbl)) for lbl in [dialog]]
     # Robust check: read the dialog's children for a QLabel mentioning "phylogenetic".
     from PyQt6.QtWidgets import QLabel
 

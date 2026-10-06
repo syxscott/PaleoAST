@@ -70,8 +70,8 @@ class TestCoverageRarefactionHill:
 
         abundance = np.array([[25, 10, 5], [15, 20, 8]])
 
-        result1 = coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=123)
-        result2 = coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=456)
+        coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=123)
+        coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=456)
 
         # Results may differ (though with bootstrap there could be some chance of same)
         # This is a probabilistic test

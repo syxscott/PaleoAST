@@ -40,7 +40,7 @@ def _read_translations(path: Path) -> dict[str, str]:
                 if not isinstance(node.value, ast.Dict):
                     raise AssertionError(f"TRANSLATIONS in {path} is not a dict literal")
                 result: dict[str, str] = {}
-                for k, v in zip(node.value.keys, node.value.values):
+                for k, v in zip(node.value.keys, node.value.values, strict=False):
                     if not isinstance(k, ast.Constant):
                         raise AssertionError(f"Non-constant key in {path}: {ast.dump(k)}")
                     result[k.value] = ast.literal_eval(v)

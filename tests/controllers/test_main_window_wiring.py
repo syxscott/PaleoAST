@@ -364,7 +364,7 @@ def test_execute_pca_passes_through_main_window(main_window, monkeypatch):
     # canned result and verify it forwards labels/groups to the canvas.
     assert main_window._run_analysis_async.called
     args = main_window._run_analysis_async.call_args
-    work, on_success, _on_fail, title = args[0]
+    _work, on_success, _on_fail, title = args[0]
     assert title == "PCA"
 
     # Now drive on_success and inspect what plot_pca_scores received.
@@ -784,7 +784,7 @@ def test_cca_handler_maps_zero_seed_to_none(main_window, monkeypatch):
     monkeypatch.setattr(mw, "CCADialog", _StubDialog)
     main_window._on_run_cca()
 
-    kwargs = [c for c in main_window._statistics_controller.calls if c[0] == "run_cca"][0][1]
+    kwargs = next(c for c in main_window._statistics_controller.calls if c[0] == "run_cca")[1]
     assert kwargs["random_seed"] is None
 
 

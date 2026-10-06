@@ -416,7 +416,7 @@ ID=S2
             curve_points={"curves": [{"order": [], "points": [[0, 0]] * 5}]},
         )
         f = TPSFile(specimens=[spec], n_landmarks=4, n_dimensions=2, comments=[])
-        with pytest.raises(ValueError, match="overflow|declares"):
+        with pytest.raises(ValueError, match=r"overflow|declares"):
             f.get_curves(n_fixed=0)
 
     def test_get_curves_inconsistent_lengths_raise(self):

@@ -287,7 +287,7 @@ class TestCCAConditionNumber:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            result = analyzer.analyze(Y, X, n_components=2, method="rda")
+            analyzer.analyze(Y, X, n_components=2, method="rda")
 
             warning_messages = [str(warning.message) for warning in w]
             ridge_warnings = [msg for msg in warning_messages if "ridge" in msg.lower()]

@@ -161,5 +161,5 @@ class TestBinForRoseUnchanged:
 
     def test_bin_for_rose_polar(self):
         angles = np.array([0, 90, 180, 270])
-        bin_centers, counts = DirectionalAnalyzer().bin_for_rose(angles, n_bins=4)
+        _bin_centers, counts = DirectionalAnalyzer().bin_for_rose(angles, n_bins=4)
         assert np.all(counts == 1)

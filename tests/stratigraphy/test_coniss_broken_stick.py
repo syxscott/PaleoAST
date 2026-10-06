@@ -116,7 +116,6 @@ class TestCONISSWithBrokenStick:
 
         # Create synthetic stratigraphic data with clear zones
         np.random.seed(42)
-        n_levels = 20
         n_vars = 5
 
         # Create data with 3 distinct zones
@@ -174,25 +173,34 @@ class TestCONISSWithBrokenStick:
 
         # Create data with very clear zones
         np.random.seed(123)
+        # The offsets are added as arrays, not as list literals: ruff's
+        # RUF005 rewrites ``arr + [2.0, ...]`` into ``[*arr, 2.0, ...]``,
+        # which flattens a 5x3 array into an 18-element list and makes
+        # np.vstack raise. The original list form here was broadcasting
+        # the three offsets across the five rows.
         data = np.vstack(
             [
-                np.random.randn(5, 3) + [2.0, 2.0, 2.0],
-                np.random.randn(5, 3) + [0.0, 0.0, 0.0],
-                np.random.randn(5, 3) + [-2.0, -2.0, -2.0],
+                np.random.randn(5, 3) + np.array([2.0, 2.0, 2.0]),
+                np.random.randn(5, 3) + np.array([0.0, 0.0, 0.0]),
+                np.random.randn(5, 3) + np.array([-2.0, -2.0, -2.0]),
             ]
         )
 
-        result, broken_stick = analyzer.analyze(
+        _result, broken_stick = analyzer.analyze(
             data,
             n_zones=3,
             compute_broken_stick=True,
             n_permutations=199,  # More permutations for better estimate
         )
 
-        # Count significant p-values
+        # Count the significant p-values by hand and require the reported
+        # number to agree. ruff had flagged the original ``sig_count`` as
+        # unused and deleted the binding, leaving the expression behind as a
+        # dead statement; the check it was written for is the one below.
         sig_count = sum(1 for p in broken_stick["p_values"] if p < 0.05)
 
-        # The reported significant_zones should be reasonable
+        # The reported significant_zones should match the p-values behind it
+        assert broken_stick["significant_zones"] == sig_count
         assert 0 <= broken_stick["significant_zones"] <= len(broken_stick["p_values"])
 
 

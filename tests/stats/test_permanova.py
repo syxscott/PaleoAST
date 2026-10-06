@@ -171,7 +171,6 @@ class TestPERMANOVA(unittest.TestCase):
     def test_performance_benchmark(self) -> None:
         """n=500, p=50, 999 permutations should complete in reasonable time."""
         np.random.seed(42)
-        n = 500
         p = 50
 
         # Generate synthetic data with distinct groups

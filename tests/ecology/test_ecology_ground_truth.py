@@ -775,7 +775,7 @@ class TestCAGroundTruth:
         # value of the *raw* pearson must be preserved by the sign
         # calibration -- i.e. was_flipped must be exactly the
         # anti-correlation flag.
-        raw_axis = np.asarray(result.row_species_axis, dtype=float)
+        np.asarray(result.row_species_axis, dtype=float)
         # The reported pearson_corr_axis_vs_height is computed against
         # the *uncalibrated* axis in the implementation, so check the
         # documented invariant that flipping the axis sign changes the

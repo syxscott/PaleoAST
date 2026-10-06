@@ -173,10 +173,15 @@ class TestTPSParserMissingSentinels:
     """TPS coordinates with ``?`` or ``*`` must parse as NaN, not crash."""
 
     def _write(self, content: str) -> str:
-        f = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".tps", delete=False)
-        f.write(content)
-        f.flush()
-        return f.name
+        # delete=False, so the file has to outlive this block for the parser
+        # to open it -- but the handle itself is closed by the `with` rather
+        # than by its reference count dropping, which is what happened
+        # before and left the write racing the read on Windows.
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".tps", delete=False
+        ) as handle:
+            handle.write(content)
+            return handle.name
 
     def test_question_mark_landmark_becomes_nan(self):
         content = (

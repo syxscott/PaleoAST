@@ -187,7 +187,7 @@ def test_analyze_accepts_progress_callback():
         progress_calls.append((restart, total, stress))
 
     # This should not raise
-    result = analyzer.analyze(
+    analyzer.analyze(
         D,
         n_dimensions=2,
         n_restarts=3,

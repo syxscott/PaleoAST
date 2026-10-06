@@ -254,7 +254,7 @@ class TestPaleotemperatureEdgeCases:
         T = analyzer.compute_paleotemperature_erez_luz(
             delta18O_sw=2.0, delta18O_c=-2.0, delta18O_sw_scale="vpdb",
         )
-        delta_diff = -2.0 - 2.0  # = -4
+        -2.0 - 2.0  # = -4
         expected = 17.0 - 4.52 * (-4) + 0.03 * (16)  # = 17 + 18.08 + 0.48 = 35.56
         assert abs(T - expected) < 0.1
 

@@ -87,7 +87,7 @@ class TestSurfaceNormalsOnCurvedSurface:
         surface = list(range(len(pts)))
         normals, _ = _compute_surface_tangents_and_normals(pts, surface)
         bad = []
-        for p, a, n in zip(pts, analytic, normals):
+        for p, a, n in zip(pts, analytic, normals, strict=False):
             cos_angle = abs(float(n @ a))
             if cos_angle < 0.85:
                 bad.append((p, a, n, cos_angle))
@@ -123,7 +123,7 @@ class TestSurfaceNormalsOnCurvedSurface:
         assert np.linalg.det(Q) > 0.999
         rotated = consensus @ Q.T
         normals_rot, _ = _compute_surface_tangents_and_normals(rotated, surface)
-        for n_ref, n_rot in zip(normals_ref, normals_rot):
+        for n_ref, n_rot in zip(normals_ref, normals_rot, strict=False):
             rotated_ref = Q @ n_ref
             assert np.allclose(rotated_ref, n_rot, atol=1e-8) or np.allclose(rotated_ref, -n_rot, atol=1e-8)
 
@@ -140,7 +140,7 @@ class TestSlidingProjectionInvariance:
         surface = list(range(len(consensus)))
 
         # a specimen that bulges in +z (out of the surface)
-        rng = np.random.default_rng(13)
+        np.random.default_rng(13)
         config = consensus + 0.0
         # displace interior points uniformly in z
         interior_idx = surface[1:-1]

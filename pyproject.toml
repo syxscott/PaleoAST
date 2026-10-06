@@ -176,6 +176,7 @@ ignore = [
     "N803",   # argument name should be lowercase
     "N806",   # variable in function should be lowercase
     "N811",   # constant imported as non-constant (used for i18n dict aliases)
+    "N812",   # lowercase module imported as non-lowercase (`import reference_algorithms as R`; R-interop convention, 45 call sites across four cross-validation files)
     "N815",   # mixedCase in class scope (PyQt signals follow Qt's camelCase convention)
     "UP007",  # use X | Y for union types (keep Optional for readability)
     "B007",   # unused loop control variable

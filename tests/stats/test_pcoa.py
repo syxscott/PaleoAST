@@ -29,6 +29,7 @@ import numpy as np
 import pytest
 
 from stats.pcoa import PCoAAnalyzer, PCoAResult
+from utils.exceptions import MatrixDimensionError
 
 
 class TestPCoANegativeEigenvalueBehavior:
@@ -164,7 +165,7 @@ class TestPCoAEigenvalueHandling:
 
         # The code should handle this without error (whether or not
         # negative eigenvalues are produced)
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             result = analyzer.analyze(distance_matrix, metric="bray-curtis")
 
@@ -292,7 +293,7 @@ class TestPCoAEdgeCases:
             ]
         )
         # Should raise error for non-square matrix
-        with pytest.raises(Exception):  # Could be ValueError or MatrixDimensionError
+        with pytest.raises(MatrixDimensionError):
             analyzer.analyze(non_square)
 
     def test_zero_distance_matrix(self):
@@ -314,5 +315,5 @@ class TestPCoAEdgeCases:
         """Test that single sample raises error."""
         analyzer = PCoAAnalyzer()
         dist_matrix = np.array([[0.0]])
-        with pytest.raises(Exception):
+        with pytest.raises(MatrixDimensionError):
             analyzer.analyze(dist_matrix)

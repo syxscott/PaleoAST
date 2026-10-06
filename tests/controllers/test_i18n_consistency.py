@@ -55,7 +55,7 @@ def _read_translations(path: Path) -> dict[str, str]:
                 if not isinstance(node.value, ast.Dict):
                     raise AssertionError(f"TRANSLATIONS in {path} is not a dict literal")
                 result: dict[str, str] = {}
-                for k, v in zip(node.value.keys, node.value.values):
+                for k, v in zip(node.value.keys, node.value.values, strict=False):
                     if not isinstance(k, ast.Constant):
                         raise AssertionError(f"Non-constant key in {path}: {ast.dump(k)}")
                     result[k.value] = ast.literal_eval(v)
@@ -210,7 +210,7 @@ def test_register_translations_round_trip(zh_translations: dict[str, str]) -> No
 
     from config.i18n import _reset_translator, get_translator, register_translations
 
-    app = QApplication.instance() or QApplication([])
+    QApplication.instance() or QApplication([])
     try:
         _reset_translator()
         register_translations()

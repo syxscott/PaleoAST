@@ -95,7 +95,7 @@ class TestPhyloTreePolytomy:
         assert tree.leaf_count == tree2.leaf_count
         assert tree.node_count == tree2.node_count
         # Verify the polytomy structure (3 children at node D)
-        d_node = [n for n in tree.root.get_all_nodes() if n.name == "D"][0]
+        d_node = next(n for n in tree.root.get_all_nodes() if n.name == "D")
         assert len(d_node.children) == 3
 
     def test_quadfurcation(self):

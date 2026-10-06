@@ -146,9 +146,7 @@ class TestJaccardBinarizationWarning:
 # Tiny helper so we don't pull in pytest just for this file
 def pytest_raises_value_error():
     """Context manager for ``with pytest_raises_value_error():``."""
-    import contextlib
-
-    return contextlib.suppress() if False else _Raises()
+    return _Raises()
 
 
 class _Raises:

@@ -23,6 +23,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from morphometrics.gpa import GPAAnalyzer, PartialGPAResult, partial_gpa
+from utils.exceptions import MorphometricsError
 
 
 class TestDimensionInference(unittest.TestCase):
@@ -71,7 +72,7 @@ class TestDimensionInference(unittest.TestCase):
         configs_flat = np.random.randn(5, 12)
         gpa = GPAAnalyzer()
 
-        with self.assertRaises(Exception):  # MorphometricsError
+        with self.assertRaises(MorphometricsError):
             # Should raise error because 12 is ambiguous
             gpa.analyze(configs_flat)
 
@@ -114,7 +115,7 @@ class TestDimensionInference(unittest.TestCase):
         configs_3d = np.random.randn(10, 6, 2)
         gpa = GPAAnalyzer()
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(MorphometricsError):
             gpa.analyze(configs_3d, n_dims=3)
 
 
