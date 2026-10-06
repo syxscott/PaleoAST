@@ -5,6 +5,89 @@ All notable changes to PaleoAST will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-10-06
+
+Thirteen analyses brought over from PAST3, a way to reach all of them
+without a hand-written dialog each, and scripting. Two of the fixes change
+numbers that may have been published.
+
+### Added
+- **Mantel test and partial Mantel test** (`stats/mantel.py`). The partial
+  form follows Guillot & Rousset (2013) and regresses both responses on the
+  control before testing the residuals; permuting the raw vectors and
+  applying the textbook partial-correlation formula is still the common
+  implementation and is anti-conservative. The Monte-Carlo Z of Legendre,
+  Fortin & Borcard (2015) is reported alongside the p-value.
+- **K-means with an elbow curve** (`stats/clustering.py`). Per-method
+  bounds so `n_permutations`-style parameters do not silently become 99.
+- **Paired nonparametric tests**: sign test and Wilcoxon signed-rank
+  (`stats/univariate.py`). The pairing rule moved into one helper so the
+  t-test and the rank tests cannot disagree about which observations form
+  a pair.
+- **Detrended correspondence analysis** (`stats/detriding.py`), with the CA
+  it detrends checked against the textbook SVD of Greenacre (1984).
+- **Two-way ANOVA with interaction, repeated-measures ANOVA, intraclass
+  correlation and contingency chi-square** (`stats/design_tests.py`).
+- **Six growth curves** (`models/growth_models.py`): von Bertalanffy,
+  Gompertz, Michaelis-Menten, logistic, Gaussian growth curve and
+  sinusoidal, fitted together and ranked by AICc.
+- **Cyclostratigraphy** (`stratigraphy/cycles.py`): autocorrelation with
+  Bartlett bands, AR(1) prewhitening, REDFIT, multitaper spectral
+  estimation, cross-correlation, autoassociation, Mann-Kendall with Sen's
+  slope, runs test, and a Milankovitch forcing table.
+- **A canonical time axis** (`stratigraphy/timeaxis.py`). Three
+  incompatible age representations existed; this converts between them
+  without rewriting the three.
+- **Moran's I, grid interpolation, nearest-neighbour point-pattern
+  statistics and spherical statistics** (`stats/spatial_stats.py`).
+  Kriging is deliberately absent and says so -- it needs a fitted
+  variogram model, and an IDW formula wearing the name would return a
+  surface that looks defensible and is not.
+- **A live analysis catalog** (`plugins/catalog.py`): 78 analyses in 12
+  categories, addressed by name.
+- **A generated parameter form** (`views/analysis_runner.py`). The form is
+  built from each analysis's signature, so the fields cannot drift from
+  what the code accepts. 96.1% of the 304 parameters across the catalog
+  render automatically; the rest name their type and point at the console.
+- **Scripting** (`utils/script_session.py`, `views/script_console.py`,
+  `utils/script_cli.py`). Python against the live spreadsheet and every
+  registered analysis, in a window or headless via `paleoast-run`.
+
+### Fixed
+- **PERMANOVA's sums of squares did not sum to the total of the distance
+  matrix it was given.** The divisors were `n - 1` and `n_g - 1`; the
+  correct ones are `n` and `n_g`. Both terms were inflated, by *different*
+  factors, so the error did not cancel: on the cross-validation fixture
+  R-squared came out 0.8539 where `vegan::adonis2` gives 0.8636, and F
+  81.83 against 88.67. The permutation p-value would never have shown it --
+  scaling both terms leaves the permutation distribution's shape alone.
+  Now exact against adonis2.
+- **The Ricker wavelet scalogram reported periods 3.85x too small.** The
+  transform was computed with the Mexican hat wavelet but its frequency
+  axis was labelled with the Morlet Fourier factor, so a 385 kyr
+  obliquity band was reported as 100 kyr. Any cycle identification read
+  off that plot was affected.
+- **Six catalogued analyses were never in the executable.** The catalog
+  references its targets by name and PyInstaller follows imports, not
+  strings, so anything not on a static import path was left out of the
+  build while every local check passed. `PaleoAST.spec` now derives its
+  hidden imports from the catalog.
+- **Two tests asserted the wrong PERMANOVA divisors and cited
+  `vegan::adonis2` as doing the same.** Two tests agreeing with each
+  other and quoting a reference that says otherwise is how the divisor
+  bug survived. The replacement assertion is stated against the distance
+  matrix rather than the formula.
+- **Six rpy2 accessors in the R cross-validation suite**: a Newick string
+  passed as a file path, a character vector passed to a float coercion, a
+  tuple index on a data.frame, a component that adonis2 does not have, a
+  row labelled `Model` rather than after the term, and `pic()` read as a
+  list when it returns a named numeric.
+- **The lint gate now passes end to end.** `ruff check` had 96 findings,
+  all in `tests/`, and `ruff format --check` had never run successfully --
+  CI stops a job at its first failing step, so the format check behind a
+  red lint step was never reached. Both are pinned to 0.16.10, since an
+  unpinned formatter gate moves whenever ruff publishes a release.
+
 ## [1.1.0] - 2026-10-06
 
 First release with the editable-R plotting path and the dark-theme

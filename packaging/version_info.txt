@@ -8,12 +8,13 @@
 # program and a piece of software.
 #
 # The numeric fields must be plain integers. PyInstaller parses them with
-# int(), so "1.1.0" is invalid here even though it is the string used
-# everywhere else; it lives in StringFileInfo instead.
+# int(), so a dotted "1.1.1" is invalid here even though that is the string
+# used everywhere else; it lives in StringFileInfo instead. The patch field
+# is the fourth number, so 1.1.1 is (1, 1, 1, 0).
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 0, 0),
-    prodvers=(1, 1, 0, 0),
+    filevers=(1, 1, 1, 0),
+    prodvers=(1, 1, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -28,12 +29,12 @@ VSVersionInfo(
           "040904B0",
           [StringStruct("CompanyName", "PaleoAST Development Team"),
            StringStruct("FileDescription", "PaleoAST - Paleontological Advanced Statistical Toolkit"),
-           StringStruct("FileVersion", "1.1.0"),
+           StringStruct("FileVersion", "1.1.1"),
            StringStruct("InternalName", "PaleoAST"),
            StringStruct("LegalCopyright", "PaleoAST Development Team"),
            StringStruct("OriginalFilename", "PaleoAST.exe"),
            StringStruct("ProductName", "PaleoAST"),
-           StringStruct("ProductVersion", "1.1.0")])
+           StringStruct("ProductVersion", "1.1.1")])
       ]),
     VarFileInfo([VarStruct("Translation", [1033, 1200])])
   ]

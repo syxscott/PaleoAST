@@ -11,7 +11,7 @@ Imputation Methods:
     - Row/Column removal: Remove rows or columns with NaN
 
 Author: PaleoAST Development Team
-version: 1.1.0
+version: 1.1.1
 """
 
 import logging

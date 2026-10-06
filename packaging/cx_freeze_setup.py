@@ -18,7 +18,7 @@ if PROJECT_ROOT not in sys.path:
 
 setup(
     name="PaleoAST",
-    version="1.1.0",
+    version="1.1.1",
     description="PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.",
     long_description="PaleoAST -- Paleontological Advanced Statistical Toolkit. Multivariate, morphometric, phylogenetic and macroevolutionary analysis for paleontological data.",
     author="PaleoAST Development Team",
