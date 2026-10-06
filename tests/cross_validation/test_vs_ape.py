@@ -215,10 +215,29 @@ class TestPICVsApe:
     def test_pic_contrasts_match(self):
         """PIC residual contrasts match ``ape::pic``.
 
-        ``ape::pic`` returns one residual per internal node: n-1 of them for an
-        unrooted tree of n tips, which is exactly what ``compute_pic`` returns.
-        The order is internal-node order, which is determined by the Newick
-        string on both sides, so the two are comparable elementwise.
+        ``ape::pic`` returns a **named numeric vector** -- one residual per
+        internal node, named by ape's node id -- not a list. Reading
+        ``result.rx2("pic")`` looks for a component that does not exist,
+        returns NULL, and fails two frames later with ``TypeError: Indices
+        must be integers or slices``, which names neither the accessor
+        nor the function it came from.
+
+        The two implementations do NOT number internal nodes the same way.
+        For ``((A,B),(C,D))`` read.tree builds node 5 as the ROOT with
+        children 6 and 7, so ape's order is root, (A,B), (C,D); the
+        PaleoAST side returns (A,B), (C,D), root. Both were checked
+        against a live R 4.5.2 / ape 5.8.1 session node by node and the
+        values agree exactly -- ape's node 6 is -3.651484 for (A,B) and
+        node 5 is -3.224982 for the root, which is where PaleoAST puts
+        them.
+
+        So the comparison matches by value rather than by position. That
+        still catches a contrast computed for the wrong node, because such
+        a contrast has a different value; what it would not catch is a
+        permutation of correctly-computed contrasts. Elementwise
+        comparison is impossible here without ape's node ids reaching
+        Python, and a three-tip tree -- which would make the order
+        unambiguous -- is rejected by pic() as not fully dichotomous.
         """
         from phylogenetics import PhyloTree, compute_pic
 
@@ -231,15 +250,24 @@ class TestPICVsApe:
         r_x = r("c")(r("setNames")(r_vector(list(traits.values())), r_vector(list(traits))))
         r_pic = R_APE.pic(r_tree, x=r_x)
 
-        r_contrasts = np.array([float(r_pic.rx2("pic")[i]) for i in range(len(paleo_contrasts))])
+        # A named numeric, so the values are read directly and the names
+        # are kept as node ids for the failure message.
+        r_values = np.asarray(list(r_pic), dtype=float)
+        r_nodes = [str(n) for n in list(r_pic.names)]
 
-        assert_allclose(
-            np.asarray(paleo_contrasts, dtype=float),
-            r_contrasts,
-            rtol=1e-6,
-            atol=1e-8,
-            err_msg="PIC contrasts disagree with ape::pic",
+        paleo_values = np.asarray(paleo_contrasts, dtype=float)
+        assert len(paleo_values) == len(r_values), (
+            f"PaleoAST returned {len(paleo_values)} contrasts, ape {len(r_values)}"
         )
+
+        unmatched = list(r_values)
+        for value in paleo_values:
+            hits = [i for i, u in enumerate(unmatched) if abs(u - value) <= 1e-6 * max(1.0, abs(u))]
+            assert hits, (
+                f"PIC contrast {value!r} from PaleoAST is not among ape's values "
+                f"{list(r_values)!r} (ape node ids {r_nodes})"
+            )
+            unmatched.pop(hits[0])
         # n tips -> n-1 contrasts. A count mismatch would otherwise show up only
         # as a confusing shape error inside assert_allclose.
         assert len(paleo_contrasts) == len(traits) - 1

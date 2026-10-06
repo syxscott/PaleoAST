@@ -123,6 +123,16 @@ def _r_adonis2_table(data: np.ndarray, groups: list[str]):
     return result
 
 
+#: adonis2 labels the row holding the grouping term "Model", not after the
+#: term. Verified against vegan 2.7.6 on the dataset below:
+#: rownames(adonis2(spec ~ group, data, method="euclidean", permutations=99))
+#:   -> "Model" "Residual" "Total"
+#: Asking for "group" finds nothing, and the lookup helper's own message
+#: then reports the three labels it did find -- which is how this was
+#: found in the first place.
+_MODEL_ROW = "Model"
+
+
 def _r_adonis2_component(data: np.ndarray, groups: list[str], column: str, row: str) -> float:
     """One cell of the adonis2 result table, located by name.
 
@@ -265,8 +275,8 @@ class TestPermanovaVsAdonis2:
             random_seed=0,
         )
 
-        r_sq = _r_adonis2_component(data, groups, "R2", "group")
-        r_f = _r_adonis2_component(data, groups, "F", "group")
+        r_sq = _r_adonis2_component(data, groups, "R2", _MODEL_ROW)
+        r_f = _r_adonis2_component(data, groups, "F", _MODEL_ROW)
 
         paleo_r_sq = float(paleo.ss_between) / float(paleo.ss_between + paleo.ss_within)
 
@@ -305,7 +315,7 @@ class TestPermanovaVsAdonis2:
 
         paleo_total = float(paleo.ss_between) + float(paleo.ss_within)
         r_total_ss = _r_adonis2_component(data, groups, "SumOfSqs", "Total")
-        r_df_between = _r_adonis2_component(data, groups, "Df", "group")
+        r_df_between = _r_adonis2_component(data, groups, "Df", _MODEL_ROW)
         r_df_within = _r_adonis2_component(data, groups, "Df", "Residual")
 
         assert_allclose(
