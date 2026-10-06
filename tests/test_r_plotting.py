@@ -156,6 +156,83 @@ def test_scree_csv_matches_result(pca_result, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# More groups than the palette has colours
+# ---------------------------------------------------------------------------
+
+
+def test_more_groups_than_colours_never_index_past_the_palette(pca_result, tmp_path):
+    """The bug this guards: 7+ groups and the points silently disappeared.
+
+    The old line was
+
+        values = PALETTE[seq_along(levels(factor(data$group)))]
+
+    With a 9-colour palette and 9 groups that was fine, but PALETTE held 6
+    entries, so groups 7-9 indexed to NA. ggplot then dropped those rows,
+    printing "Removed 9 rows containing missing values" -- and still exited 0
+    with a PDF on disk. A figure that quietly lost a third of its data is
+    worse than one that failed.
+    """
+    n_groups = 9
+    groups = [f"Horizon {i % n_groups}" for i in range(len(pca_result.scores))]
+    export = RScriptExporter(stamp="test").export_pca_scores(
+        pca_result, tmp_path, RPlotSpec(output_format="pdf"), groups=groups
+    )
+    script = export.script_path.read_text(encoding="utf-8")
+
+    # No direct indexing into the palette by level count any more.
+    assert "PALETTE[seq_along" not in script, (
+        "the script indexes PALETTE by level count, which yields NA once the "
+        "groups outnumber the colours"
+    )
+    assert "rep_len(PALETTE" in script
+    assert "GROUP_COLOURS" in script and "GROUP_SHAPES" in script
+    # And it says so out loud when the palette has to be recycled.
+    assert "recycled" in script
+
+
+def test_okabe_ito_is_the_default_palette(pca_result, tmp_path):
+    """Colour-blind safe and greyscale-safe by default, not by luck.
+
+    Okabe & Ito (2008) is the palette a biology figure is expected to use, and
+    the previous default was a hand-picked set with no citation.
+    """
+    export = RScriptExporter(stamp="test").export_pca_scores(
+        pca_result, tmp_path, RPlotSpec(output_format="pdf")
+    )
+    script = export.script_path.read_text(encoding="utf-8")
+    assert RPlotSpec().color_palette == "okabeito"
+    assert 'PALETTE_NAME <- "okabeito"' in script
+    assert "#E69F00" in script and "#009E73" in script  # Okabe-Ito orange/green
+    # Every advertised palette must be selectable in the generated script.
+    for name in ("okabeito", "dark2", "greyscale", "viridis"):
+        assert f"\n  {name} =" in script or f"\n  {name} = " in script
+
+
+def test_ellipses_are_computed_not_stated_by_ggplot(pca_result, tmp_path):
+    """The ellipse must carry its group's colour.
+
+    ``stat_ellipse`` does not preserve the colour aesthetic: naming it in the
+    layer's aes draws every ellipse in one colour, and ggplot answers with
+    "the following aesthetics were dropped during statistical transformation:
+    colour". The figure then showed ellipses that did not match their points.
+    """
+    groups = [f"Horizon {i // 8}" for i in range(len(pca_result.scores))]
+    export = RScriptExporter(stamp="test").export_pca_scores(
+        pca_result, tmp_path, RPlotSpec(output_format="pdf"), groups=groups
+    )
+    script = export.script_path.read_text(encoding="utf-8")
+    assert "stat_ellipse" not in script
+    assert "geom_path" in script
+    assert ".ellipse95" in script
+    # The minimum is enforced where the ellipse is built, not only reported.
+    assert "min_n = ELLIPSE_MIN_N" in script
+    # The data-frame column is named, not positional: d[[1]] is `sample`.
+    assert 'd[["PC1"]]' in script or 'd[["PC2"]]' in script
+
+
+
+# ---------------------------------------------------------------------------
 # 2. Generated scripts stay valid, and avoid the R traps
 # ---------------------------------------------------------------------------
 

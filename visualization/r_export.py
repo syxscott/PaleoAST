@@ -50,11 +50,21 @@ from typing import Any
 import numpy as np
 
 __all__ = [
+    "ELLIPSE_MIN_N",
     "RExportResult",
     "RPlotSpec",
     "RScriptExporter",
     "validate_r_script",
 ]
+
+# Points a group needs before a 95% normal ellipse means anything. Not 3, and
+# not ggplot2's own technical minimum of 4: at 4 the fitted region's shape is
+# set by the sample and the chi-square multiplier inflates it until it spans
+# the panel, which reads as structure that is not in the data. Stratigraphic
+# groups often have 3-4 samples, so this number decides whether a figure shows
+# ellipses at all -- it is stated, and the script reports which groups were
+# skipped, rather than drawing a curve that means nothing.
+ELLIPSE_MIN_N = 6
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +92,13 @@ class RPlotSpec:
     annotate_samples: bool = False
     reverse_time_axis: bool = False  # stratigraphic convention: oldest at the bottom
     point_shape: int = 16            # 16 = filled circle (no stroke, theme-safe)
-    color_palette: str = "default"   # name resolved inside the R script
+    # coord_fixed(): one data unit the same size on both axes, so apparent
+    # spread is real spread. Correct for an ordination, and OFF by default
+    # because PC1 usually spans far more than PC2 -- equal units then leaves
+    # the point cloud as a thin band across a mostly empty square panel. Turn
+    # it on when the metric proportions matter more than the panel filling.
+    equal_aspect: bool = False
+    color_palette: str = "okabeito"  # name resolved inside the R script
     r_executable: str = ""           # "" => auto-detect
     output_format: str = "pdf"       # pdf | svg | png
 
@@ -477,8 +493,8 @@ class RScriptExporter:
 ## --- settings you are most likely to want to change -----------------
 
 {spec.theme_line()}
-## e.g. theme_bw() / theme_minimal() / theme_grey(base_size = 9)
-{self._palette_block(spec)}
+## e.g. theme_bw() / theme_minimal() / theme_grey(base_size = 10)
+{self._palette_block(spec)}{self._ellipse_prelude("PC" + str(pc1 + 1), "PC" + str(pc2 + 1), bool(group_col)) if spec.show_ellipse else ""}
 LABELS <- list(
   title    = "PCA Score Plot",
   subtitle = "Centred",
@@ -502,29 +518,53 @@ p <- ggplot(data, {aes_expr}) +
         layers: list[str] = [
             "geom_hline(yintercept = 0, linewidth = 0.3, colour = \"grey70\")",
             "geom_vline(xintercept = 0, linewidth = 0.3, colour = \"grey70\")",
-            f"geom_point(size = {spec.point_size:g}, shape = {spec.point_shape},"
-            f"\n             alpha = {spec.alpha:g})",
         ]
+        if group_col:
+            # Shape follows the group as well as colour. Above ~8 groups no
+            # palette is readable, and in greyscale none is; a second channel
+            # keeps the classes separable without a bigger legend.
+            layers.append(
+                "geom_point(data = data,\n"
+                "             aes(shape = factor(group)),\n"
+                f"             size = {spec.point_size:g}, alpha = {spec.alpha:g})"
+            )
+        else:
+            layers.append(
+                f"geom_point(size = {spec.point_size:g}, shape = {spec.point_shape},"
+                f"\n             alpha = {spec.alpha:g})"
+            )
 
         if group_col:
             layers.append(
                 "scale_colour_manual(\n"
-                "    values = PALETTE[seq_along(levels(factor(data$group)))],\n"
+                "    values = GROUP_COLOURS,\n"
                 "    name = NULL\n"
-                "  )"
+                "  ) +"
+                "\n  scale_shape_manual(values = GROUP_SHAPES, name = NULL)"
             )
 
         if spec.show_ellipse and n >= 3:
+            # An empty frame, not NULL: geom_path(NULL) is an error, and a
+            # layer that does not exist cannot report that the ellipse was
+            # skipped.
+            empty = "data.frame(x = numeric(0), y = numeric(0), group = character(0))"
             if group_col:
+                # The ellipses are drawn as a path over a pre-computed frame
+                # (see _ellipse_prelude) rather than with stat_ellipse, which
+                # discards the colour aesthetic. geom_path keeps it.
                 layers.append(
-                    "stat_ellipse(aes(group = group, colour = factor(group)),\n"
-                    '                 type = "norm", level = 0.95, linewidth = 0.5,\n'
-                    "                 show.legend = FALSE)"
+                    f"geom_path(data = if (is.null(ellipse_data)) {empty} else ellipse_data,\n"
+                    '             aes(x = x, y = y, group = group,\n'
+                    "                 colour = factor(group)),\n"
+                    "             linewidth = 0.5, show.legend = FALSE)"
                 )
             else:
+                # Same computed path, one ellipse over all points.
                 layers.append(
-                    'stat_ellipse(type = "norm", level = 0.95, linewidth = 0.5,\n'
-                    '                 colour = "grey40")'
+                    f"geom_path(data = if (is.null(ellipse_data)) {empty} else ellipse_data,\n"
+                    "             aes(x = x, y = y, group = group),\n"
+                    '             colour = "grey40", linewidth = 0.5,\n'
+                    "             show.legend = FALSE)"
                 )
 
         if spec.annotate_samples and label_col:
@@ -543,6 +583,13 @@ p <- ggplot(data, {aes_expr}) +
         )
         if group_col:
             layers.append('theme(legend.position = "right")')
+        if spec.equal_aspect:
+            # Without it the panel stretches one axis, so a group's apparent
+            # spread is not its spread, and a 95% ellipse -- an ellipse in
+            # data space -- is rendered as some other shape. Correct for an
+            # ordination, at the cost of a half-empty panel whenever PC1 spans
+            # much more than PC2, which is the usual case.
+            layers.append("coord_fixed()")
         layers.append("THEME")
 
         # Joined with a trailing " +" on each line. Joining WITHOUT the operator
@@ -628,26 +675,131 @@ p <- ggplot(data, aes(x = factor(component))) +
 
     # -- shared ------------------------------------------------------
     @staticmethod
+    def _ellipse_prelude(x_col: str, y_col: str, grouped: bool) -> str:
+        """R that draws the 95% group ellipses itself.
+
+        Why not stat_ellipse:
+
+        * It drops `colour`. Naming it in the layer's aes is exactly what the
+          old script did, and ggplot answered with "the following aesthetics
+          were dropped during statistical transformation: colour" -- every
+          ellipse came out in the first group's colour, or black. An ellipse
+          that does not match its points is worse than no ellipse.
+        * Its minimum is a technicality, not a statistic. It stops complaining
+          at four points, but a 95% normal region fitted to four points has no
+          residual degrees of freedom, and the resulting ellipse is enormous --
+          it spans the panel and reads as structure that is not there. For
+          stratigraphic data, where a horizon often carries three or four
+          samples, that is the usual case rather than the exception.
+
+        So the ellipse is computed here, in base R, and drawn with geom_path,
+        which carries the group colour through. The threshold is reported
+        rather than guessed: a group with too few samples gets a message, not
+        a silently wrong curve.
+        """
+        if grouped:
+            # A plain string, not an f-string: the braces are literal R.
+            split_and_join = f"""
+.by_group <- split(data, factor(data$group))
+.el <- lapply(names(.by_group), function(g) {{
+  d <- .by_group[[g]]
+  ## By NAME, not by position: d[[1]] is the CSV's `sample` column, and the
+  ## ellipses then landed nowhere near the points they belong to.
+  pts <- .ellipse95(d[["{x_col}"]], d[["{y_col}"]], min_n = ELLIPSE_MIN_N)
+  if (is.null(pts)) return(NULL)
+  data.frame(x = pts[, 1], y = pts[, 2], group = g, stringsAsFactors = FALSE)
+}})
+ellipse_data <- do.call(rbind, .el[!vapply(.el, is.null, logical(1))])
+n_skipped <- sum(vapply(.el, is.null, logical(1)))
+if (n_skipped > 0) {{
+  message(sprintf(
+    "%d of %d groups have fewer than %d points, so no 95%% ellipse is drawn for them.",
+    n_skipped, length(.by_group), ELLIPSE_MIN_N))
+}}
+"""
+        else:
+            split_and_join = f"""
+pts_all <- .ellipse95(data[["{x_col}"]], data[["{y_col}"]], min_n = ELLIPSE_MIN_N)
+ellipse_data <- if (is.null(pts_all)) NULL else
+  data.frame(x = pts_all[, 1], y = pts_all[, 2], group = "all", stringsAsFactors = FALSE)
+if (is.null(ellipse_data)) message("Too few points for a 95% ellipse.")
+"""
+        return f"""
+## --- 95% group ellipses ------------------------------------------
+## Needs at least ELLIPSE_MIN_N points per group: below that a normal
+## region has no degrees of freedom left and the drawn curve would be an
+## artefact rather than a confidence region. Groups under the threshold are
+## reported and skipped.
+ELLIPSE_MIN_N <- {ELLIPSE_MIN_N}
+
+.ellipse95 <- function(x, y, level = 0.95, n = 200, min_n = 3) {{
+  ## The threshold is applied HERE, not only where the message is printed.
+  ## Declaring ELLIPSE_MIN_N and never testing it drew every ellipse anyway.
+  if (length(x) < min_n) return(NULL)
+  m <- cbind(x, y)
+  cm <- colMeans(m)
+  d <- m - rep(cm, each = nrow(m))
+  v <- var(d)
+  if (any(!is.finite(v)) || det(v) <= 0) return(NULL)
+  ## chi-square quantile with 2 df, scaled by the eigenvectors of the
+  ## covariance: the standard 95% normal region for bivariate data.
+  r <- sqrt(stats::qchisq(level, df = 2))
+  ev <- eigen(v, symmetric = TRUE)
+  if (any(ev$values <= 0)) return(NULL)
+  ang <- atan2(ev$vectors[2, 1], ev$vectors[1, 1])
+  th <- seq(0, 2 * pi, length.out = n)
+  pts <- cbind(sqrt(ev$values[1]) * cos(th), sqrt(ev$values[2]) * sin(th))
+  rot <- matrix(c(cos(ang), -sin(ang), sin(ang), cos(ang)), nrow = 2)
+  sweep(pts %*% t(rot), 2, cm, "+")
+}}
+{split_and_join}"""
+
+    @staticmethod
     def _palette_block(spec: RPlotSpec) -> str:
         return f"""
 ## --- colour palette ----------------------------------------------
-## Swap PALETTE_NAME below; the rest of the script is unchanged.
-## Only "default" is guaranteed to work everywhere -- the alternatives fall
-## back to base R (grDevices::hcl.colors) when the package is absent, so the
-## script never dies on a missing suggested package.
+## PALETTE_NAME is the only knob. The rest of the script is unchanged, and
+## every option is base R, so the script never dies on a missing package.
+##
+##   okabeito  Okabe & Ito (2008), Colour Universal Design. Distinguishable
+##             under deuteranopia, protanopia and tritanopia, and in
+##             greyscale. The usual default for a figure in biology.
+##   dark2     RColorBrewer Dark2, qualitative; needs the suggested package.
+##   greyscale Tones of grey only -- for a journal that photocopies.
+##   viridis   Perceptually uniform; right for a magnitude, weak for a class
+##             because neighbouring viridis colours read alike.
 PALETTE_NAME <- "{spec.color_palette}"
 PALETTE <- switch(
   PALETTE_NAME,
-  default = c("#2C7FB8", "#D95F0E", "#1A9641", "#7B3294", "#C994C7", "#41B6C4"),
-  brewer  = if (requireNamespace("RColorBrewer", quietly = TRUE)) {{
-               RColorBrewer::brewer.pal(6, "Dark2")
-             }} else {{
-               grDevices::hcl.colors(6, palette = "Dark 3")
-             }},
+  okabeito = c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+               "#0072B2", "#D55E00", "#CC79A7", "#000000",
+               "#999999"),
+  dark2 = if (requireNamespace("RColorBrewer", quietly = TRUE)) {{
+            RColorBrewer::brewer.pal(8, "Dark2")
+          }} else {{
+            grDevices::hcl.colors(8, palette = "Dark 3")
+          }},
+  greyscale = grDevices::grey.colors(8, start = 0.05, end = 0.85),
   viridis = if (requireNamespace("viridisLite", quietly = TRUE)) {{
-               viridisLite::viridis(6)
-             }} else {{
-               grDevices::hcl.colors(6, palette = "Viridis")
-             }}
+              viridisLite::viridis(8)
+            }} else {{
+              grDevices::hcl.colors(8, palette = "Viridis")
+            }}
 )
+
+## More groups than colours. Indexing straight into a short vector yields NA,
+## and ggplot then DROPS those rows -- printing "Removed N rows containing
+## missing values" and still exiting 0. A figure that quietly lost a third of
+## its data is worse than one that failed outright.
+## Recycling keeps every point, and the shape channel keeps the classes apart
+## when colour alone is not enough.
+SHAPES <- c(16, 17, 15, 3, 4, 8, 1, 2, 0, 5, 6, 7, 9, 10, 11, 12, 13, 14)
+GROUP_LEVELS <- levels(factor(data$group))
+GROUP_COLOURS <- rep_len(PALETTE, length(GROUP_LEVELS))
+GROUP_SHAPES <- rep_len(SHAPES, length(GROUP_LEVELS))
+if (length(GROUP_LEVELS) > length(PALETTE)) {{
+  message(sprintf(
+    "%d groups but %d colours -- the palette was recycled. Shape is varied as well, so the classes stay separable.",
+    length(GROUP_LEVELS), length(PALETTE)))
+}}
 """

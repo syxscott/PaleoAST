@@ -1330,5 +1330,11 @@ TRANSLATIONS = {
     '&Stratigraphic Correlation...': '&地层对比…',
     '{0}: {1:.1f}% constrained variance': '{0}：约束方差 {1:.1f}%',
     '{0} Error': '{0} 错误',
-    'UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy.\n\nAdvanced options:\n * Endemic-species filter: removes local taxa whose cross-section occurrence is below the threshold.\n * UAZ similarity threshold: merges highly similar UAs into Unitary Association Zones (Guex 1991).\n * Cyclic contradiction detection: flags FAD/LAD ordering inversions.': 'UA 寻找重叠事件的极大团以识别生物带；RASC 用动态规划求最优事件排序。\n两者都是定量生物地层学方法。\n\n高级选项：\n * 特有种过滤：剔除出现层位数低于阈值的本地类群。\n * UAZ 相似度阈值：把高度相似的 UA 合并为单位联合带（Guex 1991）。\n * 循环矛盾检测：标记 FAD/LAD 顺序反转。'
+    'UA finds maximal cliques of overlapping events to identify biozones. RASC uses dynamic programming to find optimal event ranking. Both are methods for quantitative biostratigraphy.\n\nAdvanced options:\n * Endemic-species filter: removes local taxa whose cross-section occurrence is below the threshold.\n * UAZ similarity threshold: merges highly similar UAs into Unitary Association Zones (Guex 1991).\n * Cyclic contradiction detection: flags FAD/LAD ordering inversions.': 'UA 寻找重叠事件的极大团以识别生物带；RASC 用动态规划求最优事件排序。\n两者都是定量生物地层学方法。\n\n高级选项：\n * 特有种过滤：剔除出现层位数低于阈值的本地类群。\n * UAZ 相似度阈值：把高度相似的 UA 合并为单位联合带（Guex 1991）。\n * 循环矛盾检测：标记 FAD/LAD 顺序反转。',
+    'Okabe-Ito (colour-blind safe)': 'Okabe-Ito（色觉友好）',
+    'Greyscale (photocopy safe)': '灰度（适合复印）',
+    'Dark2 (ColorBrewer)': 'Dark2（ColorBrewer）',
+    'Viridis (for a magnitude)': 'Viridis（适合连续量）',
+    'Group colours:': '分组配色：',
+    'Colour set for the groups in the figure. Okabe-Ito stays separable for colour-blind readers and in greyscale; viridis suits a continuous magnitude rather than a class.': '图中各分组使用的颜色。Okabe-Ito 对色觉障碍读者和灰度打印都能分辨；viridis 更适合连续量而非分类。',
 }

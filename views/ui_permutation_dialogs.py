@@ -301,6 +301,15 @@ class PreferencesDialog(QDialog):
     # choice is written verbatim into the generated script.
     R_THEMES = ("classic", "bw", "minimal", "grey")
     R_OUTPUT_FORMATS = ("pdf", "svg", "png")
+    # Named in the order a figure is judged: colour-vision safe first, then
+    # print-safe, then a magnitude ramp. The label carries the citation so the
+    # manuscript can name the source.
+    R_PALETTES = (
+        ("Okabe-Ito (colour-blind safe)", "okabeito"),
+        ("Greyscale (photocopy safe)", "greyscale"),
+        ("Dark2 (ColorBrewer)", "dark2"),
+        ("Viridis (for a magnitude)", "viridis"),
+    )
 
     def __init__(self, parent=None, *, current: dict | None = None) -> None:
         super().__init__(parent)
@@ -315,12 +324,15 @@ class PreferencesDialog(QDialog):
             "r_theme": str(current.get("r_theme", "classic")),
             "r_base_size": float(current.get("r_base_size", 9)),
             "r_output_format": str(current.get("r_output_format", "pdf")),
+            "r_palette": str(current.get("r_palette", "okabeito")),
             "r_timeout": int(current.get("r_timeout", 300)),
         }
         if self._current["r_theme"] not in self.R_THEMES:
             self._current["r_theme"] = "classic"
         if self._current["r_output_format"] not in self.R_OUTPUT_FORMATS:
             self._current["r_output_format"] = "pdf"
+        if self._current["r_palette"] not in [v for _, v in self.R_PALETTES]:
+            self._current["r_palette"] = "okabeito"
         self._setup_ui()
         self._apply_stylesheet()
 
@@ -441,6 +453,21 @@ class PreferencesDialog(QDialog):
         self._r_format_combo.setCurrentText(self._current["r_output_format"])
         r_form.addRow(_("Output format:"), self._r_format_combo)
 
+        # Placed next to the theme rather than buried with the file paths:
+        # this is the one setting that decides whether the figure reads for a
+        # reader with colour vision deficiency, or in a photocopied journal.
+        self._r_palette_combo = QComboBox(r_group)
+        for label, value in self.R_PALETTES:
+            self._r_palette_combo.addItem(_(label), value)
+        idx = self._r_palette_combo.findData(self._current["r_palette"])
+        self._r_palette_combo.setCurrentIndex(max(0, idx))
+        self._r_palette_combo.setToolTip(
+            _("Colour set for the groups in the figure. Okabe-Ito stays "
+              "separable for colour-blind readers and in greyscale; "
+              "viridis suits a continuous magnitude rather than a class.")
+        )
+        r_form.addRow(_("Group colours:"), self._r_palette_combo)
+
         self._r_timeout_spin = QSpinBox(r_group)
         self._r_timeout_spin.setRange(10, 3600)
         self._r_timeout_spin.setSingleStep(30)
@@ -547,5 +574,6 @@ class PreferencesDialog(QDialog):
             "r_theme": self._r_theme_combo.currentText(),
             "r_base_size": float(self._r_size_spin.value()),
             "r_output_format": self._r_format_combo.currentText(),
+            "r_palette": str(self._r_palette_combo.currentData()),
             "r_timeout": int(self._r_timeout_spin.value()),
         }

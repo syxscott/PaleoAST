@@ -3492,10 +3492,11 @@ class MainWindow(QMainWindow):
             figsize = (7.0, 5.5)
         return RPlotSpec(
             theme=str(prefs.get("r_theme", "classic")),
-            base_size=float(prefs.get("r_base_size", 9)),
+            base_size=float(prefs.get("r_base_size", 10)),
             figsize=figsize,
             dpi=int(prefs.get("plot_dpi", 300)),
             output_format=str(prefs.get("r_output_format", "pdf")),
+            color_palette=str(prefs.get("r_palette", "okabeito")),
             r_executable=str(prefs.get("r_rscript", "")),
         )
 
