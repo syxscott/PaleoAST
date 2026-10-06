@@ -46,6 +46,7 @@ import numpy.typing as npt
 from config.constants import PERMUTATION_TESTS
 from config.i18n import _
 from utils.exceptions import ComputationError, MatrixDimensionError
+from utils.statistics_core import permutation_pvalue
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -168,42 +169,22 @@ class PERMANOVAAnalyzer:
             # degenerate resampling cannot abort the test.
             F_obs, ss_between, ss_within, df_g, df_res = self._compute_F_statistic(D, groups_array, g, n, strict=True)
 
-            # Permutation test. Use a dedicated Generator when a seed is
-            # supplied so the test is fully reproducible; fall back to
-            # ``np.random`` otherwise for backward compatibility.
-            if random_seed is not None:
-                rng = np.random.default_rng(random_seed)
-            else:
-                # Without a seed the global ``np.random`` state is used.
-                # Two calls with identical inputs may return slightly
-                # different p-values; warn the caller so they can decide
-                # whether to pass a seed for a publishable result.
-                import warnings as _warnings
+            # Permutation test. Shares the driver with ANOSIM, the two
+            # blocks having been line-for-line identical apart from the
+            # statistic. make_rng keeps the unseeded case off the global
+            # np.random stream, which the fallback below used to move.
+            def _permuted_F(rng: np.random.Generator) -> float:
+                permuted_groups = groups_array[rng.permutation(n)]
+                return self._compute_F_statistic(D, permuted_groups, g, n)[0]
 
-                _warnings.warn(
-                    "PERMANOVA: no ``random_seed`` supplied; the permutation "
-                    "p-value uses the global ``np.random`` state and is not "
-                    "reproducible across runs. Pass ``random_seed=`` to make "
-                    "the result deterministic.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                self._logger.warning(
-                    "PERMANOVA: no random_seed supplied; p-value uses global "
-                    "np.random state and is not reproducible."
-                )
-                rng = np.random
-
-            permuted_F = np.zeros(n_permutations)
-
-            for i in range(n_permutations):
-                # Randomly permute group assignments
-                perm_indices = rng.permutation(n)
-                permuted_groups = groups_array[perm_indices]
-                permuted_F[i] = self._compute_F_statistic(D, permuted_groups, g, n)[0]
-
-            # Calculate p-value
-            p_value = float((1 + np.sum(permuted_F >= F_obs)) / (n_permutations + 1))
+            perm = permutation_pvalue(
+                F_obs,
+                _permuted_F,
+                n_permutations=n_permutations,
+                random_seed=random_seed,
+                context="PERMANOVA",
+            )
+            p_value = perm.p_value
 
             # Mean squares
             ms_between = ss_between / df_g if df_g > 0 else 0

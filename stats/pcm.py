@@ -59,6 +59,7 @@ from config.i18n import _
 from phylogenetics.signal import _blomberg_k_from_vcv
 from phylogenetics.tree import NodeType, PhyloNode, PhyloTree
 from utils.exceptions import ComputationError, ValidationError
+from utils.statistics_core import permutation_pvalue
 
 logger = logging.getLogger(__name__)
 
@@ -788,40 +789,22 @@ class PCMAnalyzer:
         tip_array = np.array([trait_values[l.name] for l in leaves], dtype=np.float64)
         K = _blomberg_k_from_vcv(tip_array, VCV)
 
-        # Compute Z-score and p-value via permutations. Use a dedicated
-        # Generator when a seed is supplied so the test is reproducible.
-        if random_seed is not None:
-            rng = np.random.default_rng(random_seed)
-        else:
-            # Without a seed the global ``np.random`` state is used.
-            # Two calls with identical inputs may return slightly
-            # different p-values; warn the caller so they can decide
-            # whether to pass a seed for a publishable result.
-            import warnings as _warnings
+        # Compute Z-score and p-value via permutations. The shared driver
+        # returns the null distribution, which the Z-score below needs, so
+        # the permutations are kept in one place rather than rebuilt here.
+        def _permuted_K(rng: np.random.Generator) -> float:
+            return _blomberg_k_from_vcv(rng.permutation(tip_array), VCV)
 
-            _warnings.warn(
-                "PCM (Blomberg K): no ``random_seed`` supplied; the permutation "
-                "p-value uses the global ``np.random`` state and is not "
-                "reproducible across runs. Pass ``random_seed=`` to make "
-                "the result deterministic.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self._logger.warning(
-                "PCM (Blomberg K): no random_seed supplied; p-value uses global "
-                "np.random state and is not reproducible."
-            )
-            rng = np.random
-
-        perm_Ks: list[float] = []
-        for _perm_index in range(n_r):
-            perm_y = rng.permutation(tip_array)
-            perm_Ks.append(_blomberg_k_from_vcv(perm_y, VCV))
-
-        perm_Ks_arr = np.array(perm_Ks)
+        perm = permutation_pvalue(
+            K,
+            _permuted_K,
+            n_permutations=n_r,
+            random_seed=random_seed,
+            context="PCM (Blomberg K)",
+        )
+        perm_Ks_arr = perm.null_distribution
+        p_value = perm.p_value
         z = (K - np.mean(perm_Ks_arr)) / np.std(perm_Ks_arr) if np.std(perm_Ks_arr) > 0 else 0.0
-        # add-one corrected permutation p-value
-        p_value = float((np.sum(perm_Ks_arr >= K) + 1.0) / (len(perm_Ks_arr) + 1.0))
 
         result = PhylogeneticSignalResult(
             k=K,
@@ -1064,6 +1047,13 @@ class PCMAnalyzer:
 
             _, _, perm_ic_data, _ = _compute_contrasts_recursive(working_tree.root, perm_trait_dict)
             if len(perm_ic_data) < 2:
+                # Deliberately not routed through
+                # utils.statistics_core.permutation_pvalue: this skip means the
+                # null can be SHORTER than n_p, so the p-value denominator is
+                # len(perm_Fs) rather than the requested count. The shared
+                # driver always runs exactly n_permutations; reproducing the
+                # variable denominator there is a behaviour change, not a
+                # substitution.
                 continue
 
             # 与观测 F 完全相同的分类规则与 F 公式

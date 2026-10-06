@@ -284,6 +284,12 @@ def procD_lm(
             f_obs = ((rss_red - residual_ss) / (df_j * resid_ms)) if resid_ms > 0 else 0.0
             test_stat[term_idx] = (red_cols, fit_red, X - fit_red, f_obs)
         counts = {term_names[j]: 0 for j in test_stat}
+        # Deliberately not routed through utils.statistics_core.permutation_pvalue.
+        # That driver tests one statistic per call, whereas every term here is
+        # tested against the SAME set of permutations -- sharing them is what
+        # makes the p-values of sibling terms comparable -- and the comparison
+        # carries a 1e-15 tolerance below. Folding this in would need a
+        # multi-statistic form of the driver, not a mechanical substitution.
         for _step in range(n_permutations):
             perm_units = rng.permutation(unit_ids)
             # each unit takes over the residual block of the unit it was

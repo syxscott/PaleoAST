@@ -41,6 +41,7 @@ import numpy.typing as npt
 
 from config.i18n import _
 from utils.exceptions import ComputationError, MatrixDimensionError
+from utils.statistics_core import make_rng
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -707,25 +708,13 @@ class CCAAnalyzer:
         range. (The degenerate early return above keeps the requested length.)
         """
         n_samples = Y.shape[0]
-        rng: np.random.Generator | np.random.RandomState
-        if random_seed is not None:
-            rng = np.random.default_rng(random_seed)
-        else:
-            import warnings as _warnings
-
-            _warnings.warn(
-                "CCA: no ``random_seed`` supplied; the permutation p-values "
-                "use the global ``np.random`` state and are not "
-                "reproducible across runs. Pass ``random_seed=`` to make "
-                "the result deterministic.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            self._logger.warning(
-                "CCA: no random_seed supplied; p-values use global np.random "
-                "state and are not reproducible."
-            )
-            rng = np.random
+        # Multi-statistic test (overall F and one F per axis from the same
+        # permutations), so it keeps its own loop rather than calling
+        # utils.statistics_core.permutation_pvalue, which handles a single
+        # statistic. The generator is shared with the rest of the codebase
+        # regardless: the unseeded path used to bind the global np.random
+        # and quietly advance the caller's stream.
+        rng = make_rng(random_seed, context="CCA")
 
         # Compute the observed F (overall + per-axis), the constrained SS,
         # the residual SS, and Wilks lambda, by re-using the same eigen

@@ -39,6 +39,7 @@ import numpy.typing as npt
 from config.constants import PERMUTATION_TESTS
 from config.i18n import _
 from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
+from utils.statistics_core import permutation_pvalue
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -203,42 +204,26 @@ class ANOSIMAnalyzer:
             # Compute observed R statistic
             R_obs = self._compute_R_statistic(D, groups)
 
-            # Permutation test. Use a dedicated Generator when a seed
-            # is supplied so the test is reproducible.
-            if random_seed is not None:
-                rng = np.random.default_rng(random_seed)
-            else:
-                # Without a seed the global ``np.random`` state is used.
-                # Two calls with identical inputs may return slightly
-                # different p-values; warn the caller so they can decide
-                # whether to pass a seed for a publishable result.
-                import warnings as _warnings
-
-                _warnings.warn(
-                    "ANOSIM: no ``random_seed`` supplied; the permutation p-value "
-                    "uses the global ``np.random`` state and is not reproducible "
-                    "across runs. Pass ``random_seed=`` to make the result "
-                    "deterministic.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                self._logger.warning(
-                    "ANOSIM: no random_seed supplied; p-value uses global np.random state "
-                    "and is not reproducible."
-                )
-                rng = np.random
-
-            permuted_R = np.zeros(n_permutations)
+            # Permutation test. make_rng hands back an isolated generator
+            # whether or not a seed was supplied, so an unseeded ANOSIM no
+            # longer moves the global np.random stream that the caller's
+            # own data generation draws from. It used to, which is why this
+            # warning and the identical block in permanova.py were copy-
+            # pasted around the codebase.
             groups_array = np.array(groups)
 
-            for i in range(n_permutations):
-                # Randomly permute group assignments
-                perm_indices = rng.permutation(n)
-                permuted_groups = groups_array[perm_indices]
-                permuted_R[i] = self._compute_R_statistic(D, permuted_groups)
+            def _permuted_R(rng: np.random.Generator) -> float:
+                permuted_groups = groups_array[rng.permutation(n)]
+                return self._compute_R_statistic(D, permuted_groups)
 
-            # Calculate p-value
-            p_value = float((1 + np.sum(permuted_R >= R_obs)) / (n_permutations + 1))
+            perm = permutation_pvalue(
+                R_obs,
+                _permuted_R,
+                n_permutations=n_permutations,
+                random_seed=random_seed,
+                context="ANOSIM",
+            )
+            p_value = perm.p_value
 
             # PAI correction: R_PAI = (R - E[R|H0]) / (1 - E[R|H0])
             # with E[R|H0] = -1/(n-1) (Clarke 1993; matches vegan::anosim).
