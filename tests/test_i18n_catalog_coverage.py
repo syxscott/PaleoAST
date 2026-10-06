@@ -32,6 +32,7 @@ decision rather than an oversight.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -97,8 +98,10 @@ def _catalog_keys(module) -> set[str]:
     return set(_catalog_table(module))
 
 
-_ZH = _catalog_keys(translations_zh)
-_EN = _catalog_keys(translations_en)
+_ZH_TABLE = _catalog_table(translations_zh)
+_EN_TABLE = _catalog_table(translations_en)
+_ZH = set(_ZH_TABLE)
+_EN = set(_EN_TABLE)
 
 
 def _underscore_literals(path: Path) -> list[tuple[str, int]]:
@@ -129,6 +132,55 @@ def test_catalogs_agree_on_key_count():
     assert not only_en, (
         f"{len(only_en)} keys are in the English catalog but have no Chinese "
         f"entry: {sorted(only_en)[:10]}"
+    )
+
+
+def _placeholders(text: str) -> list[str]:
+    """Format fields, in order, as ``index`` or ``index:spec``.
+
+    Auto-numbered ``{}`` and named ``{value}`` are reported by their literal
+    body, because they are not interchangeable with a numbered field and a
+    translation that swaps one for the other breaks at runtime.
+    """
+    return re.findall(r"\{(\d+(?::[^}]*)?|[^}\d][^}:]*(?::[^}]*)?)\}", text)
+
+
+def test_translations_keep_every_placeholder():
+    """A dropped placeholder is an IndexError on one specific plot.
+
+    Nothing else catches this: the catalog is a plain dict, the string still
+    imports, and the failure only appears when a user runs that analysis.
+
+    The comparison is value against value, not key against value. The key is
+    the identifier the source looks up -- it is never displayed -- so it is
+    not a template. What has to match is the structure of the two rendered
+    strings, because the same call site feeds one ``str.format`` for both
+    languages.
+    """
+    broken = []
+    for key in sorted(_EN & _ZH):
+        want = _placeholders(_EN_TABLE[key])
+        got = _placeholders(_ZH_TABLE[key])
+        if sorted(want) != sorted(got):
+            broken.append(
+                f"{key!r}: en has {want}, zh has {got}"
+            )
+    assert not broken, (
+        f"{len(broken)} translations changed the format placeholders:\n  "
+        + "\n  ".join(broken[:20])
+    )
+
+
+def test_translations_do_not_drop_unformatted_braces():
+    """An unbalanced brace survives import and fails only when formatted."""
+    broken = []
+    for key in _EN & _ZH:
+        for lang, table in (("en", _EN_TABLE), ("zh", _ZH_TABLE)):
+            if table[key].count("{") != table[key].count("}"):
+                broken.append(f"{lang} {key!r}")
+    assert not broken, (
+        f"unbalanced braces in {len(broken)} translation(s): "
+        f"{broken[:10]}"
     )
 
 

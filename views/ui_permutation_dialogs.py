@@ -343,12 +343,11 @@ class PreferencesDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
-        # The groups size to their contents instead of sharing the dialog
-        # height equally. Without this a dialog taller than its content
-        # stretches every QGroupBox, so each one shows a band of empty space
-        # under its last row and the four sections read as unrelated boxes
-        # rather than as one list of settings.
-        root.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # The groups below size to their contents. Without a stretch before the
+        # button row, a dialog taller than its content would hand the extra
+        # height to the group boxes equally, so each one showed a band of
+        # empty space under its last row and the sections read as unrelated
+        # boxes. The stretch is added at the bottom instead.
 
         # --- Language -----------------------------------------------------
         lang_group = QGroupBox(_("Interface"))
@@ -452,6 +451,12 @@ class PreferencesDialog(QDialog):
         )
         r_form.addRow(_("Timeout:"), self._r_timeout_spin)
         root.addWidget(r_group)
+        # Push the action buttons to the bottom while the groups above stay
+        # their natural height. A stretch is the right tool; setting
+        # AlignTop on the layout would top-align the button row too and leave
+        # the empty space *below* the buttons, which is worse than the
+        # original problem of stretched group boxes.
+        root.addStretch(1)
         # --- Bottom buttons -----------------------------------------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel

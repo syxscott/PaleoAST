@@ -603,7 +603,13 @@ QSlider::groove:horizontal {{
 }}
 
 QSlider::handle:horizontal {{
-    width: 18px;
+    /* 20px, not 18px: 18 is off the 4px grid this stylesheet keeps. The size
+       is also chosen so the overhang matches the margin exactly -- handle 20,
+       groove 8, so it hangs (20 - 8) / 2 = 6px past each edge, which is what
+       the -6px below says. Declaring the height explicitly keeps that
+       arithmetic checkable instead of leaving it to Qt's auto-sizing. */
+    width: 20px;
+    height: 20px;
     background: {colors.primary};
     border-radius: 50%;
     margin: -6px 0;
