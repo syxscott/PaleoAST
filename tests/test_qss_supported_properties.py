@@ -43,10 +43,12 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFrame,
     QGroupBox,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QMainWindow,
     QMenu,
@@ -58,6 +60,7 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QTabBar,
     QTreeView,
+    QTreeWidget,
     QWidget,
 )
 
@@ -66,11 +69,13 @@ _FACTORIES = {
     "QCheckBox": lambda p: QCheckBox("c", p),
     "QComboBox": lambda p: QComboBox(p),
     "QDialog": lambda p: QDialog(p),
+    "QDoubleSpinBox": lambda p: QDoubleSpinBox(p),
     "QFrame": lambda p: QFrame(p),
     "QGraphicsDropShadowEffect": lambda p: None,
     "QGroupBox": lambda p: QGroupBox("g", p),
     "QLabel": lambda p: QLabel("l", p),
     "QLineEdit": lambda p: QLineEdit(p),
+    "QListView": lambda p: QListView(p),
     "QListWidget": lambda p: QListWidget(p),
     "QMainWindow": lambda p: QMainWindow(p),
     "QMenu": lambda p: QMenu(p),
@@ -83,6 +88,7 @@ _FACTORIES = {
     "QStatusBar": lambda p: QStatusBar(p),
     "QTabBar": lambda p: QTabBar(p),
     "QTreeView": lambda p: QTreeView(p),
+    "QTreeWidget": lambda p: QTreeWidget(p),
     "QWidget": lambda p: QWidget(p),
 }
 

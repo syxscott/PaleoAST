@@ -604,7 +604,7 @@ class ScientificSpreadsheet(QWidget):
                 border-radius: 6px;
             }}
             QTableWidget::item {{
-                padding: 6px 8px;
+                padding: 4px 8px;
                 border-bottom: 1px solid {c.border_light};
             }}
             QTableWidget::item:selected {{

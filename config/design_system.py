@@ -402,7 +402,7 @@ QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {{
 }}
 
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
-    border: 2px solid {colors.primary};
+    border: 2px solid {colors.border_focus};
     outline: 0;
 }}
 
@@ -487,6 +487,50 @@ QRadioButton::indicator {{
 QRadioButton::indicator:checked {{
     background: qradial-gradient(circle, {colors.primary} 40%, {colors.bg_primary} 50%);
     border-color: {colors.primary};
+}}
+
+/* =============================================================================
+   FOCUS RING
+   =============================================================================
+   VSCode's rule is that the focus indicator is ALWAYS visible: one colour
+   (``focusBorder``) drawn on every control that can take the keyboard
+   focus.  Only the text inputs had one here.  A button, a combo box, a
+   check box or the navigation tree could take the focus and show nothing
+   at all, so a keyboard user had no way to tell where they were.
+
+   The ring is the ``border_focus`` token -- re-stepped for the dark theme
+   -- and it is drawn as a border because Qt's style sheets implement no
+   ``outline``.  Two pixels, not one: a 1px ring in a colour close to the
+   control's own accent does not read on the default button.
+
+   The check box and the radio button get the ring on their indicator
+   rather than on the widget, because a border on the widget would draw a
+   box around the text as well.
+*/
+
+QPushButton:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QListWidget:focus,
+QListView:focus,
+QTreeWidget:focus,
+QTreeView:focus {{
+    border: 2px solid {colors.border_focus};
+    outline: 0;
+}}
+
+/* The default button is filled with the accent, so a ring in the focus
+   colour would be the same colour as the thing it is supposed to be
+   distinguishing.  It takes the button's own on-fill colour instead. */
+QPushButton[default="true"]:focus {{
+    border: 2px solid {colors.on_primary};
+    outline: 0;
+}}
+
+QCheckBox::indicator:focus,
+QRadioButton::indicator:focus {{
+    border: 2px solid {colors.border_focus};
 }}
 
 /* =============================================================================

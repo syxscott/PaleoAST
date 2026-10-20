@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from config.colors import current_palette
 from stratigraphy.spectral_analysis import SpectralResult
 
 from ._style_scope import scoped_plot_methods
@@ -69,18 +70,18 @@ class SpectralPlotter:
             result.periods[::-1],  # Reverse for traditional periodogram view
             result.power[::-1],
             "-",
-            color="#2C3E50",
+            color=current_palette()[0],
             linewidth=1.5,
         )
 
         # Fill under curve
-        ax1.fill_between(result.periods[::-1], result.power[::-1], alpha=0.3, color="#3498DB")
+        ax1.fill_between(result.periods[::-1], result.power[::-1], alpha=0.3, color=current_palette()[1])
 
         # Mark peaks
         if show_peaks and result.peak_period:
             ax1.axvline(
                 x=result.peak_period,
-                color="#E74C3C",
+                color=current_palette()[5],
                 linestyle="--",
                 linewidth=1.5,
                 label=f"Peak period: {result.peak_period:.2f}",
@@ -107,7 +108,7 @@ class SpectralPlotter:
         max_power = np.max(result.power)
         normalized_power = result.power / max_power
 
-        colors = ["#3498DB" if p < peak_threshold else "#E74C3C" for p in normalized_power]
+        colors = [current_palette()[1] if p < peak_threshold else current_palette()[5] for p in normalized_power]
 
         for i in range(len(result.periods) - 1):
             ax2.axvspan(result.periods[::-1][i], result.periods[::-1][i + 1], alpha=0.3, color=colors[i])
@@ -133,15 +134,15 @@ class SpectralPlotter:
 
         fig, ax = plt.subplots(figsize=self._figure_size)
 
-        ax.plot(result.frequencies, result.power, "-", color="#2C3E50", linewidth=1.5)
+        ax.plot(result.frequencies, result.power, "-", color=current_palette()[0], linewidth=1.5)
 
-        ax.fill_between(result.frequencies, result.power, alpha=0.3, color="#3498DB")
+        ax.fill_between(result.frequencies, result.power, alpha=0.3, color=current_palette()[1])
 
         # Mark peak
         if result.peak_frequency:
             ax.axvline(
                 x=result.peak_frequency,
-                color="#E74C3C",
+                color=current_palette()[5],
                 linestyle="--",
                 linewidth=1.5,
                 label=f"Peak: {result.peak_frequency:.4f}",
@@ -183,11 +184,11 @@ class SpectralPlotter:
         # 1. Periodogram (large)
         ax1 = fig.add_subplot(gs[0, :])
 
-        ax1.plot(result.periods[::-1], result.power[::-1], "-", color="#2C3E50", linewidth=1.5)
-        ax1.fill_between(result.periods[::-1], result.power[::-1], alpha=0.3, color="#3498DB")
+        ax1.plot(result.periods[::-1], result.power[::-1], "-", color=current_palette()[0], linewidth=1.5)
+        ax1.fill_between(result.periods[::-1], result.power[::-1], alpha=0.3, color=current_palette()[1])
 
         if result.peak_period:
-            ax1.axvline(x=result.peak_period, color="#E74C3C", linestyle="--", linewidth=1.5)
+            ax1.axvline(x=result.peak_period, color=current_palette()[5], linestyle="--", linewidth=1.5)
 
         ax1.set_xlabel("Period", fontsize=10)
         ax1.set_ylabel("Power", fontsize=10)

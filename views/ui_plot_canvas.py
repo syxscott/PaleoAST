@@ -52,7 +52,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.colors import current_palette
+from config.colors import current_palette, relative_luminance
 from config.design_system import FigureTypography, get_palette
 from config.i18n import _
 
@@ -305,14 +305,14 @@ class InteractivePlotCanvas(QWidget):
                 background-color: {c.bg_secondary};
                 border: 1px solid {c.border_light};
                 spacing: 8px;
-                padding: 6px;
+                padding: 4px;
             }}
             QPushButton {{
                 background-color: {c.bg_tertiary};
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: 6px;
-                padding: 6px 12px;
+                padding: 4px 12px;
                 min-width: 50px;
                 font-weight: 500;
             }}
@@ -329,7 +329,7 @@ class InteractivePlotCanvas(QWidget):
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: 6px;
-                padding: 6px 8px;
+                padding: 4px 8px;
                 min-width: 100px;
             }}
             QComboBox:hover {{
@@ -434,6 +434,19 @@ class InteractivePlotCanvas(QWidget):
             "legend_edge": c.border_light,
             "reference": c.text_secondary,
         }
+
+    def _on_fill(self, fill: str) -> str:
+        """A readable text colour for text drawn on top of ``fill``.
+
+        The fill is a data colour, and the data palette is the same in both
+        themes, so the text drawn on it cannot come from the theme's text
+        role: in the dark theme that role is light, and the fills are light
+        too.  The one colour that reads on a given fill is whichever of
+        black and white has more contrast against it, so that is what this
+        picks.
+        """
+        luminance = relative_luminance(fill)
+        return "#000000" if luminance > 0.179 else "#FFFFFF"
 
     def _legend_kwargs(self, loc: str = "upper right", **overrides) -> dict:
         """Legend keyword arguments tinted with the current theme."""
@@ -965,7 +978,7 @@ class InteractivePlotCanvas(QWidget):
             self._ax.scatter(
                 species_scores[:, ax1],
                 species_scores[:, ax2],
-                c="#E74C3C",
+                c=self.COLORS[5],
                 s=60,
                 alpha=0.6,
                 marker="^",
@@ -1131,15 +1144,15 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot warped grid - colored lines
         for i in range(grid_shape[0]):
-            self._ax.plot(warped_grid[i, :, 0], warped_grid[i, :, 1], color="#3498DB", linewidth=1.5, alpha=0.8)
+            self._ax.plot(warped_grid[i, :, 0], warped_grid[i, :, 1], color=self.COLORS[1], linewidth=1.5, alpha=0.8)
         for j in range(grid_shape[1]):
-            self._ax.plot(warped_grid[:, j, 0], warped_grid[:, j, 1], color="#3498DB", linewidth=1.5, alpha=0.8)
+            self._ax.plot(warped_grid[:, j, 0], warped_grid[:, j, 1], color=self.COLORS[1], linewidth=1.5, alpha=0.8)
 
         # Plot source landmarks
         self._ax.scatter(
             source[:, 0],
             source[:, 1],
-            c="#E74C3C",
+            c=self.COLORS[5],
             s=80,
             marker="o",
             edgecolors="white",
@@ -1152,7 +1165,7 @@ class InteractivePlotCanvas(QWidget):
         self._ax.scatter(
             target[:, 0],
             target[:, 1],
-            c="#27AE60",
+            c=self.COLORS[2],
             s=80,
             marker="s",
             edgecolors="white",
@@ -1169,7 +1182,7 @@ class InteractivePlotCanvas(QWidget):
                     "",
                     xy=(target[i, 0], target[i, 1]),
                     xytext=(source[i, 0], source[i, 1]),
-                    arrowprops=dict(arrowstyle="->", color="#9B59B6", lw=1.5, alpha=0.6),
+                    arrowprops=dict(arrowstyle="->", color=self.COLORS[6], lw=1.5, alpha=0.6),
                 )
 
         # Labels and title
@@ -1446,8 +1459,8 @@ class InteractivePlotCanvas(QWidget):
             loc="lower right",
             framealpha=0.9,
             facecolor=self.theme_colors()["text"],
-            edgecolor="#34495E",
-            labelcolor="#ECF0F1",
+            edgecolor=self.theme_colors()["legend_edge"],
+            labelcolor=self.theme_colors()["text"],
         )
 
         # Style
@@ -1588,7 +1601,7 @@ class InteractivePlotCanvas(QWidget):
         self._ax.invert_yaxis()
 
         # Style
-        self._ax.set_facecolor("#1A1A2E")
+        self._ax.set_facecolor(self.theme_colors()["axes_bg"])
         self._canvas.draw()
 
     def plot_anosim_results(self, result: Any) -> None:
@@ -1636,7 +1649,7 @@ class InteractivePlotCanvas(QWidget):
             ha="center",
             va="center",
             fontsize=11,
-            color="#FFFFFF" if R > 0.3 else "#2C3E50",
+            color=self._on_fill(color) if R > 0.3 else self.theme_colors()["text"],
             fontweight="bold",
         )
 
@@ -1649,7 +1662,7 @@ class InteractivePlotCanvas(QWidget):
             ha="center",
             va="top",
             fontsize=9,
-            color="#7F8C8D",
+            color=self.theme_colors()["text_muted"],
             transform=self._ax.get_xaxis_transform(),
         )
 
@@ -2185,11 +2198,11 @@ class InteractivePlotCanvas(QWidget):
 
         # Plot envelope as shaded region
         self._ax.fill_between(
-            r_values, envelope_lower, envelope_upper, color="#3498DB", alpha=0.2, label=_("95% Envelope")
+            r_values, envelope_lower, envelope_upper, color=self.COLORS[1], alpha=0.2, label=_("95% Envelope")
         )
 
         # Plot L(r) curve
-        self._ax.plot(r_values, l_values, color="#E74C3C", linewidth=2.5, label=_("L(r) - r"))
+        self._ax.plot(r_values, l_values, color=self.COLORS[5], linewidth=2.5, label=_("L(r) - r"))
 
         # Plot zero reference line
         self._ax.axhline(y=0, color=self.theme_colors()["text"], linestyle="--", linewidth=1, alpha=0.7)
@@ -2634,7 +2647,7 @@ class InteractivePlotCanvas(QWidget):
                 textcoords="offset points",
                 arrowprops=dict(arrowstyle="->", color="white", lw=1),
                 bbox=dict(boxstyle="round", facecolor=self.theme_colors()["text"], alpha=0.9),
-                color="#ECF0F1",
+                color=self.theme_colors()["text"],
                 fontsize=9,
             )
 
@@ -2902,7 +2915,7 @@ class InteractivePlotCanvas(QWidget):
             self._ax.scatter(
                 x,
                 y,
-                c="#2C3E50",
+                c=self.theme_colors()["text"],
                 s=80,
                 alpha=0.7,
                 edgecolors="white",
@@ -3061,7 +3074,7 @@ class InteractivePlotCanvas(QWidget):
             ax2 = self._figure.add_subplot(212)
             models = list(result.aic_weights.keys())
             weights = list(result.aic_weights.values())
-            colors = ["#E74C3C" if m == result.best_model else "#3498DB" for m in models]
+            colors = [self.COLORS[5] if m == result.best_model else self.COLORS[1] for m in models]
             bars = ax2.barh(models, weights, color=colors, alpha=0.7)
             ax2.set_xlabel("AIC Weight", fontsize=10)
             ax2.set_title("Model Comparison", fontsize=10)
@@ -3196,7 +3209,14 @@ class InteractivePlotCanvas(QWidget):
         # Histogram of simulated scores
         self._ax = self._reset_axes()
         simulated = result.simulated_scores
-        self._ax.hist(simulated, bins=50, color="#3498DB", alpha=0.7, edgecolor="black", label="Simulated")
+        self._ax.hist(
+            simulated,
+            bins=50,
+            color=self.COLORS[1],
+            alpha=0.7,
+            edgecolor=self.theme_colors()["text"],
+            label="Simulated",
+        )
 
         # Observed score line
         self._ax.axvline(
@@ -3421,7 +3441,7 @@ class InteractivePlotCanvas(QWidget):
                 ax.set_title(col_names[i] if i < len(col_names) else f"Var {i + 1}", fontsize=9)
                 continue
 
-            ax.hist(valid, bins=min(30, max(5, len(valid) // 3)), color="#3498DB", alpha=0.7, edgecolor="white")
+            ax.hist(valid, bins=min(30, max(5, len(valid) // 3)), color=self.COLORS[1], alpha=0.7, edgecolor="white")
             name = col_names[i] if i < len(col_names) else f"Var {i + 1}"
             ax.set_title(name, fontsize=9, fontweight="bold")
 
@@ -3478,10 +3498,10 @@ class InteractivePlotCanvas(QWidget):
                 continue
 
             sp_stats.probplot(valid, dist="norm", plot=ax)
-            ax.get_lines()[0].set_markerfacecolor("#3498DB")
+            ax.get_lines()[0].set_markerfacecolor(self.COLORS[1])
             ax.get_lines()[0].set_markeredgecolor("white")
             ax.get_lines()[0].set_markersize(4)
-            ax.get_lines()[1].set_color("#E74C3C")
+            ax.get_lines()[1].set_color(self.COLORS[5])
 
             name = col_names[i] if i < len(col_names) else f"Var {i + 1}"
             title = name
@@ -3525,7 +3545,7 @@ class InteractivePlotCanvas(QWidget):
         ncols = min(3, n_vars)
         nrows = (n_vars + ncols - 1) // ncols
 
-        colors = ["#3498DB", "#E74C3C", "#27AE60", "#F39C12", "#9B59B6", "#1ABC9C"]
+        colors = [self.COLORS[i] for i in range(6)]
 
         for i in range(n_vars):
             ax = self._figure.add_subplot(nrows, ncols, i + 1)
@@ -3555,7 +3575,7 @@ class InteractivePlotCanvas(QWidget):
                 sig = "***" if pv < 0.001 else "**" if pv < 0.01 else "*" if pv < 0.05 else "ns"
                 title += f"\np={pv:.4f} {sig}"
                 if pv < 0.05:
-                    ax.set_title(title, fontsize=8, fontweight="bold", color="#E74C3C")
+                    ax.set_title(title, fontsize=8, fontweight="bold", color=self.COLORS[5])
                 else:
                     ax.set_title(title, fontsize=8, fontweight="bold")
             else:
@@ -3606,7 +3626,7 @@ class InteractivePlotCanvas(QWidget):
         # Draw zone boundaries
         if zone_boundaries:
             for zb in zone_boundaries:
-                ax.axhline(y=zb, color="#E74C3C", linestyle="--", linewidth=1.5, alpha=0.7)
+                ax.axhline(y=zb, color=self.COLORS[5], linestyle="--", linewidth=1.5, alpha=0.7)
 
         ax.set_title(_("CONISS Zonation ({0} zones)").format(n_zones), fontsize=12, fontweight="bold")
         ax.set_xlabel(_("Samples"), fontsize=10)
@@ -3635,17 +3655,19 @@ class InteractivePlotCanvas(QWidget):
         components = np.arange(1, n + 1)
 
         # Bar chart: individual variance
-        ax1.bar(components, explained_var, color="#3498DB", alpha=0.8, label=_("Individual"))
+        ax1.bar(components, explained_var, color=self.COLORS[1], alpha=0.8, label=_("Individual"))
         ax1.set_xlabel(_("Component"), fontsize=10)
-        ax1.set_ylabel(_("Variance Explained (%)"), fontsize=10, color="#3498DB")
-        ax1.tick_params(axis="y", labelcolor="#3498DB")
+        ax1.set_ylabel(_("Variance Explained (%)"), fontsize=10, color=self.COLORS[1])
+        ax1.tick_params(axis="y", labelcolor=self.COLORS[1])
         ax1.set_xticks(components)
 
         # Line chart: cumulative variance
         ax2 = ax1.twinx()
-        ax2.plot(components, cumulative_var, "o-", color="#E74C3C", linewidth=2, markersize=5, label=_("Cumulative"))
-        ax2.set_ylabel(_("Cumulative (%)"), fontsize=10, color="#E74C3C")
-        ax2.tick_params(axis="y", labelcolor="#E74C3C")
+        ax2.plot(
+            components, cumulative_var, "o-", color=self.COLORS[5], linewidth=2, markersize=5, label=_("Cumulative")
+        )
+        ax2.set_ylabel(_("Cumulative (%)"), fontsize=10, color=self.COLORS[5])
+        ax2.tick_params(axis="y", labelcolor=self.COLORS[5])
         ax2.set_ylim(0, 105)
 
         # Kaiser criterion line (eigenvalue > 1 for correlation PCA)
@@ -3716,12 +3738,12 @@ class InteractivePlotCanvas(QWidget):
                 y = leaf_y[id(node)]
                 ax.plot([x_start, 0], [y, y], color=self.theme_colors()["text"], linewidth=1)
                 label = node.name or ""
-                color = "#E74C3C" if trait_values and label in trait_values else "#2C3E50"
+                color = self.COLORS[5] if trait_values and label in trait_values else self.theme_colors()["text"]
                 ax.text(-0.02 * max_depth, y, f" {label}", va="center", fontsize=8, color=color)
                 if trait_values and label in trait_values:
                     val = trait_values[label]
-                    ax.plot(0, y, "o", color="#3498DB", markersize=6, alpha=0.7)
-                    ax.text(0.02 * max_depth, y, f"{val:.3f}", va="center", fontsize=7, color="#3498DB")
+                    ax.plot(0, y, "o", color=self.COLORS[1], markersize=6, alpha=0.7)
+                    ax.text(0.02 * max_depth, y, f"{val:.3f}", va="center", fontsize=7, color=self.COLORS[1])
                 return y
 
             child_ys = []
@@ -3775,7 +3797,7 @@ class InteractivePlotCanvas(QWidget):
         x = scores[:, 0]
         y = scores[:, 1] if scores.shape[1] > 1 else np.zeros_like(x)
 
-        ax.scatter(x, y, c="#9B59B6", s=60, alpha=0.7, edgecolors="white", linewidths=0.5)
+        ax.scatter(x, y, c=self.COLORS[6], s=60, alpha=0.7, edgecolors="white", linewidths=0.5)
 
         if specimen_labels:
             for i, label in enumerate(specimen_labels):
@@ -4026,7 +4048,7 @@ class InteractivePlotCanvas(QWidget):
                 # data-palette slot whose 8th entry is pure black, which
                 # measured 1.44:1 on the dark axes background -- the axis
                 # simply disappeared.  Use the theme's muted text colour.
-                risk_color = self.theme_colors().get("text_muted", "#94A3B8")
+                risk_color = self.theme_colors()["text_muted"]
                 ax2.step(t, risk, where="post", color=risk_color, linewidth=1, linestyle=":", label=_("At risk"))
                 ax2.set_ylabel(_("Number at risk"), color=risk_color)
                 ax2.tick_params(axis="y", labelcolor=risk_color)
@@ -4123,7 +4145,7 @@ class InteractivePlotCanvas(QWidget):
         have_cons = cons.ndim == 2 and cons.shape == (arr.shape[1], arr.shape[2])
         if have_cons:
             self._ax.plot(
-                cons[:, 0], cons[:, 1], "s--", color="#E74C3C", markersize=4, linewidth=1.6, label=_("Consensus")
+                cons[:, 0], cons[:, 1], "s--", color=self.COLORS[5], markersize=4, linewidth=1.6, label=_("Consensus")
             )
 
         self._ax.set_aspect("equal", adjustable="datalim")

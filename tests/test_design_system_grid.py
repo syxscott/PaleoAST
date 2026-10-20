@@ -127,6 +127,57 @@ def test_generated_stylesheet_respects_the_grid(palette):
     )
 
 
+# -----------------------------------------------------------------------------
+# The UI layer
+# -----------------------------------------------------------------------------
+# The stylesheet is where the grid was DECLARED, so it is also where the
+# guard looked -- and the UI layer has its own inline style sheets, written
+# into the widgets that need them.  Those carried eighteen spacing literals
+# off the grid: the 2px and the 6px, a 14px, and the pairs built from them.
+#
+# A grid that only the stylesheet obeys is half a grid.  The exemptions are
+# the same as above: a 1px border is a hairline, and a negative margin is a
+# geometric compensation.
+
+UI_LAYER_DIRS = ("views", "visualization")
+
+
+def _ui_layer_files() -> list[Path]:
+    root = Path(__file__).resolve().parent.parent
+    files: list[Path] = []
+    for directory in UI_LAYER_DIRS:
+        files.extend(sorted((root / directory).rglob("*.py")))
+    return files
+
+
+def test_the_ui_layer_obeys_the_grid():
+    """Inline style sheets are style sheets too.
+
+    Scanned as source rather than as a generated sheet, for the same reason
+    the stylesheet check reads the template: in the source a token is still
+    ``{spacing.sm}`` and a hard-coded value is still ``6px``, and only
+    there can the two be told apart.
+    """
+    offenders: list[str] = []
+    for path in _ui_layer_files():
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            match = SPACING_PROPERTY.match(line)
+            if not match:
+                continue
+            for raw in PX_VALUE.findall(match.group(4)):
+                value = int(raw)
+                if value < 0:
+                    continue  # geometric compensation
+                if value % GRID:
+                    offenders.append(
+                        f"{path.relative_to(path.parents[1])}:{number} {match.group(0).strip()} ({value}px)"
+                    )
+    assert not offenders, (
+        f"{len(offenders)} spacing values in the UI layer are off the {GRID}px grid:\n  "
+        + "\n  ".join(sorted(set(offenders)))
+    )
+
+
 def test_spacing_scale_is_itself_on_the_grid():
     """The scale cannot be the thing that is off-grid."""
     for name in ("xs", "sm", "md", "lg", "xl", "xxl"):

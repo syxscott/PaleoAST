@@ -210,7 +210,7 @@ class DiagnosticConsole(QDockWidget):
                     background: {c.bg_tertiary};
                     color: {c.text_primary};
                     border: 1px solid {c.border_light};
-                    padding: 6px 14px;
+                    padding: 4px 12px;
                     border-radius: 4px;
                     min-width: 60px;
                 }}
@@ -243,7 +243,7 @@ class DiagnosticConsole(QDockWidget):
                     background: {c.bg_tertiary};
                     color: {c.text_primary};
                     border: 1px solid {c.border_light};
-                    padding: 6px 14px;
+                    padding: 4px 12px;
                     border-radius: 4px;
                     min-width: 60px;
                 }}

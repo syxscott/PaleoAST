@@ -21,6 +21,8 @@ import numpy as np
 import numpy.typing as npt
 from matplotlib.figure import Figure
 
+from config.colors import current_palette
+
 from ._style_scope import scoped_plot_methods
 
 logger = logging.getLogger(__name__)
@@ -164,9 +166,9 @@ class EvolutionRatePlotter:
             colors = []
             for m in models:
                 if m == best_model:
-                    colors.append("#E74C3C")  # Red for best
+                    colors.append(current_palette()[5])  # Red for best
                 else:
-                    colors.append("#3498DB")  # Blue for others
+                    colors.append(current_palette()[1])  # Blue for others
 
             bars = ax2.barh(models, weights, color=colors, alpha=0.7)
             ax2.set_xlabel("AIC Weight", fontsize=self._font_size)
@@ -209,7 +211,7 @@ class EvolutionRatePlotter:
 
         # Bar positions
         positions = np.arange(n_models)
-        bars = ax.bar(positions, rates, color="#3498DB", alpha=0.7, edgecolor="black")
+        bars = ax.bar(positions, rates, color=current_palette()[1], alpha=0.7, edgecolor="black")
 
         # Error bars for CI
         if rate_ci_lower is not None and rate_ci_upper is not None:
@@ -276,7 +278,7 @@ class EvolutionRatePlotter:
             ax.set_xticklabels([f"Group {g}" for g in unique_groups])
             ax.legend(["Mean", "Median"], loc="best")
         else:
-            ax.hist(trait_series, bins=20, color="#3498DB", alpha=0.7, edgecolor="black")
+            ax.hist(trait_series, bins=20, color=current_palette()[1], alpha=0.7, edgecolor="black")
 
         ax.set_xlabel("Trait Value", fontsize=self._font_size)
         ax.set_ylabel("Frequency", fontsize=self._font_size)

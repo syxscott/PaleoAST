@@ -471,7 +471,7 @@ class NavigationTree(QWidget):
                 font-size: {t.body_sm_size}px;
             }}
             QTreeWidget::item {{
-                padding: 6px 4px;
+                padding: 4px 4px;
                 min-height: 32px;
                 border-radius: {r.md};
             }}
@@ -515,7 +515,7 @@ class NavigationTree(QWidget):
                 background-color: {c.bg_secondary};
                 border: 1px solid {c.border_light};
                 border-radius: {r.lg};
-                padding: 6px 8px;
+                padding: 4px 8px;
                 font-size: {t.body_size}px;
             }}
             QLineEdit:focus {{
@@ -537,7 +537,12 @@ class NavigationTree(QWidget):
         self._tree.setAnimated(True)
         self._tree.setAlternatingRowColors(False)
         self._tree.setSelectionBehavior(QTreeWidget.SelectionBehavior.SelectRows)
-        self._tree.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        # TabFocus, not ClickFocus: with ClickFocus the tree could only be
+        # reached with the mouse, so a keyboard user tabbing through the
+        # application never landed on the navigation tree at all -- there
+        # was nothing to focus, and therefore nothing to show a focus
+        # ring on.  The ring itself comes from the global stylesheet.
+        self._tree.setFocusPolicy(Qt.FocusPolicy.TabFocus)
 
         # Set custom delegate. It is parented to the tree (not left orphaned)
         # so set_dark_theme() can reach viewport() and force a repaint when the

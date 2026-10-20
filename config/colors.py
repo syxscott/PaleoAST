@@ -16,6 +16,9 @@ Author: PaleoAST Development Team
 version: 1.1.2
 """
 
+from __future__ import annotations
+
+import colorsys
 from typing import Final
 
 # =============================================================================
@@ -443,6 +446,112 @@ PALETTE_ALIASES: Final[dict[str, str]] = {
 }
 
 _current_palette_name: str = DEFAULT_PALETTE_NAME
+_figure_background: str = ""
+"""The surface the figures are drawn on, or "" when nothing is known.
+
+Set by the main window when the theme is applied. It is what tells the
+palette that it is being painted on a dark surface.
+"""
+
+
+# =============================================================================
+# Reading the palette on a dark surface
+# =============================================================================
+# Okabe & Ito's set was designed for a white background, and it is used
+# verbatim there: the eighth colour is black, and black on white is what
+# the eighth group is supposed to look like.  On a dark surface it is the
+# one colour that cannot be seen -- measured against the application's dark
+# axes (#1E293B) it is 1.44:1, which is a series that is there and cannot
+# be told from the background.
+#
+# The registry cannot be changed to fix that: the R export is handed the
+# same list, and the test that keeps the two sides in step compares them.
+# So the adjustment is made where the figure is painted, and only there.
+#
+# The rule is deliberately narrow:
+#
+#   * on a LIGHT surface nothing is adjusted, so the figure on screen is
+#     still the figure that gets exported;
+#   * on a DARK surface a colour that is darker than the surface is
+#     lifted -- keeping its hue -- until it can be seen.
+#
+# A colour that is already lighter than the surface is left alone.  That
+# matters: Okabe & Ito's yellow measures 1.26:1 against the near-white
+# axes, and it is not the problem the number suggests -- a saturated hue
+# reads at contrast ratios well under 3:1, which is why the palette was
+# measured and rendered before this rule was written rather than derived
+# from the ratios alone.
+
+
+def _hex_to_rgb(colour: str) -> tuple[float, float, float]:
+    """``#rrggbb`` to three floats in 0..1."""
+    h = colour.lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"expected a #rrggbb colour, got {colour!r}")
+    return tuple(int(h[offset : offset + 2], 16) / 255 for offset in (0, 2, 4))  # type: ignore[return-value]
+
+
+def relative_luminance(colour: str) -> float:
+    """WCAG relative luminance of a ``#rrggbb`` colour.
+
+    Public because the contrast of a colour against a surface is a
+    question several modules ask, and asking it in three places with
+    three slightly different formulas is how a palette ends up with two
+    different contrast ratios for the same pair of colours.
+    """
+    h = colour.lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"expected a #rrggbb colour, got {colour!r}")
+    channels = []
+    for offset in (0, 2, 4):
+        value = int(h[offset : offset + 2], 16) / 255
+        channels.append(value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast_ratio(colour: str, background: str) -> float:
+    """WCAG contrast ratio between two ``#rrggbb`` colours."""
+    first = relative_luminance(colour)
+    second = relative_luminance(background)
+    lighter, darker = max(first, second), min(first, second)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _lift_for_background(colour: str, background: str, minimum: float = 3.0) -> str:
+    """Lift ``colour`` until it is visible on a dark ``background``.
+
+    The hue is kept and only the lightness moves, so the colour still
+    reads as the same colour -- a green series does not turn blue.
+    """
+    if relative_luminance(background) >= 0.5:
+        return colour  # a light surface: the palette was designed for it
+    if relative_luminance(colour) >= relative_luminance(background):
+        return colour  # already lighter than the surface: it has contrast
+
+    hue, _lightness, saturation = colorsys.rgb_to_hls(*_hex_to_rgb(colour))
+    for step in range(1, 101):
+        lightness = (step / 100) * 0.98
+        candidate = colorsys.hls_to_rgb(hue, lightness, saturation)
+        hexed = "#{:02X}{:02X}{:02X}".format(*(round(channel * 255) for channel in candidate))
+        if contrast_ratio(hexed, background) >= minimum:
+            return hexed
+    return "#FFFFFF"
+
+
+def set_figure_background(background: str) -> None:
+    """Tell the palette which surface the figures are drawn on.
+
+    Called by the main window when the theme is applied. An empty string
+    means "unknown", and the palette is then handed out exactly as the
+    registry has it.
+    """
+    global _figure_background
+    _figure_background = background
+
+
+def figure_background() -> str:
+    """The surface the figures are currently drawn on."""
+    return _figure_background
 
 
 def palette_names() -> list[str]:
@@ -468,11 +577,19 @@ def current_palette() -> list[str]:
     export reads, so the in-app figure and the exported figure are the same
     figure.
 
+    On a dark surface the colours that would disappear into it are lifted
+    first; see :func:`set_figure_background`. The registry itself is never
+    modified, so the exported figure -- which is drawn on white -- is
+    unaffected.
+
     Returns a copy, like :func:`get_color_scheme`: handing out the registry's
     own list would let one caller appending a colour change every figure drawn
     after it.
     """
-    return list(PALETTES[_current_palette_name])
+    palette = list(PALETTES[_current_palette_name])
+    if not _figure_background:
+        return palette
+    return [_lift_for_background(colour, _figure_background) for colour in palette]
 
 
 def current_palette_name() -> str:

@@ -107,7 +107,7 @@ class PCAPlotter:
 
             ax.legend(loc="best", frameon=True, fancybox=True)
         else:
-            ax.scatter(x, y, c="#2C3E50", s=80, alpha=0.7, edgecolors="white")
+            ax.scatter(x, y, c=current_palette()[0], s=80, alpha=0.7, edgecolors="white")
 
         # Annotate samples
         if annotate_samples and labels:
@@ -163,15 +163,17 @@ class PCAPlotter:
         # Individual variance
         variance = result.explained_variance[:n_show]
 
-        ax.bar(components, variance, color="#3498DB", alpha=0.8, label="Individual")
+        ax.bar(components, variance, color=current_palette()[1], alpha=0.8, label="Individual")
 
         # Cumulative variance
         if show_cumulative:
             cumulative = result.cumulative_variance[:n_show]
             ax2 = ax.twinx()
-            ax2.plot(components, cumulative, "o-", color="#E74C3C", linewidth=2, markersize=6, label="Cumulative")
-            ax2.set_ylabel("Cumulative Variance (%)", fontsize=self._font_size, color="#E74C3C")
-            ax2.tick_params(axis="y", labelcolor="#E74C3C")
+            ax2.plot(
+                components, cumulative, "o-", color=current_palette()[5], linewidth=2, markersize=6, label="Cumulative"
+            )
+            ax2.set_ylabel("Cumulative Variance (%)", fontsize=self._font_size, color=current_palette()[5])
+            ax2.tick_params(axis="y", labelcolor=current_palette()[5])
             ax2.set_ylim(0, 105)
 
             # Add legend
@@ -219,7 +221,7 @@ class PCAPlotter:
         y = scores[:, pc2]
 
         # Plot samples
-        ax.scatter(x, y, c="#2C3E50", s=80, alpha=0.7, edgecolors="white")
+        ax.scatter(x, y, c=current_palette()[0], s=80, alpha=0.7, edgecolors="white")
 
         # Annotate samples
         if labels:
@@ -245,13 +247,19 @@ class PCAPlotter:
                     dy,
                     head_width=0.1,
                     head_length=0.05,
-                    fc="#E74C3C",
-                    ec="#E74C3C",
+                    fc=current_palette()[5],
+                    ec=current_palette()[5],
                     alpha=0.8,
                 )
 
                 if loading_labels and i < len(loading_labels):
-                    ax.annotate(loading_labels[i], (dx * 1.1, dy * 1.1), fontsize=9, color="#E74C3C", fontweight="bold")
+                    ax.annotate(
+                        loading_labels[i],
+                        (dx * 1.1, dy * 1.1),
+                        fontsize=9,
+                        color=current_palette()[5],
+                        fontweight="bold",
+                    )
 
         # Labels
         var1 = result.explained_variance[pc1]
@@ -280,7 +288,15 @@ class PCAPlotter:
             dy = loadings[i, 1] * scale
 
             ax.arrow(
-                origin[0], origin[1], dx, dy, head_width=0.05, head_length=0.03, fc="#E74C3C", ec="#E74C3C", alpha=0.8
+                origin[0],
+                origin[1],
+                dx,
+                dy,
+                head_width=0.05,
+                head_length=0.03,
+                fc=current_palette()[5],
+                ec=current_palette()[5],
+                alpha=0.8,
             )
 
     def _add_confidence_ellipses(self, ax, scores: npt.NDArray, groups: list[int], pc1: int, pc2: int) -> None:

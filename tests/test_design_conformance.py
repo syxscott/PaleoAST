@@ -462,3 +462,180 @@ def test_the_palette_is_the_one_the_export_reads():
     export = (REPO_ROOT / "visualization" / "r_export.py").read_text(encoding="utf-8")
     assert "get_color_scheme" in export
     assert len(current_palette()) >= 8
+
+
+# =============================================================================
+# the focus ring
+# =============================================================================
+# VSCode's rule is that the focus indicator is always visible.  Only the
+# text inputs had one here: a button, a combo box, a check box or the
+# navigation tree could take the keyboard focus and show nothing at all.
+def test_every_focusable_control_has_a_focus_ring():
+    """The focus ring is a rule, not a favour granted to the text inputs."""
+    from config.design_system import get_stylesheet
+
+    sheet = get_stylesheet(False)
+    for selector in (
+        "QPushButton:focus",
+        "QComboBox:focus",
+        "QSpinBox:focus",
+        "QDoubleSpinBox:focus",
+        "QListWidget:focus",
+        "QListView:focus",
+        "QTreeWidget:focus",
+        "QTreeView:focus",
+        "QCheckBox::indicator:focus",
+        "QRadioButton::indicator:focus",
+    ):
+        assert selector in sheet, f"{selector} has no focus ring"
+
+    # One colour for every control, and that colour is a token: the dark
+    # theme re-steps it, and a hard-coded one would not follow.
+    from config.design_system import ColorPalette, ColorPaletteDark
+
+    for palette in (ColorPalette, ColorPaletteDark):
+        assert palette.border_focus in get_stylesheet(palette is ColorPaletteDark)
+
+
+def test_the_focus_ring_is_visible_where_it_is_drawn():
+    """The ring has to be visible on the control it is ringing.
+
+    Two things can go wrong, and both happened: a ring in the accent
+    colour on an accent-coloured button is the ring you cannot see, and
+    a ring in a colour that does not clear 3:1 against the surface the
+    control sits on is not a focus indicator either.
+    """
+    from config.design_system import ColorPalette, ColorPaletteDark
+
+    for palette in (ColorPalette, ColorPaletteDark):
+        for surface in (palette.bg_primary, palette.bg_secondary):
+            ratio = _contrast(palette.border_focus, surface)
+            assert ratio >= 3.0, f"{palette.__name__}.border_focus on {surface} is {ratio:.2f}:1"
+
+        # The default button is filled with the accent, so its ring takes
+        # the colour meant for text on that fill.
+        assert _contrast(palette.on_primary, palette.primary) >= 4.5
+
+
+def test_the_navigation_tree_can_be_reached_with_the_keyboard():
+    """ClickFocus meant the tree could only be reached with the mouse.
+
+    A widget that cannot take the focus cannot show a focus ring either,
+    so the ring and the focus policy are the same defect seen twice.
+
+    This is checked in the source rather than by building the widget:
+    this file deliberately creates no QApplication in the pytest process
+    (see the note at the top), and a QWidget built without one takes the
+    interpreter down with it.  The behaviour is exercised in the running
+    application instead.
+    """
+    source = (REPO_ROOT / "views" / "ui_navigation.py").read_text(encoding="utf-8")
+    assert "Qt.FocusPolicy.TabFocus" in source, "the navigation tree is still mouse-only"
+    assert "Qt.FocusPolicy.ClickFocus" not in source, (
+        "the navigation tree still refuses the keyboard focus, so it can never show a focus ring"
+    )
+
+
+# =============================================================================
+# the palette on the surface it is drawn on
+# =============================================================================
+# Okabe & Ito's eighth colour is black.  That is right for the white
+# background the palette was designed for, and wrong for the application's
+# dark axes, where it measures 1.44:1.
+def test_the_palette_is_untouched_on_a_light_surface():
+    """On white the palette is the registry, verbatim.
+
+    This is the property the whole single-source arrangement exists for:
+    the figure on screen is the figure that gets exported.
+    """
+    from config.colors import PALETTES, current_palette, set_figure_background
+    from config.design_system import ColorPalette
+
+    set_figure_background(ColorPalette.bg_secondary)
+    try:
+        assert current_palette() == PALETTES["okabeito"]
+    finally:
+        set_figure_background("")
+
+
+def test_the_invisible_colour_is_lifted_on_a_dark_surface():
+    """A series that is there and cannot be seen is worse than a shade off.
+
+    The registry is not modified -- the exported figure is drawn on white
+    and still uses Okabe & Ito's black -- but the figure on a dark axes
+    gets a colour that can be seen there.
+    """
+    from config.colors import PALETTES, contrast_ratio, current_palette, set_figure_background
+    from config.design_system import ColorPaletteDark
+
+    registry = list(PALETTES["okabeito"])
+    background = ColorPaletteDark.bg_secondary
+
+    set_figure_background(background)
+    try:
+        painted = current_palette()
+    finally:
+        set_figure_background("")
+
+    # The order and the length are the registry's: the eighth group is
+    # still the eighth group.
+    assert len(painted) == len(registry)
+
+    changed = [i for i, (before, after) in enumerate(zip(registry, painted, strict=True)) if before != after]
+    assert changed == [7], f"only the black slot should be repainted, but {changed} changed"
+
+    # And the repainted slot is now visible.
+    assert contrast_ratio(painted[7], background) >= 3.0
+    assert contrast_ratio(registry[7], background) < 3.0, (
+        "this test only makes sense while the black slot fails on the dark axes"
+    )
+
+
+def test_the_registry_itself_still_has_okabe_itos_black():
+    """The export is drawn on white, so the registry keeps the black.
+
+    The repainting happens where the figure is painted, not in the table
+    the R script is handed.
+    """
+    from config.colors import COLORBLIND_FRIENDLY_PALETTE
+
+    assert COLORBLIND_FRIENDLY_PALETTE[7] == "#000000"
+
+
+# =============================================================================
+# the plot modules
+# =============================================================================
+# The chart modules carried their own copy of the deprecated flat-UI
+# palette for their series colours.  They are not chrome, so the chrome
+# check did not cover them -- and a series colour is a data colour, which
+# has to come from the registered palette.
+PLOT_MODULES = (
+    "views/ui_plot_canvas.py",
+    "visualization/pca_plot.py",
+    "visualization/spectral_plot.py",
+    "visualization/evo_rate_plot.py",
+)
+
+
+def test_the_plot_modules_no_longer_carry_the_deprecated_series_colours():
+    """A series colour comes from the registry, like every other colour."""
+    deprecated = ("#3498DB", "#27AE60", "#F39C12", "#E74C3C", "#9B59B6", "#2C3E50")
+    offenders: list[str] = []
+    for rel in PLOT_MODULES:
+        path = REPO_ROOT / rel
+        if not path.exists():
+            continue
+        for i, line in _code_lines(path):
+            for value in deprecated:
+                if f'"{value}"' in line or f"'{value}'" in line:
+                    offenders.append(f"{rel}:{i} {value}")
+    assert not offenders, "deprecated flat-UI series colour: " + "; ".join(offenders)
+
+
+def test_the_plot_modules_read_the_registered_palette():
+    """The canvas reads it through its own property; the rest call it."""
+    canvas = (REPO_ROOT / "views" / "ui_plot_canvas.py").read_text(encoding="utf-8")
+    assert "current_palette()" in canvas
+    for rel in ("visualization/pca_plot.py", "visualization/spectral_plot.py", "visualization/evo_rate_plot.py"):
+        source = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert "current_palette()" in source, f"{rel} does not read the registered palette"

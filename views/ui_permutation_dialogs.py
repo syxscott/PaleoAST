@@ -206,7 +206,7 @@ class PermutationTestDialog(QDialog):
                 color: {palette.text_primary};
                 border: 1px solid {outline};
                 border-radius: {radii.sm}px;
-                padding: 4px 6px;
+                padding: 4px 4px;
             }}
             QPushButton {{
                 background-color: {palette.bg_secondary};
@@ -531,7 +531,7 @@ class PreferencesDialog(QDialog):
                 color: {palette.text_primary};
                 border: 1px solid {outline};
                 border-radius: {radii.sm}px;
-                padding: 4px 6px;
+                padding: 4px 4px;
             }}
             QPushButton {{
                 background-color: {palette.bg_secondary};

@@ -209,7 +209,7 @@ class BaseAnalysisDialog(QDialog):
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: {r.lg};
-                padding: 6px 12px;
+                padding: 4px 12px;
                 min-width: 150px;
                 font-size: {t.body_size}px;
             }}
@@ -240,7 +240,7 @@ class BaseAnalysisDialog(QDialog):
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: {r.lg};
-                padding: 6px;
+                padding: 4px;
                 min-width: 80px;
                 font-size: {t.body_size}px;
             }}
@@ -324,7 +324,7 @@ class BaseAnalysisDialog(QDialog):
                 font-size: {t.body_size}px;
             }}
             QListWidget::item {{
-                padding: 6px 8px;
+                padding: 4px 8px;
             }}
             QListWidget::item:hover {{
                 background-color: {c.bg_secondary};
