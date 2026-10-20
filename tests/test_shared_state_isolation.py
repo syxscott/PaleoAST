@@ -47,10 +47,19 @@ def _isolate_qsettings(tmp_path):
 
     ``MainWindow.close()`` saves the window geometry, so without this the
     suite would quietly rewrite the geometry of the machine it runs on.
+
+    The default format is put back afterwards.  Leaving it pointing at
+    the ini sandbox would send every later test's ``QSettings`` writes
+    into a directory that no longer exists, which is the same class of
+    leak as the shared state this file is about.
     """
+    previous_format = QSettings.defaultFormat()
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path))
-    yield
+    try:
+        yield
+    finally:
+        QSettings.setDefaultFormat(previous_format)
 
 
 class _RecordingMessageBox(QMessageBox):

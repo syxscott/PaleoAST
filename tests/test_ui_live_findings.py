@@ -47,10 +47,19 @@ def qapp():
 
 @pytest.fixture
 def isolated_settings(tmp_path):
-    """Point QSettings at a sandbox ini so each test starts clean."""
+    """Point QSettings at a sandbox ini so each test starts clean.
+
+    The default format is put back afterwards, so a test that runs later
+    in the same process is not left writing its settings into a
+    directory that has already been deleted.
+    """
+    previous_format = QSettings.defaultFormat()
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path))
-    yield
+    try:
+        yield
+    finally:
+        QSettings.setDefaultFormat(previous_format)
 
 
 def _close_without_prompting(window, qapp) -> None:
