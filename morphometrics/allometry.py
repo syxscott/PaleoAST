@@ -57,6 +57,7 @@ from scipy import stats
 
 from config.i18n import _
 from utils.exceptions import ValidationError
+from utils.statistics_core import make_rng, resolve_seed
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,11 @@ class AllometryResult:
     cac_variance: float | None = None
     rsc_scores: npt.NDArray[np.float64] | None = None
     rsc_proportion: npt.NDArray[np.float64] | None = None
+    # The parametric F p-value, kept for reference only.  It is NOT the
+    # answer to the isometry question -- see the note in analyze_allometry.
+    isometry_pvalue_parametric: float | None = None
+    # Number of permutations behind ``isometry_pvalue``.
+    n_permutations: int | None = None
 
     def summary(self) -> str:
         """Generate summary text."""
@@ -178,6 +184,8 @@ class AllometryResult:
             "cac_variance": self.cac_variance,
             "rsc_scores": None if self.rsc_scores is None else self.rsc_scores.tolist(),
             "rsc_proportion": None if self.rsc_proportion is None else self.rsc_proportion.tolist(),
+            "isometry_pvalue_parametric": self.isometry_pvalue_parametric,
+            "n_permutations": self.n_permutations,
             "summary": self.summary(),
         }
 
@@ -319,6 +327,8 @@ class AllometryAnalyzer:
         aligned_configurations: npt.NDArray,
         n_components: int | None = None,
         centroid_sizes: npt.NDArray | None = None,
+        n_permutations: int = 9999,
+        random_seed: int | None = None,
     ) -> AllometryResult:
         """
         Analyze relationship between centroid size and shape.
@@ -356,6 +366,11 @@ class AllometryAnalyzer:
 
             if n_specimens < 3:
                 raise ValidationError(_("Need at least 3 specimens for allometry analysis"))
+
+            if n_permutations < 1:
+                raise ValidationError(
+                    _("n_permutations must be >= 1, got {0}").format(n_permutations)
+                )
 
             # Step 1: Centroid size for each specimen.  When the caller
             # supplies the pre-GPA sizes (the only informative choice for
@@ -450,7 +465,15 @@ class AllometryAnalyzer:
                 predicted_full = predicted + mean_shape
 
             X_null = np.ones((n_specimens, 1))
-            beta_null, _, _, _ = np.linalg.lstsq(X_null, shape_centered, rcond=None)
+            # NOT ``_``: binding ``_`` here (even through tuple unpacking)
+            # makes ``_`` a local variable for the WHOLE function, so every
+            # ``_("...")`` above would resolve to the unpacking target
+            # instead of the module-level translation function -- and to an
+            # UnboundLocalError on the error paths that run before this
+            # line.
+            beta_null, _lstsq_res, _lstsq_rank, _lstsq_sv = np.linalg.lstsq(
+                X_null, shape_centered, rcond=None
+            )
             predicted_null_full = X_null @ beta_null + mean_shape
             ss_null_full = float(np.sum((flattened - predicted_null_full) ** 2))
             ss_res_full = float(np.sum((flattened - predicted_full) ** 2))
@@ -458,13 +481,157 @@ class AllometryAnalyzer:
             df1 = full_shape_dim
             df2 = n_specimens - 2  # residual df
 
+            # Step 8b: the isometry p-value.
+            #
+            # The F statistic below pools the residual sum of squares over all
+            # `full_shape_dim` coordinates, but the p-value it was paired with
+            # used ``df2 = n - 2`` -- the residual df of a SINGLE coordinate.
+            # The ratio's null distribution is therefore not F(df1, df2):
+            # Procrustes coordinates are strongly correlated by construction,
+            # so the pooled SS is not a sum of independent chi-squares and no
+            # F distribution describes it.  The consequence was a p-value
+            # that is systematically far too large -- on data with a real
+            # allometric signal the test reported "no allometry" while a
+            # permutation test on the SAME statistic rejected clearly.
+            #
+            # The reference distribution for "shape is independent of size" is
+            # the permutation null: shuffle the pairing between specimens and
+            # sizes, recompute the same statistic, and count how often the
+            # shuffled data reaches the observed value.  That is what
+            # ``isometry_pvalue`` now reports.  The parametric p-value is
+            # kept in ``isometry_pvalue_parametric`` for reference only.
+            # Prerequisite for the closed-form residual SS used by the
+            # permutation null: the centred reduced-space shape and the
+            # total sum of squares in both spaces.
+            yc_reduced = shape_reduced - shape_reduced.mean(axis=0)
+            ss_tot_reduced = float(np.sum(yc_reduced**2))
+            ss_tot_full = float(np.sum(shape_centered**2))
+
+            def _full_space_residual_ss(regressor: npt.NDArray) -> float:
+                """Residual SS of Shape ~ regressor, in the full shape space.
+
+                Closed form rather than a fresh ``lstsq`` per permutation.
+                For the model ``y = a + b*z`` the least-squares residual sum
+                of squares is
+
+                    RSS_reduced = ||yc||^2 - (zc' yc)^2 / (zc' zc)
+
+                with ``yc = y - ybar`` and ``zc = z - zbar``.
+
+                The FULL-space residual then splits into two orthogonal
+                parts: the shape variation the PCA reduction discarded
+                (which no regression on the retained axes can explain), and
+                the residual of the reduced regression itself:
+
+                    RSS_full = (SS_total_full - SS_total_reduced) + RSS_reduced
+
+                The two parts are orthogonal because the first lives in the
+                complement of the retained subspace and the second is a
+                back-projection of a reduced-space residual.  (The naive
+                identity ``||shape_centred - X beta V'||^2 ==
+                ||shape_reduced - X beta||^2`` is WRONG: V has orthonormal
+                COLUMNS, so V V' is a projection and the discarded axes do
+                not vanish.)
+
+                Doing 9999 of these in O(n * d) instead of O(n * d^2) is the
+                difference between a usable and an unusable runtime on a
+                large landmark set.
+                """
+                zc = regressor - regressor.mean()
+                szz = float(zc @ zc)
+                if szz <= 0.0:
+                    # A constant regressor: the fit degenerates to the mean.
+                    return ss_tot_full
+                numer = zc @ yc_reduced
+                return float(
+                    (ss_tot_full - ss_tot_reduced)
+                    + ss_tot_reduced
+                    - float(np.sum(numer**2)) / szz
+                )
+
+            # The closed form and the explicit lstsq path must agree, or the
+            # permutation null would be testing a different statistic from
+            # the observed one.  Check it once, on the observed data.
+            ss_res_check = _full_space_residual_ss(log_cs)
+            if ss_res_full > 0 and not np.isclose(
+                ss_res_check, ss_res_full, rtol=1e-8, atol=1e-12
+            ):
+                raise ValidationError(
+                    _("Internal allometry inconsistency: the residual sum of squares "
+                      "computed by the two code paths disagree ({0} vs {1}).")
+                    .format(ss_res_check, ss_res_full)
+                )
+
             if ss_res_full > 0 and df2 > 0:
                 f_statistic = ((ss_null_full - ss_res_full) / df1) / (ss_res_full / df2)
-                # P-value from F-distribution
-                isometry_pvalue = 1.0 - stats.f.cdf(f_statistic, df1, df2)
+                # Parametric p-value, reported for reference.  df2 is the
+                # pooled residual df (df1 coordinates, each with n-2 df),
+                # which is the closest F approximation for INDEPENDENT
+                # coordinates; Procrustes coordinates are not independent, so
+                # this remains an approximation and is labelled as such.
+                parametric_df2 = df1 * df2
+                isometry_pvalue_parametric = float(
+                    1.0 - stats.f.cdf(f_statistic, df1, parametric_df2)
+                )
             else:
                 f_statistic = 0.0
+                isometry_pvalue_parametric = None
+
+            # Permutation test on the same F statistic.
+            isometry_pvalue = 1.0
+            if regressor_degenerate or ss_res_full <= 0 or df2 <= 0:
+                # Nothing to permute: the regressor is constant (the
+                # regression is undefined) or the fit has no residual.
                 isometry_pvalue = 1.0
+            else:
+                # The project's seeding convention: an unseeded run is not
+                # reproducible, and that is warned about rather than left
+                # silent -- a published p-value that will not reproduce is
+                # worse than a slow one.
+                seed = resolve_seed(random_seed, context="Allometry isometry test")
+                rng = make_rng(seed, context="Allometry isometry test")
+                f_obs = f_statistic
+                n_ge = 0
+                n_valid = 0
+                # The permutations are evaluated in vectorised chunks: for a
+                # permutation, the centred regressor is the centred log(CS)
+                # in a different order (centring commutes with
+                # permutation), and the sum of squares of the centred
+                # regressor is the same for every permutation.  So one
+                # (chunk x n) @ (n x d) product replaces a Python loop of
+                # thousands of least-squares fits.
+                zc0 = log_cs - log_cs.mean()
+                szz_constant = float(zc0 @ zc0)
+                total_perms = max(1, int(n_permutations))
+                chunk_size = 256
+                done = 0
+                while done < total_perms:
+                    m = min(chunk_size, total_perms - done)
+                    # argsort of uniform noise == independent random
+                    # permutations of the specimen order.
+                    perms = np.argsort(rng.random((m, n_specimens)), axis=1)
+                    zcs = zc0[perms]
+                    nums = zcs @ yc_reduced
+                    # Same decomposition as _full_space_residual_ss:
+                    # (SS_total_full - SS_total_reduced) + RSS_reduced
+                    # collapses to SS_total_full - sum(nums^2)/szz.
+                    perm_ss = ss_tot_full - np.sum(nums**2, axis=1) / szz_constant
+                    good = np.isfinite(perm_ss) & (perm_ss > 0)
+                    if not np.any(good):
+                        done += m
+                        continue
+                    f_perm = ((ss_null_full - perm_ss[good]) / df1) / (
+                        perm_ss[good] / df2
+                    )
+                    good_f = np.isfinite(f_perm)
+                    n_valid += int(np.count_nonzero(good_f))
+                    n_ge += int(np.count_nonzero(f_perm[good_f] >= f_obs))
+                    done += m
+                if n_valid == 0:
+                    isometry_pvalue = 1.0
+                else:
+                    # Add-one form: the p-value can never be exactly zero.
+                    isometry_pvalue = float((1.0 + n_ge) / (1.0 + n_valid))
 
             # Step 10: Common Allometric Component (CAC) and Residual Shape
             # Components (RSC) in the FULL shape space (Mitteroecker et al.
@@ -513,6 +680,10 @@ class AllometryAnalyzer:
                 cac_variance=cac_variance,
                 rsc_scores=rsc_scores,
                 rsc_proportion=rsc_proportion,
+                isometry_pvalue_parametric=(
+                    float(isometry_pvalue_parametric) if isometry_pvalue_parametric is not None else None
+                ),
+                n_permutations=int(n_permutations),
             )
 
             self._last_result = result

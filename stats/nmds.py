@@ -84,6 +84,9 @@ def _pava_increasing(y_sorted: npt.NDArray) -> npt.NDArray:
 
 logger = logging.getLogger(__name__)
 
+# The stress measures this analyzer implements.
+SUPPORTED_METHODS: tuple[str, ...] = ("raw_stress", "stress_1")
+
 
 @dataclass
 class NMDSResult:

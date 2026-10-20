@@ -68,6 +68,7 @@ logger = logging.getLogger(__name__)
 
 #: Randomization algorithms understood by :class:`NullModelAnalyzer`.
 SUPPORTED_ALGORITHMS: tuple[str, ...] = ("swap", "rrs", "rcs", "shuffle")
+SUPPORTED_METRICS: tuple[str, ...] = ("c_score", "checkerboard", "combo")
 
 
 # =============================================================================

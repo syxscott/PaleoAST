@@ -106,8 +106,11 @@ class AnalysisPluginRegistry:
         return [name for name, p in self._plugins.items() if p.category == category]
 
     def list_categories(self) -> list[str]:
-        """List all unique plugin categories."""
-        return list({p.category for p in self._plugins.values()})
+        """List all unique plugin categories, in a stable order.
+
+        The set made the order arbitrary, so two calls could differ.
+        """
+        return sorted({p.category for p in self._plugins.values()})
 
     def get_all(self) -> dict[str, AnalysisPlugin]:
         """Get a copy of all registered plugins."""

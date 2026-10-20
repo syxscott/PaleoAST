@@ -47,6 +47,9 @@ from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
 
+# The decomposition methods this analyzer implements.
+SUPPORTED_METHODS: tuple[str, ...] = ("covariance", "correlation")
+
 
 @dataclass
 class PCAResult:

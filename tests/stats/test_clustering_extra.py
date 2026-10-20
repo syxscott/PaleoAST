@@ -15,11 +15,14 @@ what a wrong implementation also produces:
 * DBSCAN is checked against the textbook outcome for two separated
   blobs plus one isolated point -- exact labels, with the isolated point
   coming back as noise (-1) rather than being absorbed into a cluster.
+  The silhouette is checked against sklearn's own score over the
+  clustered samples, so noise cannot quietly be counted as a class.
 * k-medoids is checked on the property that *defines* a medoid: the
-  returned centres are rows of the input, not means. It is also checked
-  against an exhaustive search over all medoid sets on a small sample,
-  which is the only way to show the BUILD/SWAP fit found the global
-  optimum rather than merely converging to something stable.
+  returned centres are rows of the input, not means. The PAM fit is
+  checked against the two things the algorithm guarantees -- that no
+  single medoid exchange improves the result, and that SWAP did better
+  than the BUILD step alone -- rather than against a global optimum,
+  which PAM does not promise to find.
 * k-nearest neighbours is checked for accuracy 1.0 on a trivially
   separable set, and the neighbour-vote counts are checked against the
   votes actually cast, so a method that merely reshuffles probabilities
@@ -40,8 +43,9 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 from scipy.spatial.distance import pdist, squareform
+from sklearn.metrics import silhouette_score
 
-from stats.clustering import ClusteringAnalyzer
+from stats.clustering import ClusteringAnalyzer, _pam
 from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
 
 
@@ -63,6 +67,27 @@ def two_blobs_with_isolated_point() -> tuple[npt.NDArray, npt.NDArray]:
     data = np.vstack([np.zeros((6, 2)), np.ones((6, 2)) * 10.0, [[5.0, 5.0]]])
     expected = np.array([0] * 6 + [1] * 6 + [-1])
     return data, expected
+
+
+def _blobs_with_two_noise_points() -> npt.NDArray:
+    """Two loose blobs plus two points far away from both.
+
+    Unlike the fixture above, this one has spread: the blobs are
+    Gaussian rather than tight, and the noise points are not isolated
+    from everything but form a pair of their own. That matters for the
+    silhouette tests: a partition whose points all sit at the same
+    distance from the two clusters scores 1.0 whichever way the
+    distances are supplied, so it cannot tell a correct score from a
+    wrong one.
+    """
+    rng = np.random.default_rng(21)
+    return np.vstack(
+        [
+            rng.normal(0.0, 0.6, (10, 2)),
+            rng.normal(5.0, 0.6, (8, 2)),
+            np.array([[20.0, 20.0], [20.5, 20.0]]),
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +160,55 @@ def test_dbscan_precomputed_matrix_matches_raw_data(analyzer: ClusteringAnalyzer
     assert precomputed.metric == "precomputed"
     assert np.array_equal(precomputed.labels, raw.labels)
     assert np.array_equal(precomputed.labels, expected)
+
+
+def test_dbscan_precomputed_silhouette_matches_raw_data(analyzer: ClusteringAnalyzer) -> None:
+    """How the distances were supplied must not change the silhouette.
+
+    The same trap as for k-medoids: sklearn's ``silhouette_score``
+    defaults to metric='euclidean', so a precomputed distance matrix
+    handed over without saying metric='precomputed' is read as n
+    samples with n features. Worse, the score is taken over the
+    clustered samples only, so the matrix has to be cut down to its
+    clustered square sub-matrix; a row selection is not a distance
+    matrix at all.
+    """
+    data = _blobs_with_two_noise_points()
+    dm = squareform(pdist(data))
+
+    raw = analyzer.analyze_dbscan(data, eps=1.0, min_samples=3)
+    precomputed = analyzer.analyze_dbscan(dm, eps=1.0, min_samples=3, precomputed=True)
+
+    assert np.isclose(precomputed.silhouette, raw.silhouette)
+
+
+def test_dbscan_silhouette_excludes_noise(analyzer: ClusteringAnalyzer) -> None:
+    """Noise is excluded from the silhouette, not scored as a class.
+
+    The score is over the clustered samples only, so it is the score of
+    the partition DBSCAN actually found. A run that counted the noise
+    points -- as a class of their own, or as members of the nearest
+    cluster -- would report a different number, because the noise
+    points sit away from every cluster.
+    """
+    data = _blobs_with_two_noise_points()
+    dm = squareform(pdist(data))
+
+    result = analyzer.analyze_dbscan(data, eps=1.0, min_samples=3)
+    clustered = result.labels != -1
+
+    assert result.n_noise == 2
+    expected = silhouette_score(data[clustered], result.labels[clustered])
+    assert np.isclose(result.silhouette, expected)
+
+    # The precomputed path has to score the same partition, over the
+    # square sub-matrix of the clustered samples.
+    precomputed = analyzer.analyze_dbscan(dm, eps=1.0, min_samples=3, precomputed=True)
+    sub_dm = dm[np.ix_(clustered, clustered)]
+    assert np.isclose(
+        precomputed.silhouette,
+        silhouette_score(sub_dm, result.labels[clustered], metric="precomputed"),
+    )
 
 
 def test_dbscan_rejects_eps_of_zero_or_less(analyzer: ClusteringAnalyzer) -> None:
@@ -231,10 +305,12 @@ def test_pam_ends_at_a_local_optimum_under_swaps(analyzer: ClusteringAnalyzer) -
 
     This is the property PAM actually guarantees, and the one worth
     asserting. It is deliberately *not* "reaches the global optimum": PAM is a
-    greedy BUILD followed by a SWAP hill-climb, so it can and does stop short
-    of the best set. On `RandomState(7)` over 40 points in 3-D it lands at
-    47.57 where exhaustive search over all C(40,3) medoid sets reaches 46.39 --
-    about 2.5% short, which is ordinary for the algorithm and not a defect.
+    greedy BUILD followed by a SWAP hill-climb, so it can stop short of the
+    best set. On this fixture (`np.random.default_rng(7)` over 40 points in
+    3-D) it happens to reach the global optimum -- cost 36.48204710565008,
+    the same as an exhaustive search over all C(40,3) = 9880 medoid sets --
+    but that is a property of this data, not a promise the algorithm makes,
+    so nothing below depends on it.
 
     An earlier version of this test asserted the global optimum and passed,
     but only because its fixture happened to be one of the instances where PAM
@@ -260,13 +336,61 @@ def test_pam_ends_at_a_local_optimum_under_swaps(analyzer: ClusteringAnalyzer) -
             )
 
 
+def _greedy_build_cost(distances: npt.NDArray, n_clusters: int) -> float:
+    """The cost of the greedy BUILD step, recomputed independently.
+
+    BUILD is the first half of PAM: it takes the point closest to
+    everything in total as its first medoid, then repeatedly adds
+    whichever remaining point lowers the cost most, and stops when none
+    does. Recomputing it here, rather than asking the implementation for
+    it, is what makes the comparison in
+    ``test_pam_swaps_when_build_alone_would_stop_short`` a test of the
+    algorithm rather than a test of itself.
+
+    Parameters:
+        distances: The square distance matrix.
+        n_clusters: The number of medoids BUILD should choose.
+
+    Returns:
+        float: The total distance to the medoids BUILD would pick.
+    """
+    chosen = [int(np.argmin(distances.sum(axis=1)))]
+    current = float(distances[:, chosen].min(axis=1).sum())
+    while len(chosen) < n_clusters:
+        best_cost = current
+        best_candidate: int | None = None
+        for candidate in range(distances.shape[0]):
+            if candidate in chosen:
+                continue
+            trial_cost = float(distances[:, [*chosen, candidate]].min(axis=1).sum())
+            if trial_cost < best_cost:
+                best_cost = trial_cost
+                best_candidate = candidate
+        if best_candidate is None:
+            # No remaining point lowers the cost: the rest are duplicates
+            # of the medoids already chosen.
+            break
+        chosen.append(best_candidate)
+        current = best_cost
+    return current
+
+
 def test_pam_swaps_when_build_alone_would_stop_short(analyzer: ClusteringAnalyzer) -> None:
     """SWAP has to be doing something, or BUILD is the whole algorithm.
 
     The search above proves the result is a local optimum but not that any
     exchange was ever tried. Here a fixture is chosen where BUILD's first
-    choice is not the answer: the reported cost must beat what a
-    no-swap implementation would produce on the same data.
+    choice is not the answer: the reported cost must be *strictly* better
+    than what a no-swap implementation would produce on the same data.
+
+    The earlier version of this test compared the cost against a BUILD
+    recomputed from the first medoid of the *returned* result, and only
+    asserted ``cost <= build_only``. That passed with SWAP deleted: with
+    SWAP gone the result is a pure BUILD result, so the recomputed build
+    equals it and the inequality holds trivially. The comparison is now
+    against BUILD recomputed the way BUILD actually works -- starting
+    from the point closest to everything in total -- and it has to be a
+    strict improvement, so a missing SWAP fails the test.
     """
     rng = np.random.default_rng(11)
     data = rng.normal(size=(35, 4))
@@ -275,25 +399,45 @@ def test_pam_swaps_when_build_alone_would_stop_short(analyzer: ClusteringAnalyze
     meds = list(result.medoid_indices)
     cost = float(distances[:, meds].min(axis=1).sum())
 
-    # Greedy BUILD: start from one point, repeatedly add whichever remaining
-    # point lowers the cost most, and stop there.
-    first = meds[0]
-    chosen = [first]
-    while len(chosen) < 4:
-        best_gain, best_point = 0.0, None
-        for candidate in range(len(data)):
-            if candidate in chosen:
-                continue
-            trial = [*chosen, candidate]
-            improvement = cost - float(distances[:, trial].min(axis=1).sum())
-            if improvement > best_gain:
-                best_gain, best_point = improvement, candidate
-        if best_point is None:
-            break
-        chosen.append(best_point)
-    build_only = float(distances[:, chosen].min(axis=1).sum())
+    build_only = _greedy_build_cost(distances, 4)
 
-    assert cost <= build_only + 1e-9
+    # A fit that never exchanged anything did not exchange anything.
+    assert result.n_iter > 0, "no medoid exchange was performed, so SWAP did not run"
+
+    # And the exchanges it did make have to have been worth something:
+    # PAM has to beat the BUILD step it started from.
+    assert cost < build_only - 1e-9, (
+        f"PAM cost {cost} is not better than the BUILD-only cost {build_only}, so SWAP improved nothing"
+    )
+
+
+def test_pam_build_starts_from_the_point_closest_to_everything(analyzer: ClusteringAnalyzer) -> None:
+    """BUILD's first medoid is the point closest to everything in total.
+
+    The `_pam` docstring makes that claim ("the point closest to
+    everything in total, which is the PAM initialisation rather than an
+    arbitrary one") and nothing pinned it down: replacing BUILD with
+    "take the first k indices" left every test green.
+
+    BUILD is checked on its own here, by running PAM with no swap
+    iterations allowed, so the medoids returned are exactly the ones
+    BUILD chose. The fixture is one where that first medoid is neither
+    the first index of the data nor the medoid the full fit ends up
+    with -- SWAP replaces it -- so a BUILD that started anywhere else
+    cannot pass by accident.
+    """
+    rng = np.random.default_rng(7)
+    data = rng.normal(size=(40, 3))
+    distances = squareform(pdist(data))
+
+    build_medoids, _build_cost, build_iters = _pam(distances, 3, max_iter=0)
+
+    assert build_iters == 0
+    assert build_medoids[0] == int(np.argmin(distances.sum(axis=1)))
+    # The fixture has to make the claim meaningful: the full fit ends up
+    # with a different first medoid, because SWAP moved it.
+    full = analyzer.analyze_kmedoids(data, n_clusters=3)
+    assert int(full.medoid_indices[0]) != build_medoids[0]
 
 
 def test_kmedoids_cost_is_distance_to_medoid_not_squared_distance_to_mean(
@@ -337,18 +481,69 @@ def test_kmedoids_is_deterministic(analyzer: ClusteringAnalyzer) -> None:
 
 
 def test_kmedoids_duplicate_rows_still_give_distinct_medoids(analyzer: ClusteringAnalyzer) -> None:
-    """Duplicated samples must not collapse into fewer than k medoids.
+    """Duplicated samples must not collapse the medoids into one.
 
     With fewer distinct points than requested clusters, BUILD cannot
-    reduce the cost any further. It still has to return k distinct
-    indices, because "k medoids" is part of what k-medoids means.
+    reduce the cost any further: the medoids it picks are duplicates of
+    each other. The medoids that are reported are still distinct
+    indices, because two medoids at the same place are not two
+    medoids.
+
+    A cluster that ends up owning nothing is a different matter: it is
+    dropped rather than reported, which is what
+    ``test_kmedoids_duplicate_rows_report_only_the_clusters_that_exist``
+    covers.
     """
     data = np.repeat(np.array([[0.0, 0.0], [5.0, 5.0]]), 5, axis=0)
     result = analyzer.analyze_kmedoids(data, n_clusters=3)
 
-    assert result.n_clusters == 3
-    assert len(set(result.medoid_indices.tolist())) == 3
+    assert len(set(result.medoid_indices.tolist())) == len(result.medoid_indices)
     assert len(result.labels) == len(data)
+    # The reported n_clusters and the cluster sizes describe the same
+    # partition.
+    assert result.n_clusters == len(result.cluster_sizes())
+
+
+def test_kmedoids_duplicate_rows_report_only_the_clusters_that_exist(analyzer: ClusteringAnalyzer) -> None:
+    """An empty cluster is not a cluster, so the labels are renumbered.
+
+    With fewer distinct samples than requested clusters, two medoids can
+    be duplicates of each other. Every sample then goes to the first of
+    the pair and the second owns nobody. Reporting three clusters while
+    the labels carry only two describes a partition that does not exist,
+    and the reported ``n_clusters`` then disagrees with the cluster
+    sizes.
+
+    The empty cluster is dropped and the labels renumbered from zero, so
+    the label values, the reported ``n_clusters`` and
+    ``cluster_sizes()`` all describe the same partition -- and the
+    medoids are renumbered with them, so medoid_indices[j] is still the
+    medoid of cluster j.
+    """
+    data = np.repeat(np.array([[0.0, 0.0], [5.0, 5.0]]), 5, axis=0)
+    result = analyzer.analyze_kmedoids(data, n_clusters=3)
+
+    assert result.n_clusters == 2
+    assert result.cluster_sizes() == {0: 5, 1: 5}
+    assert sorted(set(result.labels.tolist())) == [0, 1]
+    # One medoid per cluster that exists, and it is the medoid of that
+    # cluster.
+    assert len(result.medoid_indices) == result.n_clusters
+    assert len(result.medoid_coordinates) == result.n_clusters
+    distances = squareform(pdist(data))
+    for label in range(result.n_clusters):
+        members = np.flatnonzero(result.labels == label)
+        medoid = int(result.medoid_indices[label])
+        assert np.allclose(result.medoid_coordinates[label], data[medoid])
+        # Every member is closer to its own medoid than to any other.
+        for member in members:
+            for other_label in range(result.n_clusters):
+                if other_label == label:
+                    continue
+                other = int(result.medoid_indices[other_label])
+                assert distances[member, medoid] <= distances[member, other] + 1e-12
+    payload = result.to_dict()
+    assert payload["n_clusters"] == len(payload["cluster_sizes"])
 
 
 def test_kmedoids_rejects_n_clusters_at_or_above_the_sample_count(analyzer: ClusteringAnalyzer) -> None:
@@ -386,6 +581,31 @@ def test_kmedoids_precomputed_matrix_matches_raw_data(analyzer: ClusteringAnalyz
     assert np.array_equal(precomputed.labels, raw.labels)
     assert np.array_equal(precomputed.medoid_indices, raw.medoid_indices)
     assert np.isclose(precomputed.cost, raw.cost)
+
+
+def test_kmedoids_precomputed_silhouette_matches_raw_data(analyzer: ClusteringAnalyzer) -> None:
+    """How the distances were supplied must not change the silhouette.
+
+    A precomputed distance matrix is a matrix of distances, not a table
+    of features. sklearn's ``silhouette_score`` defaults to
+    metric='euclidean', so handing it the matrix without saying
+    metric='precomputed' makes it read n samples with n features and
+    score a partition of the distance profiles -- a different number,
+    silently, for the same data. The two paths have to agree.
+    """
+    rng = np.random.default_rng(2)
+    data = np.vstack([rng.normal(0.0, 0.3, (12, 2)), rng.normal(7.0, 0.3, (12, 2))])
+    dm = squareform(pdist(data))
+
+    raw = analyzer.analyze_kmedoids(data, n_clusters=2)
+    precomputed = analyzer.analyze_kmedoids(dm, n_clusters=2, precomputed=True)
+
+    assert np.isclose(precomputed.silhouette, raw.silhouette)
+    # ... and both are the score of the partition that was returned.
+    assert np.isclose(
+        precomputed.silhouette,
+        silhouette_score(dm, precomputed.labels, metric="precomputed"),
+    )
 
 
 def test_kmedoids_summary_and_dict_expose_the_medoid_indices(analyzer: ClusteringAnalyzer) -> None:
@@ -435,6 +655,41 @@ def test_knn_scores_are_none_when_no_query_labels_are_supplied(analyzer: Cluster
     assert np.isnan(result.accuracy)
     assert result.confusion.size == 0
     assert "not scored" in result.summary()
+
+
+def test_knn_in_sample_accuracy_is_not_one_by_construction(analyzer: ClusteringAnalyzer) -> None:
+    """Scoring the training rows is in-sample, and it is not perfect.
+
+    A point is always its own nearest neighbour, but its own vote is
+    only one of the k votes, so with k > 1 its own class can be
+    outvoted by the neighbours. The point at the origin here sits
+    inside a ring of class 1 points: with k = 5 its own vote is one
+    against four, so it is classified as class 1 and the in-sample
+    accuracy is 8/9 rather than 1.0.
+
+    This pins down the behaviour the docstring describes, after the
+    docstring wrongly promised an accuracy of 1.0 "by construction".
+    """
+    train = np.array(
+        [
+            [0.0, 0.0],
+            [0.1, 0.0],
+            [0.0, 0.1],
+            [-0.1, 0.0],
+            [0.0, -0.1],
+            [5.0, 5.0],
+            [5.1, 5.0],
+            [5.0, 5.1],
+            [5.2, 5.2],
+        ]
+    )
+    labels = np.array([0, 1, 1, 1, 1, 2, 2, 2, 2])
+
+    result = analyzer.classify_knn(train, labels, None, n_neighbors=5, query_labels=labels)
+
+    assert result.predictions[0] == 1, "the class 0 point should have been outvoted by its neighbours"
+    assert result.accuracy == pytest.approx(8 / 9)
+    assert result.accuracy < 1.0
 
 
 def test_knn_confusion_matrix_counts_true_against_predicted(analyzer: ClusteringAnalyzer) -> None:
@@ -500,6 +755,27 @@ def test_knn_neighbor_counts_sum_to_k_for_uniform_weights(analyzer: ClusteringAn
         assert result.neighbor_counts[1, 1] == 3
 
 
+def test_knn_neighbor_counts_have_one_row_per_query(analyzer: ClusteringAnalyzer) -> None:
+    """The vote table is (n_queries, n_classes), not the shape of the confusion matrix.
+
+    The two are easy to confuse. The confusion matrix is
+    (n_classes, n_classes) and counts queries; the vote table is one
+    row per query and counts neighbours. A fixture with three queries
+    and two classes is used here precisely because the two shapes then
+    differ, so a test that asserted (2, 2) for a two-query fixture
+    would not have told them apart.
+    """
+    train = np.vstack([np.zeros((10, 2)), np.ones((10, 2)) * 10.0])
+    labels = np.array([0] * 10 + [1] * 10)
+    queries = np.array([[0.1, 0.1], [9.9, 9.9], [0.2, 0.2]])
+
+    result = analyzer.classify_knn(train, labels, queries, n_neighbors=3, query_labels=np.array([0, 1, 0]))
+
+    assert result.confusion.shape == (2, 2)
+    assert result.neighbor_counts.shape == (3, 2)
+    assert result.neighbor_counts.sum(axis=1).tolist() == [3, 3, 3]
+
+
 def test_knn_handles_string_class_labels(analyzer: ClusteringAnalyzer) -> None:
     """Species names are strings, and must survive as strings.
 
@@ -516,6 +792,31 @@ def test_knn_handles_string_class_labels(analyzer: ClusteringAnalyzer) -> None:
     assert result.predictions == ["T. rex"]
     assert isinstance(result.predictions[0], str)
     assert result.classes == ["T. rex", "T. triceratops"]
+
+
+def test_knn_predictions_are_plain_python_values(analyzer: ClusteringAnalyzer) -> None:
+    """The predictions are plain Python values, not numpy scalars.
+
+    A numpy integer is not JSON-serialisable and a numpy string scalar
+    is not a ``str``, so a caller that names a taxon or exports the
+    result gets the wrong type unless the values are converted. The
+    docstring promises plain Python values, so the type is checked here
+    and not just the value.
+    """
+    train = np.vstack([np.zeros((8, 2)), np.ones((8, 2)) * 10.0])
+
+    numeric = analyzer.classify_knn(train, np.array([0] * 8 + [1] * 8), np.array([[0.1, 0.1]]), n_neighbors=3)
+    assert numeric.predictions == [0]
+    assert type(numeric.predictions[0]) is int
+
+    named = analyzer.classify_knn(
+        train,
+        ["T. rex"] * 8 + ["T. triceratops"] * 8,
+        np.array([[0.1, 0.1]]),
+        n_neighbors=3,
+    )
+    assert named.predictions == ["T. rex"]
+    assert type(named.predictions[0]) is str
 
 
 def test_knn_rejects_k_larger_than_the_training_set(analyzer: ClusteringAnalyzer) -> None:
@@ -570,6 +871,49 @@ def test_knn_rejects_mismatched_query_label_count(analyzer: ClusteringAnalyzer) 
             n_neighbors=3,
             query_labels=np.array([0, 1]),
         )
+
+
+# ---------------------------------------------------------------------------
+# Parameter handling shared by all three
+# ---------------------------------------------------------------------------
+
+
+def test_an_unknown_metric_is_rejected_as_a_validation_error(analyzer: ClusteringAnalyzer) -> None:
+    """A metric no backend understands must come back as ValidationError.
+
+    The three methods used to let the name through to scipy or
+    scikit-learn, which raised their own exceptions: a bare ValueError
+    ("Unknown Distance Metric") for k-medoids and an
+    InvalidParameterError for the other two. Neither is one of this
+    project's exceptions, so a caller catching PaleoASTError did not
+    catch them and had no idea which method had refused.
+    """
+    data = np.random.default_rng(0).normal(size=(10, 2))
+
+    with pytest.raises(ValidationError, match="metric"):
+        analyzer.analyze_dbscan(data, eps=1.0, metric="not_a_metric")
+    with pytest.raises(ValidationError, match="metric"):
+        analyzer.analyze_kmedoids(data, n_clusters=2, metric="not_a_metric")
+    with pytest.raises(ValidationError, match="metric"):
+        analyzer.classify_knn(data, np.arange(10) % 2, data[:2], n_neighbors=3, metric="not_a_metric")
+
+
+def test_precomputed_metric_is_rejected_where_it_does_not_apply(analyzer: ClusteringAnalyzer) -> None:
+    """'precomputed' is a metric name, not a way of saying the data is a matrix.
+
+    DBSCAN and k-nearest neighbours both know the name, but for them it
+    means "the data you hand me is already a distance matrix". DBSCAN
+    has a flag for that; k-nearest neighbours has no way to accept a
+    distance matrix at all, because it has to fit the classifier on
+    observations. Passing the name instead of the flag used to reach
+    scikit-learn and fail there with a shape error.
+    """
+    data = np.random.default_rng(0).normal(size=(10, 2))
+
+    with pytest.raises(ValidationError, match="precomputed"):
+        analyzer.analyze_dbscan(data, eps=1.0, metric="precomputed")
+    with pytest.raises(ValidationError, match="precomputed"):
+        analyzer.classify_knn(data, np.arange(10) % 2, data[:2], n_neighbors=3, metric="precomputed")
 
 
 # ---------------------------------------------------------------------------

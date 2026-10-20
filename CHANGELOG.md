@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
+### Added
+- **Six families of univariate tests the application could not run at all**
+  (`stats/univariate_extra.py`, wired up through `stats/univariate_menu.py`
+  and the plugin catalog): Brunner-Munzel, Mood's median test, Fligner-Kileen,
+  Grubbs' outlier test, and exact confidence intervals for a proportion and a
+  Poisson rate.
+- **Two-sample distribution tests** (`stats/distribution_tests.py`, wired up
+  through `stats/distribution_menu.py`): the Kolmogorov-Smirnov test with an
+  exact null that handles ties, and the Epps-Singleton test.
+- **Diversity sampling standardisation and between-group tests**
+  (`ecology/diversity_extra.py`, wired up through `ecology/diversity_menu.py`):
+  sample-coverage rarefaction, a diversity profile, and the between-group
+  tests.
+- **A review of the whole codebase, and the plan that came out of it**
+  (`FIX_PLAN_2026-10-19.md`): 125 defects across 12 module groups, with the
+  five that were fixed first written up in full.
+
+### Fixed
+- **The spreadsheet no longer aborts the application on an infinite cell
+  value** (`views/ui_spreadsheet.py`) -- typing `inf` reached the DataMatrix
+  validator, whose `DataValidationError` escaped the Qt slot, and PyQt6
+  aborts the process on an unhandled exception inside a slot. Every unsaved
+  edit was lost. Infinite values are now rejected before they reach the
+  model, with a message; NaN is still accepted, because that is how a
+  missing measurement is recorded.
+- **A thousand-separated number in the first data column is data again**
+  (`parsers/dat_parser.py`) -- `_is_label` and `_parse_numeric_value` disagreed
+  about separators, so `1,234.56` in the first column was classified as a row
+  label: the column disappeared from the data, the row labels became
+  numbers, and nothing was reported. An identifier that merely looks
+  numeric (`1.2.3`) still counts as a label.
+- **Growth-model confidence intervals are no longer too narrow**
+  (`utils/statistics_core.py`) -- `fit_nonlinear` hard-coded
+  `absolute_sigma=True` while `sigma` was `None`, so scipy returned an
+  unscaled covariance and every standard error and 95% interval came out
+  too narrow by `sqrt(RSS/(M-N))` -- 3.3x too narrow in the von Bertalanffy
+  case. The interval that goes into the paper was wrong.
+- **The Epps-Singleton test no longer crashes on data that straddles zero**
+  (`stats/distribution_tests.py`) -- a permutation whose group mean is exactly
+  zero raised a bare `ZeroDivisionError` out of the test, with an exception
+  type that is not part of this project's error hierarchy.
+- **The isometry test now uses the correct reference distribution**
+  (`morphometrics/allometry.py`) -- the F statistic pools the residual sum of
+  squares over correlated Procrustes coordinates, so its null distribution is
+  not `F(df1, n-2)`. The p-value was systematically far too large, and real
+  allometry was reported as isometry. The p-value is now a permutation test on
+  the same statistic; the parametric p-value is still available in
+  `isometry_pvalue_parametric`, using the pooled residual degrees of
+  freedom.
+- **Three functions no longer shadow the translation helper**
+  (`morphometrics/allometry.py`, `morphometrics/evolution_rate.py`,
+  `stats/pcm.py`) -- a tuple-unpacking target named `_` makes `_` a local
+  variable for the whole function, so the `_("...")` calls on their error
+  paths raised `UnboundLocalError` instead of a translated message.
+- **One Chinese string no longer contains two corrupted characters**
+  (`config/i18n/translations_zh.py`).
+
 ## [1.1.2] - 2026-10-07
 
 Feature-parity work aimed at PAST 4, plus the defects that surfaced while

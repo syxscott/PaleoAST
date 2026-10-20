@@ -26,6 +26,9 @@ from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
 
+# The rank tests this module implements.
+SUPPORTED_METHODS: tuple[str, ...] = ("wilcoxon", "sign")
+
 
 @dataclass
 class ColumnStats:

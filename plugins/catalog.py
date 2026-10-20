@@ -47,11 +47,12 @@ version: 1.1.0
 from __future__ import annotations
 
 import importlib
+import inspect
 import logging
 from dataclasses import dataclass
 from typing import Any
 
-from plugins.base import AnalysisPlugin, AnalysisResult
+from plugins.base import AnalysisPlugin, AnalysisResult, data_slot_name
 
 logger = logging.getLogger(__name__)
 
@@ -751,6 +752,126 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "plot",
         "3-D surface over a grid",
     ),
+    # -- the univariate extra tests, through their facade --------------------
+    # The analyzers themselves take numpy arrays, which the generated form
+    # cannot fill: it would hand the whole sheet to the first sample and the
+    # form's column number to the second. The facade takes the sheet and
+    # column numbers and does the extraction, so these entries are the ones
+    # the analysis runner can actually drive.
+    _e(
+        "brunner_munzel",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "brunner_munzel",
+        "univariate",
+        "Brunner-Munzel test for stochastic equality of two samples",
+    ),
+    _e(
+        "mood_median",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "mood_median",
+        "univariate",
+        "Mood's median test for a common median",
+    ),
+    _e(
+        "fligner_kileen",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "fligner_kileen",
+        "univariate",
+        "Fliegler-Kileen test for equality of dispersion between groups",
+    ),
+    _e(
+        "outlier_screen",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "outlier_screen",
+        "univariate",
+        "Outlier screening by z-score or by Grubbs' test",
+    ),
+    _e(
+        "cochran_mantel_haenszel",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "cochran_mantel_haenszel",
+        "univariate",
+        "Cochran-Mantel-Haenszel test on a 2x2 table of four counts",
+    ),
+    _e(
+        "proportion_test",
+        "stats.univariate_menu",
+        "UnivariateExtraMenu",
+        "proportion_test",
+        "univariate",
+        "Exact binomial test of one proportion against a null value",
+    ),
+    # -- the two-sample distribution tests, through their facade -------------
+    _e(
+        "ks_2samp",
+        "stats.distribution_menu",
+        "DistributionTestMenu",
+        "ks_2samp",
+        "distribution",
+        "Kolmogorov-Smirnov test of two samples",
+    ),
+    _e(
+        "epps_singleton",
+        "stats.distribution_menu",
+        "DistributionTestMenu",
+        "epps_singleton",
+        "distribution",
+        "Epps-Singleton test of two samples",
+    ),
+    # -- the diversity sampling tools, through their facade ------------------
+    _e(
+        "sqs_subsample",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "subsample",
+        "diversity",
+        "Shareholder-quorum subsample of one sample",
+    ),
+    _e(
+        "sample_coverage",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "coverage",
+        "diversity",
+        "Sample coverage of a samples-by-taxa table",
+    ),
+    _e(
+        "sample_rarefaction_tao",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "rarefaction",
+        "diversity",
+        "Tao rarefaction of a samples-by-taxa table",
+    ),
+    _e(
+        "diversity_profile",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "profile",
+        "diversity",
+        "Diversity indices of one sample across sampling depths",
+    ),
+    _e(
+        "diversity_t_test",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "t_test",
+        "diversity",
+        "t-test of the diversity indices between groups of samples",
+    ),
+    _e(
+        "diversity_permutation_test",
+        "ecology.diversity_menu",
+        "DiversityExtraMenu",
+        "permutation_test",
+        "diversity",
+        "Permutation test of the diversity indices between groups of samples",
+    ),
 )
 
 
@@ -822,6 +943,28 @@ class BuiltinAnalysisPlugin(AnalysisPlugin):
             raise AttributeError(f"{where} has no callable {self._entry.method!r}; the catalog is out of date")
         return method
 
+    def _invoke(self, method: Any, data: Any, kwargs: dict[str, Any]) -> Any:
+        """Call the target with the data on the parameter that wants it.
+
+        The contract is ``analyze(data, **kwargs)`` with ``data`` the whole
+        spreadsheet, but the target's first positional parameter is not
+        always the data: ``growth_model(model, times, values)`` takes a
+        model name first, and ``orbital_forcing(period_kyr, ...)`` takes no
+        data at all. Handing the sheet to the first positional parameter
+        regardless gave the sheet to ``model`` and to ``period_kyr``.
+
+        The parameter is found from the signature -- see
+        :func:``plugins.base.data_slot_name`` -- and the data is passed
+        there by keyword. A target with no such parameter gets the form's
+        arguments alone.
+        """
+        slot = data_slot_name(inspect.signature(method))
+        if slot is None:
+            return method(**kwargs)
+        if slot in kwargs:
+            raise ValueError(f"{slot} is the data parameter and was also given explicitly; it cannot be set twice.")
+        return method(**{slot: data}, **kwargs)
+
     def analyze(self, data: Any, **kwargs: Any) -> AnalysisResult:
         """Run the wrapped analysis.
 
@@ -838,7 +981,7 @@ class BuiltinAnalysisPlugin(AnalysisPlugin):
         # Deliberately not wrapped in a try/except. The analyzers raise the
         # project's own exception types, which callers match on; catching
         # them here to re-raise a generic one would lose that.
-        outcome = method(data, **kwargs)
+        outcome = self._invoke(method, data, kwargs)
 
         metadata: dict[str, Any] = {
             "module": self._entry.module,

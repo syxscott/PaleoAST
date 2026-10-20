@@ -62,7 +62,10 @@ __all__ = ["GenericPlotter"]
 
 def _as_1d(values: object, name: str) -> npt.NDArray[np.float64]:
     """Coerce a column to a 1-D float array, or explain what was wrong with it."""
-    array = np.asarray(values, dtype=float)
+    try:
+        array = np.asarray(values, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(f"{name} must be a column of numbers; this one is not ({exc})") from exc
     if array.ndim == 0:
         array = array.reshape(1)
     if array.ndim > 1:
@@ -294,8 +297,8 @@ class GenericPlotter:
         column. With ``categories`` the values are summed per category, so a
         row of numbers per group becomes one bar per group.
         """
-        data = _as_1d(values, "values")
         if categories is not None:
+            data = _as_1d(values, "values")
             cats = list(categories)
             if len(cats) != data.size:
                 raise DataValidationError(f"categories has {len(cats)} entries but values has {data.size}")
@@ -306,11 +309,24 @@ class GenericPlotter:
             names = [str(k) for k in totals_by_key]
             totals = list(totals_by_key.values())
         else:
-            uniq, counts = np.unique(data[np.isfinite(data)], return_counts=True)
-            if uniq.size == 0:
-                raise DataValidationError("no finite values to plot")
-            names = [f"{v:g}" for v in uniq]
-            totals = [float(c) for c in counts]
+            raw = np.asarray(values, dtype=object).ravel()
+            if raw.size == 0:
+                raise DataValidationError("no values to plot")
+            if all(isinstance(v, (int, float, np.number)) and not isinstance(v, bool) for v in raw):
+                data = _as_1d(values, "values")
+                uniq, counts = np.unique(data[np.isfinite(data)], return_counts=True)
+                if uniq.size == 0:
+                    raise DataValidationError("no finite values to plot")
+                names = [f"{v:g}" for v in uniq]
+                totals = [float(c) for c in counts]
+            else:
+                # A label column: each distinct label is a bar.
+                tally: dict[object, float] = {}
+                for v in raw:
+                    key = v.item() if isinstance(v, np.generic) else v
+                    tally[key] = tally.get(key, 0.0) + 1.0
+                names = [str(k) for k in tally]
+                totals = list(tally.values())
 
         palette = current_palette()
         colors = [palette[i % len(palette)] for i in range(len(names))]
@@ -776,13 +792,20 @@ class GenericPlotter:
             palette = current_palette()
             for (cx, cy), colour in (((0.42, 0.55), palette[0]), ((0.58, 0.55), palette[1]), ((0.5, 0.38), palette[2])):
                 ax.add_patch(Circle((cx, cy), 0.28, alpha=0.5, color=colour))
+            # The positions are the regions, not the corners of the
+            # figure. The pairwise-only counts have to sit in the lens
+            # between their two circles and OUTSIDE the third one:
+            # A n B belongs above C, A n C to the lower left of B, and
+            # B n C to the lower right of A. Drawn anywhere else, all
+            # three landed inside the triple overlap, on top of the
+            # "all three" count.
             for cx, cy, text in (
                 (0.30, 0.62, a),
                 (0.70, 0.62, b),
                 (0.50, 0.26, c),
-                (0.50, 0.60, ab),
-                (0.38, 0.44, ac),
-                (0.62, 0.44, bc),
+                (0.50, 0.72, ab),
+                (0.34, 0.40, ac),
+                (0.66, 0.40, bc),
                 (0.50, 0.48, abc),
             ):
                 ax.text(cx, cy, str(text), ha="center", fontsize=9)

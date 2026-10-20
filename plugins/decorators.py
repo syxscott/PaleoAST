@@ -60,8 +60,21 @@ def register_analysis(
         if not issubclass(cls, AnalysisPlugin):
             raise TypeError(f"{cls.__name__} must inherit from AnalysisPlugin")
 
-        instance = cls()
-        get_plugin_registry().register(instance)
+        # The decorator's arguments describe the analysis, so they are
+        # what gets registered. They used to be ignored entirely: a class
+        # decorated @register_analysis(name="foo") was registered under
+        # whatever its own "name" property returned, and "category" and
+        # "cache_key" went nowhere at all. The registered instance is a
+        # subclass carrying them, so the decorated class itself is
+        # untouched and can still be used directly.
+        namespace = {
+            "name": property(lambda self: name),
+            "description": property(lambda self: description),
+            "category": property(lambda self: category),
+            "cache_key": property(lambda self: cache_key if cache_key is not None else f"{name}_result"),
+        }
+        registered = type(cls.__name__, (cls,), namespace)
+        get_plugin_registry().register(registered())
         return cls
 
     return decorator

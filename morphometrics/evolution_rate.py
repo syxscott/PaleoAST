@@ -629,13 +629,29 @@ class EvolutionRateAnalyzer:
             # Fit model
             boot_dx = np.diff(boot_trait)
             if model == EvolutionModel.RANDOM_WALK.value:
-                _, rate = self._fit_random_walk(boot_dx, time_intervals)
+                # NOT ``_``: binding ``_`` here (even through tuple
+                # unpacking) makes ``_`` a local variable for the whole
+                # function, so the ``_("...")`` above would raise
+                # UnboundLocalError instead of the translated message.
+                _rw_res, rate = self._fit_random_walk(boot_dx, time_intervals)
                 rates.append(rate)
             elif model == EvolutionModel.DIRECTIONAL.value:
-                _, rate, _, _, _ = self._fit_directional(boot_trait, boot_dx, time_intervals)
+                # NOT ``_``: binding ``_`` here (even through tuple
+                # unpacking) makes ``_`` a local variable for the whole
+                # function, so the ``_("...")`` above would raise
+                # UnboundLocalError instead of the translated message.
+                _dir_res, rate, _dir_rank, _dir_sv, _dir_extra = self._fit_directional(
+                    boot_trait, boot_dx, time_intervals
+                )
                 rates.append(rate)
             elif model == EvolutionModel.STASIS.value:
-                _, rate, _, _ = self._fit_stasis(boot_trait, boot_dx, time_intervals)
+                # NOT ``_``: binding ``_`` here would make it a local
+                # variable for the whole function, so the ``_("...")`` above
+                # would raise UnboundLocalError instead of the translated
+                # validation message.
+                _boot_res, rate, _boot_rank, _boot_sv = self._fit_stasis(
+                    boot_trait, boot_dx, time_intervals
+                )
                 rates.append(rate)
 
         if not rates:

@@ -1045,7 +1045,13 @@ class PCMAnalyzer:
             perm_trait = rng.permutation(tip_array)
             perm_trait_dict = {tip_names_list[i]: perm_trait[i] for i in range(len(tip_names_list))}
 
-            _, _, perm_ic_data, _ = _compute_contrasts_recursive(working_tree.root, perm_trait_dict)
+            # NOT ``_``: binding ``_`` here (even through tuple unpacking)
+            # makes ``_`` a local variable for the whole function, so the
+            # ``_("...")`` above would raise UnboundLocalError instead of
+            # the translated message.
+            _pc_res, _pc_extra, perm_ic_data, _pc_sv = _compute_contrasts_recursive(
+                working_tree.root, perm_trait_dict
+            )
             if len(perm_ic_data) < 2:
                 # Deliberately not routed through
                 # utils.statistics_core.permutation_pvalue: this skip means the
@@ -1059,7 +1065,12 @@ class PCMAnalyzer:
             # 与观测 F 完全相同的分类规则与 F 公式
             perm_labels = _contrast_labels(perm_ic_data)
             perm_ic = [c[0] for c in perm_ic_data]
-            perm_F, _, _, _, _ = _one_way_f(perm_ic, perm_labels)
+            # NOT ``_``: binding ``_`` here would make it a local variable
+            # for the whole function, so the ``_("...")`` above would raise
+            # UnboundLocalError instead of the translated message.
+            perm_F, _perm_res, _perm_rank, _perm_sv, _perm_extra = _one_way_f(
+                perm_ic, perm_labels
+            )
             perm_Fs.append(perm_F)
 
         # 加一校正 (1 + #{F_perm >= F_obs}) / (1 + n_perm)：与本文件

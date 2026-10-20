@@ -51,6 +51,9 @@ from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
 
+# The dissimilarity measures SIMPER is defined for.
+SUPPORTED_METRICS: tuple[str, ...] = ("bray_curtis", "euclidean")
+
 
 @dataclass
 class VariableContribution:

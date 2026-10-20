@@ -122,7 +122,13 @@ class TestAllometryFTestUsesFullShapeSpace:
         result = analyzer.analyze_allometry(cfgs, n_components=None)
         ref_f, ref_p = _expected_full_shape_f(cfgs, n_components=None)
         assert result.f_statistic == pytest.approx(ref_f, abs=1e-9)
-        assert result.isometry_pvalue == pytest.approx(ref_p, abs=1e-12)
+        # The p-value is no longer the parametric F p-value: the pooled sum
+        # of squares over correlated Procrustes coordinates does not follow
+        # an F distribution, so the reference distribution is the
+        # permutation null.  What the reference above still documents is
+        # the OLD parametric p-value, which is why it must now differ.
+        assert 0.0 <= float(result.isometry_pvalue) <= 1.0
+        assert float(result.isometry_pvalue) != pytest.approx(ref_p, abs=1e-12)
 
     def test_pca_reduction_still_uses_full_shape_reference(self):
         cfgs, _ = _aligned_with_allometry(seed=42, n=25, p=8, k=2)
@@ -130,7 +136,30 @@ class TestAllometryFTestUsesFullShapeSpace:
         result = analyzer.analyze_allometry(cfgs, n_components=2)
         ref_f, ref_p = _expected_full_shape_f(cfgs, n_components=2)
         assert result.f_statistic == pytest.approx(ref_f, abs=1e-9)
-        assert result.isometry_pvalue == pytest.approx(ref_p, abs=1e-12)
+        assert 0.0 <= float(result.isometry_pvalue) <= 1.0
+        assert float(result.isometry_pvalue) != pytest.approx(ref_p, abs=1e-12)
+
+    def test_parametric_pvalue_uses_the_pooled_residual_df(self):
+        """The parametric p-value must use the POOLED residual df.
+
+        The residual sum of squares is pooled over ``df1`` coordinates, each
+        with ``n - 2`` residual degrees of freedom, so the denominator of the
+        F distribution is ``df1 * (n - 2)``.  Using ``n - 2`` alone -- the
+        residual df of a single coordinate -- is what made the old p-value
+        far too large.
+        """
+        from scipy import stats
+
+        cfgs, _ = _aligned_with_allometry()
+        analyzer = AllometryAnalyzer()
+        result = analyzer.analyze_allometry(cfgs, n_components=None)
+        n, p, k = cfgs.shape
+        df1 = p * k
+        df2 = n - 2
+        expected = float(1.0 - stats.f.cdf(result.f_statistic, df1, df1 * df2))
+        assert float(result.isometry_pvalue_parametric) == pytest.approx(
+            expected, rel=1e-9
+        )
 
     def test_pca_reduction_differs_from_legacy_reduced(self):
         """The bug made the F-test identical to a reduced-space test.

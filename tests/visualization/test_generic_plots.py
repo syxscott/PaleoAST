@@ -242,3 +242,61 @@ def test_normal_probability_plot_needs_enough_points(plotter):
 def test_matrix_plot_refuses_a_non_matrix(plotter):
     with pytest.raises(DataValidationError, match="2-D"):
         plotter.plot_matrix(np.arange(10.0))
+
+
+# ---------------------------------------------------------------------------
+# The places the counts and the names end up
+# ---------------------------------------------------------------------------
+
+
+def test_the_three_set_venn_puts_each_count_in_its_own_region(plotter):
+    """A count drawn in the wrong region is a misreading, not a drawing.
+
+    The three pairwise-only counts were placed inside the triple
+    overlap, on top of the "all three" count, so a reader could not
+    tell which was which.
+    """
+    circles = {"A": (0.42, 0.55), "B": (0.58, 0.55), "C": (0.5, 0.38)}
+    radius = 0.28
+
+    def region(point):
+        return "".join(
+            name for name, centre in circles.items() if np.hypot(point[0] - centre[0], point[1] - centre[1]) < radius
+        )
+
+    fig = plotter.plot_venn([10, 20, 5, 3, 2, 1, 1])
+    ax = fig.axes[0]
+    counts = [(text.get_text(), region(text.get_position())) for text in ax.texts if text.get_text().isdigit()]
+    # The counts are a, b, c, a n b, a n c, b n c and all three. Two of
+    # them are 1, so they are compared as a list, not as a mapping.
+    assert counts == [
+        ("10", "A"),
+        ("20", "B"),
+        ("5", "C"),
+        ("3", "AB"),
+        ("2", "AC"),
+        ("1", "BC"),
+        ("1", "ABC"),
+    ]
+
+
+def test_a_label_column_can_be_plotted(plotter):
+    """A taxon-name column is the most common column in the sheet.
+
+    The pie chart and the bar chart both count the distinct values, and
+    name the slices or the bars after them.
+    """
+    names = ["T. rex", "T. rex", "S. allops", "C. diplodocus"]
+
+    pie = plotter.plot_pie_chart(names).axes[0]
+    slices = [t.get_text() for t in pie.texts if "%" not in t.get_text()]
+    assert slices == ["T. rex", "S. allops", "C. diplodocus"]
+
+    bar = plotter.plot_bar_chart(names).axes[0]
+    assert [t.get_text() for t in bar.get_xticklabels()] == ["T. rex", "S. allops", "C. diplodocus"]
+
+
+def test_a_non_numeric_column_is_a_data_problem_not_a_crash(plotter):
+    """The message is the project's own, not a raw ValueError."""
+    with pytest.raises(DataValidationError, match="must be a column of numbers"):
+        plotter.plot_histogram(["T. rex", "S. allops"])

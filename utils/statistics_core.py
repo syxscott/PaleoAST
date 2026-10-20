@@ -96,6 +96,41 @@ MISSING_GROUP = _MissingGroupLabel()
 # =============================================================================
 
 
+def resolve_seed(random_seed: int | None = None, *, context: str = "analysis") -> int:
+    """The seed to use, as a number.
+
+    ``np.random.default_rng()`` draws its own entropy, which cannot be
+    recovered afterwards, so a result that reports "the seed used" has
+    to know it. Drawing the seed here, as a number, keeps the two
+    consistent: the generator is built from a seed the caller can be
+    told, so an unseeded run is still not reproducible across runs --
+    it is reproducible from the seed in the result.
+
+    Parameters
+    ----------
+    random_seed:
+        The seed the caller asked for, or None to draw one.
+    context:
+        Name used in the warning and log messages.
+
+    Returns
+    -------
+    int
+        The seed to build the generator from.
+    """
+    if random_seed is not None:
+        return int(random_seed)
+    warnings.warn(
+        f"{context}: no ``random_seed`` supplied; the result is not "
+        f"reproducible across runs. Pass ``random_seed=`` for a "
+        f"deterministic result.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+    _logger.warning("%s: no random_seed supplied; result is not reproducible", context)
+    return int(np.random.SeedSequence().generate_state(1, dtype=np.uint32)[0])
+
+
 def make_rng(random_seed: int | None = None, *, context: str = "analysis") -> np.random.Generator:
     """Return an isolated random generator for a stochastic analysis.
 
@@ -123,17 +158,7 @@ def make_rng(random_seed: int | None = None, *, context: str = "analysis") -> np
     -------
     numpy.random.Generator
     """
-    if random_seed is None:
-        warnings.warn(
-            f"{context}: no ``random_seed`` supplied; the result is not "
-            f"reproducible across runs. Pass ``random_seed=`` for a "
-            f"deterministic result.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        _logger.warning("%s: no random_seed supplied; result is not reproducible", context)
-        return np.random.default_rng()
-    return np.random.default_rng(random_seed)
+    return np.random.default_rng(resolve_seed(random_seed, context=context))
 
 
 # =============================================================================
@@ -246,18 +271,34 @@ def permutation_pvalue(
     if alternative not in ("greater", "two_sided"):
         raise ValidationError(f"{context}: alternative must be 'greater' or 'two_sided', got {alternative!r}")
 
-    rng = make_rng(random_seed, context=context)
+    seed = resolve_seed(random_seed, context=context)
+    rng = make_rng(seed, context=context)
     null = np.empty(n_permutations, dtype=float)
     for i in range(n_permutations):
         null[i] = statistic_fn(rng)
 
-    n_ge = int(np.sum(null >= observed))
-    p_value = (1.0 + n_ge) / (n_permutations + 1.0)
+    # A permutation whose statistic is undefined -- a zero-variance group
+    # pair gives 0/0 -- is not evidence against the null, and it used to
+    # be counted in the denominator while never counting as "at least
+    # as extreme". Worse, one NaN made the two-sided centre NaN, so
+    # every comparison was False and the two-sided p-value collapsed to
+    # 1/(n+1): a p-value of 0.001 for a test that found nothing.
+    finite = np.isfinite(null)
+    n_valid = int(np.sum(finite))
+    if n_valid == 0:
+        raise ComputationError(
+            f"{context}: every permutation produced an undefined statistic, "
+            "so there is no null distribution to compare against."
+        )
+    valid = null[finite]
+
+    n_ge = int(np.sum(valid >= observed))
+    p_value = (1.0 + n_ge) / (n_valid + 1.0)
 
     if alternative == "two_sided":
-        centre = float(np.mean(null))
-        n_far = int(np.sum(np.abs(null - centre) >= abs(observed - centre)))
-        p_two = (1.0 + n_far) / (n_permutations + 1.0)
+        centre = float(np.mean(valid))
+        n_far = int(np.sum(np.abs(valid - centre) >= abs(observed - centre)))
+        p_two = (1.0 + n_far) / (n_valid + 1.0)
     else:
         p_two = p_value
 
@@ -268,7 +309,7 @@ def permutation_pvalue(
         p_value_two_sided=float(p_two),
         n_permutations=n_permutations,
         n_significant=n_ge,
-        random_seed=random_seed,
+        random_seed=seed,
     )
 
 
@@ -490,9 +531,12 @@ def fit_nonlinear(
     von Bertalanffy fit against a Gompertz fit without their log-likelihoods,
     and you cannot report a growth rate without its standard error.
 
-    ``absolute_sigma`` is set so the returned covariance is in parameter
-    units rather than scaled by residual variance -- without it, a
-    heteroscedastic series yields confidence intervals that are too narrow.
+    ``absolute_sigma`` is set only when the caller actually supplies
+    ``sigma``.  With known observation standard deviations the covariance is
+    already in parameter units; without them, scipy must scale the
+    covariance by the reduced chi-square, and skipping that scaling is what
+    made every confidence interval on this harness too narrow by a factor
+    of sqrt(RSS/(M-N)).
 
     Parameters
     ----------
@@ -555,11 +599,24 @@ def fit_nonlinear(
             p0=p0_arr,
             bounds=bounds,
             sigma=sigma,
-            # Without absolute_sigma the covariance comes back scaled by
-            # residual variance, which silently narrows every confidence
-            # interval on a heteroscedastic series -- exactly the fossil
-            # growth series this exists to fit.
-            absolute_sigma=True,
+            # ``absolute_sigma`` tells scipy whether ``sigma`` is the ABSOLUTE
+            # standard deviation of the observations (True) or merely their
+            # RELATIVE weights (False).  With absolute_sigma=True the returned
+            # covariance is used as-is; with False, scipy scales it by the
+            # reduced chi-square RSS/(M-N).
+            #
+            # The previous code hard-coded True while ``sigma`` was None.
+            # scipy then read "the measurement error of every point is exactly
+            # 1.0" and returned an UNSCALED covariance, so every standard error
+            # and 95% interval came out too narrow by sqrt(RSS/(M-N)) -- 3.3x
+            # too narrow in the von Bertalanffy case below, i.e. the interval
+            # that goes into the paper.  The old comment claimed the opposite
+            # ("without it ... intervals that are too narrow"), which is what
+            # made the bug so easy to miss.
+            #
+            # Correct rule: scale by the residual variance unless the caller
+            # actually supplied an absolute sigma.
+            absolute_sigma=sigma is not None,
             maxfev=20000,
         )
     except (RuntimeError, ValueError, TypeError) as exc:

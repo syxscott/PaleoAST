@@ -26,19 +26,29 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pytest
 
-from plugins.base import AnalysisResult
+from plugins.base import AnalysisResult, data_slot_name
 from plugins.catalog import (
     BUILTIN_ANALYSES,
     BuiltinAnalysisPlugin,
     register_builtin_analyses,
 )
 from plugins.registry import AnalysisPluginRegistry
+
+# The generated form lives in the views layer, which needs a Qt platform
+# before it is imported. The form is built from signatures, so no widget is
+# created and no display is needed -- but the import still has to succeed.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("QT_QPA_FONTDIR", r"C:\Windows\Fonts")
+
+from views.analysis_runner import build_specs
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -164,6 +174,70 @@ def test_the_spec_derives_hidden_imports_from_the_catalog() -> None:
     )
 
 
+def test_register_analysis_honours_its_arguments() -> None:
+    """The decorator's arguments are what gets registered.
+
+    They used to be ignored entirely: a class decorated
+    ``@register_analysis(name="foo")`` was registered under whatever its
+    own ``name`` property returned, and ``category`` and ``cache_key``
+    went nowhere at all.
+    """
+    from plugins.base import AnalysisPlugin
+    from plugins.decorators import register_analysis
+    from plugins.registry import get_plugin_registry
+
+    @register_analysis(
+        name="decorated_probe",
+        description="A probe.",
+        category="probe-category",
+        cache_key="probe_key",
+    )
+    class Probe(AnalysisPlugin):
+        @property
+        def name(self):
+            return "the_class_says_something_else"
+
+        @property
+        def description(self):
+            return "The class says something else."
+
+        @property
+        def category(self):
+            return "the_class_says_something_else"
+
+        @property
+        def cache_key(self):
+            return "the_class_says_something_else"
+
+        def analyze(self, data, **kwargs):
+            from plugins.base import AnalysisResult
+
+            return AnalysisResult(name=self.name, data=None, metadata={})
+
+    registry = get_plugin_registry()
+    try:
+        plugin = registry.get("decorated_probe")
+        assert plugin is not None, "the decorated class was not registered under its declared name"
+        assert plugin.description == "A probe."
+        assert plugin.category == "probe-category"
+        assert plugin.cache_key == "probe_key"
+        # The decorated class itself is untouched.
+        assert Probe().name == "the_class_says_something_else"
+    finally:
+        registry.unregister("decorated_probe")
+
+
+def test_a_failure_can_be_expressed() -> None:
+    """The standard container has to be able to say "this failed"."""
+    from plugins.base import AnalysisResult
+
+    result = AnalysisResult.failure("thing", "it went wrong", {"module": "x"})
+    assert result.success is False
+    assert result.error == "it went wrong"
+    assert result.data is None
+    assert result.metadata == {"module": "x"}
+
+
 def test_names_are_unique() -> None:
     """A duplicate name would make the second one unreachable."""
     names = [e.name for e in BUILTIN_ANALYSES]
@@ -192,6 +266,7 @@ def test_catalog_covers_every_analyzer_in_the_source() -> None:
     the controller never learn about it, and nothing complains.
     """
     covered = {(e.module, e.class_name) for e in BUILTIN_ANALYSES if e.class_name is not None}
+    covered |= _facade_wrapped_analyzers()
     present = _analyzer_classes_in_source()
     missing = sorted(present - covered)
     assert not missing, (
@@ -352,3 +427,234 @@ def test_controller_run_plugin_executes() -> None:
     assert isinstance(outcome, AnalysisResult)
     assert outcome.metadata["category"] == "spatial"
     assert np.isfinite(outcome.data.statistic)
+
+
+# ---------------------------------------------------------------------------
+# The catalog can actually be driven by the generated form
+# ---------------------------------------------------------------------------
+
+# The analyses the three new modules brought, and the facade that drives each
+# one. The facades exist because the analyzers take numpy arrays, which the
+# generated form cannot fill: it would hand the whole sheet to the first
+# sample and the form's column number to the second.
+NEW_ANALYSES: dict[str, str] = {
+    "brunner_munzel": "stats.univariate_menu",
+    "mood_median": "stats.univariate_menu",
+    "fligner_kileen": "stats.univariate_menu",
+    "outlier_screen": "stats.univariate_menu",
+    "cochran_mantel_haenszel": "stats.univariate_menu",
+    "proportion_test": "stats.univariate_menu",
+    "ks_2samp": "stats.distribution_menu",
+    "epps_singleton": "stats.distribution_menu",
+    "sqs_subsample": "ecology.diversity_menu",
+    "sample_coverage": "ecology.diversity_menu",
+    "sample_rarefaction_tao": "ecology.diversity_menu",
+    "diversity_profile": "ecology.diversity_menu",
+    "diversity_t_test": "ecology.diversity_menu",
+    "diversity_permutation_test": "ecology.diversity_menu",
+}
+
+# The analyses the form cannot render, and says to run from the script
+# console instead: they want a tree, a callback or a precomputed result. An
+# analysis that joins this list is one the application cannot run from the
+# mouse, and it belongs here only with a reason.
+KNOWN_UNDRIVABLE: frozenset[str] = frozenset(
+    {
+        "age_model",
+        "nmds",
+        "null_models",
+        "phylo_anova",
+        "phylogenetic_signal",
+        "procd",
+        "sedimentation_rate",
+        "spectral_peaks",
+        "stratigraphic_correlation",
+    }
+)
+
+
+def _facade_wrapped_analyzers() -> set[tuple[str, str]]:
+    """The analyzers that are reachable through a catalogued facade.
+
+    A facade is a catalogued class that wraps an analyzer and drives it from
+    the generated form, so an analyzer it wraps is reachable even though the
+    catalog names the facade rather than the analyzer. The facade says what
+    it wraps in ``wrapped_analyzers``, and only a *catalogued* facade counts:
+    an uncatalogued facade reaches nothing.
+
+    The point of the check is reachability, not spelling: an analyzer that
+    only exists behind a facade nobody catalogued is exactly as invisible as
+    one nobody wrote down at all.
+    """
+    wrapped: set[tuple[str, str]] = set()
+    for entry in BUILTIN_ANALYSES:
+        if entry.class_name is None:
+            continue
+        try:
+            module = importlib.import_module(entry.module)
+            cls = getattr(module, entry.class_name, None)
+        except Exception:  # pragma: no cover - optional dependency
+            continue
+        if cls is None:
+            continue
+        for analyzer in getattr(cls, "wrapped_analyzers", ()):
+            wrapped.add((analyzer.__module__, analyzer.__name__))
+    return wrapped
+
+
+def _numeric_sheet() -> npt.NDArray:
+    """Five columns of random values, the sheet most of the form is driven with."""
+    return np.random.default_rng(0).normal(size=(30, 5))
+
+
+def _grouped_sheet() -> npt.NDArray:
+    """A sheet whose first column names the group each row belongs to."""
+    rng = np.random.default_rng(1)
+    labels = np.array([1.0, 2.0] * 15)
+    return np.column_stack([labels, rng.normal(size=(30, 4))])
+
+
+def _counts_sheet() -> npt.NDArray:
+    """A samples-by-taxa table of integer counts."""
+    return np.random.default_rng(2).integers(1, 30, size=(6, 5))
+
+
+#: The sheet each new analysis is driven with, and the form values that are
+#: not the defaults.
+NEW_ANALYSIS_INPUTS: dict[str, tuple[Any, dict[str, Any]]] = {
+    "brunner_munzel": (_numeric_sheet, {}),
+    "mood_median": (_numeric_sheet, {}),
+    "fligner_kileen": (_grouped_sheet, {}),
+    "outlier_screen": (_numeric_sheet, {}),
+    "cochran_mantel_haenszel": (_numeric_sheet, {}),
+    "proportion_test": (_numeric_sheet, {}),
+    "ks_2samp": (_numeric_sheet, {}),
+    "epps_singleton": (_numeric_sheet, {}),
+    "sqs_subsample": (_counts_sheet, {}),
+    "sample_coverage": (_counts_sheet, {}),
+    "sample_rarefaction_tao": (_counts_sheet, {}),
+    "diversity_profile": (_counts_sheet, {}),
+    "diversity_t_test": (_counts_sheet, {"groups": ["1", "1", "1", "2", "2", "2"]}),
+    "diversity_permutation_test": (_counts_sheet, {"groups": ["1", "1", "1", "2", "2", "2"]}),
+}
+
+
+def _entry(name: str) -> Any:
+    """The catalog entry with this name."""
+    entry = next((e for e in BUILTIN_ANALYSES if e.name == name), None)
+    assert entry is not None, f"{name} is not in the catalog"
+    return entry
+
+
+def _form_values(specs: Any, sheet: Any, overrides: dict[str, Any]) -> dict[str, Any]:
+    """The values the generated form would send for these parameters.
+
+    Mirrors ``AnalysisRunnerDialog._on_run``: a field left at its default
+    sends that default, a field the user emptied sends nothing, and a
+    parameter that wants an array is handed the column of the sheet it names.
+    """
+    values: dict[str, Any] = {}
+    for spec in specs:
+        if spec.kind == "unsupported":
+            continue
+        if spec.name in overrides:
+            value = overrides[spec.name]
+        elif spec.kind == "array":
+            value = np.asarray(sheet)[:, spec.column]
+        elif spec.kind == "choice":
+            value = spec.default if spec.default in spec.choices else None
+        else:
+            value = spec.default
+        if value is None:
+            continue
+        values[spec.name] = value
+    return values
+
+
+def test_every_catalogued_entry_can_be_driven_by_the_generated_form() -> None:
+    """The form must be able to express every catalogued analysis.
+
+    An entry whose parameters the form cannot render is an entry the runner
+    refuses to run, and sends the user to the script console instead -- the
+    same invisibility the catalog is meant to prevent. The exceptions are the
+    analyses that want a tree, a callback or a precomputed result, which no
+    form can express; they are listed in ``KNOWN_UNDRIVABLE``.
+    """
+    problems: list[str] = []
+    for entry in BUILTIN_ANALYSES:
+        plugin = BuiltinAnalysisPlugin(entry)
+        specs = build_specs(entry, plugin)
+        unsupported = [s.name for s in specs if s.kind == "unsupported"]
+        if unsupported and entry.name not in KNOWN_UNDRIVABLE:
+            problems.append(
+                f"{entry.name}: the form cannot render {', '.join(unsupported)}; "
+                "give it a facade, or say why it cannot have one"
+            )
+        signature = inspect.signature(getattr(plugin._resolve(), entry.method))
+        slot = data_slot_name(signature)
+        supplied = {s.name for s in specs}
+        for name, param in signature.parameters.items():
+            if name in ("self", "kwargs", "args") or name == slot or name in supplied:
+                continue
+            if param.default is inspect.Parameter.empty:
+                problems.append(f"{entry.name}: {name} is required and the form has no field for it")
+    assert not problems, "catalogued analyses the form cannot drive:" + chr(10) + chr(10).join(problems)
+
+
+def test_the_new_analyses_are_present_and_resolve() -> None:
+    """The analyses the new modules brought are in the catalog, and they resolve.
+
+    A catalog entry that names a module that does not import, or a class that
+    does not exist, is an entry the runner lists and then cannot run.
+    """
+    for name, module in NEW_ANALYSES.items():
+        entry = _entry(name)
+        assert entry.module == module, f"{name} should be driven by {module}"
+        imported = importlib.import_module(entry.module)
+        cls = getattr(imported, entry.class_name, None)
+        assert cls is not None, f"{entry.module} has no {entry.class_name}"
+        assert callable(getattr(cls(), entry.method, None)), f"{name} does not resolve"
+
+
+def test_the_facades_cover_the_analyzers_they_wrap() -> None:
+    """Every analyzer of the three new modules is behind a catalogued facade.
+
+    This is the staleness check for the facades: a facade that stops wrapping
+    an analyzer it used to wrap would leave that analyzer invisible, and
+    nothing else would say so.
+    """
+    wrapped = _facade_wrapped_analyzers()
+    for module, name in (
+        ("ecology.diversity_extra", "DiversityExtraAnalyzer"),
+        ("stats.distribution_tests", "DistributionTestAnalyzer"),
+        ("stats.univariate_extra", "BrunnerMunzelAnalyzer"),
+        ("stats.univariate_extra", "CochranMantelHaenszelAnalyzer"),
+        ("stats.univariate_extra", "FlignerKileenAnalyzer"),
+        ("stats.univariate_extra", "MoodMedianAnalyzer"),
+        ("stats.univariate_extra", "OutlierAnalyzer"),
+        ("stats.univariate_extra", "ProportionAnalyzer"),
+    ):
+        assert (module, name) in wrapped, f"{module}.{name} is not behind a catalogued facade"
+
+
+def test_the_new_analyses_run_through_the_generated_form() -> None:
+    """Every new analysis runs, with the values the generated form sends.
+
+    The form is built from the signature, so a facade whose parameters the
+    form cannot express -- or expresses wrongly -- is a facade the user
+    cannot run. This drives each of the new entries the way the runner does
+    and insists on a real result coming back.
+    """
+    for name in NEW_ANALYSES:
+        entry = _entry(name)
+        plugin = BuiltinAnalysisPlugin(entry)
+        specs = build_specs(entry, plugin)
+        unsupported = [s.name for s in specs if s.kind == "unsupported"]
+        assert not unsupported, f"{name} has a parameter the form cannot render: {unsupported}"
+        sheet, overrides = NEW_ANALYSIS_INPUTS[name]
+        values = _form_values(specs, sheet(), overrides)
+        outcome = plugin.analyze(sheet(), **values)
+        assert isinstance(outcome, AnalysisResult)
+        assert outcome.success, f"{name} reported a failure: {outcome.error}"
+        assert outcome.data is not None, f"{name} returned nothing"
+        assert outcome.metadata.get("summary"), f"{name} produced no summary"

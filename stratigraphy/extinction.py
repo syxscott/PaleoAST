@@ -46,6 +46,9 @@ from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
+# The extinction estimators this module implements.
+SUPPORTED_METHODS: tuple[str, ...] = ("marshall", "strauss_sadler")
+
 
 # =============================================================================
 # Result Class

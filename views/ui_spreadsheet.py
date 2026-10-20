@@ -1194,6 +1194,26 @@ class ScientificSpreadsheet(QWidget):
 
         self.selectionChanged.emit(rows, cols)
 
+    def _revert_cell_text(self, item: QTableWidgetItem, row: int, col: int) -> None:
+        """Restore the cell text to the stored value, without re-entering the slot.
+
+        Use blockSignals to prevent this setText from re-triggering
+        _on_item_changed and creating a recursion loop.
+
+        The old code skipped the revert whenever the stored value was
+        NaN, leaving the literal text the user typed sitting in the cell
+        while self._data[row, col] stayed NaN. _make_display_item
+        renders NaN as "", so the view and the model disagreed, and
+        every consumer (get_data, analyze_*, export) kept seeing NaN
+        while the user believed their text had been stored.
+        """
+        self._table.blockSignals(True)
+        try:
+            old = self._data[row, col]
+            item.setText("" if np.isnan(old) else str(old))
+        finally:
+            self._table.blockSignals(False)
+
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
         """Handle cell data change."""
         if self._data is None:
@@ -1208,22 +1228,27 @@ class ScientificSpreadsheet(QWidget):
         try:
             value = float(item.text())
         except ValueError:
-            # Revert to the stored value. Use blockSignals to prevent this
-            # setText from re-triggering _on_item_changed and creating
-            # a recursion loop.
+            self._revert_cell_text(item, row, col)
+            return
+
+        if np.isinf(value):
+            # ``float("inf")`` / ``float("1e400")`` parse cleanly, but the
+            # DataMatrix validator rejects infinite values.  That
+            # DataValidationError used to escape this slot, and PyQt6
+            # ABORTS THE WHOLE PROCESS on an unhandled exception inside a
+            # slot (exit code 0xC0000409) -- the user lost every unsaved
+            # edit because they typed "inf" into one cell.  Reject the value
+            # here, before it reaches the model.
             #
-            # The old code skipped the revert whenever the stored value was
-            # NaN, leaving the literal text the user typed sitting in the cell
-            # while self._data[row, col] stayed NaN. _make_display_item
-            # renders NaN as "", so the view and the model disagreed, and
-            # every consumer (get_data, analyze_*, export) kept seeing NaN
-            # while the user believed their text had been stored.
-            self._table.blockSignals(True)
-            try:
-                old = self._data[row, col]
-                item.setText("" if np.isnan(old) else str(old))
-            finally:
-                self._table.blockSignals(False)
+            # NaN is deliberately NOT rejected: DataMatrix allows it
+            # (allow_nan=True) and typing "nan" is how a user records a
+            # missing measurement.  Only the infinities are refused.
+            self._revert_cell_text(item, row, col)
+            QMessageBox.warning(
+                self,
+                _("Invalid Value"),
+                _("The value must be a finite number. Infinite values are not accepted."),
+            )
             return
 
         old_value = self._data[row, col]

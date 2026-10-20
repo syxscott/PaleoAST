@@ -124,11 +124,59 @@ def test_integer_parameters_get_sensible_bounds(registry) -> None:
     Asserted on the bounds mapping the runner consults, not on a widget
     that only exists once a dialog has built it.
     """
-    from views.analysis_runner import _INT_BOUNDS
+    import inspect
+
+    from views.analysis_runner import _INT_BOUNDS, _widen_to_default
 
     for parameter in ("n_permutations", "n_clusters", "n_components", "k"):
         low, high, _step = _INT_BOUNDS[parameter]
         assert low >= 0 and high > low
+
+    # A default outside the range was silently changed on the way to the
+    # analyzer: the plot menu's "not set" sentinel of -1 became 0, which
+    # turned "do not group" into "group by the first column". The range
+    # the spin box is given has to contain the default.
+    for entry in BUILTIN_ANALYSES:
+        plugin = registry.get(entry.name)
+        try:
+            target = plugin._resolve()
+            signature = inspect.signature(getattr(target, entry.method))
+        except Exception:
+            continue
+        for name, param in signature.parameters.items():
+            default = param.default
+            if default is None or isinstance(default, bool):
+                continue
+            if not isinstance(default, int):
+                continue
+            low, high, _step = _INT_BOUNDS.get(name, (0, 100000, 1))
+            low, high = _widen_to_default(low, high, default)
+            assert low <= default <= high, f"{entry.name}.{name} defaults to {default}, outside the range {low}..{high}"
+
+
+def test_the_data_slot_is_never_a_form_field(registry) -> None:
+    """The runner hands the sheet over; the form must not also send it.
+
+    Sending it twice is a TypeError -- "got multiple values for
+    argument" -- which is what happened to orbital_forcing, whose first
+    parameter is a period and not the data at all.
+    """
+    import inspect
+
+    from plugins.base import data_slot_name
+
+    for entry in BUILTIN_ANALYSES:
+        plugin = registry.get(entry.name)
+        try:
+            target = plugin._resolve()
+            signature = inspect.signature(getattr(target, entry.method))
+        except Exception:
+            continue
+        slot = data_slot_name(signature)
+        if slot is None:
+            continue
+        names = {s.name for s in build_specs(entry, plugin)}
+        assert slot not in names, f"{entry.name} offers a field for its data parameter {slot!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -149,18 +197,48 @@ def test_choices_are_found_in_the_analyzers_own_module(registry) -> None:
     )
 
 
-def test_choices_are_found_in_a_shared_module_when_needed(registry) -> None:
-    """clustering declares its own; a module that does not falls back."""
+def test_choices_come_from_the_analyzer_not_from_an_unrelated_module(registry) -> None:
+    """A parameter named "method" means something different everywhere.
 
+    The runner used to fall back on a hard-coded list of "shared
+    vocabulary" modules, so stats/cca.py was offered the clustering
+    module's linkage methods. Picking one of them ran RDA while the
+    result reported "rda" with no error at all. The vocabulary is now
+    found in the analyzer's own module, or in a module it imports --
+    never in an unrelated one.
+    """
     import stats.clustering as clustering
 
     found = _find_choices(clustering, "method")
     assert "ward" in found
-    # And the fallback path, for a module that holds nothing itself.
+
     import types
 
     empty = types.ModuleType("empty_module_for_test")
-    assert _find_choices(empty, "metric"), "fallback should find DISTANCE_METRICS"
+    assert _find_choices(empty, "metric") == (), "an unrelated module's constant must not be offered"
+
+
+def test_every_offered_choice_is_one_the_analyzer_accepts(registry) -> None:
+    """The drop-down must not offer a value the analyzer rejects.
+
+    This is the regression test for the silent substitution: with an
+    unrelated vocabulary in the drop-down, picking "ward" for CCA ran
+    RDA. The offered values are now the analyzer's own.
+    """
+    expected = {
+        "cca": ("method", ("cca", "rda")),
+        "pca": ("method", ("covariance", "correlation")),
+        "nmds": ("method", ("raw_stress", "stress_1")),
+        "paired_rank_test": ("method", ("wilcoxon", "sign")),
+        "extinction": ("method", ("marshall", "strauss_sadler")),
+        "simper": ("metric", ("bray_curtis", "euclidean")),
+        "beta_diversity": ("metric", ("jaccard", "sorensen")),
+    }
+    for entry_name, (parameter, values) in expected.items():
+        specs = _specs(entry_name, registry)
+        assert parameter in specs, f"{entry_name} has no {parameter} field"
+        assert specs[parameter].kind == "choice", f"{entry_name}.{parameter} is not a drop-down"
+        assert tuple(specs[parameter].choices) == values, f"{entry_name}.{parameter} offers the wrong values"
 
 
 def test_an_unknown_parameter_gets_no_choices(registry) -> None:
@@ -183,7 +261,11 @@ def test_mantel_parameters_map_to_the_right_widgets(registry) -> None:
     assert specs["compute_mc_z"].kind == "bool"
     assert specs["labels"].kind == "list_str"
     assert specs["correlation"].kind == "choice"
-    assert specs["data_a"].kind == "array"
+    # data_a is the data slot: the runner hands it the spreadsheet, so it
+    # is not a form field. data_b is a second array, and an array is a
+    # column of the sheet.
+    assert "data_a" not in specs
+    assert specs["data_b"].kind == "array"
 
 
 def test_bare_list_of_labels_maps_to_a_text_field(registry) -> None:
@@ -272,4 +354,97 @@ def test_running_an_analysis_produces_output(dialog) -> None:
     dialog._on_run()
     text = dialog._output.toPlainText()
     assert "K-Means" in text
+    assert "Traceback" not in text
+
+
+# ---------------------------------------------------------------------------
+# The behaviours that were wrong
+# ---------------------------------------------------------------------------
+
+
+def _select(dialog, name: str) -> None:
+    """Put the dialog on a named analysis."""
+    from PyQt6.QtCore import Qt
+
+    for i in range(dialog._list.count()):
+        if dialog._list.item(i).data(Qt.ItemDataRole.UserRole) == name:
+            dialog._list.setCurrentRow(i)
+            return
+    raise AssertionError(f"{name} is not in the list")
+
+
+def test_a_plot_menu_figure_reaches_the_callback(qapp) -> None:
+    """The figure must arrive at the canvas, not as an object repr.
+
+    The plugin wraps whatever the analysis returned in an AnalysisResult,
+    so the Figure is at .data. The runner tested the wrapper itself, the
+    check was always False, and the plot menu never drew anything: the
+    user got "AnalysisResult(name='xy_plot', data=<Figure ...>)" in a
+    text pane, which is exactly what the figure branch exists to avoid.
+    """
+    from matplotlib.figure import Figure
+
+    from views.analysis_runner import AnalysisRunnerDialog
+
+    received = []
+    window = AnalysisRunnerDialog(
+        data_provider=lambda: np.arange(20, dtype=float).reshape(5, 4),
+        on_figure=lambda figure, name: received.append((figure, name)),
+    )
+    try:
+        _select(window, "xy_plot")
+        window._on_run()
+        assert len(received) == 1, "the figure never reached the callback"
+        assert isinstance(received[0][0], Figure)
+        assert received[0][1] == "xy_plot"
+        assert "Figure drawn." in window._output.toPlainText()
+    finally:
+        window.deleteLater()
+
+
+def test_a_number_keeps_the_analyzers_own_default(dialog) -> None:
+    """A spin box clamped the default, and the analysis changed.
+
+    The plot menu's "not set" sentinel of -1 was clamped to 0, so
+    "groups: none" became "groups: the first column".
+    """
+    _select(dialog, "xy_plot")
+    groups = next(s for s in dialog._specs if s.name == "groups")
+    assert groups.default == -1
+    assert groups.value() == -1
+
+
+def test_a_number_with_no_default_is_left_to_the_analyzer(dialog) -> None:
+    """None means "the analyzer decides", so the form must not send a number."""
+    _select(dialog, "pca")
+    components = next(s for s in dialog._specs if s.name == "n_components")
+    assert components.default is None
+    assert components.value() is None
+
+
+def test_an_array_parameter_is_a_column_of_the_sheet(dialog) -> None:
+    """An array used to be a text field that threw the typing away."""
+    _select(dialog, "spectral")
+    arrays = [s for s in dialog._specs if s.kind == "array"]
+    assert arrays, "spectral has no array parameter"
+    assert arrays[0].value() == 0, "the column picker does not start at the first column"
+
+
+def test_an_analysis_the_form_cannot_drive_says_so(dialog) -> None:
+    """A TypeError about a missing argument is not an explanation."""
+    _select(dialog, "phylo_anova")
+    dialog._on_run()
+    text = dialog._output.toPlainText()
+    assert "script console" in text
+    assert "Traceback" not in text
+
+
+def test_the_project_errors_are_shown_as_messages(dialog) -> None:
+    """A PaleoASTError says what went wrong, in the project's voice."""
+
+    _select(dialog, "kmeans")
+    # A single row cannot be clustered, and the analyzer says so.
+    dialog._current_data = lambda: np.zeros((1, 3))
+    dialog._on_run()
+    text = dialog._output.toPlainText()
     assert "Traceback" not in text

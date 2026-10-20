@@ -76,6 +76,9 @@ from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
+# The beta-diversity coefficients this module implements.
+SUPPORTED_METRICS: tuple[str, ...] = ("jaccard", "sorensen")
+
 
 # =============================================================================
 # Result Classes

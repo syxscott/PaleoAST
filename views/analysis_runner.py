@@ -15,10 +15,10 @@ form-building that rots the moment a default changes.
 
 The catalog already knows every analysis by module, class and method, so
 ``inspect.signature`` gives the parameters, and the annotations are
-regular enough to render: across all 78 entries there are integers,
-floats, booleans, strings, arrays, ``list[str]`` and ``list[int]``, and
-**no signature fails to resolve**. So the form is built from the
-signature instead of written per analysis.
+regular enough to render: across every entry in the catalog there are
+integers, floats, booleans, strings, arrays, ``list[str]`` and
+``list[int]``, and **no signature fails to resolve**. So the form is
+built from the signature instead of written per analysis.
 
 WHAT IT IS NOT
 ~~~~~~~~~~~~~~
@@ -30,10 +30,26 @@ hand-written path stays. This is the door for everything that has no
 door yet, which is what makes the new analyses reachable from the
 mouse rather than only from the script console.
 
-Four analyses take a ``PhyloTree`` or a ``dict``; those parameters
+Some analyses take a ``PhyloTree`` or a ``dict``; those parameters
 cannot be built from a text field, so they are reported as unsupported
 here and named in the message, pointing at the console where a tree is
 already in scope.
+
+An analysis that needs something the form has no field for at all --
+a second matrix, a precomputed result -- is refused before it runs, and
+the refusal says which parameter is missing and where to run it
+instead. Letting the call fail with a TypeError about a missing
+argument is not an explanation.
+
+WHERE THE DATA GOES
+~~~~~~~~~~~~~~~~~~~
+The sheet is the analysis's input, and the parameter it belongs
+in is not always the first one: ``growth_model(model, times, values)``
+takes a model name first, and ``orbital_forcing(period_kyr, ...)`` takes
+no data at all. So the parameter is found from the signature -- the
+first one the annotation says is an array, or the one named ``data`` --
+and the sheet is handed to that one. It is not a form field, because
+the form sending it as well is a "got multiple values for argument".
 
 Author: PaleoAST Development Team
 version: 1.1.0
@@ -46,6 +62,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 from matplotlib.figure import Figure
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -69,8 +86,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config.i18n import _
+from plugins.base import AnalysisResult, data_slot_name
 from plugins.catalog import BUILTIN_ANALYSES
 from plugins.registry import get_plugin_registry
+from utils.exceptions import PaleoASTError
 from utils.script_session import _format_result
 
 logger = logging.getLogger(__name__)
@@ -165,6 +184,10 @@ class ParameterSpec:
         choices: Legal values for ``choice``.
         detail: For unsupported parameters, what could not be rendered.
         widget: The built widget.
+        toggle: For a number whose analyzer default is None, the "use
+            this value" checkbox. Unchecked means the analyzer decides.
+        column: For the ``array`` kind, the 0-based column of the sheet
+            the parameter takes.
     """
 
     name: str
@@ -173,6 +196,8 @@ class ParameterSpec:
     widget: QWidget | None = None
     choices: tuple[str, ...] = ()
     detail: str = ""
+    toggle: QCheckBox | None = None
+    column: int = 0
 
     def value(self) -> Any:
         """Read the widget, or None when the field is blank.
@@ -180,10 +205,19 @@ class ParameterSpec:
         A blank field means "leave the analyzer's own default alone",
         which is why every optional parameter is returned as ``None``
         rather than as a zero.
+
+        A number whose analyzer default is None -- "how many
+        components", where None means "as many as the data supports" --
+        carries a toggle. Untouched, the toggle is off and the field
+        reads as None, so the analyzer's own default survives. A spin
+        box cannot be left empty, so without the toggle the form
+        always sent a number and quietly changed what the analysis did.
         """
         if self.kind == "bool":
             return bool(self.widget.isChecked())  # type: ignore[union-attr]
         if self.kind in ("int", "float"):
+            if self.toggle is not None and not self.toggle.isChecked():
+                return None
             return self.widget.value()  # type: ignore[union-attr]
         if self.kind == "choice":
             index = self.widget.currentIndex()  # type: ignore[union-attr]
@@ -197,6 +231,10 @@ class ParameterSpec:
                 return None
             parts = [p.strip() for p in text.split(",") if p.strip()]
             return parts if self.kind == "list_str" else [int(p) for p in parts]
+        if self.kind == "array":
+            # The column number, not the data: the runner turns it into
+            # the column itself.
+            return self.column
         return None
 
 
@@ -204,24 +242,32 @@ def _is_array(annotation: str) -> bool:
     return "NDArray" in annotation or "ndarray" in annotation
 
 
+def _is_number(value: Any) -> bool:
+    """True for a real number, and not for a bool."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _widen_to_default(low: int, high: int, default: Any) -> tuple[int, int]:
+    """A range that contains the analyzer's own default.
+
+    A spin box clamps whatever it is given to its range, so a default
+    outside the range was silently changed on the way to the analyzer.
+    The plot menu's "not set" sentinel of -1 became 0, which turned
+    "do not group" into "group by the first column"; a default of 0 for
+    "permutations" became 1, which turned "no permutation test" into a
+    real one; and a default of 0.0 for "alpha" became 1e-06.
+
+    The range exists to stop a nonsense value, not to override the
+    analyzer, so it gives way to the default.
+    """
+    if default is None:
+        return low, high
+    return min(low, default), max(high, default)
+
+
 def _base_type(annotation: str) -> str:
     """The first alternative of a union, as text."""
     return annotation.split("|")[0].strip().replace("'", "").replace("typing.", "")
-
-
-# Modules that hold shared vocabularies, searched only when the analyzer's
-# own module has nothing. Not a hard-coded list of legal values, because
-# two of these disagree: stats/clustering.py's DISTANCE_METRICS is the
-# scipy pdist set (cityblock, hamming, cosine) while
-# stats/distance_metrics.py's is a different one (manhattan, bray_curtis,
-# chebychev). Finding the real constant where it lives is right; guessing
-# would offer the wrong options half the time.
-_SHARED_VOCABULARY_MODULES = (
-    "stats.distance_metrics",
-    "stats.clustering",
-    "stats.design_tests",
-    "stratigraphy.spectral_analysis",
-)
 
 
 def _find_choices(module: Any, parameter: str) -> tuple[str, ...]:
@@ -233,6 +279,20 @@ def _find_choices(module: Any, parameter: str) -> tuple[str, ...]:
     ``VALID_CORRELATIONS``. A token that matches nothing yields an empty
     tuple and the field degrades to free text rather than silently
     offering the wrong options.
+
+    When the analyzer's own module has no such constant, the modules it
+    has *imported* are searched next. That is the only safe fallback: a
+    parameter named ``method`` or ``metric`` means something different in
+    every domain, so reaching into an unrelated module for a constant with
+    a matching name offered values the analyzer rejects. It also offered a
+    value that silently selected a different analysis -- with
+    stats/clustering.py's ``LINKAGE_METHODS`` in the drop-down, stats/cca.py
+    took ``method='ward'`` and ran RDA instead of CCA, reporting
+    ``method='rda'`` with no error at all.
+
+    A vocabulary the analyzer genuinely shares lives in a module it imports,
+    so it is still found. A vocabulary it does not share is not offered, and
+    the field is free text instead.
     """
     tokens = _CHOICE_TOKEN.get(parameter, ())
     if not tokens:
@@ -251,12 +311,15 @@ def _find_choices(module: Any, parameter: str) -> tuple[str, ...]:
     found = scan(module)
     if found:
         return found
-    import importlib
 
-    for dotted in _SHARED_VOCABULARY_MODULES:
+    import types
+
+    for value in list(vars(module).values()):
+        if not isinstance(value, types.ModuleType):
+            continue
         try:
-            fallback = scan(importlib.import_module(dotted))
-        except Exception:
+            fallback = scan(value)
+        except Exception:  # pragma: no cover - a broken import cannot crash a form
             continue
         if fallback:
             return fallback
@@ -319,8 +382,13 @@ def _build_specs(entry: Any, plugin: Any) -> list[ParameterSpec]:
             )
         ]
     module = inspect.getmodule(getattr(type(target), "analyze", target))
+    data_slot = data_slot_name(signature)
     for name, param in signature.parameters.items():
         if name in _SKIPPED_PARAMETERS:
+            continue
+        if name == data_slot:
+            # The sheet goes here. The form must not also send it, or
+            # the call fails with "got multiple values for argument".
             continue
         text = _annotation_text(param.annotation)
         lowered = text.lower()
@@ -531,35 +599,42 @@ class AnalysisRunnerDialog(QDialog):
         plugin = self._registry.get(entry.name)
         self._specs = build_specs(entry, plugin)
         for spec in self._specs:
-            spec.widget = self._build_widget(spec)
+            widget = self._build_widget(spec)
             if spec.kind == "unsupported":
                 self._form.addRow(
                     spec.name,
                     QLabel(_("Unsupported here: {0}. Use the script console.").format(spec.detail or "?")),
                 )
             else:
-                self._form.addRow(spec.name, spec.widget)
+                self._form.addRow(spec.name, widget)
 
     def _build_widget(self, spec: ParameterSpec) -> QWidget:
         """One widget per parameter kind."""
         if spec.kind == "int":
             low, high, step = _INT_BOUNDS.get(spec.name, (0, 100000, 1))
+            default = spec.default if _is_number(spec.default) else None
+            low, high = _widen_to_default(low, high, default)
             box = QSpinBox()
             box.setRange(low, high)
             box.setSingleStep(step)
-            box.setValue(int(spec.default) if isinstance(spec.default, int) else low)
-            return box
+            box.setValue(int(default) if default is not None else low)
+            spec.widget = box
+            return self._optional_number(spec, box, default)
         if spec.kind == "float":
             low, high, step = _FLOAT_BOUNDS.get(spec.name, (-1e12, 1e12, 0.1))
+            default = spec.default if _is_number(spec.default) else None
+            low, high = _widen_to_default(low, high, default)
             box = QDoubleSpinBox()
             box.setDecimals(6)
             box.setRange(low, high)
             box.setSingleStep(step)
-            box.setValue(float(spec.default) if isinstance(spec.default, float) else 0.0)
-            return box
+            box.setValue(float(default) if default is not None else low)
+            spec.widget = box
+            return self._optional_number(spec, box, default)
         if spec.kind == "bool":
             box = QCheckBox()
             box.setChecked(bool(spec.default) if spec.default is not None else True)
+            spec.widget = box
             return box
         if spec.kind == "choice":
             box = QComboBox()
@@ -567,13 +642,52 @@ class AnalysisRunnerDialog(QDialog):
             box.addItems(list(spec.choices))
             if isinstance(spec.default, str) and spec.default in spec.choices:
                 box.setCurrentText(spec.default)
+            spec.widget = box
             return box
+        if spec.kind == "array":
+            # An array parameter is a column of the sheet. The form picks
+            # the column and the runner hands the column over. This used
+            # to be a text field: it accepted typing and threw it away,
+            # and the analysis then failed with a TypeError about a
+            # missing argument. Eighteen of the catalogued analyses have
+            # an array parameter, and none of them could be run.
+            box = QSpinBox()
+            box.setRange(0, 100000)
+            box.setSingleStep(1)
+            box.setValue(0)
+            spec.widget = box
+            spec.column = 0
+            holder = QWidget()
+            layout = QHBoxLayout(holder)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(box)
+            layout.addWidget(QLabel(_("column of the sheet (0 = the first column)")))
+            layout.addStretch(1)
+            return holder
         line = QLineEdit()
         if isinstance(spec.default, str):
             line.setPlaceholderText(spec.default)
-        elif spec.kind == "array":
-            line.setPlaceholderText(_("(uses the current data)"))
+        spec.widget = line
         return line
+
+    def _optional_number(self, spec: ParameterSpec, box: QWidget, default: Any) -> QWidget:
+        """Put an "use it" toggle in front of a number whose default is None.
+
+        A parameter whose analyzer default is None means "the analyzer
+        decides" -- how many components, how many iterations -- and a
+        spin box cannot be left empty. Without the toggle the form
+        always sent a number and changed what the analysis did.
+        """
+        if default is not None:
+            return box
+        toggle = QCheckBox(_("use this value"))
+        holder = QWidget()
+        layout = QHBoxLayout(holder)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(toggle)
+        layout.addWidget(box)
+        spec.toggle = toggle
+        return holder
 
     # -- running ----------------------------------------------------------
 
@@ -590,11 +704,72 @@ class AnalysisRunnerDialog(QDialog):
             return data.raw_data
         return data
 
+    def _missing_parameters(self, plugin: Any) -> list[str]:
+        """Required parameters the form cannot supply.
+
+        An analysis that needs something the form has no field for -- a
+        second matrix, a tree, a precomputed result -- cannot be run
+        from here. Saying so is better than letting the call fail with
+        a TypeError about a missing argument.
+        """
+        if self._entry is None:
+            return []
+        try:
+            target = plugin._resolve()
+            signature = inspect.signature(getattr(target, self._entry.method))
+        except Exception:
+            return []
+        data_slot = data_slot_name(signature)
+        supplied = {spec.name for spec in self._specs if spec.kind != "unsupported"}
+        missing: list[str] = []
+        for name, param in signature.parameters.items():
+            if name in ("self", "kwargs", "args"):
+                continue
+            if name == data_slot or name in supplied:
+                continue
+            if param.default is inspect.Parameter.empty:
+                missing.append(name)
+        return missing
+
+    def _column_of(self, sheet: Any, index: Any, name: str) -> Any:
+        """One column of the sheet, for a parameter that wants an array.
+
+        Returns None, after explaining itself, when there is no sheet or
+        the column is out of range.
+        """
+        if sheet is None:
+            self._output.setPlainText(_("There is no data to take a column from."))
+            return None
+        array = np.asarray(sheet)
+        if array.ndim == 1:
+            array = array.reshape(-1, 1)
+        if index < 0 or index >= array.shape[1]:
+            self._output.setPlainText(
+                _("{0} is column {1}, but the data has {2} columns.").format(name, index + 1, array.shape[1])
+            )
+            return None
+        return array[:, index]
+
     def _on_run(self) -> None:
         """Collect the form, run the analysis, show its summary."""
         if self._entry is None:
             return
-        kwargs = {}
+        plugin = self._registry.get(self._entry.name)
+        if plugin is None:
+            self._output.setPlainText(_("No analysis named {0}.").format(self._entry.name))
+            return
+
+        missing = self._missing_parameters(plugin)
+        if missing:
+            self._output.setPlainText(
+                _("{0} needs {1}, which this form cannot supply. Run it from the script console.").format(
+                    self._entry.name, ", ".join(missing)
+                )
+            )
+            return
+
+        sheet = self._current_data()
+        kwargs: dict[str, Any] = {}
         for spec in self._specs:
             if spec.kind == "unsupported":
                 continue
@@ -603,15 +778,25 @@ class AnalysisRunnerDialog(QDialog):
             except (ValueError, TypeError) as exc:
                 self._output.setPlainText(_("Could not read {0}: {1}").format(spec.name, exc))
                 return
+            if spec.kind == "array":
+                column = self._column_of(sheet, value, spec.name)
+                if column is None:
+                    return
+                kwargs[spec.name] = column
+                continue
             if value is not None:
                 kwargs[spec.name] = value
-        plugin = self._registry.get(self._entry.name)
-        if plugin is None:
-            self._output.setPlainText(_("No analysis named {0}.").format(self._entry.name))
-            return
+
         self._output.setPlainText(_("Running {0} ...").format(self._entry.name))
         try:
-            outcome = plugin.analyze(self._current_data(), **kwargs)
+            outcome = plugin.analyze(sheet, **kwargs)
+        except PaleoASTError as exc:
+            # The project's own errors say what went wrong, in the
+            # project's voice. A Python traceback in the output pane was
+            # the wrong register: it names file paths and frames the
+            # user cannot act on.
+            self._output.setPlainText(str(exc))
+            return
         except Exception:
             import traceback
 
@@ -620,12 +805,21 @@ class AnalysisRunnerDialog(QDialog):
         # The plot menu returns a matplotlib Figure. Formatting that as text
         # would print an object repr and throw the picture away, so a figure
         # goes to the canvas instead.
-        if isinstance(outcome, Figure):
+        #
+        # The plugin wraps whatever the analysis returned in an
+        # AnalysisResult, so the Figure is at .data. Testing the wrapper
+        # itself was always False, so the callback never fired and the
+        # plot menu never drew anything -- the user got the object repr
+        # in a text pane, which is what this branch exists to prevent.
+        payload = outcome.data if isinstance(outcome, AnalysisResult) else outcome
+        if isinstance(payload, Figure):
             self._output.setPlainText(_("Figure drawn."))
             if self._on_figure is not None:
                 try:
-                    self._on_figure(outcome, self._entry.name)
+                    self._on_figure(payload, self._entry.name)
                 except Exception:
+                    import traceback
+
                     self._output.setPlainText(traceback.format_exc())
                     return
             self._logger.info("analysis runner: %s drew a figure", self._entry.name)

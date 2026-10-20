@@ -44,9 +44,14 @@ from scipy.cluster.hierarchy import cophenet, fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 
 from config.i18n import _
-from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
+from utils.exceptions import (
+    ComputationError,
+    InvalidDataTypeError,
+    MatrixDimensionError,
+    ValidationError,
+)
 from utils.statistics_core import make_rng
-from utils.validators import validate_data_array
+from utils.validators import validate_data_array, validate_distance_metric
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +183,98 @@ DISTANCE_METRICS = [
     "cosine",
     "correlation",
 ]
+
+# The metric names each entry point accepts, written out here rather than
+# read out of the backends at import time.
+#
+# The sets differ because the backends differ: k-medoids measures with
+# scipy's ``pdist`` (and scores the partition with sklearn's
+# ``silhouette_score``), while DBSCAN and k-nearest neighbours hand the
+# name straight to scikit-learn, whose pairwise distances know the scipy
+# set plus a few aliases of their own. They are listed here rather than
+# imported because scikit-learn is an optional dependency of this
+# project: ``stats.clustering`` has to import on a base install, so it
+# cannot import sklearn at module level.
+#
+# ``DISTANCE_METRICS`` above is the subset the user interface offers. It
+# is deliberately *not* what the code enforces: nothing here needs to
+# narrow the accepted names to what one dialog happens to list, and a
+# caller passing a perfectly good "chebyshev" should not be refused for
+# it. The names below are the ones the backends actually understand.
+_PDIST_METRICS = frozenset(
+    {
+        "braycurtis",
+        "canberra",
+        "chebyshev",
+        "cityblock",
+        "correlation",
+        "cosine",
+        "dice",
+        "euclidean",
+        "hamming",
+        "jaccard",
+        "mahalanobis",
+        "matching",
+        "minkowski",
+        "rogerstanimoto",
+        "russellrao",
+        "seuclidean",
+        "sokalmichener",
+        "sokalsneath",
+        "sqeuclidean",
+        "yule",
+    }
+)
+
+_SKLEARN_METRICS = frozenset(
+    _PDIST_METRICS
+    | {
+        "haversine",
+        "l1",
+        "l2",
+        "nan_euclidean",
+        "wminkowski",
+    }
+)
+
+
+def _validate_metric(metric: str, valid_metrics: frozenset[str], context: str) -> str:
+    """Check a distance metric name against the set a call site accepts.
+
+    The project's own validator for this is
+    ``utils.validators.validate_distance_metric``, and it is used here
+    with an explicit list of valid metrics. Its default set (euclidean,
+    manhattan, bray_curtis, jaccard, canberra, chebyshev) is neither
+    this module's ``DISTANCE_METRICS`` nor the scipy pdist set the
+    backends understand, so the caller has to say which set applies to
+    it. That validator raises ``InvalidDataTypeError``; the entry points
+    in this module raise ``ValidationError`` for a bad parameter, so the
+    exception type is translated here.
+
+    Parameters:
+        metric: The metric name to check.
+        valid_metrics: The names this call site accepts.
+        context: Name of the calling method, for the error message.
+
+    Returns:
+        str: The metric name, lower-cased and stripped.
+
+    Raises:
+        ValidationError: If the name is not a string, or is not one of
+            ``valid_metrics``.
+    """
+    if not isinstance(metric, str):
+        raise ValidationError(
+            f"{context}: metric must be a string, got {type(metric).__name__}",
+            details={"metric": repr(metric)},
+        )
+    try:
+        return validate_distance_metric(metric, valid_metrics=sorted(valid_metrics))
+    except InvalidDataTypeError as exc:
+        raise ValidationError(
+            f"{context}: unknown distance metric {metric!r}. Supported metrics: {', '.join(sorted(valid_metrics))}.",
+            details={"metric": metric, "supported_metrics": sorted(valid_metrics)},
+        ) from exc
 
 
 @dataclass
@@ -376,14 +473,22 @@ class KMedoidsResult:
 
     Attributes:
         labels: Cluster index (0-based, contiguous from zero) per sample.
+            The clusters are the ones that exist: when duplicate medoid
+            rows leave a cluster empty, that cluster is dropped and the
+            labels are renumbered, so the label values are always
+            0..n_clusters-1 with no gaps.
         medoid_indices: Row indices of the medoids in the input data.
-            Each is an actual observed sample, not an average.
+            Each is an actual observed sample, not an average. One per
+            cluster, in the same order as the label values.
         medoid_coordinates: The medoids themselves, one row per cluster,
             in the same order as ``labels`` values 0..n_clusters-1.
         cost: PAM objective, the summed distance from each sample to
             the medoid of its cluster.
         silhouette: Mean silhouette coefficient, or NaN when undefined.
-        n_clusters: Number of clusters found.
+        n_clusters: Number of clusters found, i.e. the number of
+            non-empty clusters. It is smaller than the requested k when
+            duplicate samples left some medoids owning nothing, because
+            an empty cluster is not a cluster.
         n_iter: SWAP iterations performed (0 means BUILD alone sufficed).
         n_samples: Number of samples clustered.
         metric: Distance metric used.
@@ -525,7 +630,10 @@ class KNNResult:
             ``classes``. Empty when no labels were supplied.
         classes: The class labels seen, sorted.
         neighbor_counts: How many of each sample's neighbours carried
-            each class. Same shape as ``confusion``.
+            each class. Shape (n_queries, n_classes): one row per query
+            sample, one column per class. It is *not* the shape of
+            ``confusion``, which is (n_classes, n_classes) and counts
+            queries rather than neighbours.
         n_neighbors: k used.
         n_train: Training samples the classifier was fitted on.
         n_queries: Samples classified.
@@ -921,17 +1029,31 @@ class ClusteringAnalyzer:
         needs no random seed, because both steps break ties by lowest
         index and the result is therefore reproducible.
 
+        Duplicate samples can leave a cluster empty: two identical
+        medoids tie, every sample goes to the first of them, and the
+        second owns nobody. Such a cluster is dropped and the labels
+        renumbered, so the reported ``n_clusters`` is the number of
+        clusters that exist rather than the number asked for. It can
+        only be smaller, never larger, and it is smaller only when the
+        data cannot support the request.
+
         Parameters:
             data: Data matrix (n_samples x n_variables) or precomputed
                 distance matrix when ``precomputed`` is True
             n_clusters: Number of clusters k
-            metric: Distance metric (ignored for a precomputed matrix)
+            metric: Distance metric, one of the names scipy's
+                ``pdist`` understands (ignored for a precomputed
+                matrix)
             precomputed: Treat ``data`` as a distance matrix
             max_iter: Cap on SWAP iterations
             compute_silhouette: Report the silhouette coefficient
 
         Returns:
             KMedoidsResult
+
+        Raises:
+            ValidationError: If a parameter is out of range, or the
+                metric name is not one this method can measure with.
         """
         with self._lock:
             X = validate_data_array(data, name="data")
@@ -954,6 +1076,12 @@ class ClusteringAnalyzer:
                     f"max_iter must be at least 1, got {max_iter}",
                     details={"max_iter": max_iter},
                 )
+            # The metric is measured with scipy's pdist, so the names it
+            # accepts are the legal ones here. An unknown name used to
+            # reach scipy and come back as a bare "Unknown Distance
+            # Metric" ValueError, which is not one of this project's
+            # exceptions and says nothing about which method refused.
+            metric = _validate_metric(metric, _PDIST_METRICS, "K-medoids")
 
             effective_metric = "precomputed" if precomputed else metric
             dm = self._resolve_distances(X, metric, precomputed, "K-medoids")
@@ -971,21 +1099,42 @@ class ClusteringAnalyzer:
 
             # Each sample joins its closest medoid, so cluster i is exactly
             # the one the i-th medoid owns. That keeps labels and
-            # medoid_coordinates aligned row for row. With duplicate
-            # medoid rows a cluster can come out empty (two identical
-            # medoids tie, and argmin keeps only the first); that is
-            # reported honestly by cluster_sizes() rather than hidden.
+            # medoid_coordinates aligned row for row.
             labels = np.argmin(dm[:, medoid_idx], axis=1).astype(int)
+
+            # With duplicate medoid rows a cluster can come out empty: two
+            # identical medoids tie, and argmin keeps only the first. An
+            # empty cluster is not a cluster, so the medoids that own
+            # nothing are dropped and the labels renumbered from zero.
+            # The medoids are renumbered with them, so medoid_indices[j]
+            # is still the medoid of cluster j and the reported
+            # n_clusters, the label values and cluster_sizes() all
+            # describe the same partition.
+            occupied = [index for index in range(len(medoids)) if np.any(labels == index)]
+            if len(occupied) < len(medoids):
+                remap = np.full(len(medoids), -1, dtype=int)
+                for new_index, old_index in enumerate(occupied):
+                    remap[old_index] = new_index
+                labels = remap[labels]
+                medoid_idx = medoid_idx[occupied]
+            n_clusters_found = len(occupied)
 
             coordinates = dm[medoid_idx] if precomputed else X[medoid_idx]
 
             silhouette = float("nan")
-            if compute_silhouette and 1 < n_clusters < n_samples:
+            if compute_silhouette and 1 < n_clusters_found < n_samples:
                 silhouette_fn = _sklearn_backend().silhouette_score
                 try:
-                    silhouette = float(
-                        silhouette_fn(dm, labels) if precomputed else silhouette_fn(X, labels, metric=metric)
-                    )
+                    if precomputed:
+                        # A precomputed matrix is a distance matrix, not
+                        # a table of features: without metric="precomputed"
+                        # sklearn reads the n x n matrix as n samples with
+                        # n features and scores a partition of the
+                        # distance profiles, which is a different number
+                        # from the one the raw path reports.
+                        silhouette = float(silhouette_fn(dm, labels, metric="precomputed"))
+                    else:
+                        silhouette = float(silhouette_fn(X, labels, metric=metric))
                 except ValueError:
                     silhouette = float("nan")
 
@@ -995,7 +1144,7 @@ class ClusteringAnalyzer:
                 medoid_coordinates=np.asarray(coordinates, dtype=float),
                 cost=float(cost),
                 silhouette=silhouette,
-                n_clusters=n_clusters,
+                n_clusters=n_clusters_found,
                 n_iter=int(n_iter),
                 n_samples=n_samples,
                 metric=effective_metric,
@@ -1041,13 +1190,18 @@ class ClusteringAnalyzer:
             eps: Neighbourhood radius
             min_samples: Points within ``eps`` (including the point
                 itself) required for a core point
-            metric: Distance metric (ignored for a precomputed matrix)
+            metric: Distance metric, one of the names scikit-learn's
+                DBSCAN accepts (ignored for a precomputed matrix)
             precomputed: Treat ``data`` as a distance matrix
             compute_silhouette: Report the silhouette over clustered
                 samples only
 
         Returns:
             DBSCANResult
+
+        Raises:
+            ValidationError: If a parameter is out of range, or the
+                metric name is not one this method can measure with.
         """
         with self._lock:
             X = validate_data_array(data, name="data")
@@ -1070,6 +1224,22 @@ class ClusteringAnalyzer:
                 raise ValidationError(
                     f"DBSCAN needs at least 2 samples, got {n_samples}",
                     details={"n_samples": n_samples},
+                )
+
+            # DBSCAN measures with scikit-learn, so the names scikit-learn
+            # accepts are the legal ones here. An unknown name used to
+            # reach sklearn and come back as an InvalidParameterError,
+            # which is not one of this project's exceptions.
+            metric = _validate_metric(metric, _SKLEARN_METRICS | {"precomputed"}, "DBSCAN")
+            if not precomputed and metric == "precomputed":
+                # 'precomputed' tells sklearn the data *is* a distance
+                # matrix, which is what the precomputed flag is for.
+                # Passing both ways leaves sklearn reading the
+                # observations as a distance matrix.
+                raise ValidationError(
+                    "DBSCAN: metric 'precomputed' means the data is already a distance matrix. "
+                    "Pass precomputed=True instead of metric='precomputed'.",
+                    details={"metric": metric},
                 )
 
             effective_metric = "precomputed" if precomputed else metric
@@ -1095,11 +1265,19 @@ class ClusteringAnalyzer:
             if compute_silhouette and n_clusters > 1 and n_noise < n_samples:
                 silhouette_fn = _sklearn_backend().silhouette_score
                 try:
-                    silhouette = float(
-                        silhouette_fn(X_in[clustered], labels[clustered])
-                        if precomputed
-                        else silhouette_fn(X[clustered], labels[clustered], metric=metric)
-                    )
+                    if precomputed:
+                        # The score needs the distances *between* the
+                        # clustered samples, so the matrix is cut down to
+                        # its clustered square sub-matrix, and it is
+                        # passed as a distance matrix: without
+                        # metric="precomputed" sklearn reads the rows as
+                        # features, and a row selection (rather than a
+                        # square sub-matrix) is not a distance matrix at
+                        # all.
+                        sub_dm = X_in[np.ix_(clustered, clustered)]
+                        silhouette = float(silhouette_fn(sub_dm, labels[clustered], metric="precomputed"))
+                    else:
+                        silhouette = float(silhouette_fn(X[clustered], labels[clustered], metric=metric))
                 except ValueError:
                     silhouette = float("nan")
 
@@ -1148,9 +1326,10 @@ class ClusteringAnalyzer:
         Scoring is optional. Passing ``query_labels`` computes accuracy
         and a confusion matrix; omitting it leaves accuracy NaN rather
         than inventing a score from the training fit. Note that
-        classifying the training rows themselves is in-sample -- a point
-        is always its own nearest neighbour -- so the accuracy would be
-        1.0 by construction. Score on held-out data.
+        classifying the training rows themselves is in-sample, and an
+        in-sample score is inflated rather than perfect: a point's own
+        vote is only one of the k votes, so with k > 1 its own class can
+        be outvoted by its neighbours. Score on held-out data.
 
         Parameters:
             train_data: Labelled reference matrix (n_train x n_variables)
@@ -1159,13 +1338,18 @@ class ClusteringAnalyzer:
                 which is in-sample and scores optimistically.
             n_neighbors: k, must be at least 1 and no larger than the
                 number of training samples
-            metric: Distance metric
+            metric: Distance metric, one of the names scikit-learn's
+                k-nearest neighbours accepts
             weights: 'uniform' (each neighbour one vote) or 'distance'
                 (closer neighbours count more)
             query_labels: True classes for the queries, for scoring
 
         Returns:
             KNNResult
+
+        Raises:
+            ValidationError: If a parameter is out of range, or the
+                metric name is not one this method can measure with.
         """
         with self._lock:
             X_train = validate_data_array(train_data, name="train_data")
@@ -1196,6 +1380,20 @@ class ClusteringAnalyzer:
                 raise ValidationError(
                     f"weights must be 'uniform' or 'distance', got {weights!r}",
                     details={"weights": weights},
+                )
+            # The classifier is fitted on observations, so the names
+            # scikit-learn's neighbour search accepts are the legal ones
+            # here. An unknown name used to reach sklearn and come back
+            # as an InvalidParameterError, which is not one of this
+            # project's exceptions.
+            metric = _validate_metric(metric, _SKLEARN_METRICS | {"precomputed"}, "k-nearest neighbours")
+            if metric == "precomputed":
+                # 'precomputed' would mean the training data is already a
+                # distance matrix. This entry point takes observations.
+                raise ValidationError(
+                    "k-nearest neighbours: metric 'precomputed' would mean the training data is already a "
+                    "distance matrix, which this method does not accept; it takes observations.",
+                    details={"metric": metric},
                 )
 
             if query_data is None:
@@ -1253,7 +1451,10 @@ class ClusteringAnalyzer:
                     neighbor_counts[row, class_pos] += 1
 
             result = KNNResult(
-                predictions=list(predictions),
+                # Plain Python values, so a string class label survives
+                # as a str and a numeric one as an int rather than a
+                # numpy scalar that json cannot serialise.
+                predictions=[_jsonable(p) for p in predictions],
                 accuracy=accuracy,
                 confusion=confusion,
                 classes=[_jsonable(c) for c in classes.tolist()],

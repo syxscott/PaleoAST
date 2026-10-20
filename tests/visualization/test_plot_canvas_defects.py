@@ -481,3 +481,29 @@ class TestBackwardCompat:
         canvas.plot_pcoa_scores(pcoa_result)
         assert canvas._current_plot_type == "pcoa"
         assert len(canvas._ax.collections) >= 1
+
+
+def test_an_adopted_figure_is_themed(qt_app, canvas):
+    """A figure built elsewhere must not arrive in the wrong colours.
+
+    The plot menu builds its figures in another module, with that
+    module's style, so a figure that was light stays light. In the dark
+    theme it arrived with a white background and dark text -- a bright
+    rectangle in a dark window. Every other path in this class themes
+    the figure it draws; the adoption path now does as well.
+    """
+    from visualization.generic_plots import GenericPlotter
+
+    # The plot menu draws in the light "paper" style, whatever the
+    # application theme is.
+    figure = GenericPlotter().plot_xy(np.array([1.0, 2.0, 3.0]), np.array([1.0, 4.0, 9.0]))
+    assert figure.patch.get_facecolor()[:3] == (1.0, 1.0, 1.0)
+
+    canvas.setDarkTheme(True)
+    themed = canvas._figure.patch.get_facecolor()
+
+    canvas.plot_figure(figure)
+    assert canvas._figure is figure
+    assert canvas._current_plot_type == "figure"
+    assert figure.patch.get_facecolor() == themed
+    assert figure.axes[0].get_facecolor() != (1.0, 1.0, 1.0, 1.0)

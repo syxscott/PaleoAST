@@ -489,15 +489,54 @@ class DATParser:
 
         return True
 
+    # A well-formed thousands grouping: 1-3 leading digits followed by one
+    # or more groups of exactly three digits ("1,234", "12,345.678",
+    # "1.234.567").  "1.2.3" is NOT well formed -- the groups are one digit
+    # each -- so it stays a label even though _parse_numeric_value would
+    # happily strip the dots and call it 123.
+    _WELL_FORMED_THOUSANDS = re.compile(r"^\d{1,3}(?:[.,]\d{3})+$")
+
     def _is_label(self, value: str) -> bool:
-        """Check if a value looks like a label (non-numeric)."""
-        # Remove quotes if present
+        """Check if a value looks like a label (non-numeric).
+
+        The test MUST agree with :meth:`_parse_numeric_value`.  When the two
+        disagreed, a thousand-separated number in the FIRST data column was
+        classified as a row label: the old implementation did
+        ``float(value.replace(",", "."))``, which turns "1,234.56" into
+        "1.234.56" -- a ValueError -- so the cell became a label, the whole
+        column vanished from ``data``, the row labels became numbers, and the
+        field count stayed self-consistent.  The result was a silently
+        missing variable and no error at all.  (The same cell in the second
+        column parsed fine, which is why the existing tests missed it: they
+        only ever put thousand separators in a row label.)
+
+        Two deliberate refinements over "whatever _parse_numeric_value
+        accepts":
+
+        * A missing-value sentinel ("?", "*", "NA", ...) parses to NaN and is
+          not a measurement, so it keeps the historical label behaviour.
+        * _parse_numeric_value is deliberately lenient about separators, and
+          it reads "1.2.3" as 123 (European thousands, minus the grouping
+          check).  A taxon name or a version string must not be silently
+          turned into a number, so a value with more than one separator of
+          the same kind is only treated as numeric when the grouping is
+          well formed.
+        """
         value = value.strip("\"'")
         try:
-            float(value.replace(",", "."))
-            return False
+            parsed = self._parse_numeric_value(value)
         except ValueError:
             return True
+        if np.isnan(parsed):
+            return True
+        sign_stripped = value.lstrip("+-")
+        comma_count = sign_stripped.count(",")
+        dot_count = sign_stripped.count(".")
+        if (comma_count > 1 or dot_count > 1) and not self._WELL_FORMED_THOUSANDS.match(
+            sign_stripped
+        ):
+            return True
+        return False
 
 
 def parse_dat_file(file_path: str) -> PASTData:

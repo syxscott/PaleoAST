@@ -40,11 +40,17 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError, MatrixDimensionError
+from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
 from utils.statistics_core import make_rng
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
+
+# The constrained-ordination methods this analyzer implements. Declared
+# here so the analysis runner's drop-down offers exactly these: it used
+# to offer stats/clustering.py's linkage methods, and picking one of
+# those ran RDA while the result said "rda" with no error at all.
+SUPPORTED_METHODS: tuple[str, ...] = ("cca", "rda")
 
 
 @dataclass
@@ -225,7 +231,18 @@ class CCAAnalyzer:
             if n_components < 1:
                 raise MatrixDimensionError("Cannot perform constrained ordination: insufficient dimensions")
 
-            # Perform analysis based on method
+            # Perform analysis based on method.
+            #
+            # The method is checked first. Anything that was not "cca"
+            # used to fall through to RDA, so a mistyped method -- or one
+            # the analysis runner's drop-down offered, because it had
+            # borrowed an unrelated module's vocabulary -- silently ran a
+            # different analysis and reported "rda" with no error at all.
+            if method not in SUPPORTED_METHODS:
+                raise ValidationError(
+                    f"method must be one of {SUPPORTED_METHODS}, got {method!r}",
+                    details={"method": method, "supported": list(SUPPORTED_METHODS)},
+                )
             if method == "cca":
                 result = self._analyze_cca(Y_arr, X_arr, n_components, species_names, env_names)
             else:

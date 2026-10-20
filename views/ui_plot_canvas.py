@@ -530,6 +530,14 @@ class InteractivePlotCanvas(QWidget):
         self._canvas.figure = figure
         axes = list(figure.axes)
         self._adopt_axes(axes[0] if axes else figure.add_subplot(111))
+        # The adopted figure is themed here too. It was built in another
+        # module, with that module's rcParams, so in the dark theme it
+        # arrived with a white background and dark text -- a bright
+        # rectangle in a dark window. Every other path in this class
+        # themes the figure it draws; this one now does as well, and the
+        # plot type is recorded so a later theme switch reaches it.
+        self._current_plot_type = "figure"
+        self._apply_axes_theme()
         self._canvas.draw_idle()
 
     def _reset_axes(self, *args, **kwargs):

@@ -55,22 +55,40 @@ __all__ = ["PlotMenuAnalyzer"]
 NOT_SET = -1
 
 
-def _matrix(data: object) -> npt.NDArray[np.float64]:
-    """The sheet as a 2-D float matrix.
+def _matrix(data: object) -> npt.NDArray:
+    """The sheet as a 2-D array.
 
     The runner passes whatever the data provider holds, which is usually a
     matrix but is a bare column when one series is loaded. A 1-D input is
     promoted to a single column rather than rejected, because "one column"
     is a legitimate thing to plot and the user did not do anything wrong.
+
+    A text column is kept as it is. Casting the whole sheet to float
+    destroyed the column the plot menu is most often asked to draw -- a
+    taxon name -- and raised a raw ValueError when it could not, so a
+    sheet with any text in it could not be plotted at all. The plotter
+    that draws a column knows whether it needs numbers, so the check
+    belongs there.
     """
-    arr = np.asarray(data, dtype=float)
+    arr = np.asarray(data, dtype=object)
     if arr.ndim == 1:
         arr = arr.reshape(-1, 1)
     if arr.ndim != 2:
         raise DataValidationError(f"the plot menu needs a 1-D or 2-D data set; got shape {arr.shape}")
     if arr.size == 0:
         raise DataValidationError("the data set is empty")
+    if all(_is_number(v) for v in arr.ravel()):
+        # A sheet of numbers stays a float sheet, so the plotter gets
+        # the dtype it expects.
+        arr = arr.astype(float)
     return arr
+
+
+def _is_number(value: object) -> bool:
+    """True for a number, and for a missing value."""
+    if value is None:
+        return True
+    return isinstance(value, (int, float, np.integer, np.floating))
 
 
 def _column(matrix: npt.NDArray[np.float64], index: int, name: str) -> npt.NDArray[np.float64]:
@@ -86,17 +104,25 @@ def _column(matrix: npt.NDArray[np.float64], index: int, name: str) -> npt.NDArr
     return matrix[:, index]
 
 
-def _labels_for(matrix: npt.NDArray[np.float64], index: int, fallback: str) -> list[str] | None:
-    """Row names for the first column, when it is a text column.
+def _labels(text: object, name: str) -> list[str] | None:
+    """Group names, comma separated, for a grouped plot.
 
-    Group columns are the one place the sheet is routinely categorical, and a
-    pie chart labelled "0.0 / 1.0" is useless. Text columns arrive from the
-    spreadsheet as strings; ``_matrix`` cast them away, so they are read back
-    from the raw data here rather than guessed at.
+    The plotter factorises a grouping column by first appearance, so the
+    names go in that order: the first name is the first new value the
+    column shows, the second the next new one, and so on. They are
+    optional -- without them the plotter falls back to "Group 1",
+    "Group 2" -- but a legend of "Group 1" is not much use next to a
+    column of taxon names.
     """
-    if index == NOT_SET or index >= matrix.shape[1]:
+    if text is None:
         return None
-    return [fallback] * matrix.shape[0]
+    raw = str(text).strip()
+    if not raw:
+        return None
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if not parts:
+        raise DataValidationError(f"{name} needs some names, e.g. T. rex, S. allops")
+    return parts
 
 
 def _ints(text: object, name: str) -> list[int]:
@@ -131,6 +157,7 @@ class PlotMenuAnalyzer:
         x: int = 0,
         y: int = 1,
         groups: int = NOT_SET,
+        labels: str = "",
         title: str = "",
         log_x: bool = False,
         log_y: bool = False,
@@ -141,6 +168,7 @@ class PlotMenuAnalyzer:
             _column(m, x, "x"),
             _column(m, y, "y"),
             groups=_column(m, groups, "groups") if groups != NOT_SET else None,
+            labels=_labels(labels, "labels"),
             title=title,
             log_x=log_x,
             log_y=log_y,
@@ -231,7 +259,14 @@ class PlotMenuAnalyzer:
         return self._plotter.plot_ternary(_column(m, a, "a"), _column(m, b, "b"), _column(m, c, "c"), title=title)
 
     def plot_bubble(
-        self, data: object, x: int = 0, y: int = 1, size: int = 2, groups: int = NOT_SET, title: str = ""
+        self,
+        data: object,
+        x: int = 0,
+        y: int = 1,
+        size: int = 2,
+        groups: int = NOT_SET,
+        labels: str = "",
+        title: str = "",
     ) -> Figure:
         m = _matrix(data)
         return self._plotter.plot_bubble(
@@ -239,6 +274,7 @@ class PlotMenuAnalyzer:
             _column(m, y, "y"),
             _column(m, size, "size"),
             groups=_column(m, groups, "groups") if groups != NOT_SET else None,
+            labels=_labels(labels, "labels"),
             title=title,
         )
 
@@ -249,10 +285,26 @@ class PlotMenuAnalyzer:
         )
 
     def plot_3d(
-        self, data: object, x: int = 0, y: int = 1, z: int = 2, mode: str = "scatter", title: str = ""
+        self,
+        data: object,
+        x: int = 0,
+        y: int = 1,
+        z: int = 2,
+        groups: int = NOT_SET,
+        labels: str = "",
+        mode: str = "scatter",
+        title: str = "",
     ) -> Figure:
         m = _matrix(data)
-        return self._plotter.plot_3d(_column(m, x, "x"), _column(m, y, "y"), _column(m, z, "z"), mode=mode, title=title)
+        return self._plotter.plot_3d(
+            _column(m, x, "x"),
+            _column(m, y, "y"),
+            _column(m, z, "z"),
+            groups=_column(m, groups, "groups") if groups != NOT_SET else None,
+            labels=_labels(labels, "labels"),
+            mode=mode,
+            title=title,
+        )
 
     # -- diagram kinds whose input is typed rather than picked -------------
 
