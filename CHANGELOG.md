@@ -134,6 +134,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   headless run has nobody to answer it: the suite stopped dead instead of
   failing. The shared state is now cleared around every test, so no test
   inherits another one's data.
+- **The dark theme no longer stops at the application chrome**
+  (`views/ui_main_window.py`) -- a canvas is built fresh for every analysis,
+  so it is never a child of the window at the moment the theme is
+  applied, and the propagation only reached the plots that happened to
+  exist then. Every figure the user produced in the dark theme came out
+  on a white background: a bright rectangle in a dark application, and
+  the dark figures the design system goes to the trouble of building were
+  unreachable for every plot the user actually made. The workspace now
+  tells a new plot which theme is in force.
+- **Every control that can take the keyboard focus now shows where it is**
+  (`config/design_system.py`) -- only the text inputs had a focus ring. A
+  button, a combo box, a check box or the navigation tree could take the
+  focus and show nothing at all, so a keyboard user had no way to tell where
+  they were. VSCode's rule is that the focus indicator is always visible,
+  and the ring is now drawn in one token, re-stepped for the dark theme.
+  The default button takes the ring in its own on-fill colour, because a
+  ring in the accent colour on an accent-coloured button is the ring you
+  cannot see.
+- **The navigation tree can be reached with the keyboard**
+  (`views/ui_navigation.py`) -- it was `ClickFocus`, so it could only be
+  reached with the mouse. A widget that cannot take the focus cannot show
+  a focus ring either, so the two were the same defect seen twice.
+- **The palette's eighth colour can be seen on the dark axes**
+  (`config/colors.py`) -- Okabe & Ito's eighth colour is black, which is
+  right for the white background the palette was designed for and wrong
+  for the application's dark axes: measured against `#1E293B` it is
+  1.44:1, a series that is there and cannot be seen. The registry is not
+  modified, so the exported figure still uses black; the colour is lifted
+  where the figure is painted, and only on a dark surface. The slot keeps
+  its index and the palette keeps its length, so the eighth group is still
+  the eighth group.
+- **The plot modules no longer carry their own series colours**
+  (`views/ui_plot_canvas.py`, `visualization/pca_plot.py`,
+  `visualization/spectral_plot.py`, `visualization/evo_rate_plot.py`) --
+  sixty-eight hard-coded values from the deprecated flat-UI palette, which
+  the chrome check deliberately did not cover because a series colour is a
+  data colour. They now read the registered palette, the same list the R
+  export is handed, so the figure in the window and the figure in the file
+  are finally the same figure.
+- **The 4px grid is enforced in the UI layer too**
+  (`tests/test_design_system_grid.py`) -- the guard only read
+  `config/design_system.py`, so eighteen off-grid padding and margin
+  literals in the widgets' own inline style sheets went unnoticed. They are
+  on the grid now, and the guard covers `views/` and `visualization/`.
+
+### Changed
+- **`DESIGN_SYSTEM_SPECIFICATION.md` is now a pointer, not a palette**
+  -- the file was 350 lines of the superseded flat-UI scheme, every value
+  in it now forbidden by the conformance test. It says where the tokens
+  live and what the three rules are, and points at
+  `config/design_system.py`.
 
 ## [1.1.2] - 2026-10-07
 

@@ -91,8 +91,14 @@ def _isolate_shared_state():
     dirty state, and a dirty state is what makes a later ``MainWindow.close()``
     raise a modal dialog that blocks forever.
     """
+    # The palette is adjusted for the surface the figures are drawn on, and
+    # that surface is process-wide state too.  It is cleared on both sides
+    # of the test, so no test inherits the dark theme's palette.
+    from config.colors import set_figure_background
     from models.state_manager import get_state_manager
 
+    set_figure_background("")
     get_state_manager().clear()
     yield
     get_state_manager().clear()
+    set_figure_background("")

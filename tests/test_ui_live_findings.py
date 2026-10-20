@@ -312,6 +312,47 @@ class TestPreferencesButtonsAreTranslated:
 
 
 # =============================================================================
+# 5. the dark theme has to reach the figures the user makes
+# =============================================================================
+class TestDarkThemeReachesNewFigures:
+    def test_a_figure_built_after_the_theme_is_dark_too(self, qapp):
+        """A canvas is built fresh for every analysis.
+
+        It is therefore never a child of the window at the moment the
+        theme is applied, and the propagation in ``setDarkTheme`` only
+        reaches the plots that already existed.  Every figure the user
+        produced in the dark theme came out on a white background -- a
+        bright rectangle in a dark application -- until the workspace
+        told the new plot which theme was in force.
+
+        Found by running the application: the theme was dark, the PCA
+        score plot was light.
+        """
+        import matplotlib.pyplot as plt
+
+        from views.ui_main_window import MainWindow
+        from views.ui_plot_canvas import InteractivePlotCanvas
+
+        # The canvas themes matplotlib globally, so the global settings are
+        # restored afterwards.  Left dark, every figure built by another
+        # module in the rest of the session comes out dark too, and the
+        # tests that assert on a light "paper" figure start failing for
+        # reasons that have nothing to do with what they are testing.
+        before = plt.rcParams.copy()
+        window = MainWindow()
+        try:
+            window._is_dark_theme = True
+            plot = InteractivePlotCanvas()
+            window._add_plot_to_workspace(plot, "test figure")
+            assert plot._is_dark_theme is True, (
+                "a figure created while the dark theme was in force was not told about it"
+            )
+        finally:
+            plt.rcParams.update(before)
+            _close_without_prompting(window, qapp)
+
+
+# =============================================================================
 # the example picker's own description of its datasets
 # =============================================================================
 def test_every_offered_example_dataset_has_a_working_loader():

@@ -80,7 +80,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.colors import DEFAULT_PALETTE_NAME, set_current_palette
+from config.colors import DEFAULT_PALETTE_NAME, set_current_palette, set_figure_background
 from config.constants import APP_VERSION
 from config.design_system import (
     BorderRadius,
@@ -799,7 +799,7 @@ class RibbonGroup(QWidget):
                 color: {c.text_primary};
                 border: 1px solid {c.border_light};
                 border-radius: 3px;
-                padding: 2px 6px;
+                padding: 0px 4px;
                 font-size: {t.body_size}px;
                 min-width: 90px;
                 max-height: 24px;
@@ -816,7 +816,7 @@ class RibbonGroup(QWidget):
                 border-left: 3px solid transparent;
                 border-right: 3px solid transparent;
                 border-top: 5px solid {c.text_secondary};
-                margin-right: 2px;
+                margin-right: 0px;
             }}
             QComboBox QAbstractItemView {{
                 background: {c.bg_primary};
@@ -2939,6 +2939,12 @@ class MainWindow(QMainWindow):
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme and propagate to all child widgets."""
         self._is_dark_theme = is_dark
+        # The categorical palette was designed for a white background, and
+        # one of its colours -- Okabe & Ito's black -- cannot be seen on
+        # the dark axes.  The palette is told which surface it is being
+        # painted on so it can lift that one colour; the registry itself
+        # is untouched, so the exported figure still uses black.
+        set_figure_background(get_palette(is_dark).bg_secondary)
         from config.design_system import get_stylesheet
 
         self.setStyleSheet(get_stylesheet(is_dark))
@@ -3820,9 +3826,29 @@ class MainWindow(QMainWindow):
             removed += 1
         return removed
 
+    def _theme_new_workspace_widget(self, widget: object) -> None:
+        """Tell a freshly built workspace widget which theme is in force.
+
+        A canvas is built fresh for every analysis, so it is never a child
+        of the window at the moment the theme is applied: the propagation
+        in :meth:`setDarkTheme` only reaches the plots that happened to
+        exist then.
+
+        Without this, every figure the user produced in the dark theme came
+        out on a white background -- a bright rectangle in a dark
+        application -- and the dark figures the design system goes to the
+        trouble of building were reachable only for the figures that
+        already existed when the theme was switched.  Which is exactly
+        what happened: the theme was dark, the PCA score plot was light.
+        """
+        setter = getattr(widget, "setDarkTheme", None)
+        if callable(setter):
+            setter(self._is_dark_theme)
+
     def _add_plot_to_workspace(self, plot: InteractivePlotCanvas, name: str) -> int:
         """Add a new plot to the workspace, evicting the oldest if needed."""
         self._evict_excess_result_tabs()
+        self._theme_new_workspace_widget(plot)
         return self._workspace.addWidget(plot, name)
 
     def _add_tab_to_workspace(self, widget: object, name: str, focus: bool = True) -> int:
@@ -3841,6 +3867,7 @@ class MainWindow(QMainWindow):
         plots hidden behind it.
         """
         idx = self._workspace.addWidget(widget, name)
+        self._theme_new_workspace_widget(widget)
         if focus:
             self._workspace.setCurrentIndex(idx)
         return idx
