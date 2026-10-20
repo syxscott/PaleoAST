@@ -60,9 +60,11 @@ sys.path.insert(0, str(REPO))
 from scripts.validation_matrix import build
 
 # 2026-10-20: 74 of 113 analyses rested on a unit test alone.
+# The first batch of R cross-validation (the univariate tests against
+# base R) took it to 63.
 # Lower it when an analysis gains an R comparison, a golden reference or
 # a property test -- and say in the commit message which one.
-THIN_BASELINE = 74
+THIN_BASELINE = 63
 
 # The ratchet for the other end: every analysis the interface offers must
 # be reachable by at least one test.

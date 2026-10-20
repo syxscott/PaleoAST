@@ -26,14 +26,29 @@ import pytest
 
 # Skip the whole module at import time when there is no bridge to R. This is
 # what makes `pytest tests/` work on a machine without R.
-rpy2 = pytest.importorskip(
-    "rpy2",
-    reason="cross-validation requires rpy2 and a working R installation",
-)
-
-from rpy2 import robjects
-from rpy2.robjects import FloatVector, ListVector, StrVector
-from rpy2.robjects.packages import importr
+#
+# The guard has to be wider than an ImportError.  rpy2 being INSTALLED is
+# not the same as rpy2 being ABLE TO REACH R: with a broken R (an R_HOME
+# that points somewhere R is not built, say) the import succeeds and the
+# failure arrives a moment later, as a RuntimeError from R's own start-up.
+# A plain importorskip would let that through as a collection ERROR --
+# one broken R on one developer machine, and the whole cross-validation
+# directory fails instead of skipping.  The file's own rule is "a missing
+# R skips its tests, it does not fail them", and a broken R is the same
+# situation.
+try:
+    rpy2 = pytest.importorskip(
+        "rpy2",
+        reason="cross-validation requires rpy2 and a working R installation",
+    )
+    from rpy2 import robjects
+    from rpy2.robjects import FloatVector, ListVector, StrVector
+    from rpy2.robjects.packages import importr
+except Exception as exc:
+    pytest.skip(
+        f"cross-validation requires rpy2 and a working R installation: {exc}",
+        allow_module_level=True,
+    )
 
 __all__ = [
     "FloatVector",

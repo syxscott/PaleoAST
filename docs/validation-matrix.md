@@ -12,13 +12,13 @@ What each column means:
 
 ```
 analyses:            113
-  compared with R:    38  (34%)
+  compared with R:    49  (43%)
   golden reference:   37  (33%)
   property test:      32  (28%)
   unit test:         113  (100%)
   no test at all:      0  (0%)
   R + (gold|prop):    36  (32%)
-  UNIT TEST ONLY:     74  (65%)   <- the gap
+  UNIT TEST ONLY:     63  (56%)   <- the gap
 
 category                 n    R    thin
 clustering               3    1       2
@@ -33,8 +33,8 @@ ordination               7    6       0
 plot                    20    0      20
 spatial                  9    2       7
 stratigraphy             7    5       2
-time-series             16    4      12
-univariate              16    0      16
+time-series             16    5      11
+univariate              16   10       6
 ```
 
 | analysis | category | module | R | gold | prop | unit |
@@ -64,16 +64,16 @@ univariate              16    0      16
 | `hierarchical_clustering` | clustering | `stats.clustering` | x | x | x | x |
 | `kmeans` | clustering | `stats.clustering` |  |  |  | x |
 | `kmeans_elbow` | clustering | `stats.clustering` |  |  |  | x |
-| `one_way_anova` | univariate | `stats.univariate` |  |  |  | x |
-| `kruskal_wallis` | univariate | `stats.univariate` |  |  |  | x |
-| `mann_whitney` | univariate | `stats.univariate` |  |  |  | x |
-| `normality` | univariate | `stats.univariate` |  |  |  | x |
-| `summary_statistics` | univariate | `stats.univariate` |  |  |  | x |
-| `two_way_anova` | univariate | `stats.design_tests` |  |  |  | x |
-| `repeated_measures_anova` | univariate | `stats.design_tests` |  |  |  | x |
-| `paired_rank_test` | univariate | `stats.univariate` |  |  |  | x |
-| `intraclass_correlation` | univariate | `stats.design_tests` |  |  |  | x |
-| `contingency_chi_square` | univariate | `stats.design_tests` |  |  |  | x |
+| `one_way_anova` | univariate | `stats.univariate` | x |  |  | x |
+| `kruskal_wallis` | univariate | `stats.univariate` | x |  |  | x |
+| `mann_whitney` | univariate | `stats.univariate` | x |  |  | x |
+| `normality` | univariate | `stats.univariate` | x |  |  | x |
+| `summary_statistics` | univariate | `stats.univariate` | x |  |  | x |
+| `two_way_anova` | univariate | `stats.design_tests` | x |  |  | x |
+| `repeated_measures_anova` | univariate | `stats.design_tests` | x |  |  | x |
+| `paired_rank_test` | univariate | `stats.univariate` | x |  |  | x |
+| `intraclass_correlation` | univariate | `stats.design_tests` | x |  |  | x |
+| `contingency_chi_square` | univariate | `stats.design_tests` | x |  |  | x |
 | `diversity` | diversity | `ecology.diversity` |  |  |  | x |
 | `beta_diversity` | diversity | `ecology.beta_diversity` |  |  |  | x |
 | `rarefaction` | diversity | `ecology.rarefaction` | x | x | x | x |
@@ -98,7 +98,7 @@ univariate              16    0      16
 | `cross_correlation` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `autoassociation` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `mann_kendall` | time-series | `stratigraphy.cycles` |  |  |  | x |
-| `runs_test` | time-series | `stratigraphy.cycles` |  |  |  | x |
+| `runs_test` | time-series | `stratigraphy.cycles` | x |  |  | x |
 | `orbital_forcing` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `insolation_series` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `arma` | time-series | `stratigraphy.arma` | x | x |  | x |
