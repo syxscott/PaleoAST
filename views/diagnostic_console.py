@@ -18,6 +18,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from PyQt6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QPushButton,
     QTextEdit,
@@ -451,6 +452,21 @@ class ConsoleLogHandler(QObject, logging.Handler):
         # and touching Qt from an atexit/exit path is exactly what aborts.
         if sys.is_finalizing():
             self._closed = True
+            return
+        # The third death mode, and the one that killed a CI job: the
+        # QApplication is gone but the console widget is not.
+        #
+        # The console is a QDockWidget with no parent, so it is NOT a child
+        # of the application: when the application is destroyed the widget
+        # survives, and so does the handler this object registered on the
+        # ROOT logger.  ``sip.isdeleted()`` then reports False -- the
+        # widget's C++ half is perfectly alive -- and the signal goes out
+        # to a slot that runs with no application, which Qt6 answers with
+        # SIGABRT.  The abort lands wherever the next log record happens
+        # to be emitted, which is how it took out a test that touches no
+        # Qt at all.
+        if QApplication.instance() is None:
+            self.close()
             return
         console = self._console
         if console is None:

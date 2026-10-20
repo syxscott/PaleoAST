@@ -124,6 +124,73 @@ class TestLoggingShutdown:
         finally:
             logging.getLogger().removeHandler(handler)
 
+    def test_emit_after_the_application_is_gone_does_not_abort(self):
+        """A log record with no application behind it must not kill the process.
+
+        This is the third death mode, and the one that killed a CI job with
+        "Fatal Python error: Aborted" three quarters of the way through the
+        run, in a test that touches no Qt at all.
+
+        The console is a QDockWidget with no parent of its own, so it is
+        NOT a child of the application: when the application is destroyed
+        the widget can survive, and so does the handler it registered on
+        the ROOT logger.  ``sip.isdeleted()`` then reports False -- the
+        widget's C++ half is perfectly alive -- and the signal goes out to
+        a slot that runs with no application, which Qt6 answers with
+        SIGABRT.
+
+        The abort lands wherever the next log record happens to be emitted.
+        In CI that was a matplotlib font warning, raised while a figure was
+        being saved, in a test about exporting figures.
+
+        So the guard has to be the application itself, not the widget.
+
+        The "application is gone" state is simulated rather than produced
+        by tearing a real one down: how a platform disposes of the
+        remaining top-level widgets when the application dies differs
+        between Windows and Linux, and a test that only bites on one of
+        them is a test that does not run where the bug is.
+        """
+        child = textwrap.dedent(
+            """
+            import os, sys, logging
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+            from PyQt6.QtWidgets import QApplication
+
+            app = QApplication([])
+            from views.diagnostic_console import ConsoleLogHandler, DiagnosticConsole
+            import views.diagnostic_console as dc
+
+            root = logging.getLogger()
+            root.setLevel(logging.INFO)
+            console = DiagnosticConsole()      # installs its own handler on the root logger
+            root.info("before")                # through that handler
+            print("BEFORE_OK", flush=True)
+
+            # The application is gone, and the console is still alive: the
+            # state that used to abort the runner.
+            class _NoApplication:
+                @staticmethod
+                def instance():
+                    return None
+            dc.QApplication = _NoApplication
+
+            root.info("after the application")   # what used to abort the runner
+            print("AFTER_OK", flush=True)
+            print("STILL_ATTACHED=%s" % any(
+                isinstance(h, ConsoleLogHandler) for h in root.handlers), flush=True)
+            """
+        )
+        proc = _run_in_subprocess(child)
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        assert proc.returncode == 0, f"child exited {proc.returncode} (134 = SIGABRT)\n{combined[-1500:]}"
+        assert "Fatal Python error" not in combined, combined[-1500:]
+        assert "BEFORE_OK" in combined and "AFTER_OK" in combined, combined[-1500:]
+        assert "STILL_ATTACHED=False" in combined, (
+            "the handler should detach itself once there is no application, "
+            f"so later records are cheap no-ops:\n{combined[-1500:]}"
+        )
+
     def test_emit_after_the_console_is_destroyed_does_not_abort(self):
         """A log record after the console dies must not kill the process.
 

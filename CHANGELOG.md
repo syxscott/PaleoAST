@@ -143,6 +143,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the dark figures the design system goes to the trouble of building were
   unreachable for every plot the user actually made. The workspace now
   tells a new plot which theme is in force.
+- **A log record with no application behind it no longer kills the process**
+  (`views/diagnostic_console.py`) -- the diagnostic console registers a log
+  handler on the ROOT logger, and the console is a dock widget with no
+  parent of its own, so when the application is destroyed the widget can
+  survive and so does the handler. The widget's C++ half was perfectly
+  alive, so the existing "has it been deleted?" guard let the signal
+  through, and the slot then ran with no application -- which Qt6 answers
+  with SIGABRT. The abort landed wherever the next log record happened to
+  be emitted: in CI it was a matplotlib font warning raised while a figure
+  was being saved, in a test that touches no Qt at all, three quarters of
+  the way through the run. The guard is now the application itself.
 - **Every control that can take the keyboard focus now shows where it is**
   (`config/design_system.py`) -- only the text inputs had a focus ring. A
   button, a combo box, a check box or the navigation tree could take the
