@@ -639,3 +639,65 @@ def test_the_plot_modules_read_the_registered_palette():
     for rel in ("visualization/pca_plot.py", "visualization/spectral_plot.py", "visualization/evo_rate_plot.py"):
         source = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "current_palette()" in source, f"{rel} does not read the registered palette"
+
+
+# =============================================================================
+# the figure font chain
+# =============================================================================
+# When matplotlib cannot satisfy the font request it logs "findfont:
+# Generic family 'sans-serif' not found because none of the following
+# families were found" -- once per render, for every figure.  The canvas
+# used to ask for four Windows families and nothing else, so on a Linux
+# machine every figure the application drew produced a log record.
+#
+# In the test suite that record reached the diagnostic console's handler,
+# and the console's own text rendering took the whole run down with a
+# SIGABRT, three quarters of the way through, in a test about exporting
+# figures.
+def test_the_figure_font_chain_names_a_font_that_ships_with_matplotlib():
+    """DejaVu Sans is bundled with matplotlib, so it is always there.
+
+    A chain that names only platform-specific fonts is unsatisfiable
+    wherever those fonts are missing, and every render then produces a
+    log record.
+    """
+    from config.design_system import FigureTypography
+
+    assert "DejaVu Sans" in FigureTypography.families, (
+        "the figure font chain names no family that ships with matplotlib, so the request "
+        "is unsatisfiable wherever the platform's own fonts are missing"
+    )
+
+
+def test_rendering_with_the_app_font_chain_logs_no_font_warning():
+    """The behaviour the structural check above is about, measured."""
+    import logging
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from config.design_system import FigureTypography
+
+    records: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    capture = _Capture()
+    root = logging.getLogger()
+    root.addHandler(capture)
+    try:
+        with plt.rc_context(FigureTypography.rc_overrides()):
+            figure, axes = plt.subplots(figsize=(2, 1.5))
+            axes.set_title("A title that needs a font")
+            axes.plot([0, 1, 2], [0, 1, 0])
+            figure.canvas.draw()
+            plt.close(figure)
+    finally:
+        root.removeHandler(capture)
+
+    complaints = [message for message in records if "findfont" in message]
+    assert not complaints, f"the app's font chain is unsatisfiable here: {complaints[:2]}"

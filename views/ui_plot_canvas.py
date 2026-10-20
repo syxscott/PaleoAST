@@ -64,8 +64,6 @@ except OSError:
         plt.style.use("seaborn-whitegrid")
 plt.rcParams.update(
     {
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Microsoft YaHei", "SimHei", "Arial", "Helvetica"],
         "figure.dpi": 100,
         "savefig.dpi": 300,
         "axes.spines.top": False,

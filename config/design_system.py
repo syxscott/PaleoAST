@@ -217,10 +217,38 @@ class FigureTypography:
     title_size = 14
     legend_size = 10
 
+    # The family the figures ask for, in order.
+    #
+    # The list has to END in fonts that exist on EVERY platform.  When
+    # matplotlib cannot satisfy the request it logs "findfont: Generic
+    # family 'sans-serif' not found because none of the following families
+    # were found" -- once per render, for every figure.  The canvas used to
+    # ask for four Windows families and nothing else, so on a Linux machine
+    # every figure the application drew produced a log record.  In the test
+    # suite that record reached the diagnostic console's handler, and the
+    # console's own text rendering took the whole run down.
+    #
+    # DejaVu Sans ships with matplotlib itself, so it is there wherever
+    # matplotlib is; Liberation Sans is on every Linux desktop.  The CJK
+    # families come first, because a figure with Chinese labels needs them
+    # where they exist.
+    family = "sans-serif"
+    families = [
+        "Microsoft YaHei",  # Windows, CJK
+        "SimHei",  # Windows, CJK
+        "Noto Sans CJK SC",  # Linux, CJK
+        "Arial",  # Windows
+        "Helvetica",  # macOS
+        "DejaVu Sans",  # ships with matplotlib -- always available
+        "Liberation Sans",  # every Linux desktop
+    ]
+
     @classmethod
-    def rc_overrides(cls) -> dict[str, float]:
-        """The rcParams that pin the figure type scale."""
+    def rc_overrides(cls) -> dict[str, object]:
+        """The rcParams that pin the figure type scale and family."""
         return {
+            "font.family": cls.family,
+            "font.sans-serif": list(cls.families),
             "font.size": cls.base_size,
             "xtick.labelsize": cls.tick_size,
             "ytick.labelsize": cls.tick_size,

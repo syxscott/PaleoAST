@@ -21,6 +21,8 @@ from __future__ import annotations
 import colorsys
 from typing import Final
 
+from config.design_system import FigureTypography
+
 # =============================================================================
 # UI COLOR SCHEME
 # =============================================================================
@@ -197,9 +199,11 @@ High contrast and distinguishable across color vision types.
 # =============================================================================
 
 MATPLOTLIB_STYLE_PARAMS: Final[dict] = {
-    # Font settings following Nature/Science guidelines
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "Liberation Sans"],
+    # Font settings following Nature/Science guidelines.  The family is
+    # the shared one: a copy that names only Windows fonts makes
+    # matplotlib log a warning on every render on any other platform.
+    "font.family": FigureTypography.family,
+    "font.sans-serif": list(FigureTypography.families),
     "font.size": 12,
     # Figure background
     "figure.facecolor": "white",
