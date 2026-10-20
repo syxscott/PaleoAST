@@ -1374,4 +1374,8 @@ TRANSLATIONS = {
     "The value must be a finite number. Infinite values are not accepted.": "该值必须是有限数值。不接受无穷大。",
     "n_permutations must be >= 1, got {0}": "n_permutations 必须大于等于 1，当前为 {0}",
     "Internal allometry inconsistency: the residual sum of squares computed by the two code paths disagree ({0} vs {1}).": "异速分析内部不一致：两条代码路径算出的残差平方和不同（{0} 与 {1}）。",
+    "Diagnostic Console": "诊断控制台",
+    "Pause": "暂停",
+    "Resume": "继续",
+    "Teal": "青色",
 }

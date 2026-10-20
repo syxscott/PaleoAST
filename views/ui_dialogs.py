@@ -194,7 +194,7 @@ class BaseAnalysisDialog(QDialog):
             }}
             QPushButton[default="true"] {{
                 background-color: {c.primary};
-                color: white;
+                color: {c.on_primary};
                 border: 1px solid {c.primary_dark};
             }}
             QPushButton[default="true"]:hover {{
@@ -233,7 +233,7 @@ class BaseAnalysisDialog(QDialog):
                 background-color: {c.bg_primary};
                 color: {c.text_primary};
                 selection-background-color: {c.primary};
-                selection-color: white;
+                selection-color: {c.on_primary};
             }}
             QSpinBox, QDoubleSpinBox {{
                 background-color: {c.bg_primary};
@@ -628,7 +628,11 @@ class PCoADialog(BaseAnalysisDialog):
         metric_help = QLabel(
             "Bray-Curtis: Good for abundance data\nJaccard: Presence/absence data\nEuclidean: Continuous variables"
         )
-        metric_help.setStyleSheet("color: #95A5A6; font-size: 10px;")
+        # The help text is secondary content, so it takes the theme's
+        # secondary-text role.  The old literal "#95A5A6" measured 2.56:1
+        # on the light background -- below the 4.5:1 requirement.
+        c_help = get_palette(self._is_dark_theme)
+        metric_help.setStyleSheet(f"color: {c_help.text_secondary}; font-size: 11px;")
         metric_layout.addWidget(metric_help)
 
         # Number of components

@@ -195,6 +195,41 @@ class Typography:
     line_height_relaxed = 1.75
 
 
+class FigureTypography:
+    """The figure type scale, in matplotlib points.
+
+    Two rendering paths exist -- the analysis canvas
+    (``views/ui_plot_canvas.py``) and the standalone plotters
+    (``visualization/``) -- and they must agree.  The plotters run inside
+    ``plt.rc_context`` seeded from a matplotlib style library, and
+    ``seaborn-v0_8-paper`` sets ``axes.labelsize`` to 8.8 and
+    ``axes.titlesize`` to 9.6.  That made a plot-menu figure's axis label
+    27% smaller than the same label in an analysis figure, in the same
+    window, and the export carries the difference into the paper.
+
+    So the figure scale lives here, next to the rest of the type scale,
+    and both paths read it.
+    """
+
+    base_size = 10
+    tick_size = 10
+    label_size = 12
+    title_size = 14
+    legend_size = 10
+
+    @classmethod
+    def rc_overrides(cls) -> dict[str, float]:
+        """The rcParams that pin the figure type scale."""
+        return {
+            "font.size": cls.base_size,
+            "xtick.labelsize": cls.tick_size,
+            "ytick.labelsize": cls.tick_size,
+            "axes.labelsize": cls.label_size,
+            "axes.titlesize": cls.title_size,
+            "legend.fontsize": cls.legend_size,
+        }
+
+
 # =============================================================================
 # Radius System
 # =============================================================================

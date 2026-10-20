@@ -37,6 +37,22 @@ from config.design_system import BorderRadius, Typography, get_palette
 from config.i18n import _
 
 
+def _overlay_color(overlay: str) -> QColor:
+    """Turn a palette ``rgba(...)`` overlay into a QColor.
+
+    ``QColor.fromString`` does not accept the CSS ``rgba()`` form the
+    palette uses -- its alpha there is a 0-1 fraction -- so parse it here.
+    Keeping the alpha in the palette is the point: the light and dark
+    themes need different overlay strengths, and a literal in the view
+    would pin both to the light one.
+    """
+    inner = overlay[overlay.index("(") + 1 : overlay.index(")")]
+    parts = [p.strip() for p in inner.split(",")]
+    red, green, blue = (int(float(p)) for p in parts[:3])
+    alpha = round(float(parts[3]) * 255)
+    return QColor(red, green, blue, alpha)
+
+
 class NavigationCategory(Enum):
     """Navigation categories."""
 
@@ -172,14 +188,18 @@ class NavigationDelegate(QStyledItemDelegate):
             is_expanded = False
 
         # Background painting
+        #
+        # The overlay strengths come from the palette, not from literals.
+        # The old literals were the LIGHT theme's alphas (selected 38,
+        # hover 20) applied in both themes, so in the dark theme -- where
+        # the palette asks for 76 and 38 -- a selected row and a hovered
+        # row were painted almost identically and the user could not tell
+        # which tree item was selected.
+        c = get_palette(self._is_dark_theme)
         if is_selected:
-            # Selected state - use primary with 15% alpha
-            selected_color = QColor(59, 130, 246, 38)
-            painter.fillRect(option.rect, QBrush(selected_color))
+            painter.fillRect(option.rect, QBrush(_overlay_color(c.selected_overlay)))
         elif is_hovered:
-            # Hover state - use primary with 8% alpha
-            hover_color = QColor(30, 64, 175, 20)
-            painter.fillRect(option.rect, QBrush(hover_color))
+            painter.fillRect(option.rect, QBrush(_overlay_color(c.hover_overlay)))
 
         # Determine icon type from item data (UserRole)
         icon_type = index.data(Qt.ItemDataRole.UserRole)
@@ -285,26 +305,31 @@ class NavigationDelegate(QStyledItemDelegate):
             painter.drawPath(path)
 
     def _draw_pca_icon(self, painter: QPainter, x: float, y: float, size: float) -> None:
-        """Draw PCA-style icon with coordinate axes."""
+        """Draw PCA-style icon with coordinate axes.
+
+        Chrome, not data: the axes are a neutral stroke and the single
+        origin mark is the accent.  The previous version used three
+        decorative hues that did not follow the theme, so in the dark
+        theme the icon was drawn with the deprecated flat-UI palette.
+        """
+        c = get_palette(self._is_dark_theme)
         center_x = int(x + size // 2)
         center_y = int(y + size // 2)
         axis_length = int(size // 2)
 
-        # X-axis (PC1)
-        painter.setPen(QPen(QColor("#E74C3C"), 1.5))
+        # X-axis (PC1) and Y-axis (PC2)
+        painter.setPen(QPen(QColor(c.text_secondary), 1.5))
         painter.drawLine(center_x, center_y, center_x + axis_length, center_y)
-
-        # Y-axis (PC2)
-        painter.setPen(QPen(QColor("#27AE60"), 1.5))
         painter.drawLine(center_x, center_y, center_x, center_y - axis_length)
 
         # Point at origin
-        painter.setBrush(QBrush(QColor("#F39C12")))
+        painter.setBrush(QBrush(QColor(c.primary)))
         painter.drawEllipse(center_x - 2, center_y - 2, 4, 4)
 
     def _draw_diversity_icon(self, painter: QPainter, x: float, y: float, size: float) -> None:
         """Draw biodiversity tree icon."""
-        painter.setPen(QPen(QColor("#27AE60"), 1.5))
+        c = get_palette(self._is_dark_theme)
+        painter.setPen(QPen(QColor(c.text_secondary), 1.5))
 
         # Main trunk
         trunk_x = int(x + size // 2)
@@ -316,7 +341,7 @@ class NavigationDelegate(QStyledItemDelegate):
         painter.drawLine(trunk_x, int(y + size * 0.4), trunk_x, int(y + size * 0.1))
 
         # Leaf nodes
-        painter.setBrush(QBrush(QColor("#27AE60")))
+        painter.setBrush(QBrush(QColor(c.primary)))
         for px, py in [
             (x + size * 0.2, y + size * 0.15),
             (x + size * 0.8, y + size * 0.15),
@@ -329,32 +354,43 @@ class NavigationDelegate(QStyledItemDelegate):
         # Triangle connecting landmarks
         from PyQt6.QtCore import QPointF
 
+        c = get_palette(self._is_dark_theme)
         points = [
             QPointF(x + size * 0.2, y + size * 0.7),
             QPointF(x + size * 0.8, y + size * 0.7),
             QPointF(x + size * 0.5, y + size * 0.2),
         ]
 
-        painter.setPen(QPen(QColor("#9B59B6"), 1.5))
+        painter.setPen(QPen(QColor(c.text_secondary), 1.5))
         painter.drawPolygon(points)
 
         # Landmark points
-        painter.setBrush(QBrush(QColor("#9B59B6")))
+        painter.setBrush(QBrush(QColor(c.primary)))
         for pt in points:
             painter.drawEllipse(int(pt.x() - 3), int(pt.y() - 3), 6, 6)
 
     def _draw_strat_icon(self, painter: QPainter, x: float, y: float, size: float) -> None:
-        """Draw stratigraphy layers icon."""
-        layer_height = size // 4
-        colors = ["#E74C3C", "#F39C12", "#27AE60", "#3498DB"]
+        """Draw stratigraphy layers icon.
 
-        for i, color in enumerate(colors):
-            painter.fillRect(int(x), int(y + i * layer_height), int(size), int(layer_height - 1), QBrush(QColor(color)))
+        The four bands are grey steps rather than four hues: a coloured
+        stack next to a blue folder and a blue tree reads as decoration,
+        and the old hues did not follow the theme.  The layering is
+        carried by the band edges.
+        """
+        c = get_palette(self._is_dark_theme)
+        layer_height = size // 4
+        bands = [c.bg_tertiary, c.border_light, c.bg_tertiary, c.border_light]
+
+        for i, band in enumerate(bands):
+            painter.fillRect(int(x), int(y + i * layer_height), int(size), int(layer_height - 1), QBrush(QColor(band)))
 
     def _draw_default_icon(self, painter: QPainter, x: float, y: float, size: float) -> None:
         """Draw default document icon."""
-        painter.setPen(QPen(QColor("#3498DB"), 1.5))
-        painter.setBrush(QBrush(QColor("#E8F4F8")))
+        c = get_palette(self._is_dark_theme)
+        painter.setPen(QPen(QColor(c.text_secondary), 1.5))
+        # The old fill was "#E8F4F8" -- a near-white that did not follow
+        # the theme, so on the dark tree it rendered as a bright block.
+        painter.setBrush(QBrush(QColor(c.bg_tertiary)))
         painter.drawRect(int(x), int(y), int(size), int(size))
 
     def _draw_expand_arrow(

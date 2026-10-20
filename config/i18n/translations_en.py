@@ -1411,4 +1411,8 @@ TRANSLATIONS = {
     "The value must be a finite number. Infinite values are not accepted.": "The value must be a finite number. Infinite values are not accepted.",
     "n_permutations must be >= 1, got {0}": "n_permutations must be >= 1, got {0}",
     "Internal allometry inconsistency: the residual sum of squares computed by the two code paths disagree ({0} vs {1}).": "Internal allometry inconsistency: the residual sum of squares computed by the two code paths disagree ({0} vs {1}).",
+    "Diagnostic Console": "Diagnostic Console",
+    "Pause": "Pause",
+    "Resume": "Resume",
+    "Teal": "Teal",
 }

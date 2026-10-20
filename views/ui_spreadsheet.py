@@ -53,6 +53,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from config.colors import current_palette
 from config.design_system import get_palette
 from config.i18n import _
 from models.data_matrix import DataMatrix
@@ -101,17 +102,11 @@ class SpreadsheetDelegate(QStyledItemDelegate):
             - Color gradients for heatmap-style visualization
     """
 
-    # Color scheme for groups (colorblind-friendly)
-    GROUP_COLORS = [
-        "#0077BB",  # Blue
-        "#EE7733",  # Orange
-        "#009988",  # Teal
-        "#CC3311",  # Red
-        "#33BBEE",  # Cyan
-        "#EE3377",  # Magenta
-        "#BBBBBB",  # Gray
-        "#000000",  # Black
-    ]
+    # Colour scheme for groups.  The palette itself lives in
+    # config/colors.py -- the same registry the plotters and the R export
+    # read.  This class used to carry its own copy of a DIFFERENT
+    # eight-colour list, so the group colours in the table and the ones
+    # in the figures were not the same colours.
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -120,6 +115,14 @@ class SpreadsheetDelegate(QStyledItemDelegate):
         self._data_cache: np.ndarray | None = None
         self._row_labels: list[str] = []
         self._col_labels: list[str] = []
+        # The delegate paints the cell text itself, so it has to know the
+        # theme -- a hard-coded text colour leaves the numbers invisible on
+        # the dark background (measured 1.63:1 against #0F172A).
+        self._is_dark_theme = False
+
+    def set_dark_theme(self, is_dark: bool) -> None:
+        """Tell the delegate which theme it is painting for."""
+        self._is_dark_theme = is_dark
 
     def set_metadata(self, row_metadata: dict[int, dict], col_metadata: dict[int, dict]) -> None:
         """Set row and column metadata for rendering."""
@@ -167,7 +170,10 @@ class SpreadsheetDelegate(QStyledItemDelegate):
 
         # Draw selection highlight
         if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(option.rect, QBrush(QColor("#3498DB").lighter(150)))
+            # The accent from the theme, not the deprecated flat-UI blue:
+            # the literal did not follow the theme at all.
+            accent = get_palette(self._is_dark_theme).primary
+            painter.fillRect(option.rect, QBrush(QColor(accent).lighter(150)))
 
         # Draw data cell content
         if (
@@ -194,13 +200,22 @@ class SpreadsheetDelegate(QStyledItemDelegate):
                 marker_x = option.rect.left() + 4
                 marker_y = option.rect.top() + (option.rect.height() - marker_size) // 2
                 self._draw_marker(
-                    painter, marker_value, marker_x, marker_y, marker_size, row_meta.get("color", "#E74C3C")
+                    painter,
+                    marker_value,
+                    marker_x,
+                    marker_y,
+                    marker_size,
+                    row_meta.get("color", get_palette(self._is_dark_theme).primary),
                 )
                 text_rect = option.rect.adjusted(marker_size + 10, 0, 0, 0)
             else:
                 text_rect = option.rect.adjusted(4, 0, 0, 0)
 
-            painter.setPen(QPen(QColor("#2C3E50")))
+            # The text colour has to come from the theme, not from a
+            # literal.  The old "#2C3E50" is the light theme's text colour:
+            # on the dark background (#0F172A) it measured 1.63:1, i.e. the
+            # numbers were effectively invisible.
+            painter.setPen(QPen(QColor(get_palette(self._is_dark_theme).text_primary)))
             painter.drawText(
                 text_rect,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -407,14 +422,18 @@ class RowHeaderMenu(QMenu):
 
         # Row color
         color_menu = self.addMenu(_("Set Color"))
+        # The colour values come from the design system's semantic roles, so
+        # they follow the theme; the old table was seven hard-coded
+        # flat-UI hexes and its names were never translated, so the English
+        # labels showed up in the Chinese interface too.
+        c = get_palette(self._is_dark_theme)
         colors = [
-            ("Red", "#E74C3C"),
-            ("Orange", "#F39C12"),
-            ("Yellow", "#F1C40F"),
-            ("Green", "#27AE60"),
-            ("Blue", "#3498DB"),
-            ("Purple", "#9B59B6"),
-            ("Gray", "#95A5A6"),
+            (_("Red"), c.error),
+            (_("Orange"), c.warning),
+            (_("Green"), c.success),
+            (_("Blue"), c.primary),
+            (_("Teal"), c.info),
+            (_("Gray"), c.text_secondary),
         ]
         for name, hex_color in colors:
             action = color_menu.addAction(name)
@@ -650,6 +669,7 @@ class ScientificSpreadsheet(QWidget):
     def setDarkTheme(self, is_dark: bool) -> None:
         """Set dark/light theme."""
         self._is_dark_theme = is_dark
+        self._delegate.set_dark_theme(is_dark)
         self._apply_stylesheet()
 
     def _setup_connections(self) -> None:
@@ -891,7 +911,8 @@ class ScientificSpreadsheet(QWidget):
 
         if action_type == "group":
             # Set group color
-            color = SpreadsheetDelegate.GROUP_COLORS[value]
+            palette = current_palette()
+            color = palette[value % len(palette)]
             if col not in self._col_metadata:
                 self._col_metadata[col] = {}
             self._col_metadata[col]["color"] = color
@@ -959,7 +980,8 @@ class ScientificSpreadsheet(QWidget):
 
         elif action_type == "group":
             # Assign to group
-            color = SpreadsheetDelegate.GROUP_COLORS[value]
+            palette = current_palette()
+            color = palette[value % len(palette)]
             if row not in self._row_metadata:
                 self._row_metadata[row] = {}
             self._row_metadata[row]["color"] = color

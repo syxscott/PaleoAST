@@ -52,7 +52,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config.design_system import get_palette
+from config.colors import current_palette
+from config.design_system import FigureTypography, get_palette
 from config.i18n import _
 
 # Publication quality style settings
@@ -65,28 +66,25 @@ plt.rcParams.update(
     {
         "font.family": "sans-serif",
         "font.sans-serif": ["Microsoft YaHei", "SimHei", "Arial", "Helvetica"],
-        "font.size": 10,
-        "axes.labelsize": 12,
-        "axes.titlesize": 14,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 10,
         "figure.dpi": 100,
         "savefig.dpi": 300,
         "axes.spines.top": False,
         "axes.spines.right": False,
-        "axes.facecolor": "#FAFBFC",
-        "figure.facecolor": "#FFFFFF",
-        "axes.edgecolor": "#E4E7EB",
-        "axes.labelcolor": "#2C3E50",
-        "xtick.color": "#2C3E50",
-        "ytick.color": "#2C3E50",
-        "text.color": "#2C3E50",
-        "grid.color": "#E4E7EB",
         "grid.linestyle": "-",
         "grid.linewidth": 0.5,
         "axes.linewidth": 0.8,
         "axes.unicode_minus": False,
+        # The light theme's surfaces and text, from the palette rather than
+        # from literals -- setDarkTheme() replaces them for the dark one.
+        "axes.facecolor": get_palette(False).bg_secondary,
+        "figure.facecolor": get_palette(False).bg_primary,
+        "axes.edgecolor": get_palette(False).border_light,
+        "axes.labelcolor": get_palette(False).text_primary,
+        "xtick.color": get_palette(False).text_primary,
+        "ytick.color": get_palette(False).text_primary,
+        "text.color": get_palette(False).text_primary,
+        "grid.color": get_palette(False).border_light,
+        **FigureTypography.rc_overrides(),
     }
 )
 
@@ -122,17 +120,18 @@ class InteractivePlotCanvas(QWidget):
     pointsSelected = pyqtSignal(list)  # List of selected row indices
     plotChanged = pyqtSignal(str)  # Plot type
 
-    # Colorblind-friendly palette
-    COLORS = [
-        "#0077BB",  # Blue
-        "#EE7733",  # Orange
-        "#009988",  # Teal
-        "#CC3311",  # Red
-        "#33BBEE",  # Cyan
-        "#EE3377",  # Magenta
-        "#BBBBBB",  # Gray
-        "#000000",  # Black
-    ]
+    # Colorblind-friendly palette.
+    #
+    # The palette itself lives in config/colors.py -- the same registry the
+    # plot-menu plotters and the R export read.  This class used to carry
+    # its own copy of a DIFFERENT eight-colour list, so the analysis
+    # figures in the window and the exported figures were not the same
+    # figure: the export followed the user's palette preference, the
+    # canvas did not.  Reading the registry makes them the same again.
+    @property
+    def COLORS(self) -> list[str]:
+        """The categorical palette, from the single source of truth."""
+        return current_palette()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -323,7 +322,7 @@ class InteractivePlotCanvas(QWidget):
             }}
             QPushButton:pressed {{
                 background-color: {c.primary};
-                color: white;
+                color: {c.on_primary};
             }}
             QComboBox {{
                 background-color: {c.bg_primary};
@@ -348,7 +347,7 @@ class InteractivePlotCanvas(QWidget):
                 background-color: {c.bg_primary};
                 color: {c.text_primary};
                 selection-background-color: {c.primary};
-                selection-color: white;
+                selection-color: {c.on_primary};
             }}
             QCheckBox {{
                 color: {c.text_primary};
@@ -4023,9 +4022,14 @@ class InteractivePlotCanvas(QWidget):
             if risk.size == t.size:
                 ax2 = self._ax.twinx()
                 ax2.patch.set_visible(False)
-                ax2.step(t, risk, where="post", color=self.COLORS[7], linewidth=1, linestyle=":", label=_("At risk"))
-                ax2.set_ylabel(_("Number at risk"), color=self.COLORS[7])
-                ax2.tick_params(axis="y", labelcolor=self.COLORS[7])
+                # The "at risk" axis is chrome, not a data series: it used a
+                # data-palette slot whose 8th entry is pure black, which
+                # measured 1.44:1 on the dark axes background -- the axis
+                # simply disappeared.  Use the theme's muted text colour.
+                risk_color = self.theme_colors().get("text_muted", "#94A3B8")
+                ax2.step(t, risk, where="post", color=risk_color, linewidth=1, linestyle=":", label=_("At risk"))
+                ax2.set_ylabel(_("Number at risk"), color=risk_color)
+                ax2.tick_params(axis="y", labelcolor=risk_color)
                 ax2.set_ylim(0, max(1.0, float(np.nanmax(risk)) * 1.15))
 
         n_events = int(np.sum(result.events)) if result.events is not None else 0

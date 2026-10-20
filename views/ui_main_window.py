@@ -1116,7 +1116,12 @@ class StatusBarWidget(QStatusBar):
         otherwise a user who ticks a box and gets the default behaviour has no
         way to tell that the box did nothing.
         """
-        self._info_label.setStyleSheet("color: #b26a00;")
+        # The warning colour comes from the palette's semantic `warning`
+        # role, which is contrast-rated for both themes.  The old literal
+        # "#b26a00" measured 4.24:1 on the light background and 4.21:1 on
+        # the dark one -- below the 4.5:1 requirement in both.
+        c = get_palette(self._is_dark_theme)
+        self._info_label.setStyleSheet(f"color: {c.warning};")
         self._info_label.setToolTip(text)
         self._info_label.setText(f"⚠ {text}")
 

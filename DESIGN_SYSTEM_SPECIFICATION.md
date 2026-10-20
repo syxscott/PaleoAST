@@ -1,6 +1,23 @@
 # PaleoAST 现代设计系统规范
 
-## 1. 颜色系统
+> **本文件已被 `config/design_system.py` 取代。**
+>
+> 下面这张色板是早期的 "flat UI" 方案（主蓝 `#3498DB`、正文 `#2C3E50`、错误 `#E74C3C`）。
+> 应用实际使用的是 `config/design_system.py` 里的另一套令牌（主色 `#1E40AF`、正文 `#0F172A`、
+> 错误 `#DC2626`），两套并不相同。**代码以 `config/design_system.py` 为准** —— 它的
+> docstring 写得很明确："This module, not the docstring of any other file."
+>
+> 保留本文件只为记录早期意图。**请勿依据它去修改代码**：2026-10-20 的前端审查发现，
+> 仓库里仍有一批 UI 位置在用下面这套旧色值（导航树图标、表格选中高亮、"Set Color"
+> 菜单等），而这些硬编码既不跟随主题、在暗色主题下也达不到对比度要求。
+> 已修的部分见 `config/design_system.py` 与 `tests/test_design_conformance.py`；
+> 尚未修完的部分见 `FIX_PLAN_2026-10-19.md` 的「设计体系落地」一节。
+>
+> 令牌本体：主色 / 语义色 / 中性色在 `config/design_system.py` 的 `ColorPalette`；
+> 间距在 `Spacing`（4px 网格）；圆角在 `BorderRadius`；字号在 `Typography`；
+> 图表字号在 `FigureTypography`。
+
+## 1. 颜色系统（旧方案，仅供参考）
 
 ### 主颜色
 | 名称 | 代码 | 用途 | 示例 |

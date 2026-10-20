@@ -25,6 +25,8 @@ from typing import Any
 
 from matplotlib import pyplot as plt
 
+from config.design_system import FigureTypography
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +45,13 @@ def resolve_style_params(style: str) -> dict[str, Any]:
     on unknown names — the caller (``_wrap``) turns that into a logged
     warning + a neutral context, rather than dropping the scope
     entirely.
+
+    Whatever the style says about type sizes, the application's own
+    figure scale wins: the style library's ``seaborn-v0_8-paper`` sets
+    ``axes.labelsize`` to 8.8 and ``axes.titlesize`` to 9.6, which
+    made a plot-menu figure's labels 27% smaller than the same labels
+    in an analysis figure. Both paths now read
+    ``config.design_system.FigureTypography``.
     """
     candidates: list[str] = []
     if style:
@@ -54,8 +63,11 @@ def resolve_style_params(style: str) -> dict[str, Any]:
     for candidate in candidates:
         try:
             if candidate in plt.style.library:
-                return dict(plt.style.library[candidate])
-            return dict(plt.style.get_style(candidate))
+                params = dict(plt.style.library[candidate])
+            else:
+                params = dict(plt.style.get_style(candidate))
+            params.update(FigureTypography.rc_overrides())
+            return params
         except (OSError, ValueError, KeyError):
             continue
 
@@ -63,7 +75,9 @@ def resolve_style_params(style: str) -> dict[str, Any]:
     # restores the caller's state (otherwise an unrelated earlier mutation
     # would leak across the scope).
     logger.debug("Could not resolve matplotlib style %r; using current rcParams", style)
-    return dict(plt.rcParams)
+    params = dict(plt.rcParams)
+    params.update(FigureTypography.rc_overrides())
+    return params
 
 
 def scoped_plot_methods(cls: type) -> type:

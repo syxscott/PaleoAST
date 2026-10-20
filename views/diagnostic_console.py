@@ -41,22 +41,22 @@ class ConsoleTextEdit(QTextEdit):
         - Clear support
     """
 
-    # Theme-aware colors (will be updated based on theme)
-    DARK_COLORS = {
-        "DEBUG": "#888888",  # Gray
-        "INFO": "#E0E0E0",  # Light gray (visible on dark)
-        "WARNING": "#FFA500",  # Orange
-        "ERROR": "#FF5252",  # Light red
-        "CRITICAL": "#FF1744",  # Bright red
-    }
-
-    LIGHT_COLORS = {
-        "DEBUG": "#888888",  # Gray
-        "INFO": "#000000",  # Black
-        "WARNING": "#FFA500",  # Orange
-        "ERROR": "#FF0000",  # Red
-        "CRITICAL": "#8B0000",  # Dark Red
-    }
+    # Log-level colours come from the design system's semantic roles, not
+    # from a hand-written table.  The old table had a WARNING entry of
+    # "#FFA500" in BOTH themes -- a colour tuned for a dark background, so
+    # on the light background it measured 1.97:1 and was effectively
+    # invisible.  The semantic roles are already contrast-rated per theme.
+    @staticmethod
+    def level_colors(is_dark: bool) -> dict[str, str]:
+        """Map a log level to a theme-aware colour."""
+        c = get_palette(is_dark)
+        return {
+            "DEBUG": c.text_disabled,
+            "INFO": c.text_primary,
+            "WARNING": c.warning,
+            "ERROR": c.error,
+            "CRITICAL": c.error,
+        }
 
     MAX_LINES = 1000
 
@@ -95,12 +95,13 @@ class ConsoleTextEdit(QTextEdit):
 
     def append_log(self, level: str, message: str, timestamp: bool = True) -> None:
         """Append a log message with color coding."""
-        colors = self.DARK_COLORS if self._is_dark_theme else self.LIGHT_COLORS
-        color = colors.get(level, "#000000")
+        colors = self.level_colors(self._is_dark_theme)
+        color = colors.get(level, get_palette(self._is_dark_theme).text_primary)
 
         text = ""
         if timestamp:
-            text += f"<span style='color: #888888;'>[{datetime.now().strftime('%H:%M:%S')}]</span> "
+            stamp_color = get_palette(self._is_dark_theme).text_disabled
+            text += f"<span style='color: {stamp_color};'>[{datetime.now().strftime('%H:%M:%S')}]</span> "
 
         text += f"<span style='color: {color};'>{message}</span>"
 
@@ -140,7 +141,7 @@ class DiagnosticConsole(QDockWidget):
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(_("诊断控制台"), parent)
+        super().__init__(_("Diagnostic Console"), parent)
         self._logger = logging.getLogger(f"{__name__}.DiagnosticConsole")
 
         self._is_paused = False
@@ -166,11 +167,11 @@ class DiagnosticConsole(QDockWidget):
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
 
-        self._btn_clear = QPushButton(_("清空"))
+        self._btn_clear = QPushButton(_("Clear"))
         self._btn_clear.clicked.connect(self.clear)
         button_layout.addWidget(self._btn_clear)
 
-        self._btn_pause = QPushButton(_("暂停"))
+        self._btn_pause = QPushButton(_("Pause"))
         self._btn_pause.clicked.connect(self.toggle_pause)
         button_layout.addWidget(self._btn_pause)
 
@@ -219,14 +220,13 @@ class DiagnosticConsole(QDockWidget):
                 }}
                 QPushButton:pressed {{
                     background: {c.primary};
-                    color: white;
+                    color: {c.on_primary};
                 }}
                 QPushButton:focus {{
                     border: 2px solid {c.primary};
-                    outline: none;
                 }}
                 QPushButton:disabled {{
-                    color: #666666;
+                    color: {c.text_disabled};
                     background: {c.bg_tertiary};
                 }}
             """)
@@ -253,14 +253,13 @@ class DiagnosticConsole(QDockWidget):
                 }}
                 QPushButton:pressed {{
                     background: {c.primary};
-                    color: white;
+                    color: {c.on_primary};
                 }}
                 QPushButton:focus {{
                     border: 2px solid {c.primary};
-                    outline: none;
                 }}
                 QPushButton:disabled {{
-                    color: #999999;
+                    color: {c.text_disabled};
                     background: {c.bg_tertiary};
                 }}
             """)
@@ -323,10 +322,10 @@ class DiagnosticConsole(QDockWidget):
         self._is_paused = not self._is_paused
 
         if self._is_paused:
-            self._btn_pause.setText(_("继续"))
+            self._btn_pause.setText(_("Resume"))
             self._logger.debug("Console paused")
         else:
-            self._btn_pause.setText(_("暂停"))
+            self._btn_pause.setText(_("Pause"))
             self._logger.debug("Console resumed")
             # Flush buffer
             for level, msg in self._message_buffer:

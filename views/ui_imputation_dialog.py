@@ -241,7 +241,10 @@ class ImputationDialog(BaseAnalysisDialog):
 
         self.result_label = QLabel(_('Press "Preview processed result" to view the projected data.'))
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("color: #666; padding: 8px;")
+        # The colour is set by setDarkTheme(); setting it here too would
+        # overwrite the theme-aware value with a literal, and this line
+        # runs during construction -- i.e. it is what the user sees FIRST.
+        self.result_label.setStyleSheet(f"color: {get_palette(self._is_dark_theme).text_secondary}; padding: 8px;")
         result_layout.addWidget(self.result_label)
 
         self.layout().addWidget(result_group)
