@@ -53,3 +53,46 @@ def sample_distance_matrix():
 @pytest.fixture
 def random_seed():
     return 42
+
+
+# =============================================================================
+# Isolation of the process-wide singletons
+# =============================================================================
+# The application keeps a process-wide ``StateManager`` singleton: the loaded
+# matrix, the undo stack, and the "modified" flag.  Nothing reset it between
+# tests, so a matrix one test loaded stayed loaded for every test that ran
+# after it -- and stayed flagged as *modified*.
+#
+# That leak has a sharp edge, and it cost a full debugging round to find.
+# ``MainWindow.closeEvent`` asks the user to save before closing whenever the
+# shared state is modified, and it asks with a MODAL ``QMessageBox``.  A
+# headless test run has nobody to answer it, so the run stops dead instead of
+# failing: the suite hung on the file that follows
+# ``tests/test_pca_dialog_entry_point.py``, which loads a matrix and leaves it
+# dirty, and every later test that closed a real main window then waited
+# forever on a dialog nobody could see.
+#
+# The fixture below clears the shared state around every test, so each one
+# starts from a known-clean slate.  ``tests/models/test_state_manager.py``
+# already does the same thing by hand with ``StateManager.reset_instance()``;
+# this makes it the rule for the whole suite instead of a per-file habit.
+#
+# The clear is deliberately ``StateManager.clear()`` and not
+# ``reset_instance()``: the singleton identity has to stay stable, because
+# windows and controllers capture a reference to it when they are built.
+
+
+@pytest.fixture(autouse=True)
+def _isolate_shared_state():
+    """Give every test a clean process-wide StateManager.
+
+    The state is cleared *before* the test as well as after it.  The "before"
+    half is the one that matters: it is what stops a test from inheriting a
+    dirty state, and a dirty state is what makes a later ``MainWindow.close()``
+    raise a modal dialog that blocks forever.
+    """
+    from models.state_manager import get_state_manager
+
+    get_state_manager().clear()
+    yield
+    get_state_manager().clear()
