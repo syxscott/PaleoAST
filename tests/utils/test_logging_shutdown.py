@@ -124,7 +124,8 @@ class TestLoggingShutdown:
         finally:
             logging.getLogger().removeHandler(handler)
 
-    def test_emit_after_the_application_is_gone_does_not_abort(self):
+    @pytest.mark.parametrize("application", ["gone", "replaced"])
+    def test_emit_after_the_application_is_gone_does_not_abort(self, application):
         """A log record with no application behind it must not kill the process.
 
         This is the third death mode, and the one that killed a CI job with
@@ -145,14 +146,21 @@ class TestLoggingShutdown:
 
         So the guard has to be the application itself, not the widget.
 
-        The "application is gone" state is simulated rather than produced
-        by tearing a real one down: how a platform disposes of the
-        remaining top-level widgets when the application dies differs
-        between Windows and Linux, and a test that only bites on one of
-        them is a test that does not run where the bug is.
+        Two states are covered, and the second is the one CI actually hit:
+        the suite creates one application per test module, so the
+        application a console was built for can be destroyed and REPLACED
+        by a later one -- and "is there an application?" then answers true
+        for the wrong one.  The guard compares by identity.
+
+        The states are simulated rather than produced by tearing a real
+        application down: how a platform disposes of the remaining
+        top-level widgets when the application dies differs between
+        Windows and Linux, and a test that only bites on one of them is a
+        test that does not run where the bug is.
         """
+        answer = "return None" if application == "gone" else "return object()"
         child = textwrap.dedent(
-            """
+            f"""
             import os, sys, logging
             os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
             from PyQt6.QtWidgets import QApplication
@@ -167,13 +175,14 @@ class TestLoggingShutdown:
             root.info("before")                # through that handler
             print("BEFORE_OK", flush=True)
 
-            # The application is gone, and the console is still alive: the
-            # state that used to abort the runner.
-            class _NoApplication:
+            # The application this console belongs to is gone -- or has been
+            # replaced by a later one.  The console is still alive: the state
+            # that used to abort the runner.
+            class _Application:
                 @staticmethod
                 def instance():
-                    return None
-            dc.QApplication = _NoApplication
+                    {answer}
+            dc.QApplication = _Application
 
             root.info("after the application")   # what used to abort the runner
             print("AFTER_OK", flush=True)
@@ -187,7 +196,7 @@ class TestLoggingShutdown:
         assert "Fatal Python error" not in combined, combined[-1500:]
         assert "BEFORE_OK" in combined and "AFTER_OK" in combined, combined[-1500:]
         assert "STILL_ATTACHED=False" in combined, (
-            "the handler should detach itself once there is no application, "
+            "the handler should detach itself once its application is gone, "
             f"so later records are cheap no-ops:\n{combined[-1500:]}"
         )
 

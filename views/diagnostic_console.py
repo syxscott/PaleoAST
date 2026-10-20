@@ -398,6 +398,15 @@ class ConsoleLogHandler(QObject, logging.Handler):
         # With a weakref the dead-receiver state becomes unrepresentable:
         # once the console is gone, the ref returns None and emit() no-ops.
         self._console_ref = weakref.ref(console)
+        # The application this handler was created for.  A widget belongs to
+        # the application that existed when it was created, and "is there an
+        # application?" is not the same question as "is it still THE SAME
+        # application?": the suite creates one per test module, so an
+        # application can be destroyed and replaced while the console it
+        # owned is still alive.  A slot running under the wrong application
+        # is what Qt6 answers with SIGABRT.
+        app = QApplication.instance()
+        self._app_ref = weakref.ref(app) if app is not None else None
         # Set once the underlying QObject is gone; see flush()/close().
         self._closed = False
         # Connect the signal with the default (auto) connection.
@@ -454,18 +463,25 @@ class ConsoleLogHandler(QObject, logging.Handler):
             self._closed = True
             return
         # The third death mode, and the one that killed a CI job: the
-        # QApplication is gone but the console widget is not.
+        # application this console belongs to is gone.
         #
         # The console is a QDockWidget with no parent, so it is NOT a child
         # of the application: when the application is destroyed the widget
-        # survives, and so does the handler this object registered on the
+        # can survive, and so does the handler this object registered on the
         # ROOT logger.  ``sip.isdeleted()`` then reports False -- the
         # widget's C++ half is perfectly alive -- and the signal goes out
         # to a slot that runs with no application, which Qt6 answers with
         # SIGABRT.  The abort lands wherever the next log record happens
         # to be emitted, which is how it took out a test that touches no
         # Qt at all.
-        if QApplication.instance() is None:
+        #
+        # The application has to be checked BY IDENTITY, not just for
+        # existence: the suite creates one per test module, so the
+        # application this console was built for can be destroyed and
+        # replaced by a later one, and "there is an application" then
+        # answers true for the wrong one.
+        app = QApplication.instance()
+        if app is None or (self._app_ref is not None and app is not self._app_ref()):
             self.close()
             return
         console = self._console
