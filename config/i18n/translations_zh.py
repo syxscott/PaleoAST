@@ -1378,4 +1378,6 @@ TRANSLATIONS = {
     "Pause": "暂停",
     "Resume": "继续",
     "Teal": "青色",
+    "Dark theme": "深色主题",
+    "Use the dark theme for the interface and the interactive figures.": "对界面和交互式图表使用深色主题。",
 }

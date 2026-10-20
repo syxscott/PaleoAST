@@ -1415,4 +1415,6 @@ TRANSLATIONS = {
     "Pause": "Pause",
     "Resume": "Resume",
     "Teal": "Teal",
+    "Dark theme": "Dark theme",
+    "Use the dark theme for the interface and the interactive figures.": "Use the dark theme for the interface and the interactive figures.",
 }

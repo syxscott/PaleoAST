@@ -263,14 +263,11 @@ class ExceptionHandler:
 # =============================================================================
 # 主题样式
 # =============================================================================
-
-
-def get_light_theme_stylesheet() -> str:
-    """获取现代清爽亮色主题样式表 (Modern Flat Light Theme)"""
-    from config.design_system import get_modern_stylesheet
-
-    return get_modern_stylesheet()
-
+# The light stylesheet used to be produced by a light-only helper here.
+# The theme is now a user preference, so the application asks
+# ``config.design_system.get_stylesheet(dark)`` for whichever one is
+# selected; a helper that could only ever return the light one had no
+# caller left.
 
 # =============================================================================
 # 闪屏窗口
@@ -714,10 +711,34 @@ class PaleoASTApplication:
         """应用主题"""
         self._logger.info("Applying theme...")
 
-        stylesheet = get_light_theme_stylesheet()
-        self._app.setStyleSheet(stylesheet)
+        # The dark theme is a user preference.  It used to be unreachable:
+        # the application always started light, and nothing ever called
+        # MainWindow.setDarkTheme(), so a whole palette, stylesheet and
+        # propagation chain existed for a theme no user could select.
+        is_dark = self._read_dark_theme_preference()
+        self._logger.info("Theme preference: %s", "dark" if is_dark else "light")
+
+        if self._main_window is not None:
+            self._main_window.apply_theme(is_dark)
+        else:
+            # No window yet (headless / test paths): set the application
+            # stylesheet only.
+            from config.design_system import get_stylesheet
+
+            self._app.setStyleSheet(get_stylesheet(is_dark))
 
         self._logger.info("Theme applied")
+
+    @staticmethod
+    def _read_dark_theme_preference() -> bool:
+        """Read the persisted dark-theme preference."""
+        try:
+            from PyQt6.QtCore import QSettings
+
+            settings = QSettings("PaleoAST", "PaleoAST")
+            return bool(settings.value("preferences/dark_theme", False, type=bool))
+        except Exception:
+            return False
 
     def _show_main_window(self) -> None:
         """显示主窗口"""

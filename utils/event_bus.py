@@ -21,6 +21,7 @@ import logging
 import threading
 from typing import Any
 
+from PyQt6 import sip
 from PyQt6.QtCore import QObject, pyqtSignal
 
 logger = logging.getLogger(__name__)
@@ -99,9 +100,17 @@ class EventBus(QObject):
         touched the QObject is fully constructed, and ``cls()`` still returns
         the one shared instance.
         """
-        if cls._instance is None:
+        if cls._instance is None or sip.isdeleted(cls._instance):
+            # ``sip.isdeleted`` is checked because a QObject's C++ side can be
+            # destroyed while the Python wrapper survives -- the wrapper then
+            # raises "wrapped C/C++ object of type EventBus has been
+            # deleted" on every attribute access.  That happened when a
+            # previous test tore down the window that owned the bus, and the
+            # next MainWindow could not connect to it.  A singleton that
+            # cannot be resurrected is a singleton that breaks the next
+            # test, so the dead instance is replaced rather than reused.
             with cls._instance_lock:
-                if cls._instance is None:
+                if cls._instance is None or sip.isdeleted(cls._instance):
                     instance = super().__new__(cls)
                     QObject.__init__(instance)
                     cls._instance = instance

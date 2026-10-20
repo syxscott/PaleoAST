@@ -59,6 +59,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -1713,47 +1714,58 @@ class MainWindow(QMainWindow):
         # Initialize UI state based on data availability
         self._update_ui_state()
 
-    def _on_load_example_dataset(self) -> None:
-        """Show a tiny picker for the bundled example datasets and
-        load the chosen one.
+    def _build_example_picker(self, labels: list[str]) -> tuple[QDialog, QComboBox]:
+        """Build the example-dataset picker.
 
-        The loader helpers live in :mod:`data.loader`.  Before this
-        method existed the empty workspace offered no way to load
-        anything other than the ribbon entries, which the new user
-        typically doesn't know to look for.
+        The dialog is built by hand rather than through
+        ``QInputDialog.getItem()`` so that its OK / Cancel buttons can be
+        translated: Qt's own translations for them are English-only, and
+        the Chinese interface showed "OK" / "Cancel" here while every
+        other button read "帮助" / "取消" / "运行".
+
+        It is a plain ``QDialog`` with a ``QComboBox`` rather than a
+        ``QInputDialog``: ``QInputDialog`` was tried first and does not
+        fit.  It has no ``setCurrentIndex`` (that belongs to
+        ``QComboBox``), and PyQt6 exposes no ``ComboBox`` input mode at
+        all, so the combo variant of ``QInputDialog`` cannot be reached
+        from Python.
+
+        It is a separate method so that the construction can be tested
+        without opening a modal dialog, and it has to be tested: this
+        path is reachable in no other way, and the broken version raised
+        an ``AttributeError`` the first time a user actually clicked
+        "Load Example Data".
         """
-        from PyQt6.QtWidgets import QInputDialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(_("Load Example Data"))
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(_("Pick an example dataset:")))
+        combo = QComboBox(dialog)
+        combo.addItems(labels)
+        layout.addWidget(combo)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(_("OK"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(_("Cancel"))
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        return dialog, combo
 
+    def _load_example_dataset(self, name: str) -> None:
+        """Load one bundled example dataset by name.
+
+        Split out of :meth:`_on_load_example_dataset` so that the loading
+        itself can be tested without opening the modal picker.
+        """
         from data.loader import (
-            list_example_datasets,
-            load_community,
+            load_example_matrix,
             load_moth_wings,
-            load_primate_traits,
             load_primate_tree,
         )
 
-        datasets = list_example_datasets()
-        labels = [f"{d['name']} — {d['description']}" for d in datasets]
-        if not labels:
-            QMessageBox.information(
-                self,
-                _("No Examples"),
-                _("No example datasets are bundled with this installation."),
-            )
-            return
-        choice, ok = QInputDialog.getItem(
-            self,
-            _("Load Example Data"),
-            _("Pick an example dataset:"),
-            labels,
-            0,
-            False,
-        )
-        if not ok:
-            return
-        idx = labels.index(choice)
-        ds = datasets[idx]
-        name = ds["name"]
         try:
             import numpy as np
 
@@ -1766,19 +1778,14 @@ class MainWindow(QMainWindow):
                 n_pts = data.shape[1] // 2
                 col_labels = [f"{c}{i + 1}" for i in range(n_pts) for c in ("x", "y")]
                 matrix = DataMatrix(data, row_labels=row_labels, col_labels=col_labels)
-            elif name == "community_abundance":
-                df = load_community()
-                site_col = df["site"].astype(str).tolist() if "site" in df.columns else None
-                group_col = df["group"].astype(str).tolist() if "group" in df.columns else None
-                data_df = df.drop(columns=[c for c in ("site", "group") if c in df.columns])
-                matrix = DataMatrix(
-                    data_df.to_numpy(dtype=float),
-                    row_labels=site_col,
-                    col_labels=list(data_df.columns),
-                    specimen_metadata=[
-                        {"group": g} if g is not None else {} for g in (group_col or [None] * len(data_df))
-                    ],
-                )
+            elif name in ("community_abundance", "primate_traits"):
+                # The text columns (row key, grouping label) are separated
+                # from the measurements in one shared place, so the two
+                # datasets cannot drift apart again.  The primate_traits
+                # branch used to leave its "group" column in and died with
+                # "could not convert string to float: 'Catarrhini'" --
+                # a bundled example dataset that could not be loaded.
+                matrix = load_example_matrix(name)
             elif name == "primate_tree":
                 # Phylogenetic tree isn't a matrix; surface the file
                 # contents in a text tab instead of stuffing it into
@@ -1794,15 +1801,6 @@ class MainWindow(QMainWindow):
                 self._add_tab_to_workspace(editor, _("Example — Primate Tree"))
                 self._status_bar.setInfo(_("Loaded example: {0} ({1} tips)").format(name, tree.leaf_count))
                 return
-            elif name == "primate_traits":
-                df = load_primate_traits()
-                species_col = df["species"].astype(str).tolist() if "species" in df.columns else None
-                data_df = df.drop(columns=[c for c in ("species",) if c in df.columns])
-                matrix = DataMatrix(
-                    data_df.to_numpy(dtype=float),
-                    row_labels=species_col,
-                    col_labels=list(data_df.columns),
-                )
             else:
                 QMessageBox.warning(
                     self,
@@ -1831,6 +1829,33 @@ class MainWindow(QMainWindow):
         self._status_bar.setInfo(
             _("Loaded example: {0} ({1} samples x {2} variables)").format(name, matrix.n_samples, matrix.n_variables)
         )
+
+    def _on_load_example_dataset(self) -> None:
+        """Show a tiny picker for the bundled example datasets and
+        load the chosen one.
+
+        The loader helpers live in :mod:`data.loader`.  Before this
+        method existed the empty workspace offered no way to load
+        anything other than the ribbon entries, which the new user
+        typically doesn't know to look for.
+        """
+        from data.loader import list_example_datasets
+
+        datasets = list_example_datasets()
+        labels = [f"{d['name']} — {d['description']}" for d in datasets]
+        if not labels:
+            QMessageBox.information(
+                self,
+                _("No Examples"),
+                _("No example datasets are bundled with this installation."),
+            )
+            return
+        dialog, combo = self._build_example_picker(labels)
+        if not dialog.exec():
+            return
+        choice = combo.currentText()
+        idx = labels.index(choice)
+        self._load_example_dataset(datasets[idx]["name"])
 
     def _setup_ribbon(self) -> None:
         """Setup ribbon tabs and groups."""
@@ -3218,6 +3243,18 @@ class MainWindow(QMainWindow):
             return
         new_state = dialog.get_preferences()
         self._apply_preferences(new_state)
+        # The theme switch is applied here rather than in
+        # _apply_preferences, because that method is deliberately callable
+        # without a window -- it only touches QSettings and the
+        # process-wide matplotlib and palette state -- and a theme change
+        # needs the real widgets.
+        #
+        # Until now the dark theme had a complete implementation and no
+        # way to reach it: the application always started light and nothing
+        # in the UI called MainWindow.setDarkTheme().
+        wanted_dark = bool(new_state.get("dark_theme", False))
+        if wanted_dark != self._is_dark_theme:
+            self.apply_theme(wanted_dark)
         self._status_bar.setInfo(_("Preferences updated"))
 
     def _get_preferences_state(self) -> dict:
@@ -3228,7 +3265,12 @@ class MainWindow(QMainWindow):
         """
         settings = QSettings("PaleoAST", "PaleoAST")
         return {
-            "language": settings.value("preferences/language", "en"),
+            # The language lives under the key the language menu writes
+            # ("language"), not under "preferences/language" -- the two were
+            # different keys, so this field always showed the default "en"
+            # even when the whole interface was running in Chinese.
+            "language": settings.value("language", get_translator().get_language()),
+            "dark_theme": settings.value("preferences/dark_theme", False, type=bool),
             "csv_has_header": settings.value("preferences/csv_has_header", True, type=bool),
             "csv_has_row_labels": settings.value("preferences/csv_has_row_labels", True, type=bool),
             "plot_dpi": settings.value("preferences/plot_dpi", 100, type=int),
@@ -3251,6 +3293,23 @@ class MainWindow(QMainWindow):
         """
         settings = QSettings("PaleoAST", "PaleoAST")
         settings.setValue("preferences/language", new_state["language"])
+        # The language actually in force lives under the key the Language
+        # menu writes.  Writing only "preferences/language" meant a change
+        # made here was stored and then ignored, so the field looked like it
+        # worked and did not.  Both keys are written; the first is the one
+        # the application reads.
+        settings.setValue("language", str(new_state.get("language", "")).strip() or "en")
+        # The theme is written ONLY when the caller supplied it.
+        #
+        # This method is deliberately callable with a partial state -- it
+        # writes the keys it is given and leaves the rest alone, and the
+        # tests call it unbound with a dict carrying the keys they care
+        # about.  Writing a missing key as its default meant that every
+        # partial write reset the user's dark theme back to light, so
+        # running the test suite silently undid the choice the user made in
+        # the Preferences dialog.
+        if "dark_theme" in new_state:
+            settings.setValue("preferences/dark_theme", bool(new_state["dark_theme"]))
         settings.setValue("preferences/csv_has_header", new_state["csv_has_header"])
         settings.setValue("preferences/csv_has_row_labels", new_state["csv_has_row_labels"])
         settings.setValue("preferences/plot_dpi", new_state["plot_dpi"])
@@ -3290,6 +3349,28 @@ class MainWindow(QMainWindow):
             # A name this build no longer knows (an older setting, or a
             # hand-edited config). Fall back rather than refuse to start.
             set_current_palette(DEFAULT_PALETTE_NAME)
+
+        # The dark theme is applied by _on_preferences, not here: this
+        # method is deliberately callable without a window (it only
+        # touches QSettings and the process-wide matplotlib and palette
+        # state), and a theme change needs the real widgets.
+
+    def apply_theme(self, is_dark: bool) -> None:
+        """Switch the whole application between the light and dark themes.
+
+        The application-wide stylesheet has to be set on the QApplication
+        (it is what the chrome outside a single window uses); everything
+        inside this window -- the ribbon, the status bar, the plot canvas,
+        the navigation tree, the open dialogs and the figures already
+        embedded in the workspace -- is reached through
+        :meth:`MainWindow.setDarkTheme`.
+        """
+        from config.design_system import get_stylesheet
+
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(get_stylesheet(is_dark))
+        self.setDarkTheme(is_dark)
 
     def _on_import_data(self) -> None:
         """Show import data dialog with conflict checking."""
@@ -6540,8 +6621,15 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """Handle window close event."""
-        # Check for unsaved changes
-        if self._state.is_modified:
+        # Check for unsaved changes.
+        #
+        # "Unsaved changes" needs something to be unsaved.  With no data
+        # loaded there is nothing to lose, and asking anyway was a dead
+        # end: "Save" was answered with "No data to save", which returned
+        # False, which made this handler ignore the close event -- so the
+        # window refused to close and the user had to answer "Discard" to
+        # get out.
+        if self._state.has_data and self._state.is_modified:
             reply = QMessageBox.question(
                 self,
                 _("Unsaved Changes"),

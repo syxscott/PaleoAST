@@ -361,7 +361,7 @@ def test_r_palette_survives_the_settings_round_trip():
 
 @pytest.fixture
 def app_settings():
-    """The window's real QSettings scope, with the palette key restored.
+    """The window's real QSettings scope, with every key restored.
 
     ``_apply_preferences`` writes to ``QSettings("PaleoAST", "PaleoAST")``.
     Asserting against a different scope would pass or fail for reasons that
@@ -369,8 +369,11 @@ def app_settings():
     first time this was written: the assertion read an empty string because it
     was looking at the wrong scope, not because the write had failed.
 
-    The user's own value is put back afterwards so running the suite does not
-    quietly change their palette.
+    The whole scope is snapshotted and put back afterwards, so running the
+    suite does not quietly change the user's palette, language or theme.
+    Restoring one key was not enough: ``_apply_preferences`` writes the
+    language and the theme as well, so the suite was resetting the user's
+    dark theme back to light every time it ran.
     """
     from PyQt6.QtCore import QSettings
     from PyQt6.QtWidgets import QApplication
@@ -379,15 +382,15 @@ def app_settings():
     assert app is not None
 
     settings = QSettings("PaleoAST", "PaleoAST")
-    had = settings.contains("preferences/r_palette")
-    prior = settings.value("preferences/r_palette") if had else None
-    settings.remove("preferences/r_palette")
+    snapshot = {key: settings.value(key) for key in settings.allKeys()}
     try:
         yield settings
     finally:
-        settings.remove("preferences/r_palette")
-        if had:
-            settings.setValue("preferences/r_palette", prior)
+        for key in settings.allKeys():
+            if key not in snapshot:
+                settings.remove(key)
+        for key, value in snapshot.items():
+            settings.setValue(key, value)
         settings.sync()
 
 

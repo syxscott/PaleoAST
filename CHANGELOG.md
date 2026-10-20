@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A review of the whole codebase, and the plan that came out of it**
   (`FIX_PLAN_2026-10-19.md`): 125 defects across 12 module groups, with the
   five that were fixed first written up in full.
+- **A dark theme you can actually turn on** (`main.py`,
+  `views/ui_main_window.py`, `views/ui_permutation_dialogs.py`) -- the
+  application had a complete dark theme: a palette, a stylesheet, and a
+  propagation chain through the ribbon, the status bar, the navigation tree,
+  the spreadsheet, the plot canvas and every dialog. Nothing reached it. The
+  application always started light, and no code path called
+  `MainWindow.setDarkTheme()`. Every dark-theme defect found in the review was
+  therefore unreachable in the product, and the switch that would have
+  exposed them did not exist. Preferences now carries a **Dark theme**
+  checkbox, the choice is persisted, and it takes effect at startup and the
+  moment it is changed.
 
 ### Fixed
 - **The spreadsheet no longer aborts the application on an infinite cell
@@ -62,6 +73,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths raised `UnboundLocalError` instead of a translated message.
 - **One Chinese string no longer contains two corrupted characters**
   (`config/i18n/translations_zh.py`).
+- **The bundled `primate_traits` example dataset can be loaded at all**
+  (`data/loader.py`, `views/ui_main_window.py`) -- picking it from the example
+  picker failed with `could not convert string to float: 'Catarrhini'`. The
+  dataset is shipped, documented and offered by the application, and it did
+  not load. The view built the matrix itself, and the sibling
+  `community_abundance` branch dropped both of its text columns ("site" and
+  "group") while the `primate_traits` branch dropped only one ("species") and
+  left the grouping label in -- the same function, half-fixed. The separation
+  of text from measurements now lives in one place,
+  `data.loader.load_example_matrix()`, so it can be tested without building a
+  window and the two datasets cannot drift apart again.
+- **The example picker no longer crashes when it is opened**
+  (`views/ui_main_window.py`) -- it raised `AttributeError: 'QInputDialog'
+  object has no attribute 'setCurrentIndex'`, and the Chinese interface
+  showed the PyQt6 crash dialog instead of a list of datasets. `setCurrentIndex`
+  is a `QComboBox` method, and PyQt6 does not expose a `ComboBox` input mode
+  for `QInputDialog` at all, so the picker is now a plain dialog with a combo
+  box in it. The whole path -- picker, choice, load -- had no test at all,
+  which is how it got that far; it does now.
+- **The Preferences dialog no longer always says the language is `en`**
+  (`views/ui_main_window.py`) -- the field read `preferences/language` while the
+  Language menu wrote `language`, so it showed the default even when the whole
+  interface was running in Chinese. The dialog now reads the key that is in
+  force, and writes both.
+- **The Preferences dialog's OK and Cancel buttons are translated**
+  (`views/ui_permutation_dialogs.py`, `views/ui_main_window.py`) -- Qt's own
+  translations for them are English-only, so a Chinese interface showed "OK"
+  and "Cancel" in the one dialog where every other button read "帮助" / "取消" /
+  "运行". The same applied to the example-data picker. Both are built with
+  translated labels now.
+- **The event bus can outlive the window that owned it**
+  (`utils/event_bus.py`) -- `EventBus` is a QObject singleton, so when the
+  window that owned it was torn down the C++ side died while the Python
+  wrapper survived, and every later access raised "wrapped C/C++ object of
+  type EventBus has been deleted". The next main window could not connect to
+  it. A dead instance is now detected and replaced instead of reused.
+- **Closing the window no longer asks to save data that does not exist**
+  (`views/ui_main_window.py`) -- the "unsaved changes" prompt was raised on
+  the modified flag alone. With nothing loaded there is nothing to lose, and
+  asking anyway was a dead end: "Save" was answered with "No data to save",
+  which returned false, which made the window ignore the close event, so the
+  window refused to close and the user had to answer "Discard" to get out.
+  The prompt is now raised only when there is data to save, and it is still
+  raised when there is.
+- **A preferences write no longer switches the user's theme off**
+  (`views/ui_main_window.py`, `tests/visualization/test_palette_single_source.py`)
+  -- `_apply_preferences` is deliberately callable with a partial state, and
+  the theme was written as its default when the key was missing from that
+  state. Every partial write therefore reset the stored dark theme back to
+  light, so running the test suite silently undid the choice the user had
+  made in the Preferences dialog. A key that is not mentioned is now left
+  alone, and the test fixture that works against the real settings scope
+  snapshots the whole scope and puts it back afterwards.
+- **The test suite no longer hangs on a dialog nobody can see**
+  (`tests/conftest.py`) -- `StateManager` is a process-wide singleton and
+  nothing reset it between tests, so a matrix one test loaded stayed loaded
+  for every test that ran after it, and stayed flagged as modified. Closing
+  a real main window then raised the modal "save changes?" box, and a
+  headless run has nobody to answer it: the suite stopped dead instead of
+  failing. The shared state is now cleared around every test, so no test
+  inherits another one's data.
 
 ## [1.1.2] - 2026-10-07
 

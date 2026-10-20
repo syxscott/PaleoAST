@@ -21,6 +21,7 @@ version: 1.1.0
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 
 class TestMothWingsDataset:
@@ -226,6 +227,96 @@ class TestPrimateTraitsDataset:
 
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         assert not df[numeric_cols].isna().any().any(), "Trait data contains NaN values"
+
+
+class TestExampleMatrix:
+    """The seam between a loader's DataFrame and the numeric matrix.
+
+    The loaders above return a DataFrame with the TEXT columns intact --
+    that is the right contract for a loader.  Turning it into the numeric
+    matrix the application analyses is a separate step, and it is where the
+    text has to be separated from the measurements.
+
+    Nothing tested that step: the loader tests stopped at the DataFrame,
+    and the view did the conversion inline.  So the bundled
+    ``primate_traits`` example shipped, was listed in the example picker,
+    and could not be loaded -- "could not convert string to float:
+    'Catarrhini'", because its "group" column (a taxonomic name) was left
+    in the matrix.  These tests cover the seam for every matrix-shaped
+    example dataset.
+    """
+
+    MATRIX_DATASETS = ("moth_wings", "community_abundance", "primate_traits")
+
+    def test_every_matrix_example_loads(self):
+        """No bundled example may fail to load."""
+        from data.loader import load_example_matrix
+
+        for name in self.MATRIX_DATASETS:
+            matrix = load_example_matrix(name)
+            assert matrix.data.ndim == 2, f"{name} did not produce a 2-D matrix"
+            assert matrix.data.size > 0, f"{name} produced an empty matrix"
+            assert np.isfinite(matrix.data).all(), f"{name} produced non-finite values"
+
+    def test_text_columns_are_not_measurements(self):
+        """A text column must not reach the numeric matrix."""
+        from data.loader import load_example_matrix
+
+        matrix = load_example_matrix("primate_traits")
+        assert "group" not in matrix.col_labels
+        assert "species" not in matrix.col_labels
+        # ... and the numbers that ARE measurements are all there.
+        for column in (
+            "body_mass_g",
+            "home_range_km2",
+            "litter_size",
+            "social_group_size",
+            "day_range_km",
+            "brain_vol_cm3",
+            "pelage_darkness",
+            "activity_cycle",
+        ):
+            assert column in matrix.col_labels, f"{column} was dropped from the matrix"
+
+    def test_grouping_label_becomes_specimen_metadata(self):
+        """The group is the variable the dataset exists to be compared on."""
+        from data.loader import load_example_matrix
+
+        for name in ("community_abundance", "primate_traits"):
+            matrix = load_example_matrix(name)
+            groups = [m.get("group") for m in matrix.specimen_metadata]
+            assert len(groups) == matrix.data.shape[0], f"{name}: metadata length mismatch"
+            assert all(g for g in groups), f"{name}: a specimen has no group"
+
+    def test_primate_traits_group_values(self):
+        """The taxonomic group survives into the metadata."""
+        from data.loader import load_example_matrix
+
+        matrix = load_example_matrix("primate_traits")
+        groups = {m.get("group") for m in matrix.specimen_metadata}
+        assert "Catarrhini" in groups, f"unexpected groups: {groups}"
+
+    def test_row_labels_are_the_row_key(self):
+        from data.loader import load_example_matrix
+
+        matrix = load_example_matrix("primate_traits")
+        assert len(matrix.row_labels) == matrix.data.shape[0]
+        assert "Homo_sapiens" in matrix.row_labels
+
+    def test_community_columns_are_species(self):
+        from data.loader import load_example_matrix
+
+        matrix = load_example_matrix("community_abundance")
+        assert "site" not in matrix.col_labels
+        assert "group" not in matrix.col_labels
+        assert matrix.data.shape == (20, 28)
+
+    def test_a_tree_is_not_a_matrix(self):
+        """primate_tree is a phylogeny; asking for a matrix must say so."""
+        from data.loader import load_example_matrix
+
+        with pytest.raises(ValueError, match="matrix"):
+            load_example_matrix("primate_tree")
 
 
 class TestDataLoaderIntegration:

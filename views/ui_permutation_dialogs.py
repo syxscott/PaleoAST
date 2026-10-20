@@ -308,6 +308,7 @@ class PreferencesDialog(QDialog):
         current = current or {}
         self._current = {
             "language": current.get("language", "en"),
+            "dark_theme": bool(current.get("dark_theme", False)),
             "csv_has_header": bool(current.get("csv_has_header", True)),
             "csv_has_row_labels": bool(current.get("csv_has_row_labels", True)),
             "plot_dpi": int(current.get("plot_dpi", 100)),
@@ -360,11 +361,19 @@ class PreferencesDialog(QDialog):
         self._language_edit.setPlaceholderText("en")
         self._language_edit.setToolTip(_("Language code (e.g. ``en``, ``zh``).  Takes effect on restart."))
         lang_form.addRow(_("Language:"), self._language_edit)
+        # The dark theme had a complete implementation -- a palette, a
+        # stylesheet and a propagation chain through every widget -- and NO
+        # way to reach it: the application always started in the light
+        # theme, and nothing in the UI called MainWindow.setDarkTheme().
+        # This checkbox is the missing switch.
+        self._dark_theme_check = QCheckBox(_("Dark theme"))
+        self._dark_theme_check.setChecked(self._current["dark_theme"])
+        self._dark_theme_check.setToolTip(_("Use the dark theme for the interface and the interactive figures."))
+        lang_form.addRow(self._dark_theme_check)
         root.addWidget(lang_group)
 
         # --- CSV defaults -------------------------------------------------
         csv_group = QGroupBox(_("CSV Loading Defaults"))
-        from PyQt6.QtWidgets import QCheckBox
 
         csv_layout = QVBoxLayout(csv_group)
         self._csv_header_check = QCheckBox(_("CSV files have a header row"))
@@ -474,6 +483,11 @@ class PreferencesDialog(QDialog):
         root.addStretch(1)
         # --- Bottom buttons -----------------------------------------------
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        # Qt's own translations for these two buttons are English-only, so a
+        # Chinese interface showed "OK" / "Cancel" here while every other
+        # button in the application read "帮助" / "取消" / "运行".
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(_("OK"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(_("Cancel"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -550,6 +564,7 @@ class PreferencesDialog(QDialog):
             lang = "en"
         return {
             "language": lang,
+            "dark_theme": self._dark_theme_check.isChecked(),
             "csv_has_header": self._csv_header_check.isChecked(),
             "csv_has_row_labels": self._csv_rowlabels_check.isChecked(),
             "plot_dpi": int(self._dpi_spin.value()),

@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
+    from models.data_matrix import DataMatrix
     from phylogenetics.tree import PhyloTree
 
 # Get the data directory path
@@ -226,6 +227,86 @@ def load_primate_traits() -> pd.DataFrame:
     df = pd.read_csv(data_path)
 
     return df
+
+
+# The example CSVs carry TEXT columns that are not measurements: a row key
+# ("site", "species") and a grouping label ("group" -- a habitat type in
+# one dataset, a taxonomic name such as "Catarrhini" in the other).  The
+# loaders above return them as a DataFrame, text columns included, which
+# is the right contract for a loader.
+#
+# Turning that into the numeric matrix the application analyses is a
+# SEPARATE step, and it is where the text has to be separated from the
+# numbers.  Leaving a text column in makes ``to_numpy(dtype=float)`` raise
+# "could not convert string to float: 'Catarrhini'", which is exactly
+# what happened to the bundled primate_traits example: the file was
+# shipped, documented, listed in the example picker, and could not be
+# loaded.
+#
+# It lives here rather than in the view so that it can be tested without
+# building a main window.  The grouping label is kept as specimen
+# metadata, because it is the variable these datasets exist to be
+# compared on.
+
+_EXAMPLE_ROW_KEY = {
+    "community_abundance": "site",
+    "primate_traits": "species",
+}
+_EXAMPLE_GROUP_COLUMN = "group"
+
+
+def load_example_matrix(name: str) -> DataMatrix:
+    """Build the numeric :class:`DataMatrix` for a bundled example dataset.
+
+    Parameters:
+        name: One of ``"moth_wings"``, ``"community_abundance"`` or
+            ``"primate_traits"``.  ``"primate_tree"`` is a phylogeny, not
+            a matrix, and is not handled here.
+
+    Returns:
+        DataMatrix with the numeric columns only, the row key as row
+        labels, and the grouping label as specimen metadata.
+
+    Raises:
+        ValueError: If ``name`` is not a matrix-shaped example dataset.
+        FileNotFoundError: If the data file is not found.
+    """
+    from models.data_matrix import DataMatrix
+
+    if name == "moth_wings":
+        landmarks, specimen_ids = load_moth_wings()
+        data = np.asarray(landmarks, dtype=float)
+        n_points = data.shape[1] // 2
+        col_labels = [f"{c}{i + 1}" for i in range(n_points) for c in ("x", "y")]
+        return DataMatrix(data, row_labels=list(specimen_ids), col_labels=col_labels)
+
+    if name == "community_abundance":
+        frame = load_community()
+    elif name == "primate_traits":
+        frame = load_primate_traits()
+    else:
+        raise ValueError(f"Not a matrix-shaped example dataset: {name!r}")
+
+    row_key = _EXAMPLE_ROW_KEY.get(name)
+    row_labels = frame[row_key].astype(str).tolist() if row_key and row_key in frame.columns else None
+
+    group_column = _EXAMPLE_GROUP_COLUMN
+    group_values = frame[group_column].astype(str).tolist() if group_column in frame.columns else None
+
+    measurements = frame.drop(columns=[c for c in (row_key, group_column) if c and c in frame.columns])
+    # Only the numeric columns are measurements.  Selecting them explicitly
+    # means an unexpected text column in a future dataset is ignored
+    # rather than crashing the load with a raw ValueError from numpy.
+    numeric = measurements.select_dtypes(include=[np.number])
+
+    return DataMatrix(
+        numeric.to_numpy(dtype=float),
+        row_labels=row_labels,
+        col_labels=list(numeric.columns),
+        specimen_metadata=[
+            {"group": group} if group is not None else {} for group in (group_values or [None] * len(numeric))
+        ],
+    )
 
 
 def list_example_datasets() -> list[dict[str, str]]:
