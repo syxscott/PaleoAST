@@ -78,6 +78,15 @@ except RuntimeError:
     pass  # the table may rebuild the item; the stored value is what matters
 print("STORED", float(sheet._data[0, 0]))
 print("SURVIVED")
+sheet.close()
+sheet.deleteLater()
+app.processEvents()
+sys.stdout.flush()
+# Qt's interpreter teardown can abort when the QApplication is collected
+# while a widget is still alive, which would turn a PASS into a crash and
+# make this test's exit-code check fail for the wrong reason.  The
+# assertions are already printed, so leave immediately.
+os._exit(0)
 """
 
 

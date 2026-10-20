@@ -26,7 +26,9 @@ Each test pins one thing that used to be wrong and is user-visible:
 from __future__ import annotations
 
 import ast
+import os
 import re
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -84,6 +86,73 @@ def _code_lines(path: Path) -> list[tuple[int, str]]:
             continue
         out.append((i, line))
     return out
+
+
+# The render check runs in a SUBPROCESS.
+#
+# This test file creates NO QApplication in the pytest process, on
+# purpose.  Qt's teardown rules differ between platforms: on Linux an
+# offscreen widget plus a QApplication that gets collected aborts the
+# interpreter -- and because the collection happens at whatever later
+# point the garbage collector runs, the crash lands far away from the
+# test that caused it (it took out a Python 3.11 job on CI three
+# percent before the end of the run, in an unrelated test).  A hard
+# abort in the pytest process would take the whole suite down rather
+# than failing one test, so the rendering happens out of process and the
+# parent only asserts on the numbers it printed.
+_RENDER_SCRIPT = """
+import os, sys
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+sys.path.insert(0, {repo!r})
+from PyQt6.QtWidgets import QApplication
+
+app = QApplication(["paleoast-design-render"])
+from views.ui_spreadsheet import ScientificSpreadsheet
+
+sheet = ScientificSpreadsheet()
+sheet.load_data([[1.5, 2.25], [3.125, 4.0]], row_labels=["r1", "r2"], col_labels=["c1", "c2"])
+sheet.setDarkTheme(True)
+sheet.resize(320, 160)
+sheet.show()
+app.processEvents()
+
+image = sheet.grab().toImage()
+counts = {{}}
+for y in range(image.height()):
+    for x in range(image.width()):
+        name = image.pixelColor(x, y).name().upper()
+        counts[name] = counts.get(name, 0) + 1
+for name in ("#2C3E50", "#F1F5F9", "#0F172A"):
+    print(name, counts.get(name, 0))
+sheet.close()
+sheet.deleteLater()
+app.processEvents()
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def _render_pixel_counts() -> dict[str, int]:
+    """Render the dark-theme spreadsheet in a subprocess and count pixels."""
+    import subprocess
+    import tempfile
+
+    path = os.path.join(tempfile.gettempdir(), "paleo_design_render.py")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(_RENDER_SCRIPT.format(repo=str(REPO_ROOT)))
+    proc = subprocess.run([sys.executable, path], capture_output=True, text=True, timeout=300)
+    out = proc.stdout or ""
+    counts: dict[str, int] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].startswith("#"):
+            try:
+                counts[parts[0].upper()] = int(parts[1])
+            except ValueError:
+                continue
+    if not counts:
+        raise AssertionError(f"the render subprocess produced no counts: {out!r} {proc.stderr!r}")
+    return counts
 
 
 def _srgb(channel: float) -> float:
@@ -164,37 +233,19 @@ def test_spreadsheet_delegate_paints_with_the_theme_colour():
 
 def test_spreadsheet_cell_text_is_readable_in_the_dark_theme():
     """Render the sheet in the dark theme and check the text pixels."""
-    from PyQt6.QtWidgets import QApplication
-
-    from views.ui_spreadsheet import ScientificSpreadsheet
-
-    app = QApplication.instance() or QApplication([])
-    sheet = ScientificSpreadsheet()
-    sheet.load_data([[1.5, 2.25], [3.125, 4.0]], row_labels=["r1", "r2"], col_labels=["c1", "c2"])
-    sheet.setDarkTheme(True)
-    sheet.resize(320, 160)
-    sheet.show()
-    app.processEvents()
-
-    image = sheet.grab().toImage()
     from config.design_system import ColorPaletteDark
 
-    def _count(hexstr: str) -> int:
-        target = hexstr.upper()
-        n = 0
-        for y in range(image.height()):
-            for x in range(image.width()):
-                if image.pixelColor(x, y).name().upper() == target:
-                    n += 1
-        return n
+    counts = _render_pixel_counts()
 
     # The regression guard: the old light-theme text colour must not be
     # painted at all in the dark theme.  Its absence is a stable
     # assertion; the exact pixel count of the correct colour is not,
     # because it depends on how much of the window is visible.
-    assert _count("#2C3E50") == 0, "the deprecated light-theme text colour is still painted"
-    assert _count(ColorPaletteDark.bg_primary) > 1000, "the dark background is not there"
-    assert _count(ColorPaletteDark.text_primary) > 10, "the cell text is not painted in the theme's text colour"
+    assert counts.get("#2C3E50", 0) == 0, "the deprecated light-theme text colour is still painted"
+    assert counts.get(ColorPaletteDark.bg_primary.upper(), 0) > 1000, "the dark background is not there"
+    assert counts.get(ColorPaletteDark.text_primary.upper(), 0) > 10, (
+        "the cell text is not painted in the theme's text colour"
+    )
 
 
 # =============================================================================
