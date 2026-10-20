@@ -104,7 +104,7 @@ class TestKruskalWallis:
         values, groups = _groups_and_values()
         mine = UnivariateAnalyzer().kruskal_wallis(values, groups)
 
-        result = R_STATS["kruskal.test"](r_vector(values), _factor(groups))
+        result = r("kruskal.test")(r_vector(values), _factor(groups))
         assert_allclose(mine.statistic, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.p_value, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
 
@@ -118,7 +118,7 @@ class TestShapiroWilk:
         values, _groups = _groups_and_values()
         mine = UnivariateAnalyzer().normality_test(values)
 
-        result = R_STATS["shapiro.test"](r_vector(values))
+        result = r("shapiro.test")(r_vector(values))
         assert_allclose(mine.shapiro_stat, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.shapiro_p, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
 
@@ -136,7 +136,7 @@ class TestMannWhitney:
 
         first = r_vector(values[[i for i, g in enumerate(groups) if g < 2]])
         second = r_vector(values[[i for i, g in enumerate(groups) if g == 2]])
-        result = R_STATS["wilcox.test"](first, second)
+        result = r("wilcox.test")(first, second)
         assert_allclose(mine.statistic, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.p_value, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
 
@@ -157,7 +157,7 @@ class TestPairedRankTest:
         labels = [0] * len(before) + [1] * len(after)
         mine = UnivariateAnalyzer().paired_rank_test(stacked, column=0, groups=labels, method="wilcoxon")
 
-        result = R_STATS["wilcox.test"](r_vector(before), r_vector(after), paired=True)
+        result = r("wilcox.test")(r_vector(before), r_vector(after), paired=True)
         assert_allclose(mine.statistic, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.p_value, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
 
@@ -171,7 +171,7 @@ class TestContingencyChiSquare:
         table = _contingency()
         mine = DesignTestAnalyzer().contingency_chi_square(table)
 
-        result = R_STATS["chisq.test"](r_matrix(table))
+        result = r("chisq.test")(r_matrix(table))
         assert_allclose(mine.chi_square, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.p_value, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
         assert mine.dof == int(as_float(result.rx2("parameter")))
@@ -202,7 +202,7 @@ class TestOneWayAnova:
         # The R argument is ``var.equal``, with the dot.  Passed as a dict so
         # the dot survives -- the same reason this suite spells prcomp's
         # ``scale.`` that way.
-        result = R_STATS["oneway.test"](formula, data=frame, **{"var.equal": True})
+        result = r("oneway.test")(formula, data=frame, **{"var.equal": True})
         assert_allclose(mine.f_statistic, as_float(result.rx2("statistic")), rtol=RTOL, atol=ATOL)
         assert_allclose(mine.p_value, as_float(result.rx2("p.value")), rtol=RTOL, atol=ATOL)
 
@@ -221,7 +221,7 @@ class TestOneWayAnova:
 
         frame = r_data_frame({"v": values, "g": groups}, factors=("g",))
         formula = r("as.formula")("v ~ g")
-        result = R_STATS["oneway.test"](formula, data=frame)
+        result = r("oneway.test")(formula, data=frame)
         assert not np.isclose(mine.p_value, as_float(result.rx2("p.value")), rtol=1e-6), (
             "PaleoAST's one-way ANOVA now agrees with R's adaptive default; "
             "if the test is meant to change, say so in the method documentation"
