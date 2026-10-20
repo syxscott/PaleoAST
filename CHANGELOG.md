@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A measurement of how every analysis was validated**
+  (`scripts/validation_matrix.py`, `docs/validation-matrix.md`) -- for each
+  of the 113 first-party analyses: whether it is compared against a
+  reference implementation in R, checked against published truth, covered
+  by a property test, or only by a unit test on one example. The gap is
+  now a number instead of a worry: **74 of 113 rested on a unit test
+  alone**, concentrated in the univariate tests (16 of 16 with no R
+  comparison at all), the plot-menu plotters (20 of 20) and the
+  time-series methods (12 of 16). A ratchet in
+  `tests/test_validation_coverage.py` holds the number where it is: it may
+  fall when something is validated properly, and it may not rise.
+- **The univariate tests are cross-validated against base R**
+  (`tests/cross_validation/test_vs_r_base_univariate.py`) -- kruskal_wallis,
+  the Shapiro-Wilk normality test, mann_whitney, the paired Wilcoxon test
+  and the contingency chi-square are compared against R's `stats` package
+  live, on the same data, to twelve digits. The one-way ANOVA is compared
+  against R's `var.equal = TRUE`, and a second test records that R's
+  *default* would give a different answer -- because PaleoAST runs the
+  classical pooled-variance test and R's default is adaptive. Both sides
+  should say which test they ran.
 - **Six families of univariate tests the application could not run at all**
   (`stats/univariate_extra.py`, wired up through `stats/univariate_menu.py`
   and the plugin catalog): Brunner-Munzel, Mood's median test, Fligner-Kileen,
