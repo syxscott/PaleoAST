@@ -254,6 +254,15 @@ def test_d_location_breaks_ties_by_the_first_distinct_value(analyzer: Distributi
     The previous version of this file claimed that the module and scipy
     "use the same convention" and checked it on 20 continuous normal
     draws, which never produce the ambiguous case.
+
+    What is asserted about scipy is only the invariant that holds on every
+    scipy release: the two agree on the statistic D itself.  The VALUE
+    scipy reports for an ambiguous maximum is an implementation detail and
+    it is NOT stable -- the scipy that ships with Python 3.10/3.11 reports
+    the last of the maximising values, the scipy that ships with
+    3.12/3.13 reports the first, and neither is part of scipy's documented
+    contract.  Pinning those numbers made this test fail on the newer
+    interpreters for a reason that has nothing to do with this module.
     """
     x = [3, 2, 1, 3, 1]
     y = [3, 2, 3, 2, 0]
@@ -262,9 +271,8 @@ def test_d_location_breaks_ties_by_the_first_distinct_value(analyzer: Distributi
     assert mine.statistic == pytest.approx(float(theirs.statistic), abs=1e-12)
     assert mine.d_location == 0.0
     assert mine.d_sign == -1
-    # scipy's convention, for the record.
-    assert float(theirs.statistic_location) == 1.0
-    assert int(theirs.statistic_sign) == 1
+    # scipy's tie-breaking is deliberately not asserted numerically; see the
+    # docstring.
 
     # A second ambiguous case, with a different sign of the deviation.
     x2 = [1, 2, 1, 2, 2]
@@ -274,8 +282,6 @@ def test_d_location_breaks_ties_by_the_first_distinct_value(analyzer: Distributi
     assert mine2.statistic == pytest.approx(float(theirs2.statistic), abs=1e-12)
     assert mine2.d_location == 0.0
     assert mine2.d_sign == -1
-    assert float(theirs2.statistic_location) == 2.0
-    assert int(theirs2.statistic_sign) == 1
 
 
 def test_d_location_is_a_value_present_in_the_pooled_sample(analyzer: DistributionTestAnalyzer) -> None:

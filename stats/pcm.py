@@ -1049,9 +1049,7 @@ class PCMAnalyzer:
             # makes ``_`` a local variable for the whole function, so the
             # ``_("...")`` above would raise UnboundLocalError instead of
             # the translated message.
-            _pc_res, _pc_extra, perm_ic_data, _pc_sv = _compute_contrasts_recursive(
-                working_tree.root, perm_trait_dict
-            )
+            _pc_res, _pc_extra, perm_ic_data, _pc_sv = _compute_contrasts_recursive(working_tree.root, perm_trait_dict)
             if len(perm_ic_data) < 2:
                 # Deliberately not routed through
                 # utils.statistics_core.permutation_pvalue: this skip means the
@@ -1068,9 +1066,7 @@ class PCMAnalyzer:
             # NOT ``_``: binding ``_`` here would make it a local variable
             # for the whole function, so the ``_("...")`` above would raise
             # UnboundLocalError instead of the translated message.
-            perm_F, _perm_res, _perm_rank, _perm_sv, _perm_extra = _one_way_f(
-                perm_ic, perm_labels
-            )
+            perm_F, _perm_res, _perm_rank, _perm_sv, _perm_extra = _one_way_f(perm_ic, perm_labels)
             perm_Fs.append(perm_F)
 
         # 加一校正 (1 + #{F_perm >= F_obs}) / (1 + n_perm)：与本文件

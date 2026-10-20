@@ -368,9 +368,7 @@ class AllometryAnalyzer:
                 raise ValidationError(_("Need at least 3 specimens for allometry analysis"))
 
             if n_permutations < 1:
-                raise ValidationError(
-                    _("n_permutations must be >= 1, got {0}").format(n_permutations)
-                )
+                raise ValidationError(_("n_permutations must be >= 1, got {0}").format(n_permutations))
 
             # Step 1: Centroid size for each specimen.  When the caller
             # supplies the pre-GPA sizes (the only informative choice for
@@ -471,9 +469,7 @@ class AllometryAnalyzer:
             # instead of the module-level translation function -- and to an
             # UnboundLocalError on the error paths that run before this
             # line.
-            beta_null, _lstsq_res, _lstsq_rank, _lstsq_sv = np.linalg.lstsq(
-                X_null, shape_centered, rcond=None
-            )
+            beta_null, _lstsq_res, _lstsq_rank, _lstsq_sv = np.linalg.lstsq(X_null, shape_centered, rcond=None)
             predicted_null_full = X_null @ beta_null + mean_shape
             ss_null_full = float(np.sum((flattened - predicted_null_full) ** 2))
             ss_res_full = float(np.sum((flattened - predicted_full) ** 2))
@@ -543,23 +539,18 @@ class AllometryAnalyzer:
                     # A constant regressor: the fit degenerates to the mean.
                     return ss_tot_full
                 numer = zc @ yc_reduced
-                return float(
-                    (ss_tot_full - ss_tot_reduced)
-                    + ss_tot_reduced
-                    - float(np.sum(numer**2)) / szz
-                )
+                return float((ss_tot_full - ss_tot_reduced) + ss_tot_reduced - float(np.sum(numer**2)) / szz)
 
             # The closed form and the explicit lstsq path must agree, or the
             # permutation null would be testing a different statistic from
             # the observed one.  Check it once, on the observed data.
             ss_res_check = _full_space_residual_ss(log_cs)
-            if ss_res_full > 0 and not np.isclose(
-                ss_res_check, ss_res_full, rtol=1e-8, atol=1e-12
-            ):
+            if ss_res_full > 0 and not np.isclose(ss_res_check, ss_res_full, rtol=1e-8, atol=1e-12):
                 raise ValidationError(
-                    _("Internal allometry inconsistency: the residual sum of squares "
-                      "computed by the two code paths disagree ({0} vs {1}).")
-                    .format(ss_res_check, ss_res_full)
+                    _(
+                        "Internal allometry inconsistency: the residual sum of squares "
+                        "computed by the two code paths disagree ({0} vs {1})."
+                    ).format(ss_res_check, ss_res_full)
                 )
 
             if ss_res_full > 0 and df2 > 0:
@@ -570,9 +561,7 @@ class AllometryAnalyzer:
                 # coordinates; Procrustes coordinates are not independent, so
                 # this remains an approximation and is labelled as such.
                 parametric_df2 = df1 * df2
-                isometry_pvalue_parametric = float(
-                    1.0 - stats.f.cdf(f_statistic, df1, parametric_df2)
-                )
+                isometry_pvalue_parametric = float(1.0 - stats.f.cdf(f_statistic, df1, parametric_df2))
             else:
                 f_statistic = 0.0
                 isometry_pvalue_parametric = None
@@ -620,9 +609,7 @@ class AllometryAnalyzer:
                     if not np.any(good):
                         done += m
                         continue
-                    f_perm = ((ss_null_full - perm_ss[good]) / df1) / (
-                        perm_ss[good] / df2
-                    )
+                    f_perm = ((ss_null_full - perm_ss[good]) / df1) / (perm_ss[good] / df2)
                     good_f = np.isfinite(f_perm)
                     n_valid += int(np.count_nonzero(good_f))
                     n_ge += int(np.count_nonzero(f_perm[good_f] >= f_obs))

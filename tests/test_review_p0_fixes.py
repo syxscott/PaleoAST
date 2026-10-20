@@ -49,7 +49,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # =============================================================================
 # P0-1  the spreadsheet must survive an "inf" cell edit
 # =============================================================================
-_SHEET_SCRIPT = '''
+_SHEET_SCRIPT = """
 import os, sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, {repo!r})
@@ -78,16 +78,14 @@ except RuntimeError:
     pass  # the table may rebuild the item; the stored value is what matters
 print("STORED", float(sheet._data[0, 0]))
 print("SURVIVED")
-'''
+"""
 
 
 def _run_sheet_script(text: str) -> tuple[int, str]:
     path = os.path.join(tempfile.gettempdir(), "paleo_sheet_regression.py")
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(_SHEET_SCRIPT.format(repo=REPO_ROOT, text=text))
-    proc = subprocess.run(
-        [sys.executable, path], capture_output=True, text=True, timeout=180
-    )
+    proc = subprocess.run([sys.executable, path], capture_output=True, text=True, timeout=180)
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
@@ -192,9 +190,7 @@ def test_epps_singleton_permutation_does_not_divide_by_zero():
     sample1 = np.array([-1.0, 1.0, 10.0, 11.0])
     sample2 = np.array([-2.0, 2.0, 12.0, 13.0])
 
-    result = DistributionTestAnalyzer().epps_singleton(
-        sample1, sample2, n_permutations=199, random_seed=7
-    )
+    result = DistributionTestAnalyzer().epps_singleton(sample1, sample2, n_permutations=199, random_seed=7)
     assert 0.0 <= float(result.p_value) <= 1.0
 
 
@@ -220,13 +216,9 @@ def test_isometry_test_detects_real_allometry():
     from morphometrics.allometry import AllometryAnalyzer
 
     coords, sizes = _allometric_data(with_allometry=True)
-    result = AllometryAnalyzer().analyze_allometry(
-        coords, centroid_sizes=sizes, n_permutations=999, random_seed=1
-    )
+    result = AllometryAnalyzer().analyze_allometry(coords, centroid_sizes=sizes, n_permutations=999, random_seed=1)
     assert float(result.r_squared) > 0.4
-    assert float(result.isometry_pvalue) < 0.05, (
-        f"p={result.isometry_pvalue} -- the isometry test is too conservative"
-    )
+    assert float(result.isometry_pvalue) < 0.05, f"p={result.isometry_pvalue} -- the isometry test is too conservative"
 
 
 def test_isometry_test_does_not_reject_without_allometry():
@@ -237,9 +229,7 @@ def test_isometry_test_does_not_reject_without_allometry():
     trials = 8
     for i in range(trials):
         coords, sizes = _allometric_data(seed=100 + i, with_allometry=False)
-        result = AllometryAnalyzer().analyze_allometry(
-            coords, centroid_sizes=sizes, n_permutations=199, random_seed=5
-        )
+        result = AllometryAnalyzer().analyze_allometry(coords, centroid_sizes=sizes, n_permutations=199, random_seed=5)
         if float(result.isometry_pvalue) < 0.05:
             rejects += 1
     assert rejects <= 2, f"{rejects}/{trials} false positives under H0"
@@ -250,10 +240,6 @@ def test_isometry_permutation_is_reproducible_with_a_seed():
     from morphometrics.allometry import AllometryAnalyzer
 
     coords, sizes = _allometric_data(with_allometry=True)
-    first = AllometryAnalyzer().analyze_allometry(
-        coords, centroid_sizes=sizes, n_permutations=199, random_seed=42
-    )
-    second = AllometryAnalyzer().analyze_allometry(
-        coords, centroid_sizes=sizes, n_permutations=199, random_seed=42
-    )
+    first = AllometryAnalyzer().analyze_allometry(coords, centroid_sizes=sizes, n_permutations=199, random_seed=42)
+    second = AllometryAnalyzer().analyze_allometry(coords, centroid_sizes=sizes, n_permutations=199, random_seed=42)
     assert float(first.isometry_pvalue) == float(second.isometry_pvalue)

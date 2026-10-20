@@ -649,9 +649,7 @@ class EvolutionRateAnalyzer:
                 # variable for the whole function, so the ``_("...")`` above
                 # would raise UnboundLocalError instead of the translated
                 # validation message.
-                _boot_res, rate, _boot_rank, _boot_sv = self._fit_stasis(
-                    boot_trait, boot_dx, time_intervals
-                )
+                _boot_res, rate, _boot_rank, _boot_sv = self._fit_stasis(boot_trait, boot_dx, time_intervals)
                 rates.append(rate)
 
         if not rates:

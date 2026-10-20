@@ -157,9 +157,7 @@ class TestAllometryFTestUsesFullShapeSpace:
         df1 = p * k
         df2 = n - 2
         expected = float(1.0 - stats.f.cdf(result.f_statistic, df1, df1 * df2))
-        assert float(result.isometry_pvalue_parametric) == pytest.approx(
-            expected, rel=1e-9
-        )
+        assert float(result.isometry_pvalue_parametric) == pytest.approx(expected, rel=1e-9)
 
     def test_pca_reduction_differs_from_legacy_reduced(self):
         """The bug made the F-test identical to a reduced-space test.

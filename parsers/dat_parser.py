@@ -532,9 +532,7 @@ class DATParser:
         sign_stripped = value.lstrip("+-")
         comma_count = sign_stripped.count(",")
         dot_count = sign_stripped.count(".")
-        if (comma_count > 1 or dot_count > 1) and not self._WELL_FORMED_THOUSANDS.match(
-            sign_stripped
-        ):
+        if (comma_count > 1 or dot_count > 1) and not self._WELL_FORMED_THOUSANDS.match(sign_stripped):
             return True
         return False
 
