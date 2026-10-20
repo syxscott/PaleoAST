@@ -143,8 +143,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the dark figures the design system goes to the trouble of building were
   unreachable for every plot the user actually made. The workspace now
   tells a new plot which theme is in force.
+- **The figures ask matplotlib for a font that exists wherever it does**
+  (`config/design_system.py`, `views/ui_plot_canvas.py`) -- the canvas
+  requested four Windows families and nothing else. When matplotlib cannot
+  satisfy the request it logs "findfont: Generic family 'sans-serif' not
+  found because none of the following families were found", once per
+  render: on a Linux machine, every figure the application drew produced a
+  log record. The chain now ends in DejaVu Sans, which ships with
+  matplotlib itself, and Liberation Sans, which is on every Linux
+  desktop, with the CJK families first so Chinese labels still pick them
+  up. The list lives in `FigureTypography` now -- the place both rendering
+  paths already read their type scale from -- so the canvas and the
+  plot-menu plotters cannot drift apart again.
 - **A log record with no application behind it no longer kills the process**
-  (`views/diagnostic_console.py`) -- the diagnostic console registers a log
   handler on the ROOT logger, and the console is a dock widget with no
   parent of its own, so when the application it belonged to is destroyed
   the widget can survive and so does the handler. The widget's C++ half was
