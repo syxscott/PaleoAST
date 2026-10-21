@@ -63,6 +63,7 @@ __all__ = [
     "r_matrix",
     "r_numbers",
     "r_program",
+    "r_program_values",
     "r_string_vector",
     "r_vector",
     "require",
@@ -291,6 +292,22 @@ def r_program(code: str, **substitutions: str) -> dict[str, float]:
         text = text.replace(f"@@{key}@@", str(value))
     result = r("eval")(r("parse")(text=text))
     return {str(name): as_float(result.rx2(str(name))) for name in r("names")(result)}
+
+
+def r_program_values(code: str, **substitutions: str) -> np.ndarray:
+    """Run an R program that returns one numeric vector, and read it whole.
+
+    The companion of :func:`r_program` for the cases where the reference
+    is a *list* of numbers -- the counts of a histogram, the quartiles of
+    a box plot -- rather than a handful of named scalars.  The values come
+    back in the order R produced them, so the R program has to put them in
+    the order the test expects.
+    """
+    text = code
+    for key, value in substitutions.items():
+        text = text.replace(f"@@{key}@@", str(value))
+    result = r("eval")(r("parse")(text=text))
+    return as_array(result)
 
 
 def r_numbers(values) -> str:

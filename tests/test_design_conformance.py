@@ -265,9 +265,20 @@ def test_both_figure_paths_use_the_same_type_scale():
     for key, value in FigureTypography.rc_overrides().items():
         assert scoped.get(key) == value, f"{key} is {scoped.get(key)} in the plotters, {value} in the scale"
 
-    # And the canvas must read the same scale.
+    # And the canvas must read the same scale.  This used to be a
+    # source-text check for "FigureTypography.rc_overrides()" in the
+    # canvas, which rotted the moment the mapping moved into
+    # config/matplotlib_theme.py -- the number is what matters, not where
+    # the call sits, so the check is on the rcParams the canvas applies.
+    from config.matplotlib_theme import rc_params
+
+    applied = rc_params(False)
+    for key, value in FigureTypography.rc_overrides().items():
+        assert applied.get(key) == value, f"{key} is {applied.get(key)} in the canvas's mapping, {value} in the scale"
+
+    # ...and the canvas really does go through that one mapping.
     canvas = (REPO_ROOT / "views" / "ui_plot_canvas.py").read_text(encoding="utf-8")
-    assert "FigureTypography.rc_overrides()" in canvas
+    assert "matplotlib_rc_params(" in canvas
 
 
 def test_figure_type_scale_is_the_documented_one():

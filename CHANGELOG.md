@@ -76,6 +76,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `anova` table are padded with trailing spaces, so looking up the row
   "a" matches both "a" and "a:b" and R resolves that to `NA`, a silent
   wrong answer rather than an error.
+- **The plot menu is cross-validated against base R** --
+  nine of the twenty plot entries now have a live comparison
+  (`tests/cross_validation/test_vs_r_base_plots.py`): the XY scatter, the
+  XY scatter with error bars, the histogram, the bar chart, the box plot,
+  the pie chart, the stacked chart, the normal probability plot and the
+  percentile plot. A figure cannot be compared with another figure, so
+  what is compared is the **data behind the figure**: the application
+  draws the picture, the numbers are read back out of the matplotlib
+  artists -- the bar heights, the box vertices, the wedge angles, the
+  error bar ends -- and those are checked element by element against what
+  R computes from the same input. The plot domain's R coverage goes from
+  0 to 9, the R column of the validation matrix from 20 to **29 of 113**,
+  and the gap from 87 to **78**.
+
+- **The Q-Q plot's reference line is the quartile line** --
+  `visualization/generic_plots.py`. The code drew a least-squares fit
+  through every point while its own docstring said the line went through
+  the quartiles, and the method documentation said the line was the unit
+  diagonal -- three different claims, none of which matched the code.
+  The line is now the quartile line, which is what the docstring said and
+  what R's `qqnorm` draws. A least-squares line is a different line: it
+  is pulled by the tails, and on a Q-Q plot the tails are the point.
+
+- **The percentile plot keeps its whiskers and its median**
+  -- `visualization/generic_plots.py`. It was built by hiding every line
+  whose style was `"-"`, and in matplotlib that is the whiskers, the caps
+  **and** the median. What was left on screen was the interquartile range
+  and nothing else, which is not a box-and-whisker plot and not what the
+  docstring said ("the box plot without outliers"). Only the outlier
+  markers are removed now.
+
+- **One place maps the design system onto matplotlib**
+  (`config/matplotlib_theme.py`, `views/ui_plot_canvas.py`) -- four places
+  used to do it: the module-level `plt.rcParams.update(...)` in the canvas
+  module, `PlotCanvas.setDarkTheme`'s own update, `PlotCanvas.theme_colors()`
+  and `PlotCanvas._apply_axes_theme`. The first two wrote matplotlib's own
+  names and the third invented a set of role names of its own, so a colour
+  that reached one of them but not the others was right in one place and
+  wrong in another. That is how a dark-theme canvas ends up with a white
+  plot area: the canvas re-tints the axes it already has, but a figure
+  created afterwards takes its colours from rcParams, and those two
+  answers were written separately. `config/matplotlib_theme.py` now owns
+  the mapping -- the role names the canvas reads and matplotlib's own
+  names both come from the same palette, so they cannot disagree.
+
+  The check in `tests/test_design_conformance.py` that the canvas reads
+  the figure type scale was a **source-text** check for
+  `FigureTypography.rc_overrides()`; it is now a check on the rcParams
+  the canvas actually applies, which is the thing the check was for.
+
 - **A cross-validation directory that no longer fails to collect**
   (`tests/cross_validation/_rbridge.py`) -- `require()` raises its skip at
   module level, where pytest refuses a plain `pytest.skip()`; without

@@ -16,14 +16,26 @@
 
 - **`percentiles`（百分位图）是箱线图去掉离群点**，
   **"离群"是按 1.5×IQR 定义的**，不是"极端值"。
-- **`normal_probability_plot`（Q-Q 图）**的**参考线是斜率为 1、截距 0**，
-  点偏离直线的形状说明了偏度还是厚尾。
+  **须线、端帽和中位数线都保留**——只去掉离群点的标记；
+  早先的版本把 `linestyle == "-"` 的线全藏了，而 matplotlib 里那正是
+  须线、端帽**和中位数**，于是图上只剩四分位距的方块。
+- **`normal_probability_plot`（Q-Q 图）**的**参考线是四分位线**：
+  取理论分位数与观测值的 25%、75% 分位点连成的直线
+  （与 R 的 `qqnorm` 画的线同一种构造），**不是斜率 1、截距 0 的单位对角线**——
+  数据本身不在该尺度上时，对角线没有意义。
+  早先的版本用的是**最小二乘**拟合：那是另一条线，它被两端拉动，
+  而 Q-Q 图要看的恰恰就是两端。
 - **`box_plot` 的箱体是四分位距**，**须线默认伸到 1.5×IQR 内的最远点**，
   而不是 min/max——**离群点是单独画出来的点**。
+- **`box_plot` 的四分位数是 type 7（线性插值）**，与 `numpy`/`R` 的
+  `quantile` 默认一致。**R 自己的 `boxplot` 不是**：`boxplot.stats` 用
+  `fivenum` 算 Tukey 铰链，偶数样本时和 type 7 **不是同一个数**。
+  拿 R 的 `boxplot` 来对会差一个数，而且与本实现无关。
 - **`histogram` 的分箱规则**（等宽/等频/Sturges/Freedman-Diaconis）会改变图的形状。
   **R 的 `hist()` 默认是 Sturges，`numpy` 默认是等宽**——两者对同一份数据给的图不同。
 - **`stacked_chart` 的堆叠顺序**决定了每一条带的起点；
   **百分比堆叠**与**绝对值堆叠**的读法完全不同。
+  **百分比堆叠的每一条加起来是 100（不是 1）**，纵轴标签写的是 "percent"。
 - **`mosaic_plot` 的面积是频数**（不是百分比除非另行归一化）。
 - **`xy_error_bars` 的误差棒含义**（标准差/标准误/置信区间）必须在图注里写明。
 - **`surface_plot` 与 `plot_3d` 的 z 轴**是投影，**不是数据的三维正交视图**；
@@ -32,18 +44,23 @@
 ## 与 R 的对照方式
 
 绘图本身无法逐像素与 R 对比（渲染器、字体、抗锯齿都不同）。
-**能对比的是图背后的数据变换**：
+**能对比的是图背后的数据变换**：本域已有 **9 个入口**与 base R 活跑比对
+（`tests/cross_validation/test_vs_r_base_plots.py`），
+做法是**让应用把图画出来，再把图里的数字读回来**（柱高、箱体顶点、
+扇区角度、误差棒端点），与 R 用同一份输入算出的结果逐元素比对。
+比对的是图，不是调图的辅助函数。
 
-| 图 | 可与 R 比对的东西 | R 的函数 |
-|---|---|---|
-| `percentiles` | 分位数点 | `quantile(type = 7)` |
-| `histogram` | 分箱边界与每箱计数 | `hist(breaks = ...)` |
-| `box_plot` | 箱线图五数概括 | `boxplot.stats` |
-| `normal_probability_plot` | QQ 分位数 | `qqnorm` |
-| `pie_chart` | 各扇区份额 | `pie` |
-| `stacked_chart` | 堆叠后的矩阵 | `barplot` / `matrix` |
-| `matrix_plot` | 归一化后的矩阵 | `image` / `heatmap` |
-| `xy_plot` | 拟合线与坐标变换 | `lm` / `plot` |
+| 图 | 比对的东西 | R 的函数 | 备注 |
+|---|---|---|---|
+| `xy_plot` | 最小二乘拟合线 | `lm` | 斜率与截距 |
+| `xy_error_bars` | 误差棒上下端点 | `y ± err` | 误差是半宽 |
+| `histogram` | 每箱计数 | `hist(breaks = ...)` | **用应用自己的箱边喂给 R**，比的是计数 |
+| `bar_chart` | 每类的合计 | `tapply` | |
+| `box_plot` | 五数概括 | `quantile(type = 7)` | 须线按 1.5×IQR 规则算；**不是** `boxplot.stats` |
+| `percentiles` | 同上 | `quantile(type = 7)` | |
+| `pie_chart` | 扇区角度 | `cumsum(x)/sum(x)*360` | **matplotlib 的 `pie` 把尺寸转成 float32**，角度只有单精度 |
+| `stacked_chart` | 每段高度与起点 | 算术 | 按列绘出，读回时按行重排 |
+| `normal_probability_plot` | 理论分位数与参考线 | `qnorm` | Blom 位置 `(i-0.5)/n` |
 
 ## 参考
 
@@ -72,24 +89,24 @@
 <!-- matrix:start -->
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
-| `bar_chart` | `visualization.plot_menu` | 单元 | Bar chart of a column, or sums per category |
-| `box_plot` | `visualization.plot_menu` | 单元 | Box plot of one column per group |
+| `bar_chart` | `visualization.plot_menu` | R | Bar chart of a column, or sums per category |
+| `box_plot` | `visualization.plot_menu` | R | Box plot of one column per group |
 | `bubble_plot` | `visualization.plot_menu` | 单元 | Scatter with a third variable as point area |
-| `histogram` | `visualization.plot_menu` | 单元 | Histogram of one column |
+| `histogram` | `visualization.plot_menu` | R | Histogram of one column |
 | `matrix_plot` | `visualization.plot_menu` | 单元 | Matrix plot of a 2-D array |
 | `mosaic_plot` | `visualization.plot_menu` | 单元 | Mosaic plot of a contingency table |
 | `network_plot` | `visualization.plot_menu` | 单元 | Network plot from an edge list |
-| `normal_probability_plot` | `visualization.plot_menu` | 单元 | Normal probability (Q-Q) plot |
-| `percentiles` | `visualization.plot_menu` | 单元 | Percentile plot: a box plot without outliers |
-| `pie_chart` | `visualization.plot_menu` | 单元 | Pie chart of a column's values or labels |
+| `normal_probability_plot` | `visualization.plot_menu` | R | Normal probability (Q-Q) plot |
+| `percentiles` | `visualization.plot_menu` | R | Percentile plot: a box plot without outliers |
+| `pie_chart` | `visualization.plot_menu` | R | Pie chart of a column's values or labels |
 | `plot_3d` | `visualization.plot_menu` | 单元 | 3-D scatter, line or bubble plot |
 | `polar_plot` | `visualization.plot_menu` | 单元 | Polar plot of one column |
 | `radar_chart` | `visualization.plot_menu` | 单元 | Radar chart: one polygon per matrix row |
-| `stacked_chart` | `visualization.plot_menu` | 单元 | Stacked bars over the rows of a matrix |
+| `stacked_chart` | `visualization.plot_menu` | R | Stacked bars over the rows of a matrix |
 | `surface_plot` | `visualization.plot_menu` | 单元 | 3-D surface over a grid |
 | `ternary_plot` | `visualization.plot_menu` | 单元 | Ternary plot of three components |
 | `vector_plot` | `visualization.plot_menu` | 单元 | Vector (quiver) field |
 | `venn_diagram` | `visualization.plot_menu` | 单元 | Venn diagram for two or three sets |
-| `xy_error_bars` | `visualization.plot_menu` | 单元 | XY scatter with error bars |
-| `xy_plot` | `visualization.plot_menu` | 单元 | XY scatter with an optional fitted line and log axes |
+| `xy_error_bars` | `visualization.plot_menu` | R | XY scatter with error bars |
+| `xy_plot` | `visualization.plot_menu` | R | XY scatter with an optional fitted line and log axes |
 <!-- matrix:end -->

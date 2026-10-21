@@ -53,8 +53,10 @@ from PyQt6.QtWidgets import (
 )
 
 from config.colors import current_palette, relative_luminance
-from config.design_system import FigureTypography, get_palette
+from config.design_system import get_palette
 from config.i18n import _
+from config.matplotlib_theme import rc_params as matplotlib_rc_params
+from config.matplotlib_theme import theme_colors as matplotlib_theme_colors
 
 # Publication quality style settings
 try:
@@ -62,29 +64,11 @@ try:
 except OSError:
     with contextlib.suppress(OSError):
         plt.style.use("seaborn-whitegrid")
-plt.rcParams.update(
-    {
-        "figure.dpi": 100,
-        "savefig.dpi": 300,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "grid.linestyle": "-",
-        "grid.linewidth": 0.5,
-        "axes.linewidth": 0.8,
-        "axes.unicode_minus": False,
-        # The light theme's surfaces and text, from the palette rather than
-        # from literals -- setDarkTheme() replaces them for the dark one.
-        "axes.facecolor": get_palette(False).bg_secondary,
-        "figure.facecolor": get_palette(False).bg_primary,
-        "axes.edgecolor": get_palette(False).border_light,
-        "axes.labelcolor": get_palette(False).text_primary,
-        "xtick.color": get_palette(False).text_primary,
-        "ytick.color": get_palette(False).text_primary,
-        "text.color": get_palette(False).text_primary,
-        "grid.color": get_palette(False).border_light,
-        **FigureTypography.rc_overrides(),
-    }
-)
+# The whole matplotlib mapping -- surfaces, text, grid, spines and the
+# type scale -- comes from one place, so the theme that is applied here
+# and the theme that ``setDarkTheme`` applies later are the same mapping
+# and cannot drift apart.
+plt.rcParams.update(matplotlib_rc_params(False))
 
 
 @dataclass
@@ -380,22 +364,10 @@ class InteractivePlotCanvas(QWidget):
 
         # Sync matplotlib theme.  The palette is the single source of truth
         # (see ``theme_colors``), so a canvas created *after* the switch
-        # inherits the same colours through rcParams.
-        t = self.theme_colors()
-        plt.rcParams.update(
-            {
-                "axes.facecolor": t["axes_bg"],
-                "figure.facecolor": t["figure_bg"],
-                "axes.edgecolor": t["border"],
-                "axes.labelcolor": t["text"],
-                "xtick.color": t["text"],
-                "ytick.color": t["text"],
-                "text.color": t["text"],
-                "grid.color": t["grid"],
-                "axes.spines.top": False,
-                "axes.spines.right": False,
-            }
-        )
+        # inherits the same colours through rcParams -- and the mapping
+        # applied here is the SAME function that produced the light-theme
+        # rcParams at import time, so the two cannot disagree.
+        plt.rcParams.update(matplotlib_rc_params(self._is_dark_theme))
 
         # Update figure background
         c = get_palette(is_dark)
@@ -419,19 +391,13 @@ class InteractivePlotCanvas(QWidget):
         methods must read their surfaces/text colours from here instead of
         hard-coding the light-theme literals, otherwise a canvas switched to
         the dark theme keeps painting white backgrounds.
+
+        The mapping itself lives in ``config.matplotlib_theme``, which is
+        also what produces the rcParams, so the colours an existing axes is
+        re-tinted with and the colours a new figure inherits are the same
+        numbers.
         """
-        c = get_palette(self._is_dark_theme)
-        return {
-            "text": c.text_primary,
-            "text_muted": c.text_secondary,
-            "axes_bg": c.bg_secondary,
-            "figure_bg": c.bg_primary,
-            "border": c.border_light,
-            "grid": c.border_light,
-            "legend_bg": c.bg_primary,
-            "legend_edge": c.border_light,
-            "reference": c.text_secondary,
-        }
+        return matplotlib_theme_colors(self._is_dark_theme)
 
     def _on_fill(self, fill: str) -> str:
         """A readable text colour for text drawn on top of ``fill``.

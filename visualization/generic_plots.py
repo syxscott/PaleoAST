@@ -520,13 +520,23 @@ class GenericPlotter:
         title: str = "",
         y_label: str = "value",
     ) -> Figure:
-        """A percentile (box-and-whisker) plot: the box plot without outliers."""
+        """A percentile (box-and-whisker) plot: the box plot without outliers.
+
+        Only the outlier *markers* are removed.  The whiskers, the caps and
+        the median line stay: a percentile plot that hid the median and
+        the whiskers as well would show the interquartile range and
+        nothing else, which is not what the name says.  The previous
+        version hid every line whose style was "-", and in matplotlib that
+        is the whiskers, the caps AND the median.
+        """
         fig = self.plot_box_plot(groups, values, title=title, y_label=y_label, show_points=False)
         ax = fig.axes[0]
         for line in ax.get_lines():
-            line.set_marker("")
-            if line.get_linestyle() == "-":
-                line.set_visible(False)
+            # The outlier markers are the only lines carrying a marker; the
+            # flier line matplotlib creates is empty until there is a flier.
+            if line.get_marker():
+                line.set_marker("")
+                line.set_linestyle("none")
         return fig
 
     def plot_normal_probability(
@@ -555,7 +565,18 @@ class GenericPlotter:
         fig = Figure(figsize=self._figure_size)
         ax = fig.subplots()
         ax.plot(theoretical, data, "o", markersize=5, color=current_palette()[0])
-        slope, intercept = np.polyfit(theoretical, data, 1)
+        # The reference line goes through the QUARTILES of the theoretical
+        # quantiles and of the data, which is the construction probability-
+        # plot paper uses and the one R's ``qqline`` draws.  It was a
+        # least-squares fit through every point, which is a different line:
+        # it leans on the tails, and on a Q-Q plot the tails are exactly
+        # what the plot is there to show.  The docstring said quartiles and
+        # the code did not.
+        q_theoretical = np.quantile(theoretical, [0.25, 0.75])
+        q_data = np.quantile(data, [0.25, 0.75])
+        span = q_theoretical[1] - q_theoretical[0]
+        slope = (q_data[1] - q_data[0]) / span if span else 1.0
+        intercept = q_data[0] - slope * q_theoretical[0]
         ax.plot(theoretical, slope * theoretical + intercept, "--", color="#333333", linewidth=1.2)
         ax.set_xlabel(x_label, fontsize=self._font_size)
         ax.set_ylabel(y_label, fontsize=self._font_size)

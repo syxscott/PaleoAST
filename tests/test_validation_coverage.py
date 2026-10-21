@@ -84,13 +84,22 @@ from scripts.validation_matrix import build
 # Cochran-Mantel-Haenszel test.  The univariate domain now has all
 # sixteen of its analyses compared against R, and none of them rests on a
 # single worked example.
-THIN_BASELINE = 87
+#
+# 2026-10-21: 87 -> 78.  Nine of the twenty plot analyses gained one: the
+# XY scatter, the XY scatter with error bars, the histogram, the bar
+# chart, the box plot, the pie chart, the stacked chart, the normal
+# probability plot and the percentile plot.  What is compared is the data
+# behind the figure -- the counts in the bars, the quartiles in the box,
+# the angles in the pie -- read back out of the matplotlib artists and
+# checked against R.
+THIN_BASELINE = 78
 
 #: The number of analyses compared against a reference implementation in
 #: R.  This one is EXACT, because the cross-validation files declare it.
 #:
-#: 2026-10-21: 10 -> 20, for the same ten analyses.
-R_BASELINE = 20
+#: 2026-10-21: 10 -> 20, for the ten univariate analyses.
+#: 2026-10-21: 20 -> 29, for the nine plot analyses.
+R_BASELINE = 29
 
 # The ratchet for the other end: every analysis the interface offers must
 # be reachable by at least one test.

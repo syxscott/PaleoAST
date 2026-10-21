@@ -12,13 +12,13 @@ What each column means:
 
 ```
 analyses:            113
-  compared with R:    20  (18%)   EXACT -- declared per file
+  compared with R:    29  (26%)   EXACT -- declared per file
   golden reference:    5  (4%)   inferred
   property test:       3  (3%)   inferred
   unit test:         113  (100%)   inferred
   no test at all:      0  (0%)   inferred
   R + (gold|prop):     2  (2%)
-  UNIT TEST ONLY:     87  (77%)   <- the gap (lower bound)
+  UNIT TEST ONLY:     78  (69%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -35,7 +35,7 @@ growth                   2    0       2
 macroevolution           2    0       2
 morphometrics            8    1       5
 ordination               7    1       4
-plot                    20    0      20
+plot                    20    9      11
 spatial                  9    0       8
 stratigraphy             7    0       6
 time-series             16    0      16
@@ -123,15 +123,15 @@ univariate              16   16       0
 | `cox_ph` | macroevolution | `macroevolution.survival` |  |  |  | x |
 | `growth_model` | growth | `models.growth_models` |  |  |  | x |
 | `growth_model_comparison` | growth | `models.growth_models` |  |  |  | x |
-| `xy_plot` | plot | `visualization.plot_menu` |  |  |  | x |
-| `xy_error_bars` | plot | `visualization.plot_menu` |  |  |  | x |
-| `histogram` | plot | `visualization.plot_menu` |  |  |  | x |
-| `bar_chart` | plot | `visualization.plot_menu` |  |  |  | x |
-| `box_plot` | plot | `visualization.plot_menu` |  |  |  | x |
-| `pie_chart` | plot | `visualization.plot_menu` |  |  |  | x |
-| `stacked_chart` | plot | `visualization.plot_menu` |  |  |  | x |
-| `percentiles` | plot | `visualization.plot_menu` |  |  |  | x |
-| `normal_probability_plot` | plot | `visualization.plot_menu` |  |  |  | x |
+| `xy_plot` | plot | `visualization.plot_menu` | x |  |  | x |
+| `xy_error_bars` | plot | `visualization.plot_menu` | x |  |  | x |
+| `histogram` | plot | `visualization.plot_menu` | x |  |  | x |
+| `bar_chart` | plot | `visualization.plot_menu` | x |  |  | x |
+| `box_plot` | plot | `visualization.plot_menu` | x |  |  | x |
+| `pie_chart` | plot | `visualization.plot_menu` | x |  |  | x |
+| `stacked_chart` | plot | `visualization.plot_menu` | x |  |  | x |
+| `percentiles` | plot | `visualization.plot_menu` | x |  |  | x |
+| `normal_probability_plot` | plot | `visualization.plot_menu` | x |  |  | x |
 | `ternary_plot` | plot | `visualization.plot_menu` |  |  |  | x |
 | `bubble_plot` | plot | `visualization.plot_menu` |  |  |  | x |
 | `matrix_plot` | plot | `visualization.plot_menu` |  |  |  | x |
