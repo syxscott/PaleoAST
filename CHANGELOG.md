@@ -25,10 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   > `compute_diversity_indices` credited all fourteen diversity analyses
   > with R coverage, and the R column read **38** (later 49) when the true
   > figure was **10**. The cross-validation files now declare the
-  > analyses they cover, and the R column is exact: **10 of 113 analyses
-  > (9%)** have been compared against a reference implementation in R.
+  > analyses they cover, and the R column is exact: at that point
+  > **10 of 113 analyses (9%)** had been compared against a reference
+  > implementation in R, and the two entries below take it to **29**.
   > The other columns are inferred and deliberately under-count, so the
-  > gap is a lower bound: **97 analyses rest on a unit test alone.**
+  > gap is a lower bound: it was **97** analyses resting on a unit test
+  > alone, and it is now **71**.
 - **The univariate tests are cross-validated against base R**
   (`tests/cross_validation/test_vs_r_base_univariate.py`) -- kruskal_wallis,
   the Shapiro-Wilk normality test, mann_whitney, the paired Wilcoxon test
