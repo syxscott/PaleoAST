@@ -58,10 +58,10 @@ class PCAResult:
 
     Attributes:
         scores: Principal component scores (n_samples × n_components)
-        loadings: Variable loadings (n_components × n_variables)
+        loadings: Variable loadings (n_variables × n_components)
         eigenvalues: Eigenvalues for each PC
-        explained_variance: Variance explained by each PC
-        cumulative_variance: Cumulative variance explained
+        explained_variance: Variance explained by each PC, as a PERCENTAGE
+        cumulative_variance: Cumulative variance explained, as a PERCENTAGE
         eigenvalues_raw: Raw eigenvalues before scaling
         mean_vector: Column means used for centering
         std_vector: Column standard deviations (for correlation PCA)
@@ -71,8 +71,10 @@ class PCAResult:
 
     Mathematical Relationships:
         - eigenvalues = singular_values² / (n - 1)
-        - scores = X_centered @ loadings
-        - loadings[:, k] = eigenvector_k * sqrt(eigenvalue_k)
+        - scores = X_centered @ V, with V the eigenvectors
+        - loadings[:, k] = eigenvector_k * sqrt(eigenvalue_k), so the
+          loadings are (n_variables × n_components) and
+          scores * sqrt(eigenvalues) = X_centered @ loadings
     """
 
     scores: npt.NDArray

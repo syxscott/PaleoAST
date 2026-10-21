@@ -124,22 +124,22 @@
 <!-- matrix:start -->
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
-| `brunner_munzel` | `stats.univariate_menu` | R | Brunner-Munzel test for stochastic equality of two samples |
-| `cochran_mantel_haenszel` | `stats.univariate_menu` | R | Cochran-Mantel-Haenszel test on a 2x2 table of four counts |
-| `contingency_chi_square` | `stats.design_tests` | R | Contingency table chi-square with Cramer's V |
+| `brunner_munzel` | `stats.univariate_menu` | R + 性质 | Brunner-Munzel test for stochastic equality of two samples |
+| `cochran_mantel_haenszel` | `stats.univariate_menu` | R + 性质 | Cochran-Mantel-Haenszel test on a 2x2 table of four counts |
+| `contingency_chi_square` | `stats.design_tests` | R + 性质 | Contingency table chi-square with Cramer's V |
 | `epps_singleton` | `stats.distribution_menu` | 单元 | Epps-Singleton test of two samples |
-| `fligner_kileen` | `stats.univariate_menu` | R | Fliegler-Kileen test for equality of dispersion between groups |
-| `intraclass_correlation` | `stats.design_tests` | R | Intraclass correlation coefficient |
-| `kruskal_wallis` | `stats.univariate` | R | Kruskal-Wallis rank test |
+| `fligner_kileen` | `stats.univariate_menu` | R + 性质 | Fliegler-Kileen test for equality of dispersion between groups |
+| `intraclass_correlation` | `stats.design_tests` | R + 性质 | Intraclass correlation coefficient |
+| `kruskal_wallis` | `stats.univariate` | R + 性质 | Kruskal-Wallis rank test |
 | `ks_2samp` | `stats.distribution_menu` | 单元 | Kolmogorov-Smirnov test of two samples |
-| `mann_whitney` | `stats.univariate` | R | Mann-Whitney U test |
-| `mood_median` | `stats.univariate_menu` | R | Mood's median test for a common median |
-| `normality` | `stats.univariate` | R | Normality tests |
-| `one_way_anova` | `stats.univariate` | R | One-way ANOVA with Tukey post-hoc |
-| `outlier_screen` | `stats.univariate_menu` | R | Outlier screening by z-score or by Grubbs' test |
-| `paired_rank_test` | `stats.univariate` | R | Paired sign or Wilcoxon signed-rank test |
-| `proportion_test` | `stats.univariate_menu` | R | Exact binomial test of one proportion against a null value |
-| `repeated_measures_anova` | `stats.design_tests` | R | Repeated-measures ANOVA |
-| `summary_statistics` | `stats.univariate` | R | Descriptive statistics |
-| `two_way_anova` | `stats.design_tests` | R | Two-way factorial ANOVA with interaction |
+| `mann_whitney` | `stats.univariate` | R + 性质 | Mann-Whitney U test |
+| `mood_median` | `stats.univariate_menu` | R + 性质 | Mood's median test for a common median |
+| `normality` | `stats.univariate` | R + 性质 | Normality tests |
+| `one_way_anova` | `stats.univariate` | R + 性质 | One-way ANOVA with Tukey post-hoc |
+| `outlier_screen` | `stats.univariate_menu` | R + 性质 | Outlier screening by z-score or by Grubbs' test |
+| `paired_rank_test` | `stats.univariate` | R + 性质 | Paired sign or Wilcoxon signed-rank test |
+| `proportion_test` | `stats.univariate_menu` | R + 性质 | Exact binomial test of one proportion against a null value |
+| `repeated_measures_anova` | `stats.design_tests` | R + 性质 | Repeated-measures ANOVA |
+| `summary_statistics` | `stats.univariate` | R + 性质 | Descriptive statistics |
+| `two_way_anova` | `stats.design_tests` | R + 性质 | Two-way factorial ANOVA with interaction |
 <!-- matrix:end -->

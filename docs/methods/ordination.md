@@ -81,17 +81,17 @@
 | `ca` | `stats.detriding` | 单元 | Correspondence analysis of a contingency table |
 | `cca` | `stats.cca` | 单元 | Canonical correspondence analysis / redundancy analysis |
 | `dca` | `stats.detriding` | 单元 | Detrended correspondence analysis |
-| `grid_interpolate` | `stats.spatial_stats` | 单元 | Interpolate scattered sites onto a regular grid |
+| `grid_interpolate` | `stats.spatial_stats` | 性质 | Interpolate scattered sites onto a regular grid |
 | `lda` | `stats.lda` | 单元 | Linear discriminant analysis |
 | `mantel` | `stats.mantel` | 单元 | Mantel test between two distance matrices |
 | `minimum_spanning_tree` | `stats.geometry` | 单元 | Minimum spanning tree of a distance matrix |
-| `morans_i` | `stats.spatial_stats` | 单元 | Global spatial autocorrelation (Moran's I) |
+| `morans_i` | `stats.spatial_stats` | 性质 | Global spatial autocorrelation (Moran's I) |
 | `morphospace_disparity` | `stats.geometry` | 单元 | Disparity through time of a morphospace |
-| `nearest_neighbour` | `stats.spatial_stats` | 单元 | Nearest-neighbour point pattern statistics |
+| `nearest_neighbour` | `stats.spatial_stats` | 性质 | Nearest-neighbour point pattern statistics |
 | `nmds` | `stats.nmds` | 性质 | Non-metric multidimensional scaling |
 | `partial_mantel` | `stats.mantel` | 单元 | Partial Mantel test controlling for a third matrix |
 | `pca` | `stats.pca` | R + 性质 | Principal component analysis |
 | `pcoa` | `stats.pcoa` | 真值 | Principal coordinate analysis |
-| `ripley_k` | `stats.spatial` | 真值 | Ripley's K point pattern analysis |
-| `spherical` | `stats.spatial_stats` | 单元 | Mean direction and concentration on the sphere |
+| `ripley_k` | `stats.spatial` | 真值 + 性质 | Ripley's K point pattern analysis |
+| `spherical` | `stats.spatial_stats` | 性质 | Mean direction and concentration on the sphere |
 <!-- matrix:end -->

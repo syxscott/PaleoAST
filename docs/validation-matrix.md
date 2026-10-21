@@ -14,11 +14,11 @@ What each column means:
 analyses:            113
   compared with R:    29  (26%)   EXACT -- declared per file
   golden reference:    5  (4%)   inferred
-  property test:       3  (3%)   inferred
+  property test:      30  (27%)   inferred
   unit test:         113  (100%)   inferred
   no test at all:      0  (0%)   inferred
-  R + (gold|prop):     2  (2%)
-  UNIT TEST ONLY:     78  (69%)   <- the gap (lower bound)
+  R + (gold|prop):    19  (17%)
+  UNIT TEST ONLY:     71  (63%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -26,7 +26,7 @@ UNDER-count on purpose -- a ratchet that credited coverage that is not
 there would let the gap be declared closed on a false positive.
 
 category                 n    R    thin
-clustering               3    0       3
+clustering               3    0       0
 directional              1    0       1
 distribution             2    0       2
 diversity               14    1      13
@@ -36,7 +36,7 @@ macroevolution           2    0       2
 morphometrics            8    1       5
 ordination               7    1       4
 plot                    20    9      11
-spatial                  9    0       8
+spatial                  9    0       4
 stratigraphy             7    0       6
 time-series             16    0      16
 univariate              16   16       0
@@ -59,27 +59,27 @@ univariate              16   16       0
 | `phylogenetic_signal` | group-comparison | `stats.pcm` |  |  |  | x |
 | `mantel` | spatial | `stats.mantel` |  |  |  | x |
 | `partial_mantel` | spatial | `stats.mantel` |  |  |  | x |
-| `ripley_k` | spatial | `stats.spatial` |  | x |  | x |
+| `ripley_k` | spatial | `stats.spatial` |  | x | x | x |
 | `minimum_spanning_tree` | spatial | `stats.geometry` |  |  |  | x |
 | `morphospace_disparity` | spatial | `stats.geometry` |  |  |  | x |
-| `morans_i` | spatial | `stats.spatial_stats` |  |  |  | x |
-| `grid_interpolate` | spatial | `stats.spatial_stats` |  |  |  | x |
-| `nearest_neighbour` | spatial | `stats.spatial_stats` |  |  |  | x |
-| `spherical` | spatial | `stats.spatial_stats` |  |  |  | x |
-| `hierarchical_clustering` | clustering | `stats.clustering` |  |  |  | x |
-| `kmeans` | clustering | `stats.clustering` |  |  |  | x |
-| `kmeans_elbow` | clustering | `stats.clustering` |  |  |  | x |
-| `one_way_anova` | univariate | `stats.univariate` | x |  |  | x |
-| `kruskal_wallis` | univariate | `stats.univariate` | x |  |  | x |
-| `mann_whitney` | univariate | `stats.univariate` | x |  |  | x |
-| `normality` | univariate | `stats.univariate` | x |  |  | x |
-| `summary_statistics` | univariate | `stats.univariate` | x |  |  | x |
-| `two_way_anova` | univariate | `stats.design_tests` | x |  |  | x |
-| `repeated_measures_anova` | univariate | `stats.design_tests` | x |  |  | x |
-| `paired_rank_test` | univariate | `stats.univariate` | x |  |  | x |
-| `intraclass_correlation` | univariate | `stats.design_tests` | x |  |  | x |
-| `contingency_chi_square` | univariate | `stats.design_tests` | x |  |  | x |
-| `diversity` | diversity | `ecology.diversity` | x |  |  | x |
+| `morans_i` | spatial | `stats.spatial_stats` |  |  | x | x |
+| `grid_interpolate` | spatial | `stats.spatial_stats` |  |  | x | x |
+| `nearest_neighbour` | spatial | `stats.spatial_stats` |  |  | x | x |
+| `spherical` | spatial | `stats.spatial_stats` |  |  | x | x |
+| `hierarchical_clustering` | clustering | `stats.clustering` |  |  | x | x |
+| `kmeans` | clustering | `stats.clustering` |  |  | x | x |
+| `kmeans_elbow` | clustering | `stats.clustering` |  |  | x | x |
+| `one_way_anova` | univariate | `stats.univariate` | x |  | x | x |
+| `kruskal_wallis` | univariate | `stats.univariate` | x |  | x | x |
+| `mann_whitney` | univariate | `stats.univariate` | x |  | x | x |
+| `normality` | univariate | `stats.univariate` | x |  | x | x |
+| `summary_statistics` | univariate | `stats.univariate` | x |  | x | x |
+| `two_way_anova` | univariate | `stats.design_tests` | x |  | x | x |
+| `repeated_measures_anova` | univariate | `stats.design_tests` | x |  | x | x |
+| `paired_rank_test` | univariate | `stats.univariate` | x |  | x | x |
+| `intraclass_correlation` | univariate | `stats.design_tests` | x |  | x | x |
+| `contingency_chi_square` | univariate | `stats.design_tests` | x |  | x | x |
+| `diversity` | diversity | `ecology.diversity` | x |  | x | x |
 | `beta_diversity` | diversity | `ecology.beta_diversity` |  |  |  | x |
 | `rarefaction` | diversity | `ecology.rarefaction` |  |  |  | x |
 | `coverage_rarefaction` | diversity | `ecology.beta_diversity` |  |  |  | x |
@@ -114,8 +114,8 @@ univariate              16   16       0
 | `gpa` | morphometrics | `morphometrics.gpa` | x | x |  | x |
 | `relative_warps` | morphometrics | `morphometrics.relative_warps` |  |  |  | x |
 | `tps` | morphometrics | `morphometrics.tps` |  |  |  | x |
-| `efa` | morphometrics | `morphometrics.efa` |  | x |  | x |
-| `eigenshape` | morphometrics | `morphometrics.efa` |  | x |  | x |
+| `efa` | morphometrics | `morphometrics.efa` |  | x | x | x |
+| `eigenshape` | morphometrics | `morphometrics.efa` |  | x | x | x |
 | `allometry` | morphometrics | `morphometrics.allometry` |  |  |  | x |
 | `pls` | morphometrics | `morphometrics.allometry` |  |  |  | x |
 | `evolution_rate` | morphometrics | `morphometrics.evolution_rate` |  |  |  | x |
@@ -143,12 +143,12 @@ univariate              16   16       0
 | `network_plot` | plot | `visualization.plot_menu` |  |  |  | x |
 | `plot_3d` | plot | `visualization.plot_menu` |  |  |  | x |
 | `surface_plot` | plot | `visualization.plot_menu` |  |  |  | x |
-| `brunner_munzel` | univariate | `stats.univariate_menu` | x |  |  | x |
-| `mood_median` | univariate | `stats.univariate_menu` | x |  |  | x |
-| `fligner_kileen` | univariate | `stats.univariate_menu` | x |  |  | x |
-| `outlier_screen` | univariate | `stats.univariate_menu` | x |  |  | x |
-| `cochran_mantel_haenszel` | univariate | `stats.univariate_menu` | x |  |  | x |
-| `proportion_test` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `brunner_munzel` | univariate | `stats.univariate_menu` | x |  | x | x |
+| `mood_median` | univariate | `stats.univariate_menu` | x |  | x | x |
+| `fligner_kileen` | univariate | `stats.univariate_menu` | x |  | x | x |
+| `outlier_screen` | univariate | `stats.univariate_menu` | x |  | x | x |
+| `cochran_mantel_haenszel` | univariate | `stats.univariate_menu` | x |  | x | x |
+| `proportion_test` | univariate | `stats.univariate_menu` | x |  | x | x |
 | `ks_2samp` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `epps_singleton` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `sqs_subsample` | diversity | `ecology.diversity_menu` |  |  |  | x |

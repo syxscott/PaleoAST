@@ -76,8 +76,8 @@
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
 | `allometry` | `morphometrics.allometry` | 单元 | Multivariate allometry |
-| `efa` | `morphometrics.efa` | 真值 | Elliptic Fourier analysis |
-| `eigenshape` | `morphometrics.efa` | 真值 | Eigenshape analysis |
+| `efa` | `morphometrics.efa` | 真值 + 性质 | Elliptic Fourier analysis |
+| `eigenshape` | `morphometrics.efa` | 真值 + 性质 | Eigenshape analysis |
 | `evolution_rate` | `morphometrics.evolution_rate` | 单元 | Evolutionary rate estimation |
 | `gpa` | `morphometrics.gpa` | R + 真值 | Generalised Procrustes analysis |
 | `pls` | `morphometrics.allometry` | 单元 | Partial least squares integration |

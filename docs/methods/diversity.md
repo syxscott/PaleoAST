@@ -91,7 +91,7 @@
 | `abundance_models` | `ecology.advanced` | 单元 | Abundance model fitting: log-series, log-normal, geometric and broken-stick, ranked by AIC |
 | `beta_diversity` | `ecology.beta_diversity` | 单元 | Beta diversity decomposition |
 | `coverage_rarefaction` | `ecology.beta_diversity` | 单元 | Sample-based coverage rarefaction |
-| `diversity` | `ecology.diversity` | R | Alpha diversity indices |
+| `diversity` | `ecology.diversity` | R + 性质 | Alpha diversity indices |
 | `diversity_permutation_test` | `ecology.diversity_menu` | 单元 | Permutation test of the diversity indices between groups of samples |
 | `diversity_profile` | `ecology.diversity_menu` | 单元 | Diversity indices of one sample across sampling depths |
 | `diversity_t_test` | `ecology.diversity_menu` | 单元 | t-test of the diversity indices between groups of samples |

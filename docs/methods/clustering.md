@@ -70,7 +70,7 @@
 <!-- matrix:start -->
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
-| `hierarchical_clustering` | `stats.clustering` | 单元 | Agglomerative hierarchical clustering |
-| `kmeans` | `stats.clustering` | 单元 | K-means partitioning |
-| `kmeans_elbow` | `stats.clustering` | 单元 | Within-cluster sum of squares against k |
+| `hierarchical_clustering` | `stats.clustering` | 性质 | Agglomerative hierarchical clustering |
+| `kmeans` | `stats.clustering` | 性质 | K-means partitioning |
+| `kmeans_elbow` | `stats.clustering` | 性质 | Within-cluster sum of squares against k |
 <!-- matrix:end -->

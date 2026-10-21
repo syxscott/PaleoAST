@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by a property test, or only by a unit test on one example. The gap is
   now a number instead of a worry. A ratchet in
   `tests/test_validation_coverage.py` holds the number where it is: it may
-  fall when something is validated properly, and it may not rise.
+  fall when something is validated properly, and it may not rise. There
+  are now three ratchets -- the gap, the number of analyses compared
+  against R (which is exact, because the cross-validation files declare
+  it), and the number with a property test, which is the strongest
+  evidence the matrix knows about.
 
   > **Correction (2026-10-21).** The first version of the matrix matched a
   > test file by the analysis' *class* name, so one file importing
@@ -106,6 +110,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and nothing else, which is not a box-and-whisker plot and not what the
   docstring said ("the box plot without outliers"). Only the outlier
   markers are removed now.
+
+- **The coverage report measures branches, not just lines**
+  (`pyproject.toml`) -- the "69% of the lines" in the coverage report was
+  69% of the *statements*: a statistic with an untested error branch and
+  one with a tested one scored the same. `branch = true` makes the
+  number mean what it says, and the gate in `[tool.coverage.report]`
+  moves with it, so the two cannot disagree. The branch number is the
+  one that matters here: a statistical branch is where the wrong answer
+  hides -- a boundary, a NaN, a degenerate input, a zero variance.
+
+- **Seventy-eight property-based tests, up from nineteen**
+  (`tests/property/`) -- the univariate tests, the design tests, the
+  principal component analysis, the diversity indices, Moran's I and the
+  clustering each gained a set of invariants that hold for *every* input
+  of a shape rather than for one worked example: a positive affine
+  transform of the response changes no F ratio, a strictly increasing
+  transform changes no rank-based statistic, permuting the values inside
+  a group changes no p-value, the terms of an ANOVA add up to the total,
+  the eigenvalues of a PCA add up to the total variance, a taxon with
+  zero individuals is not a taxon.
+
+  Three of them record things that are true of the algorithm and not of
+  the result, and are worth knowing: k-means does **not** give the same
+  partition when the samples are reordered (it starts from a random
+  initialisation), the Fliller-Kileen statistic is only invariant under
+  an affine transform that is exact in floating point (an inexact one
+  can separate a tie and change the ranks), and the intraclass
+  correlation's interval cannot contain a negative point estimate,
+  because the interval is built from non-negative component ratios.
+
+  Two production documentation defects were found on the way and fixed:
+  `PCAResult` described the loadings as `(n_components × n_variables)`
+  when they are `(n_variables × n_components)`, and the relation it
+  gave between the scores and the loadings was missing the
+  `sqrt(eigenvalues)` factor.
 
 - **One place maps the design system onto matplotlib**
   (`config/matplotlib_theme.py`, `views/ui_plot_canvas.py`) -- four places

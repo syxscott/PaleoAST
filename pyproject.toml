@@ -308,6 +308,17 @@ markers = [
 # Coverage
 # =============================================================================
 [tool.coverage.run]
+# Branch coverage is measured as well as line coverage.  It was not
+# before, which meant the "69% of the lines" in the coverage report said
+# nothing at all about the branches: the number was 69% of the
+# STATEMENTS, and a statistic with an untested error branch and one
+# with a tested one scored the same.
+#
+# The number that matters is the statistical code, and a statistical
+# branch is where the wrong answer hides: a boundary, a NaN, a degenerate
+# input, a zero variance.  Measuring the branches is what makes a
+# regression in one of them visible.
+branch = true
 # Measured over every package the wheel actually ships -- the same set as
 # [tool.setuptools.packages.find] include below. This list used to name only 13
 # of the 22 packages, so hpc/, macroevolution/, parsers/, phylogenetics/,
@@ -343,31 +354,27 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Measured 44.68% (12477/27925 statements) on Python 3.10 / Windows with
+# Measured 67% with branch coverage ON (36739 statements, 10252 branches,
+# 1527 of them partial) on Python 3.12 / Windows with
 # `pytest tests/ tests_morpho3d_macroevolution/ -m "not cross_validation"`,
-# over every package the wheel ships (see the [tool.coverage.run] source list
-# above). The gate sits ~1.7 points below that -- about 470 statements of
-# headroom -- so ordinary platform and dependency drift does not flip CI red,
-# while a real regression still fails the build: dropped tests, a module
-# removed from testpaths, a dependency bump that starts skipping.
+# over every package the wheel ships (see the [tool.coverage.run] source
+# list above).  The gate sits below that -- about 7 points of headroom --
+# so ordinary platform and dependency drift does not flip CI red, while a
+# real regression still fails the build: dropped tests, a module removed
+# from testpaths, a dependency bump that starts skipping.
 #
-# This replaced a hardcoded `--fail-under=10` in .github/workflows/ci.yml, which
-# sat 4.5x below the real number and so could not fail for any realistic
-# regression. The threshold lives here, in one place, so the CI job and a local
-# `pytest --cov` cannot disagree.
+# The number is the COMBINED one: coverage.py adds the branches to the
+# statements and divides by the total, so this gate now holds the branch
+# coverage down as well as the line coverage.  It was 43 before branch
+# coverage was turned on, against a measured 44.68% of the statements
+# alone -- and that gate could not have caught a branch that stopped
+# being taken.
 #
-# What keeps the number where it is, roughly in order of cost:
-#   UI and plotting, which needs a live Qt event loop --
-#     views/ui_main_window.py 7.9% (2782 statements, the largest file in the
-#     repo), views/ui_plot_canvas.py 13.6%, visualization/* mostly 9-14%
-#   completely untested but shipped --
-#     config/imputation.py 0/170, plugins/ 0/124, reporting/matrix_converter.py
-#     0/23, reporting/table_generator.py 0/28
-#   lightly tested -- hpc/ 31.7%, phylogenetics/ 46.5%, state_machine/ 55.8%
-# Raising this gate means testing those, not lowering the gate here. The
-# well-covered engines (stats 65.4%, parsers 73.7%, macroevolution 77.1%,
-# presets 98.3%) are what pull the average up over the UI floor.
-fail_under = 43
+# Raising this gate means testing the uncovered code, not lowering the
+# gate here.  The worst-covered areas are still the UI and the plotting
+# layer, which needs a live Qt event loop, and the modules that ship
+# untested: config/imputation.py, plugins/, reporting/.
+fail_under = 60
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.",

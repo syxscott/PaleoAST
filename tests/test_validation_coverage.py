@@ -92,7 +92,12 @@ from scripts.validation_matrix import build
 # behind the figure -- the counts in the bars, the quartiles in the box,
 # the angles in the pie -- read back out of the matplotlib artists and
 # checked against R.
-THIN_BASELINE = 78
+#
+# 2026-10-21: 78 -> 71.  Fifty-eight new property tests -- the univariate
+# tests, the design tests, the PCA, the diversity indices, Moran's I and
+# the clustering -- each giving an analysis an invariant that holds for
+# every input of a shape rather than for one worked example.
+THIN_BASELINE = 71
 
 #: The number of analyses compared against a reference implementation in
 #: R.  This one is EXACT, because the cross-validation files declare it.
@@ -100,6 +105,16 @@ THIN_BASELINE = 78
 #: 2026-10-21: 10 -> 20, for the ten univariate analyses.
 #: 2026-10-21: 20 -> 29, for the nine plot analyses.
 R_BASELINE = 29
+
+#: The number of analyses with a PROPERTY test -- an invariant that must
+#: hold for every input, not for one example.
+#:
+#: This one is INFERRED, like the unit column, so it under-counts on
+#: purpose.  It is held to a floor because a property test is the
+#: strongest evidence the matrix knows about: it says the answer is
+#: right for the whole class of inputs and not only for the one in the
+#: test file.
+PROP_BASELINE = 30
 
 # The ratchet for the other end: every analysis the interface offers must
 # be reachable by at least one test.
@@ -140,6 +155,22 @@ def test_the_r_comparison_count_does_not_shrink():
     assert len(with_r) >= R_BASELINE, (
         f"only {len(with_r)} analyses are compared against R (was {R_BASELINE}): {sorted(with_r)}. "
         "A cross-validation file must declare the analyses it covers in ANALYSES_COVERED."
+    )
+
+
+def test_the_property_test_count_does_not_shrink():
+    """The property column is the strongest evidence the matrix knows.
+
+    An invariant that holds for every input of a shape says the answer
+    is right for the whole class of inputs, and not only for the one in
+    the test file.  The count is inferred, so it under-counts on purpose,
+    but it must not go backwards.
+    """
+    rows = build()
+    with_property = [str(r["name"]) for r in rows if r["prop"]]
+    assert len(with_property) >= PROP_BASELINE, (
+        f"only {len(with_property)} analyses have a property test (was {PROP_BASELINE}): {sorted(with_property)}. "
+        "A property test is an invariant that must hold for every input, not for one example."
     )
 
 
