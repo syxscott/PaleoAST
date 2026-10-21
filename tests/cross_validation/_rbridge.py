@@ -59,7 +59,10 @@ __all__ = [
     "matrix_to_array",
     "r",
     "r_array",
+    "r_labels",
     "r_matrix",
+    "r_numbers",
+    "r_program",
     "r_string_vector",
     "r_vector",
     "require",
@@ -73,13 +76,24 @@ _PACKAGE_CACHE: dict[str, object] = {}
 
 
 def require(package: str):
-    """Import an R package, or skip the calling test if it is not installed."""
+    """Import an R package, or skip the calling test if it is not installed.
+
+    The skip is raised with ``allow_module_level=True`` because this
+    function is called at *module* level by the files that need a
+    package: ``geomorph`` or ``iNEXT`` missing otherwise turns the whole
+    cross-validation directory into a collection ERROR, which is louder
+    and less honest than a skip.  pytest refuses a plain ``pytest.skip``
+    outside a test for exactly that reason, and says so.
+    """
     if package in _PACKAGE_CACHE:
         return _PACKAGE_CACHE[package]
     try:
         module = importr(package)
     except Exception as exc:
-        pytest.skip(f"R package {package!r} is not available: {exc}")
+        pytest.skip(
+            f"R package {package!r} is not available: {exc}",
+            allow_module_level=True,
+        )
     _PACKAGE_CACHE[package] = module
     return module
 
@@ -246,3 +260,49 @@ def unnamed_list(value) -> list:
         else:
             out.append(as_array(element))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Running a reference program
+# ---------------------------------------------------------------------------
+def r_program(code: str, **substitutions: str) -> dict[str, float]:
+    """Run an R program and read back the named numeric vector it returns.
+
+    The program must end with the vector as its last expression; its names
+    become the keys of the returned dict.
+
+    Substitutions use ``@@name@@`` markers rather than ``str.format``'s
+    ``{name}``.  R programs are full of braces -- a ``for`` loop body, a
+    function definition -- and ``str.format`` reads those as placeholders,
+    so a program with a loop fails with a ``KeyError`` about a line of R
+    that has nothing to do with the substitution.
+
+    Going through a *program* rather than through R's objects directly is
+    deliberate.  The shapes R's statistical functions return differ from one
+    another -- ``summary()`` of an ``aov`` gives a matrix for a plain model
+    and a list of matrices per stratum when there is an ``Error()`` term,
+    and the row names of an ``anova`` table are padded with trailing spaces
+    -- and rpy2's conversion of those shapes does not always preserve the
+    attributes the names live in.  Letting R do the indexing keeps every
+    lookup on the R side, where the semantics are the documented ones.
+    """
+    text = code
+    for key, value in substitutions.items():
+        text = text.replace(f"@@{key}@@", str(value))
+    result = r("eval")(r("parse")(text=text))
+    return {str(name): as_float(result.rx2(str(name))) for name in r("names")(result)}
+
+
+def r_numbers(values) -> str:
+    """An R numeric vector literal.
+
+    ``repr`` of a Python float is the shortest string that reads back as the
+    same double, which is exactly the precision R's parser needs.
+    """
+    flat = np.asarray(values, dtype=float).ravel()
+    return "c(" + ", ".join(repr(float(v)) for v in flat) + ")"
+
+
+def r_labels(values) -> str:
+    """An R character vector literal."""
+    return "c(" + ", ".join('"' + str(v) + '"' for v in values) + ")"

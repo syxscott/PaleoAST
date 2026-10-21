@@ -34,6 +34,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *default* would give a different answer -- because PaleoAST runs the
   classical pooled-variance test and R's default is adaptive. Both sides
   should say which test they ran.
+- **Every univariate analysis is now cross-validated against R**
+  (`tests/cross_validation/test_vs_r_base_design.py`,
+  `tests/cross_validation/test_vs_r_base_univariate_extra.py`) -- the two-way
+  ANOVA, the repeated-measures ANOVA, the intraclass correlation, the exact
+  binomial proportion test, the Fligner-Kileen test, the descriptive
+  statistics, the outlier screen, the Brunner-Munzel test, Mood's median test
+  and the Cochran-Mantel-Haenszel test. The univariate domain now has all
+  sixteen of its analyses compared against a live reference implementation
+  in R, and the R column of the validation matrix reads **20 of 113** (was
+  10); the gap -- analyses resting on a single worked example -- falls from
+  **97 to 87**.
+
+  Three differences between the two implementations are **on the record**
+  rather than smoothed over, each with a test that pins it:
+
+  - The **Brunner-Munzel** variance differs from `lawstat`'s by exactly the
+    finite-sample correction term `S1*S2/(m*n*(m-1)*(n-1))` and by nothing
+    else, so the comparison is an *exact* relation rather than a tolerance.
+    Both were checked against the null by simulation: 4000 replicates at
+    three designs give a type-I error rate of 0.052-0.055 against a
+    nominal 0.05, for both.
+  - Mood's median test reports the **sample** odds ratio; R's
+    `fisher.test` reports the **conditional** maximum-likelihood estimate,
+    which R's own documentation says is what it uses. The two differ by a
+    few percent, and a test records that they do.
+  - The Cochran-Mantel-Haenszel continuity correction is applied
+    unconditionally, as `statsmodels` and SAS do; R skips it when the
+    total signed residual is under half a unit. A test pins that corner
+    and shows the difference is in the conservative direction.
+
+  The two-way ANOVA is compared on an **unbalanced** design as well as a
+  balanced one: on a balanced design the Type I, Type II and Type III
+  decompositions coincide, so a comparison there cannot show which one
+  the application computes.
+
+  `tests/cross_validation/_rbridge.py` also gained `r_program()`, which
+  runs a reference as a small R program and reads back a named numeric
+  vector. It exists because R's statistical functions return shapes that
+  rpy2's conversion does not always preserve the names of -- the rows of an
+  `anova` table are padded with trailing spaces, so looking up the row
+  "a" matches both "a" and "a:b" and R resolves that to `NA`, a silent
+  wrong answer rather than an error.
+- **A cross-validation directory that no longer fails to collect**
+  (`tests/cross_validation/_rbridge.py`) -- `require()` raises its skip at
+  module level, where pytest refuses a plain `pytest.skip()`; without
+  `allow_module_level=True` a missing `geomorph` or `iNEXT` turned the
+  whole directory into a collection ERROR instead of a skip.
 - **Six families of univariate tests the application could not run at all**
   (`stats/univariate_extra.py`, wired up through `stats/univariate_menu.py`
   and the plugin catalog): Brunner-Munzel, Mood's median test, Fligner-Kileen,

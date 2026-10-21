@@ -75,11 +75,22 @@ from scripts.validation_matrix import build
 # The number is a conservative lower bound on the gap.  Lower it when
 # an analysis gains an R comparison, a golden reference or a property
 # test -- and say in the commit message which one.
-THIN_BASELINE = 97
+#
+# 2026-10-21: 97 -> 87.  Ten univariate analyses gained a live comparison
+# against base R: the two-way ANOVA, the repeated-measures ANOVA, the
+# intraclass correlation, the exact binomial proportion test, the
+# Fligner-Kileen test, the descriptive statistics, the outlier screen,
+# the Brunner-Munzel test, Mood's median test and the
+# Cochran-Mantel-Haenszel test.  The univariate domain now has all
+# sixteen of its analyses compared against R, and none of them rests on a
+# single worked example.
+THIN_BASELINE = 87
 
 #: The number of analyses compared against a reference implementation in
 #: R.  This one is EXACT, because the cross-validation files declare it.
-R_BASELINE = 10
+#:
+#: 2026-10-21: 10 -> 20, for the same ten analyses.
+R_BASELINE = 20
 
 # The ratchet for the other end: every analysis the interface offers must
 # be reachable by at least one test.

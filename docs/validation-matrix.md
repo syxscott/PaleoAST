@@ -12,13 +12,13 @@ What each column means:
 
 ```
 analyses:            113
-  compared with R:    10  (9%)   EXACT -- declared per file
+  compared with R:    20  (18%)   EXACT -- declared per file
   golden reference:    5  (4%)   inferred
   property test:       3  (3%)   inferred
   unit test:         113  (100%)   inferred
   no test at all:      0  (0%)   inferred
   R + (gold|prop):     2  (2%)
-  UNIT TEST ONLY:     97  (86%)   <- the gap (lower bound)
+  UNIT TEST ONLY:     87  (77%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -39,7 +39,7 @@ plot                    20    0      20
 spatial                  9    0       8
 stratigraphy             7    0       6
 time-series             16    0      16
-univariate              16    6      10
+univariate              16   16       0
 ```
 
 | analysis | category | module | R | gold | prop | unit |
@@ -73,11 +73,11 @@ univariate              16    6      10
 | `kruskal_wallis` | univariate | `stats.univariate` | x |  |  | x |
 | `mann_whitney` | univariate | `stats.univariate` | x |  |  | x |
 | `normality` | univariate | `stats.univariate` | x |  |  | x |
-| `summary_statistics` | univariate | `stats.univariate` |  |  |  | x |
-| `two_way_anova` | univariate | `stats.design_tests` |  |  |  | x |
-| `repeated_measures_anova` | univariate | `stats.design_tests` |  |  |  | x |
+| `summary_statistics` | univariate | `stats.univariate` | x |  |  | x |
+| `two_way_anova` | univariate | `stats.design_tests` | x |  |  | x |
+| `repeated_measures_anova` | univariate | `stats.design_tests` | x |  |  | x |
 | `paired_rank_test` | univariate | `stats.univariate` | x |  |  | x |
-| `intraclass_correlation` | univariate | `stats.design_tests` |  |  |  | x |
+| `intraclass_correlation` | univariate | `stats.design_tests` | x |  |  | x |
 | `contingency_chi_square` | univariate | `stats.design_tests` | x |  |  | x |
 | `diversity` | diversity | `ecology.diversity` | x |  |  | x |
 | `beta_diversity` | diversity | `ecology.beta_diversity` |  |  |  | x |
@@ -143,12 +143,12 @@ univariate              16    6      10
 | `network_plot` | plot | `visualization.plot_menu` |  |  |  | x |
 | `plot_3d` | plot | `visualization.plot_menu` |  |  |  | x |
 | `surface_plot` | plot | `visualization.plot_menu` |  |  |  | x |
-| `brunner_munzel` | univariate | `stats.univariate_menu` |  |  |  | x |
-| `mood_median` | univariate | `stats.univariate_menu` |  |  |  | x |
-| `fligner_kileen` | univariate | `stats.univariate_menu` |  |  |  | x |
-| `outlier_screen` | univariate | `stats.univariate_menu` |  |  |  | x |
-| `cochran_mantel_haenszel` | univariate | `stats.univariate_menu` |  |  |  | x |
-| `proportion_test` | univariate | `stats.univariate_menu` |  |  |  | x |
+| `brunner_munzel` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `mood_median` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `fligner_kileen` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `outlier_screen` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `cochran_mantel_haenszel` | univariate | `stats.univariate_menu` | x |  |  | x |
+| `proportion_test` | univariate | `stats.univariate_menu` | x |  |  | x |
 | `ks_2samp` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `epps_singleton` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `sqs_subsample` | diversity | `ecology.diversity_menu` |  |  |  | x |

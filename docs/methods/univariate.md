@@ -45,7 +45,28 @@
   反复剔除会改变分布本身，这是个已知的统计学陷阱（Grubbs 检验不能迭代使用）。
 - **`intraclass_correlation` 实现的是 ICC(3,1) 与 ICC(2,1)** 两种形式；
   报告 ICC 时必须写清楚是 "one-way"（随机）还是 "two-way"（混合），
-  因为同一个 ICC 数字在两种设计下含义不同。
+  因为同一个 ICC 数字在两种设计下含义不同。点估计与 McGraw & Wong (1996)
+  的公式一致（交叉验证里用 R 自己的 ANOVA 表推算），但**区间不与 R 比**：
+  本实现对两个均方分别做 F 反演并用 Bonferroni 校正，`irr` 只反演一个比值，
+  比的是区间构造方式而不是分析本身。
+- **`two_way_anova` 用的是 Type I（顺序）分解**，与 R 的 `aov(y ~ a*b)` 一致。
+  平衡设计下 Type I / II / III 的平方和相同，对照看不出到底算了哪一种，
+  所以交叉验证特意**同时用了不平衡设计**（格内 5/4/3/6）——那里三种分解才分得开。
+- **`brunner_munzel` 的方差与 `lawstat::brunner.munzel.test` 相差恰好一个有限样本
+  修正项** `S1·S2/(m·n·(m−1)·(n−1))`，别的什么都不差，所以交叉验证写的是一条
+  **精确关系**而不是"误差在百分之几以内"。两边**符号约定相反**：R 报
+  `P(X<Y)+0.5P(X=Y)`，本实现报 `P(X>Y)+0.5P(X=Y)`。H0 模拟（4000 次重复 ×
+  3 种设计）下两者的第一类错误率都是 0.052–0.055（名义 0.05），说明两个方差
+  估计量都是**校准的**，差别只在效率。
+- **`mood_median` 报的优势比是样本优势比** `a·d/(b·c)`（无偏 MLE）；R 的
+  `fisher.test` 报的是**条件极大似然估计**——R 自己的文档写明
+  "the *conditional* Maximum Likelihood Estimate (MLE) rather than the
+  unconditional MLE (the sample odds ratio) is used"。两者差几个百分点，
+  p 值则**完全一致**。写论文引用优势比时要说清用的是哪一个。
+- **`cochran_mantel_haenszel` 的连续性校正无条件减 0.5**（与 `statsmodels`、SAS
+  一致）；R 的 `mantelhaen.test` 在总残差小于 0.5 时不校正。两者在总残差
+  ≥ 0.5 时**完全一致**；不一致的那个角落里，差异方向是**保守的**
+  （统计量更小、p 值更大）。
 - **`cochran_mantel_haenszel` 只对 2×2 的四个计数有意义**；3×3 以上的表要用
   Mantel-Haenszel 的推广形式。
 - **`proportion_test` 是精确二项检验**（不是正态近似），小样本下比 `prop.test` 保守；
@@ -103,22 +124,22 @@
 <!-- matrix:start -->
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
-| `brunner_munzel` | `stats.univariate_menu` | 单元 | Brunner-Munzel test for stochastic equality of two samples |
-| `cochran_mantel_haenszel` | `stats.univariate_menu` | 单元 | Cochran-Mantel-Haenszel test on a 2x2 table of four counts |
+| `brunner_munzel` | `stats.univariate_menu` | R | Brunner-Munzel test for stochastic equality of two samples |
+| `cochran_mantel_haenszel` | `stats.univariate_menu` | R | Cochran-Mantel-Haenszel test on a 2x2 table of four counts |
 | `contingency_chi_square` | `stats.design_tests` | R | Contingency table chi-square with Cramer's V |
 | `epps_singleton` | `stats.distribution_menu` | 单元 | Epps-Singleton test of two samples |
-| `fligner_kileen` | `stats.univariate_menu` | 单元 | Fliegler-Kileen test for equality of dispersion between groups |
-| `intraclass_correlation` | `stats.design_tests` | 单元 | Intraclass correlation coefficient |
+| `fligner_kileen` | `stats.univariate_menu` | R | Fliegler-Kileen test for equality of dispersion between groups |
+| `intraclass_correlation` | `stats.design_tests` | R | Intraclass correlation coefficient |
 | `kruskal_wallis` | `stats.univariate` | R | Kruskal-Wallis rank test |
 | `ks_2samp` | `stats.distribution_menu` | 单元 | Kolmogorov-Smirnov test of two samples |
 | `mann_whitney` | `stats.univariate` | R | Mann-Whitney U test |
-| `mood_median` | `stats.univariate_menu` | 单元 | Mood's median test for a common median |
+| `mood_median` | `stats.univariate_menu` | R | Mood's median test for a common median |
 | `normality` | `stats.univariate` | R | Normality tests |
 | `one_way_anova` | `stats.univariate` | R | One-way ANOVA with Tukey post-hoc |
-| `outlier_screen` | `stats.univariate_menu` | 单元 | Outlier screening by z-score or by Grubbs' test |
+| `outlier_screen` | `stats.univariate_menu` | R | Outlier screening by z-score or by Grubbs' test |
 | `paired_rank_test` | `stats.univariate` | R | Paired sign or Wilcoxon signed-rank test |
-| `proportion_test` | `stats.univariate_menu` | 单元 | Exact binomial test of one proportion against a null value |
-| `repeated_measures_anova` | `stats.design_tests` | 单元 | Repeated-measures ANOVA |
-| `summary_statistics` | `stats.univariate` | 单元 | Descriptive statistics |
-| `two_way_anova` | `stats.design_tests` | 单元 | Two-way factorial ANOVA with interaction |
+| `proportion_test` | `stats.univariate_menu` | R | Exact binomial test of one proportion against a null value |
+| `repeated_measures_anova` | `stats.design_tests` | R | Repeated-measures ANOVA |
+| `summary_statistics` | `stats.univariate` | R | Descriptive statistics |
+| `two_way_anova` | `stats.design_tests` | R | Two-way factorial ANOVA with interaction |
 <!-- matrix:end -->
