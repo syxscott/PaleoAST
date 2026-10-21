@@ -12,83 +12,88 @@ What each column means:
 
 ```
 analyses:            113
-  compared with R:    49  (43%)
-  golden reference:   37  (33%)
-  property test:      32  (28%)
-  unit test:         113  (100%)
-  no test at all:      0  (0%)
-  R + (gold|prop):    36  (32%)
-  UNIT TEST ONLY:     63  (56%)   <- the gap
+  compared with R:    10  (9%)   EXACT -- declared per file
+  golden reference:    5  (4%)   inferred
+  property test:       3  (3%)   inferred
+  unit test:         113  (100%)   inferred
+  no test at all:      0  (0%)   inferred
+  R + (gold|prop):     2  (2%)
+  UNIT TEST ONLY:     97  (86%)   <- the gap (lower bound)
+
+The R row is exact: every cross-validation file declares the analyses
+it covers.  The other rows are inferred from the test tree, and they
+UNDER-count on purpose -- a ratchet that credited coverage that is not
+there would let the gap be declared closed on a false positive.
 
 category                 n    R    thin
-clustering               3    1       2
-directional              1    1       0
+clustering               3    0       3
+directional              1    0       1
 distribution             2    0       2
-diversity               14    7       7
-group-comparison         6    3       3
-growth                   2    1       1
-macroevolution           2    2       0
-morphometrics            8    6       2
-ordination               7    6       0
+diversity               14    1      13
+group-comparison         6    1       5
+growth                   2    0       2
+macroevolution           2    0       2
+morphometrics            8    1       5
+ordination               7    1       4
 plot                    20    0      20
-spatial                  9    2       7
-stratigraphy             7    5       2
-time-series             16    5      11
-univariate              16   10       6
+spatial                  9    0       8
+stratigraphy             7    0       6
+time-series             16    0      16
+univariate              16    6      10
 ```
 
 | analysis | category | module | R | gold | prop | unit |
 |---|---|---|:--:|:--:|:--:|:--:|
-| `pca` | ordination | `stats.pca` | x | x | x | x |
-| `pcoa` | ordination | `stats.pcoa` | x | x | x | x |
-| `nmds` | ordination | `stats.nmds` | x | x | x | x |
-| `cca` | ordination | `stats.cca` | x | x | x | x |
-| `lda` | ordination | `stats.lda` | x | x | x | x |
-| `ca` | ordination | `stats.detriding` |  | x |  | x |
-| `dca` | ordination | `stats.detriding` | x | x | x | x |
-| `anosim` | group-comparison | `stats.anosim` | x | x | x | x |
-| `permanova` | group-comparison | `stats.permanova` | x | x | x | x |
-| `simper` | group-comparison | `stats.simper` | x | x | x | x |
+| `pca` | ordination | `stats.pca` | x |  | x | x |
+| `pcoa` | ordination | `stats.pcoa` |  | x |  | x |
+| `nmds` | ordination | `stats.nmds` |  |  | x | x |
+| `cca` | ordination | `stats.cca` |  |  |  | x |
+| `lda` | ordination | `stats.lda` |  |  |  | x |
+| `ca` | ordination | `stats.detriding` |  |  |  | x |
+| `dca` | ordination | `stats.detriding` |  |  |  | x |
+| `anosim` | group-comparison | `stats.anosim` |  |  |  | x |
+| `permanova` | group-comparison | `stats.permanova` | x |  |  | x |
+| `simper` | group-comparison | `stats.simper` |  |  |  | x |
 | `procd` | group-comparison | `stats.procD_lm` |  |  |  | x |
 | `phylo_anova` | group-comparison | `stats.pcm` |  |  |  | x |
 | `phylogenetic_signal` | group-comparison | `stats.pcm` |  |  |  | x |
-| `mantel` | spatial | `stats.mantel` | x | x | x | x |
+| `mantel` | spatial | `stats.mantel` |  |  |  | x |
 | `partial_mantel` | spatial | `stats.mantel` |  |  |  | x |
-| `ripley_k` | spatial | `stats.spatial` | x | x | x | x |
+| `ripley_k` | spatial | `stats.spatial` |  | x |  | x |
 | `minimum_spanning_tree` | spatial | `stats.geometry` |  |  |  | x |
 | `morphospace_disparity` | spatial | `stats.geometry` |  |  |  | x |
 | `morans_i` | spatial | `stats.spatial_stats` |  |  |  | x |
 | `grid_interpolate` | spatial | `stats.spatial_stats` |  |  |  | x |
 | `nearest_neighbour` | spatial | `stats.spatial_stats` |  |  |  | x |
 | `spherical` | spatial | `stats.spatial_stats` |  |  |  | x |
-| `hierarchical_clustering` | clustering | `stats.clustering` | x | x | x | x |
+| `hierarchical_clustering` | clustering | `stats.clustering` |  |  |  | x |
 | `kmeans` | clustering | `stats.clustering` |  |  |  | x |
 | `kmeans_elbow` | clustering | `stats.clustering` |  |  |  | x |
 | `one_way_anova` | univariate | `stats.univariate` | x |  |  | x |
 | `kruskal_wallis` | univariate | `stats.univariate` | x |  |  | x |
 | `mann_whitney` | univariate | `stats.univariate` | x |  |  | x |
 | `normality` | univariate | `stats.univariate` | x |  |  | x |
-| `summary_statistics` | univariate | `stats.univariate` | x |  |  | x |
-| `two_way_anova` | univariate | `stats.design_tests` | x |  |  | x |
-| `repeated_measures_anova` | univariate | `stats.design_tests` | x |  |  | x |
+| `summary_statistics` | univariate | `stats.univariate` |  |  |  | x |
+| `two_way_anova` | univariate | `stats.design_tests` |  |  |  | x |
+| `repeated_measures_anova` | univariate | `stats.design_tests` |  |  |  | x |
 | `paired_rank_test` | univariate | `stats.univariate` | x |  |  | x |
-| `intraclass_correlation` | univariate | `stats.design_tests` | x |  |  | x |
+| `intraclass_correlation` | univariate | `stats.design_tests` |  |  |  | x |
 | `contingency_chi_square` | univariate | `stats.design_tests` | x |  |  | x |
-| `diversity` | diversity | `ecology.diversity` |  |  |  | x |
+| `diversity` | diversity | `ecology.diversity` | x |  |  | x |
 | `beta_diversity` | diversity | `ecology.beta_diversity` |  |  |  | x |
-| `rarefaction` | diversity | `ecology.rarefaction` | x | x | x | x |
-| `coverage_rarefaction` | diversity | `ecology.beta_diversity` | x | x | x | x |
-| `null_models` | diversity | `ecology.null_models` | x | x | x | x |
-| `she` | diversity | `ecology.advanced` | x | x | x | x |
+| `rarefaction` | diversity | `ecology.rarefaction` |  |  |  | x |
+| `coverage_rarefaction` | diversity | `ecology.beta_diversity` |  |  |  | x |
+| `null_models` | diversity | `ecology.null_models` |  |  |  | x |
+| `she` | diversity | `ecology.advanced` |  |  |  | x |
 | `abundance_models` | diversity | `ecology.advanced` |  |  |  | x |
-| `dtw` | diversity | `ecology.dtw` | x | x | x | x |
-| `ua` | stratigraphy | `stratigraphy.biostratigraphy` | x | x | x | x |
-| `rasc` | stratigraphy | `stratigraphy.biostratigraphy` | x | x | x | x |
-| `coniss` | stratigraphy | `stratigraphy.coniss` | x | x | x | x |
-| `stratigraphic_correlation` | stratigraphy | `stratigraphy.correlation` | x | x | x | x |
+| `dtw` | diversity | `ecology.dtw` |  |  |  | x |
+| `ua` | stratigraphy | `stratigraphy.biostratigraphy` |  |  |  | x |
+| `rasc` | stratigraphy | `stratigraphy.biostratigraphy` |  |  |  | x |
+| `coniss` | stratigraphy | `stratigraphy.coniss` |  |  |  | x |
+| `stratigraphic_correlation` | stratigraphy | `stratigraphy.correlation` |  |  | x | x |
 | `age_model` | stratigraphy | `stratigraphy.correlation` |  |  |  | x |
 | `sedimentation_rate` | stratigraphy | `stratigraphy.correlation` |  |  |  | x |
-| `spectral` | time-series | `stratigraphy.spectral_analysis` | x | x | x | x |
+| `spectral` | time-series | `stratigraphy.spectral_analysis` |  |  |  | x |
 | `wavelet` | time-series | `stratigraphy.spectral_analysis` |  |  |  | x |
 | `spectral_peaks` | time-series | `stratigraphy.spectral_analysis` |  |  |  | x |
 | `acf` | time-series | `stratigraphy.cycles` |  |  |  | x |
@@ -98,25 +103,25 @@ univariate              16   10       6
 | `cross_correlation` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `autoassociation` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `mann_kendall` | time-series | `stratigraphy.cycles` |  |  |  | x |
-| `runs_test` | time-series | `stratigraphy.cycles` | x |  |  | x |
+| `runs_test` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `orbital_forcing` | time-series | `stratigraphy.cycles` |  |  |  | x |
 | `insolation_series` | time-series | `stratigraphy.cycles` |  |  |  | x |
-| `arma` | time-series | `stratigraphy.arma` | x | x |  | x |
-| `markov` | time-series | `stratigraphy.markov` | x | x | x | x |
-| `extinction` | stratigraphy | `stratigraphy.extinction` | x | x | x | x |
-| `directional` | directional | `stratigraphy.directional` | x | x | x | x |
-| `isotope_paleotemperature` | time-series | `stratigraphy.isotope_analysis` | x | x | x | x |
-| `gpa` | morphometrics | `morphometrics.gpa` | x | x | x | x |
-| `relative_warps` | morphometrics | `morphometrics.relative_warps` | x | x | x | x |
-| `tps` | morphometrics | `morphometrics.tps` | x | x | x | x |
-| `efa` | morphometrics | `morphometrics.efa` | x | x | x | x |
-| `eigenshape` | morphometrics | `morphometrics.efa` | x | x | x | x |
+| `arma` | time-series | `stratigraphy.arma` |  |  |  | x |
+| `markov` | time-series | `stratigraphy.markov` |  |  |  | x |
+| `extinction` | stratigraphy | `stratigraphy.extinction` |  |  |  | x |
+| `directional` | directional | `stratigraphy.directional` |  |  |  | x |
+| `isotope_paleotemperature` | time-series | `stratigraphy.isotope_analysis` |  |  |  | x |
+| `gpa` | morphometrics | `morphometrics.gpa` | x | x |  | x |
+| `relative_warps` | morphometrics | `morphometrics.relative_warps` |  |  |  | x |
+| `tps` | morphometrics | `morphometrics.tps` |  |  |  | x |
+| `efa` | morphometrics | `morphometrics.efa` |  | x |  | x |
+| `eigenshape` | morphometrics | `morphometrics.efa` |  | x |  | x |
 | `allometry` | morphometrics | `morphometrics.allometry` |  |  |  | x |
 | `pls` | morphometrics | `morphometrics.allometry` |  |  |  | x |
-| `evolution_rate` | morphometrics | `morphometrics.evolution_rate` | x | x | x | x |
-| `kaplan_meier` | macroevolution | `macroevolution.survival` | x | x |  | x |
-| `cox_ph` | macroevolution | `macroevolution.survival` | x | x |  | x |
-| `growth_model` | growth | `models.growth_models` | x | x |  | x |
+| `evolution_rate` | morphometrics | `morphometrics.evolution_rate` |  |  |  | x |
+| `kaplan_meier` | macroevolution | `macroevolution.survival` |  |  |  | x |
+| `cox_ph` | macroevolution | `macroevolution.survival` |  |  |  | x |
+| `growth_model` | growth | `models.growth_models` |  |  |  | x |
 | `growth_model_comparison` | growth | `models.growth_models` |  |  |  | x |
 | `xy_plot` | plot | `visualization.plot_menu` |  |  |  | x |
 | `xy_error_bars` | plot | `visualization.plot_menu` |  |  |  | x |
@@ -147,8 +152,8 @@ univariate              16   10       6
 | `ks_2samp` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `epps_singleton` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `sqs_subsample` | diversity | `ecology.diversity_menu` |  |  |  | x |
-| `sample_coverage` | diversity | `ecology.diversity_menu` | x |  |  | x |
-| `sample_rarefaction_tao` | diversity | `ecology.diversity_menu` | x |  |  | x |
+| `sample_coverage` | diversity | `ecology.diversity_menu` |  |  |  | x |
+| `sample_rarefaction_tao` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_profile` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_t_test` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_permutation_test` | diversity | `ecology.diversity_menu` |  |  |  | x |

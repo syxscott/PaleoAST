@@ -23,6 +23,14 @@ from ._rbridge import as_float, r, r_vector, require
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  The Chao1 estimator and the
+#: observed richness are both computed by ``compute_diversity_indices``, so
+#: the analysis they belong to is ``diversity`` -- and note that the
+#: RAREFACTION CURVE is not covered here: only its observed endpoint is
+#: comparable without fixing R's RNG.  See the note in
+#: ``test_vs_r_base_univariate.py`` for why this is declared.
+ANALYSES_COVERED = {"diversity"}
+
 R_INEXT = require("iNEXT")
 
 # iNEXT has no `ChaoSpecies` -- that name is not in its exported namespace, which

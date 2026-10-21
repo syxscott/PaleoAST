@@ -28,6 +28,13 @@ from ._rbridge import as_array, matrix_to_array, r, r_matrix, r_string_vector, r
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  The tree distance methods
+#: and the PIC contrasts are not analyses in the catalog -- the catalog
+#: holds the analyses the interface offers, and the tree builders are not
+#: among them.  See the note in ``test_vs_r_base_univariate.py`` for why
+#: this is declared.
+ANALYSES_COVERED: set[str] = set()
+
 R_APE = require("ape")
 R_STATS = require("stats")
 

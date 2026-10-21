@@ -59,12 +59,27 @@ sys.path.insert(0, str(REPO))
 
 from scripts.validation_matrix import build
 
-# 2026-10-20: 74 of 113 analyses rested on a unit test alone.
-# The first batch of R cross-validation (the univariate tests against
-# base R) took it to 63.
-# Lower it when an analysis gains an R comparison, a golden reference or
-# a property test -- and say in the commit message which one.
-THIN_BASELINE = 63
+# 2026-10-20: 74 of 113 analyses rested on a unit test alone, on the
+# first count -- which turned out to be too generous.  The count matched a
+# test file by the analysis' CLASS name, so one file importing
+# ``compute_diversity_indices`` credited all fourteen diversity analyses
+# with R coverage, and the R column read 38 when only 10 analyses have
+# ever been compared against R.
+#
+# The rule is now: a test file may DECLARE the analyses it covers, and
+# that declaration is authoritative; otherwise a file counts only if it
+# mentions both the class and the module, which under-counts on purpose --
+# a ratchet that credits coverage that is not there would let the gap be
+# declared closed on a false positive.
+#
+# The number is a conservative lower bound on the gap.  Lower it when
+# an analysis gains an R comparison, a golden reference or a property
+# test -- and say in the commit message which one.
+THIN_BASELINE = 97
+
+#: The number of analyses compared against a reference implementation in
+#: R.  This one is EXACT, because the cross-validation files declare it.
+R_BASELINE = 10
 
 # The ratchet for the other end: every analysis the interface offers must
 # be reachable by at least one test.
@@ -88,10 +103,23 @@ def test_the_gap_does_not_grow():
     thin = _thin(rows)
     assert len(thin) <= THIN_BASELINE, (
         f"{len(thin)} analyses rest on a unit test alone (baseline {THIN_BASELINE}). "
-        "The gap may shrink; it may not widen.  Analyses that grew: "
-        + ", ".join(
-            sorted(str(r["name"]) for r in thin if str(r["name"]) not in {str(x["name"]) for x in _thin(build())})
-        )
+        "The gap may shrink; it may not widen."
+    )
+
+
+def test_the_r_comparison_count_does_not_shrink():
+    """The R column is exact, so it can be held to a floor.
+
+    Every analysis compared against a reference implementation in R is
+    evidence that cannot go away by accident, and the cross-validation
+    files declare what they cover, so this number is exact rather than
+    inferred.
+    """
+    rows = build()
+    with_r = [str(r["name"]) for r in rows if r["R"]]
+    assert len(with_r) >= R_BASELINE, (
+        f"only {len(with_r)} analyses are compared against R (was {R_BASELINE}): {sorted(with_r)}. "
+        "A cross-validation file must declare the analyses it covers in ANALYSES_COVERED."
     )
 
 

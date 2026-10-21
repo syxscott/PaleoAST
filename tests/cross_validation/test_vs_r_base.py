@@ -27,6 +27,11 @@ from ._rbridge import as_array, as_float, matrix_to_array, r, r_matrix, require
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  See the note in
+#: ``test_vs_r_base_univariate.py`` for why this is declared rather than
+#: inferred.
+ANALYSES_COVERED = {"pca"}
+
 R_STATS = require("stats")
 
 

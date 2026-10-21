@@ -37,6 +37,12 @@ from ._rbridge import ListVector, StrVector, as_float, matrix_to_array, r, r_mat
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  The Bray-Curtis comparison
+#: is about ``compute_distance_matrix``, which is not itself an analysis in
+#: the catalog -- it is the input to several.  See the note in
+#: ``test_vs_r_base_univariate.py`` for why this is declared.
+ANALYSES_COVERED = {"diversity", "permanova"}
+
 R_VEGAN = require("vegan")
 
 

@@ -80,6 +80,28 @@ def _mentions(path: pathlib.Path, needle: str) -> bool:
         return False
 
 
+def _declared_analyses(text: str) -> set[str] | None:
+    """The analyses a test file says it covers, if it says.
+
+    A test file may declare ``ANALYSES_COVERED = {"pca", "nmds"}`` at module
+    level.  When it does, that declaration is authoritative: the file is
+    evidence for those analyses and for nothing else.
+
+    This matters because the fallback is a NAME MATCH, and a name match
+    over-reports badly.  A file that imports ``compute_diversity_indices``
+    mentions "diversity", so every analysis whose name starts with
+    "diversity" looks validated -- fourteen of them -- when in fact the
+    file compared one.  A matrix that says "R" for an analysis nobody
+    compared against R is worse than no matrix: it makes the gap look
+    smaller than it is, and the ratchet built on it would let the gap
+    grow in peace.
+    """
+    match = re.search(r"^ANALYSES_COVERED\s*(?::\s*[^=]+)?=\s*\{(.*?)\}", text, re.MULTILINE | re.DOTALL)
+    if not match:
+        return None
+    return set(re.findall(r"[\"']?([a-z0-9_]+)[\"']?", match.group(1)))
+
+
 def build() -> list[dict[str, object]]:
     files = _test_files()
     cache = {p: p.read_text(encoding="utf-8", errors="ignore") for p in files}
@@ -92,7 +114,24 @@ def build() -> list[dict[str, object]]:
         kinds: set[str] = set()
         hits: list[str] = []
         for path, text in cache.items():
-            if any(needle in text for needle in needles):
+            declared = _declared_analyses(text)
+            if declared is not None:
+                # The file says what it covers; believe it.
+                if entry.name in declared:
+                    kinds.add(_classify(path))
+                    hits.append(path.relative_to(REPO).as_posix())
+                continue
+            # The fallback: the class (or method) name has to appear AND
+            # the module has to appear.  Either alone is far too loose --
+            # a class name credits every analysis that shares that class,
+            # and a module name credits every analysis in it.
+            #
+            # This rule UNDER-counts on purpose.  A ratchet that credits
+            # coverage that is not there would let the gap be declared
+            # closed on a false positive; a ratchet that misses coverage
+            # only makes the number look worse than it is.
+            module_tail = entry.module.rsplit(".", 1)[-1]
+            if any(needle in text for needle in needles) and module_tail in text:
                 kinds.add(_classify(path))
                 hits.append(path.relative_to(REPO).as_posix())
         rows.append(
@@ -102,6 +141,7 @@ def build() -> list[dict[str, object]]:
                 "module": entry.module,
                 "class": entry.class_name,
                 "method": entry.method,
+                "description": entry.description or "",
                 "R": "R" in kinds,
                 "gold": "gold" in kinds,
                 "prop": "prop" in kinds,
@@ -126,13 +166,18 @@ def _summary(rows: list[dict[str, object]]) -> str:
     thin = sum(1 for x in rows if x["unit"] and not (x["R"] or x["gold"] or x["prop"]))
     lines = [
         f"analyses:            {total}",
-        f"  compared with R:   {r:>3}  ({100 * r / total:.0f}%)",
-        f"  golden reference:  {gold:>3}  ({100 * gold / total:.0f}%)",
-        f"  property test:     {prop:>3}  ({100 * prop / total:.0f}%)",
-        f"  unit test:         {unit:>3}  ({100 * unit / total:.0f}%)",
-        f"  no test at all:    {none:>3}  ({100 * none / total:.0f}%)",
+        f"  compared with R:   {r:>3}  ({100 * r / total:.0f}%)   EXACT -- declared per file",
+        f"  golden reference:  {gold:>3}  ({100 * gold / total:.0f}%)   inferred",
+        f"  property test:     {prop:>3}  ({100 * prop / total:.0f}%)   inferred",
+        f"  unit test:         {unit:>3}  ({100 * unit / total:.0f}%)   inferred",
+        f"  no test at all:    {none:>3}  ({100 * none / total:.0f}%)   inferred",
         f"  R + (gold|prop):   {both:>3}  ({100 * both / total:.0f}%)",
-        f"  UNIT TEST ONLY:    {thin:>3}  ({100 * thin / total:.0f}%)   <- the gap",
+        f"  UNIT TEST ONLY:    {thin:>3}  ({100 * thin / total:.0f}%)   <- the gap (lower bound)",
+        "",
+        "The R row is exact: every cross-validation file declares the analyses",
+        "it covers.  The other rows are inferred from the test tree, and they",
+        "UNDER-count on purpose -- a ratchet that credited coverage that is not",
+        "there would let the gap be declared closed on a false positive.",
     ]
     by_cat: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0])
     for row in rows:

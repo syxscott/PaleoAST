@@ -188,9 +188,9 @@
 
 ## 📚 文档完整性
 
-- [x] UI_IMPROVEMENTS.md - ✅ 详细改进说明
-- [x] PROFESSIONAL_UPGRADE_SUMMARY.md - ✅ 升级总结
-- [x] UPGRADE_QUICK_SUMMARY.md - ✅ 快速总结
+- [x] docs/archive/UI_IMPROVEMENTS.md - ✅ 详细改进说明
+- [x] docs/archive/PROFESSIONAL_UPGRADE_SUMMARY.md - ✅ 升级总结
+- [x] docs/archive/UPGRADE_QUICK_SUMMARY.md - ✅ 快速总结
 - [x] 代码注释 - ✅ 所有新代码都有注释
 - [x] 方法文档字符串 - ✅ 所有新方法都有docstring
 

@@ -12,12 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the 113 first-party analyses: whether it is compared against a
   reference implementation in R, checked against published truth, covered
   by a property test, or only by a unit test on one example. The gap is
-  now a number instead of a worry: **74 of 113 rested on a unit test
-  alone**, concentrated in the univariate tests (16 of 16 with no R
-  comparison at all), the plot-menu plotters (20 of 20) and the
-  time-series methods (12 of 16). A ratchet in
+  now a number instead of a worry. A ratchet in
   `tests/test_validation_coverage.py` holds the number where it is: it may
   fall when something is validated properly, and it may not rise.
+
+  > **Correction (2026-10-21).** The first version of the matrix matched a
+  > test file by the analysis' *class* name, so one file importing
+  > `compute_diversity_indices` credited all fourteen diversity analyses
+  > with R coverage, and the R column read **38** (later 49) when the true
+  > figure was **10**. The cross-validation files now declare the
+  > analyses they cover, and the R column is exact: **10 of 113 analyses
+  > (9%)** have been compared against a reference implementation in R.
+  > The other columns are inferred and deliberately under-count, so the
+  > gap is a lower bound: **97 analyses rest on a unit test alone.**
 - **The univariate tests are cross-validated against base R**
   (`tests/cross_validation/test_vs_r_base_univariate.py`) -- kruskal_wallis,
   the Shapiro-Wilk normality test, mann_whitney, the paired Wilcoxon test

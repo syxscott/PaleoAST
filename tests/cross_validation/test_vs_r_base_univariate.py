@@ -48,6 +48,19 @@ from ._rbridge import as_float, r, r_data_frame, r_matrix, r_vector, require
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  ``scripts/validation_matrix.py``
+#: reads this declaration instead of guessing from imported class names --
+#: a name match would credit every analysis that shares a class, and the
+#: matrix would then claim R coverage for methods nobody ever compared.
+ANALYSES_COVERED = {
+    "kruskal_wallis",
+    "normality",
+    "mann_whitney",
+    "paired_rank_test",
+    "one_way_anova",
+    "contingency_chi_square",
+}
+
 R_STATS = require("stats")
 
 #: Tolerances.  These are the same statistics, so they agree to the last

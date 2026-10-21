@@ -55,6 +55,11 @@ from ._rbridge import matrix_to_array, r_array, require
 
 pytestmark = pytest.mark.cross_validation
 
+#: The analyses this file compares against R.  See the note in
+#: ``test_vs_r_base_univariate.py`` for why this is declared rather than
+#: inferred.
+ANALYSES_COVERED = {"gpa"}
+
 R_GEOMORPH = require("geomorph")
 
 
