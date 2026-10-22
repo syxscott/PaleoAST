@@ -318,6 +318,38 @@ def permutation_pvalue(
 # =============================================================================
 
 
+def ordered_unique_labels(labels: Sequence[Any]) -> list[Any]:
+    """The distinct labels, in a defined order, tolerating mixed types.
+
+    A group column read from a spreadsheet can hold a number in one cell
+    and text in the next -- the same column, one value typed as "1" and
+    one typed as "A".  ``sorted(set(labels))`` then raises a bare
+    ``TypeError: '<' not supported between instances of 'str' and 'int'``
+    from inside the sort, which escapes the project's exception
+    hierarchy and, in the GUI, the unified error handling with it.
+
+    Homogeneous labels keep their natural order -- numbers stay numeric,
+    strings stay lexicographic -- so nothing about the existing output
+    changes.  Only a column that genuinely mixes types falls back to
+    ordering by the string form, where the order is arbitrary anyway.
+
+    Parameters
+    ----------
+    labels:
+        The labels to reduce.
+
+    Returns
+    -------
+    list
+        The distinct labels, in order.
+    """
+    unique = set(labels)
+    try:
+        return sorted(unique)
+    except TypeError:
+        return sorted(unique, key=lambda x: str(x))
+
+
 def group_indices(groups: Sequence[Any]) -> dict[Any, npt.NDArray]:
     """Map each group label to the row positions carrying it.
 

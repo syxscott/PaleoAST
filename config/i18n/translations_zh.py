@@ -1380,4 +1380,18 @@ TRANSLATIONS = {
     "Teal": "青色",
     "Dark theme": "深色主题",
     "Use the dark theme for the interface and the interactive figures.": "对界面和交互式图表使用深色主题。",
+    # =========================================================================
+    # 缺失值报告 (config/imputation.py)
+    #
+    # 这五条被 MissingValueReport.summary() 使用，但两个字典里都没有，
+    # 于是回退逻辑把英文原文直接吐给用户——中文界面下整段报告都是英文。
+    # =========================================================================
+    "Missing Value Report": "缺失值报告",
+    "Total NaN count: {0}": "NaN 总数：{0}",
+    "NaN proportion: {0:.2f}%": "NaN 占比：{0:.2f}%",
+    "Rows with NaN: {0}": "含 NaN 的行数：{0}",
+    "Columns with NaN: {0}": "含 NaN 的列数：{0}",
+    # Fallback tab title for a workspace view that was added without a
+    # name.  Every call site passes one, so this is a safety net.
+    "Result": "结果",
 }

@@ -24,7 +24,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 from stats.permanova import PERMANOVAAnalyzer
-from utils.exceptions import ComputationError
+from utils.exceptions import ComputationError, ValidationError
 
 
 class TestPERMANOVA(unittest.TestCase):
@@ -35,17 +35,23 @@ class TestPERMANOVA(unittest.TestCase):
         self.analyzer = PERMANOVAAnalyzer()
         np.random.seed(42)
 
-    def test_single_group_returns_zero(self) -> None:
-        """Single group should return F=0 (test not applicable)."""
+    def test_single_group_is_refused(self) -> None:
+        """A single group has no comparison to make, so it is refused.
+
+        This used to be expected to return ``F = 0`` with ``df_between = 0``
+        and a p-value of 1 -- a complete-looking report saying "no
+        difference between groups" for a design that has only one group.
+        ANOSIM, which faces the same degeneracy, refuses it; PERMANOVA now
+        does too.
+        """
         n = 10
         # Euclidean distance matrix
         data = np.random.rand(n, 5)
         D = np.sqrt(((data[:, None, :] - data[None, :, :]) ** 2).sum(axis=2))
         groups = ["A"] * n
 
-        result = self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
-        self.assertEqual(result.f_statistic, 0.0)
-        self.assertEqual(result.df_between, 0)
+        with self.assertRaises(ValidationError):
+            self.analyzer.analyze(D, groups, n_permutations=99, random_seed=42)
 
     def test_perfect_separation(self) -> None:
         """Perfectly separated groups should return very large F."""

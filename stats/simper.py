@@ -46,7 +46,8 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError
+from utils.exceptions import ComputationError, ValidationError
+from utils.statistics_core import ordered_unique_labels
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -193,8 +194,19 @@ class SimperAnalyzer:
 
             if variable_names is None:
                 variable_names = [f"Var_{i + 1}" for i in range(n_vars)]
+            elif len(variable_names) != n_vars:
+                # The names are looked up by variable index further down, so
+                # a shorter list raised a bare IndexError -- and only after
+                # every statistic had already been computed.  The column
+                # names are checked for length first, the way
+                # stats/univariate.py checks its column_names.
+                raise ValidationError(
+                    f"SIMPER was given {len(variable_names)} variable name(s) for "
+                    f"{n_vars} variable(s); they must match.",
+                    details={"n_names": len(variable_names), "n_vars": n_vars},
+                )
 
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             n_groups = len(unique_groups)
 
             if n_groups < 2:

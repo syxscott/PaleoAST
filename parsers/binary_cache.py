@@ -279,6 +279,18 @@ class BinaryCache:
         """
         import numpy as np
 
+        # Labels must line up with the axes they label.  A cache written
+        # with the wrong number of labels loads back without complaint and
+        # silently mislabels every row, so the mismatch is refused here --
+        # before the try block, so the caller is told rather than getting
+        # a bare False back.
+        if isinstance(matrix, np.ndarray):
+            n_rows, n_cols = matrix.shape
+            if row_labels is not None and len(row_labels) != n_rows:
+                raise ValueError(f"row_labels has {len(row_labels)} entries but the matrix has {n_rows} rows")
+            if col_labels is not None and len(col_labels) != n_cols:
+                raise ValueError(f"col_labels has {len(col_labels)} entries but the matrix has {n_cols} columns")
+
         try:
             # 验证输入
             if not isinstance(matrix, np.ndarray):
@@ -644,6 +656,23 @@ class BinaryCache:
 
         if count == 0:
             return []
+
+        # The label count is the file's own, and the header's row/column
+        # counts are the matrix's.  They used to be read independently and
+        # never compared, so a cache written with the wrong number of
+        # labels loaded back without complaint -- with the labels offset
+        # against the data, which puts the wrong specimen's value under
+        # every label.  The CRC cannot catch it either: the checksum was
+        # computed over the same serialised bytes that were read back.
+        if expected_count is not None and count != expected_count:
+            raise CorruptedCacheError(
+                f"Cache holds {count} label(s) but its matrix has {expected_count} row(s); "
+                "the labels do not belong to this data.",
+                details={
+                    "labels_found": int(count),
+                    "expected": int(expected_count),
+                },
+            )
 
         labels = []
         for _ in range(count):

@@ -229,9 +229,25 @@ def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float =
     """
     Compute Chao1 richness estimator with confidence interval.
 
-    Implements the bias-corrected Chao1 estimator and its variance
-    following Chao (1987) and the log-transformation method for
-    confidence intervals.
+    Implements the Chao1 estimator of Chao (1987) and its variance
+    following the log-transformation method for confidence intervals.
+
+    WHICH CHAO1 THIS IS
+    -------------------
+    The point estimate is the *classic* Chao1 lower bound,
+    ``S_obs + f_1² / (2·f_2)`` -- NOT Chao's bias-corrected variant
+    ``f_1(f_1-1) / (2(f_2+1))``.  The two differ substantially when
+    f_2 is small (at f_1 = 10, f_2 = 2 the classic form gives 25 unseen
+    species and the bias-corrected one 15), so calling this "bias
+    corrected" was a claim the code did not make.
+
+    The classic form is deliberate: it is what this project's own R
+    cross-validation pins, against ``iNEXT::ChaoRichness``
+    (tests/cross_validation/test_vs_inext.py asserts S + f_1²/(2·f_2)
+    exactly).  iNEXT applies the bias correction by default, so the two
+    agree to within about 0.3 % when f_2 > 0 and about 1.1 % on the
+    f_2 == 0 branch -- a gap that suite measures and bounds explicitly
+    rather than hides.
 
     Parameters
     ----------
@@ -251,6 +267,11 @@ def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float =
         S_hat_Chao1 = S_obs + f_1² / (2·f_2)
 
     where f_1 = number of singletons and f_2 = number of doubletons.
+
+    **The f_2 == 0 branch**: when there are no doubletons but at least one
+    singleton, the classic estimate is undefined and Chao (1987) Eq. 6
+    substitutes ``S_obs + f_1(f_1-1)/2``.  That substitution IS the
+    bias-corrected form; it is used for this branch only.
 
     **Variance** (Chao 1987, Eq. 5):
         var(Chao1) = f_2 · [ (α/4)·(f_1/f_2)⁴ + (α²/2)·(f_1/f_2)³
@@ -293,7 +314,10 @@ def chao1_confidence_interval(abundances: npt.NDArray, confidence_level: float =
     if f2 > 0:
         chao1 = s_obs + (f1**2) / (2 * f2)
     elif f1 > 0:
-        # Bias-corrected form when f2 == 0 but f1 > 0
+        # f_2 == 0 but f_1 > 0: the classic estimate is undefined (it
+        # divides by f_2), and Chao (1987) Eq. 6 substitutes
+        # S_obs + f_1(f_1-1)/2.  That substitution happens to be the
+        # bias-corrected form, and it is used for this branch only.
         chao1 = s_obs + (f1 * (f1 - 1)) / 2
     else:
         chao1 = float(s_obs)

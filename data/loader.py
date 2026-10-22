@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from importlib.resources import files
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -35,23 +35,10 @@ _DATA_DIR = files("data") / "examples"
 
 logger = logging.getLogger(__name__)
 
-# Encodings tried in order when reading CSVs now live in ``utils.csv_io``,
+# Encodings tried in order when reading CSVs live in ``utils.csv_io``,
 # shared with ``controllers/data_controller.py`` so the interactive import path
 # and the example-data loaders cannot drift apart.
 from utils.csv_io import read_csv_with_fallback
-
-
-def _read_csv_with_fallback(path: str) -> pd.DataFrame:
-    """Read a CSV file, falling back across text encodings.
-
-    Thin wrapper over :func:`utils.csv_io.read_csv_with_fallback`, kept for
-    the existing call sites in this module. Candidates are tried in
-    :data:`utils.csv_io.CSV_ENCODING_CANDIDATES` order; because ``latin-1``
-    decodes every byte, a warning is logged whenever anything beyond UTF-8 had
-    to be used.
-    """
-    df, _encoding = read_csv_with_fallback(path)
-    return df
 
 
 def _get_data_path(filename: str) -> str:
@@ -143,7 +130,7 @@ def load_community() -> pd.DataFrame:
         array(['Grassland', 'Woodland', 'Meadow', 'Wetland', 'Disturbed'])
     """
     data_path = _get_data_path("community_abundance.csv")
-    df = pd.read_csv(data_path)
+    df, _encoding = read_csv_with_fallback(str(data_path))
 
     return df
 
@@ -224,7 +211,7 @@ def load_primate_traits() -> pd.DataFrame:
         True
     """
     data_path = _get_data_path("primate_traits.csv")
-    df = pd.read_csv(data_path)
+    df, _encoding = read_csv_with_fallback(str(data_path))
 
     return df
 
@@ -299,13 +286,21 @@ def load_example_matrix(name: str) -> DataMatrix:
     # rather than crashing the load with a raw ValueError from numpy.
     numeric = measurements.select_dtypes(include=[np.number])
 
+    # The specimen metadata always has one entry per data row.  When the
+    # frame carries a group column the entry names the group; when it does
+    # not, the entry is empty.  This used to be one expression,
+    # ``group_values or [None] * len(numeric)``, which mixed a list of
+    # strings with a list of None and left a type checker guessing which
+    # of the two the iteration produced.
+    specimen_metadata: list[dict[str, Any]] = (
+        [{"group": group} for group in group_values] if group_values is not None else [{} for _ in range(len(numeric))]
+    )
+
     return DataMatrix(
         numeric.to_numpy(dtype=float),
         row_labels=row_labels,
         col_labels=list(numeric.columns),
-        specimen_metadata=[
-            {"group": group} if group is not None else {} for group in (group_values or [None] * len(numeric))
-        ],
+        specimen_metadata=specimen_metadata,
     )
 
 

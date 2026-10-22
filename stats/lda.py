@@ -36,6 +36,7 @@ import numpy.typing as npt
 
 from config.i18n import _
 from utils.exceptions import ComputationError
+from utils.statistics_core import ordered_unique_labels
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -261,7 +262,7 @@ class LDAAnalyzer:
             # [0,0,1,0,1,1,1,1] whose min is 0, which drove the CV-fold count
             # to 0 and made the code report RESUBSTITUTION accuracy that
             # summary() then printed as "cross-validated accuracy".
-            unique_classes = sorted(set(groups_grouped))
+            unique_classes = ordered_unique_labels(groups_grouped)
             n_classes = len(unique_classes)
             if n_classes < 2:
                 raise ComputationError("LDA requires at least 2 classes")

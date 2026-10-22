@@ -22,6 +22,7 @@ from matplotlib.figure import Figure
 
 from config.colors import current_palette
 from stats.pca import PCAResult
+from utils.statistics_core import ordered_unique_labels
 
 from ._style_scope import scoped_plot_methods
 
@@ -89,7 +90,7 @@ class PCAPlotter:
 
         # Plot points
         if groups is not None:
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             colors = current_palette()
 
             for i, group in enumerate(unique_groups):
@@ -303,7 +304,7 @@ class PCAPlotter:
         """Add 95% confidence ellipses for each group."""
         from matplotlib.patches import Ellipse
 
-        unique_groups = sorted(set(groups))
+        unique_groups = ordered_unique_labels(groups)
         colors = current_palette()
 
         for idx, group in enumerate(unique_groups):

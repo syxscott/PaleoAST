@@ -376,6 +376,15 @@ class AllometryAnalyzer:
             # the array as before.
             if centroid_sizes is None:
                 centroid_sizes = self._compute_centroid_sizes(aligned_configurations)
+                # The sizes computed here come from the data, so they are
+                # not covered by _validate_centroid_sizes below.  A
+                # specimen whose landmarks all coincide has a centroid
+                # size of exactly zero, and log(0) is -inf: the regression
+                # then went on to raise a bare
+                # "LinAlgError: SVD did not converge" from deep inside
+                # numpy, with no indication that a degenerate specimen
+                # was the cause.
+                self._validate_centroid_sizes(centroid_sizes, n_specimens)
             else:
                 centroid_sizes = self._validate_centroid_sizes(centroid_sizes, n_specimens)
             log_cs = np.log(centroid_sizes)
@@ -830,6 +839,14 @@ class IntegrationAnalyzer:
             if n_components is None:
                 n_components = max_comp
             n_components = min(n_components, max_comp)
+            if n_components < 1:
+                # Zero components left the score-correlation array empty,
+                # and the integration index -- which IS the first
+                # component's correlation -- indexed into it and raised a
+                # bare IndexError.
+                raise ValidationError(
+                    f"PLS needs at least 1 component, got {n_components}",
+                )
 
             # Center both blocks
             block_a_centered = block_a - np.mean(block_a, axis=0)

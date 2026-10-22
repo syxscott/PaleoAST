@@ -64,7 +64,13 @@ class GPAResult:
     consensus: npt.NDArray  # (k, m) - mean configuration
     procrustes_distances: npt.NDArray  # Distance to consensus
     rotations: list[npt.NDArray]  # Rotation matrices
-    scales: npt.NDArray  # Scale factors
+    # Cumulative scale factor APPLIED to each original configuration, i.e.
+    # ``aligned = (original - centroid) @ rotations.T * scales``.  It is the
+    # reciprocal of the centroid size (1/CS), NOT the size itself: the
+    # normalising division is ``aligned[i] / sizes[i]``, so recording the
+    # divisor here made this field a duplicate of ``centroid_sizes`` while
+    # its name said it was a factor that had been applied.
+    scales: npt.NDArray
     centroids: npt.NDArray  # Original centroids
     centroid_sizes: npt.NDArray  # Original centroid size per specimen (n,)
     n_iterations: int
@@ -187,6 +193,14 @@ class GPAAnalyzer:
 
             if n_iterations is None:
                 n_iterations = self._max_iterations
+            if n_iterations < 1:
+                # The iteration loop is what produces `aligned` and
+                # `consensus`, and both are consumed after it.  Zero
+                # iterations left them unbound -- an UnboundLocalError
+                # after a misleading "did not converge after 0
+                # iterations" log line.  partial_gpa refuses the same
+                # request with the same message.
+                raise MorphometricsError(f"n_iterations must be >= 1, got {n_iterations}")
             if tolerance is None:
                 tolerance = self._tolerance
 
@@ -219,7 +233,10 @@ class GPAAnalyzer:
                             "information and cannot be Procrustes-superimposed."
                         )
                     aligned[i] = aligned[i] / sizes[i]
-                    scales[i] *= sizes[i]
+                    # Accumulate the factor that was APPLIED (1/CS), not the
+                    # divisor, so ``scales`` says what was done to the
+                    # configuration rather than repeating ``centroid_sizes``.
+                    scales[i] /= sizes[i]
 
                 # Step 3: Rotate each specimen toward the leave-one-out mean
                 # of the other specimens (morphops / Ten Berge).  Rotating to

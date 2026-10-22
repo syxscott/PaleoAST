@@ -22,6 +22,8 @@ import numpy.typing as npt
 from matplotlib.figure import Figure
 from scipy import stats
 
+from utils.statistics_core import ordered_unique_labels
+
 from ._style_scope import scoped_plot_methods
 
 logger = logging.getLogger(__name__)
@@ -113,7 +115,7 @@ class AllometryPlotter:
 
         # Plot points by group
         if groups is not None:
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             colors = plt.cm.Set1(np.linspace(0, 1, len(unique_groups)))
 
             for idx, group in enumerate(unique_groups):
@@ -224,7 +226,7 @@ class AllometryPlotter:
         ax = fig.add_subplot(111)
 
         if groups is not None:
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             colors = plt.cm.Set1(np.linspace(0, 1, len(unique_groups)))
 
             for idx, group in enumerate(unique_groups):
@@ -288,7 +290,7 @@ class AllometryPlotter:
         y = right_scores[:, 0]
 
         if groups is not None:
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             colors = plt.cm.Set1(np.linspace(0, 1, len(unique_groups)))
 
             for idx, group in enumerate(unique_groups):

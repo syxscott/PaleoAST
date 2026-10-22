@@ -72,8 +72,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
-    QStackedWidget,
     QStatusBar,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -1167,8 +1167,16 @@ class WorkspaceArea(QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
 
-        # Stacked widget for different views
-        self._stack = QStackedWidget()
+        # A tab widget, not a stacked one.  The workspace was a
+        # ``QStackedWidget``, so only the newest view was ever reachable:
+        # the ``name`` argument of ``addWidget`` was dropped on the floor,
+        # the roughly thirty call sites that pass a label ("PCA Score
+        # Plot", "UAZ Hierarchy", ...) had nowhere to put it, and the
+        # FIFO eviction deleted the results the user could no longer get
+        # back to.  A tab per view gives every result the title it was
+        # always being handed, and lets the user switch between them.
+        self._stack = QTabWidget()
+        self._stack.setDocumentMode(True)
         self._stack.currentChanged.connect(self._on_current_changed)
         self._layout.addWidget(self._stack)
 
@@ -1178,7 +1186,12 @@ class WorkspaceArea(QWidget):
         # ``MainWindow``), so it just emits the matching signal and
         # ``MainWindow`` connects its existing slots.
         self._placeholder = self._build_empty_state()
-        self._stack.addWidget(self._placeholder)
+        self._stack.addTab(self._placeholder, "")
+        # The welcome pane is the only thing on screen until data is
+        # loaded, and it is not a result: no tab bar is shown until a real
+        # view takes over.  PyQt6 6.11 does not expose
+        # ``QTabWidget.setTabBarVisible``, so the bar is hidden directly.
+        self._stack.tabBar().setVisible(False)
 
     def _build_empty_state(self) -> QWidget:
         """Build the welcome pane with three primary actions."""
@@ -1328,12 +1341,36 @@ class WorkspaceArea(QWidget):
                     pass
 
     def addWidget(self, widget: QWidget, name: str = "") -> int:
-        """Add a widget to the workspace."""
-        return self._stack.addWidget(widget)
+        """Add a widget to the workspace as a named tab.
+
+        The ``name`` used to be dropped on the floor: the workspace was a
+        ``QStackedWidget``, so the title had nowhere to go and only the
+        newest view was ever reachable.  It is the tab title now.
+        """
+        label = name or widget.windowTitle() or widget.objectName() or _("Result")
+        # Adding a tab must not change what is in front; the callers
+        # decide that explicitly right after.
+        current = self._stack.currentIndex()
+        index = self._stack.addTab(widget, label)
+        if current >= 0:
+            self._stack.setCurrentIndex(current)
+        return index
 
     def setCurrentIndex(self, index: int) -> None:
         """Set current widget index."""
         self._stack.setCurrentIndex(index)
+        self._sync_placeholder()
+
+    def showWidget(self, widget: QWidget) -> None:
+        """Bring a widget to the front, addressed by widget rather than index.
+
+        Removing the welcome pane shifts every index below it, so a
+        remembered index goes stale.  Looking the widget up is the only
+        way to stay correct.
+        """
+        index = self._stack.indexOf(widget)
+        if index >= 0:
+            self.setCurrentIndex(index)
 
     def currentWidget(self) -> QWidget | None:
         """Get current widget."""
@@ -1341,7 +1378,37 @@ class WorkspaceArea(QWidget):
 
     def removeWidget(self, widget: QWidget) -> None:
         """Remove widget from workspace."""
-        self._stack.removeWidget(widget)
+        index = self._stack.indexOf(widget)
+        if index >= 0:
+            self._stack.removeTab(index)
+
+    def _sync_placeholder(self) -> None:
+        """Drop the welcome pane once a real view is in front.
+
+        The welcome pane is not a result and has no business sitting on
+        the tab bar next to the user's analyses.  It goes as soon as
+        something else is shown, which is also the moment the tab bar
+        becomes meaningful.
+        """
+        if self._placeholder is None:
+            self._stack.tabBar().setVisible(True)
+            return
+        current = self._stack.currentWidget()
+        if current is None or current is self._placeholder:
+            self._stack.tabBar().setVisible(False)
+            return
+        index = self._stack.indexOf(self._placeholder)
+        if index >= 0:
+            self._stack.removeTab(index)
+        self._placeholder.setParent(None)
+        self._placeholder.deleteLater()
+        self._placeholder = None
+        # Removing a tab shifts the indices above it, so the view that
+        # was in front has to be re-selected by widget.
+        restored = self._stack.indexOf(current)
+        if restored >= 0:
+            self._stack.setCurrentIndex(restored)
+        self._stack.tabBar().setVisible(True)
 
 
 class _AnalysisSignals(QObject):
@@ -1582,8 +1649,18 @@ class MainWindow(QMainWindow):
                 specimen_metadata=specimen_metadata,
             )
 
-            self._state.set_data_matrix(new_matrix)
+            # A dropped file is read from disk exactly as it is, so the
+            # document has not been modified.  The other three load paths
+            # (example data, File > Open, the import wizard) all say so
+            # explicitly; this one did not, so a file the user had only
+            # looked at was treated as edited and the close handler asked
+            # them to save changes they had never made.
+            self._state.set_data_matrix(new_matrix, mark_modified=False)
             self._spreadsheet.load_data(matrix_data, row_labels=row_labels, col_labels=col_labels, update_state=False)
+            # Bring the data forward: without this the welcome pane stayed
+            # on screen after a drag-and-drop, with the loaded data
+            # hidden behind it.
+            self._workspace.showWidget(self._spreadsheet)
 
             self._status_bar.setInfo(
                 _("Loaded: {0} rows x {1} columns").format(new_matrix.n_samples, new_matrix.n_variables)
@@ -1825,7 +1902,7 @@ class MainWindow(QMainWindow):
             update_state=False,
         )
         self._update_ui_state()
-        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._workspace.showWidget(self._spreadsheet)
         self._status_bar.setInfo(
             _("Loaded example: {0} ({1} samples x {2} variables)").format(name, matrix.n_samples, matrix.n_variables)
         )
@@ -2783,7 +2860,7 @@ class MainWindow(QMainWindow):
             return
 
         # For category clicks or un-mapped items, switch to spreadsheet view
-        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._workspace.showWidget(self._spreadsheet)
 
     def _on_navigation_changed_external(self, section: str) -> None:
         """Default internal observer for ``navigationChanged``.
@@ -2801,7 +2878,7 @@ class MainWindow(QMainWindow):
         if not self._state.has_data:
             QMessageBox.warning(self, _("No Data"), _("Please load data first."))
             return
-        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._workspace.showWidget(self._spreadsheet)
         self._status_bar.setInfo(_("Matrix Operations: edit data in spreadsheet"))
 
     def _on_new_file(self) -> None:
@@ -2865,7 +2942,7 @@ class MainWindow(QMainWindow):
 
             # Load into spreadsheet
             self._spreadsheet.load_data(data, row_labels=row_labels, col_labels=col_labels, update_state=False)
-            self._workspace.setCurrentIndex(self._spreadsheet_index)
+            self._workspace.showWidget(self._spreadsheet)
 
             # Update UI state now that we have data
             self._update_ui_state()
@@ -2899,7 +2976,7 @@ class MainWindow(QMainWindow):
                 self._spreadsheet.load_data(
                     matrix.data, row_labels=matrix.row_labels, col_labels=matrix.col_labels, update_state=False
                 )
-                self._workspace.setCurrentIndex(self._spreadsheet_index)
+                self._workspace.showWidget(self._spreadsheet)
 
                 # Update UI state now that we have data
                 self._update_ui_state()
@@ -2921,6 +2998,14 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 self._data_controller.export_csv(filepath)
+                # The write succeeded, so the document is no longer
+                # modified.  This was never called from the view layer, so
+                # the dirty flag survived a successful save: the status
+                # bar kept saying "modified" and closing the window still
+                # asked the user to save changes that were already on
+                # disk.  It also records the path, which is what lets a
+                # later Save write back to the same file.
+                self._state.mark_saved(filepath)
                 self._status_bar.setInfo(_("Saved: {0}").format(os.path.basename(filepath)))
                 return True
             except Exception as e:
@@ -3421,7 +3506,7 @@ class MainWindow(QMainWindow):
             col_labels=col_labels,
             update_state=False,
         )
-        self._workspace.setCurrentIndex(self._spreadsheet_index)
+        self._workspace.showWidget(self._spreadsheet)
 
         # Update UI state now that we have data
         self._update_ui_state()
@@ -3760,31 +3845,6 @@ class MainWindow(QMainWindow):
             return canvas.figure
         return None
 
-    def _cleanup_plot_widgets(self) -> None:
-        """Remove all plot canvases from the workspace to prevent memory leaks.
-
-        Handles both the legacy :class:`InteractivePlotCanvas` instances
-        and any "cleanable" workspace host widget. The latter is
-        identified by the dynamic ``workspace_cleanable`` Qt property
-        (set on the container by :meth:`_embed_figure_in_workspace` and
-        :meth:`_show_uaz_tree`). The spreadsheet is always preserved.
-        """
-        stack = self._workspace._stack
-        for i in range(stack.count() - 1, -1, -1):
-            widget = stack.widget(i)
-            if widget is self._spreadsheet:
-                continue
-            is_interactive_plot = isinstance(widget, InteractivePlotCanvas)
-            # Read the new property name with backward-compat fallback.
-            is_cleanable = False
-            if widget is not None:
-                marker = widget.property("workspace_cleanable")
-                if (marker is not None and bool(marker)) or widget.property("figure_canvas") is not None:
-                    is_cleanable = True
-            if is_interactive_plot or is_cleanable:
-                stack.removeWidget(widget)
-                widget.deleteLater()
-
     # Keep the last N analysis results in the workspace so the user can
     # switch between them.  Older results are evicted FIFO.
     _MAX_RESULT_HISTORY = 8
@@ -3813,7 +3873,10 @@ class MainWindow(QMainWindow):
 
         while len(result_widgets) >= self._MAX_RESULT_HISTORY:
             old = result_widgets.pop(0)
-            stack.removeWidget(old)
+            # QTabWidget has no removeWidget: the tab goes by index.
+            old_index = stack.indexOf(old)
+            if old_index >= 0:
+                stack.removeTab(old_index)
             # Drop the figure reference on figure host containers so
             # the canvas + figure can be GC'd, not held alive by Qt.
             canvas = old.property("figure_canvas") if hasattr(old, "property") else None
@@ -6493,7 +6556,11 @@ class MainWindow(QMainWindow):
         # property name would mislead future maintainers.
         container.setProperty("workspace_cleanable", True)
 
-        self._cleanup_plot_widgets()
+        # The tree goes into the workspace as a view of its own, next to
+        # the results that are already there.  It used to call
+        # ``_cleanup_plot_widgets()`` first, which removed and destroyed
+        # every analysis result the user had computed -- an operation
+        # with nothing to do with the tree wiping the workspace.
         idx = self._workspace.addWidget(container, _("UAZ Hierarchy"))
         self._workspace.setCurrentIndex(idx)
 

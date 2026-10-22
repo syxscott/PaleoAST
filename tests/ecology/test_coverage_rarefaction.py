@@ -65,17 +65,28 @@ class TestCoverageRarefactionHill:
         np.testing.assert_allclose(result1.confidence_upper, result2.confidence_upper, rtol=1e-10)
 
     def test_different_seeds_different_results(self):
-        """Test that different seeds produce different results."""
+        """Different seeds must give different bootstrap results.
+
+        This test used to end in ``assert True``, so it could never fail:
+        the claim in its own name was never checked, and a refactor that
+        dropped ``seed=`` on the way to the generator would have left it
+        green.  The point estimate is a deterministic function of the
+        data and does not depend on the seed; the bootstrap confidence
+        interval does, and that is what is compared here.
+
+        Both seeds are fixed, so the comparison is deterministic rather
+        than probabilistic.
+        """
         from ecology.beta_diversity import coverage_rarefaction_hill
 
         abundance = np.array([[25, 10, 5], [15, 20, 8]])
 
-        coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=123)
-        coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=456)
+        first = coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=123)
+        second = coverage_rarefaction_hill(abundance, q=0, n_points=5, n_bootstrap=20, seed=456)
 
-        # Results may differ (though with bootstrap there could be some chance of same)
-        # This is a probabilistic test
-        assert True  # Seed parameter is accepted
+        assert not np.allclose(first.confidence_lower, second.confidence_lower), (
+            "different seeds produced identical bootstrap intervals, so the seed is not reaching the random generator"
+        )
 
     def test_multiple_samples(self):
         """Test with multiple samples."""

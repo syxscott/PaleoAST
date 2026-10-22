@@ -161,6 +161,14 @@ class RelativeWarpsAnalyzer:
                 n_components = max_components
             else:
                 n_components = min(n_components, max_components)
+            if n_components < 1:
+                # Zero components left the eigenvalue and explained-
+                # variance arrays empty, and the completion log took
+                # explained_variance[0] -- a bare IndexError, thrown
+                # after the whole analysis had been computed.
+                raise ComputationError(
+                    f"Relative warps need at least 1 component, got {n_components}",
+                )
 
             # Flatten configurations
             # Shape: (n_specimens, n_landmarks * n_dims)

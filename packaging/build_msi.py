@@ -20,6 +20,7 @@ Run:  python packaging/build_msi.py
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -87,9 +88,7 @@ setup(
         "build_exe": {{
             "build_exe": {build_dir!r},
             "packages": [
-                "config", "controllers", "data", "ecology", "models",
-                "morphometrics", "macroevolution", "parsers", "phylogenetics",
-                "stats", "stratigraphy", "utils", "visualization", "views",
+{package_lines}
             ],
             "includes": [
                 "PyQt6", "numpy", "scipy", "pandas", "matplotlib", "psutil",
@@ -136,8 +135,52 @@ setup(
 """
 
 
+def declared_packages() -> list[str]:
+    """The packages the wheel ships, read from ``pyproject.toml``.
+
+    This list used to be written out by hand here, and it had drifted:
+    ``plugins``, ``presets``, ``reporting``, ``state_machine``, ``hpc`` and
+    ``morpho3d`` were all missing, so the frozen tree could be missing
+    packages the application imports at start-up.  The wheel's own list
+    is the source of truth, and reading it here means the two cannot
+    drift apart again.
+
+    The project supports Python 3.10, which has no ``tomllib``, so the
+    one list is read with a regex over the ``include = [...]`` block.
+    That block is a flat list of quoted strings, so this is safe; if the
+    format ever changes, the parse fails loudly rather than quietly
+    producing a short list.
+    """
+    text = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    marker = "[tool.setuptools.packages.find]"
+    if marker not in text:
+        raise RuntimeError(f"{marker} not found in pyproject.toml")
+    section = text[text.index(marker) :]
+    # Bound the section to this table: the file has later tables with
+    # their own ``include`` keys.
+    end = section.find("\n[", 1)
+    if end != -1:
+        section = section[:end]
+    # Read the ``include = [...]`` list itself.  Searching for the key
+    # rather than for the first bracket matters: the comment above the
+    # list mentions a package that was renamed away, and a looser parse
+    # picked that name up out of the prose.
+    match = re.search(r"include\s*=\s*\[(.*?)\]", section, re.S)
+    if match is None:
+        raise RuntimeError("could not find the include list in pyproject.toml")
+    # Strip comments before matching: the list carries a comment that
+    # names a package which was renamed away, and a looser parse picked
+    # that name up out of the prose.
+    block = "\n".join(line.split("#", 1)[0] for line in match.group(1).splitlines())
+    packages = re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)\*"', block)
+    if not packages:
+        raise RuntimeError("could not read the package list from pyproject.toml")
+    return sorted(packages)
+
+
 def write_setup() -> Path:
     target = PROJECT_ROOT / "packaging" / "cx_freeze_setup.py"
+    package_lines = "\n".join(f'                "{name}",' for name in declared_packages())
     target.write_text(
         SETUP_TEMPLATE.format(
             root=str(PROJECT_ROOT),
@@ -146,6 +189,7 @@ def write_setup() -> Path:
             description=DESCRIPTION,
             author=ORG_NAME,
             build_dir=str(BUILD_DIR),
+            package_lines=package_lines,
         ),
         encoding="utf-8",
     )

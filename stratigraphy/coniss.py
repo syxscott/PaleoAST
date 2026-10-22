@@ -36,6 +36,7 @@ import numpy.typing as npt
 
 from config.i18n import _
 from utils.exceptions import ComputationError
+from utils.statistics_core import ordered_unique_labels
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ class CONISSAnalyzer:
         # Compute ISS per zone
         iss_total = 0.0
         iss_by_zone = []
-        for zone_id in sorted(set(labels)):
+        for zone_id in ordered_unique_labels(labels):
             mask = labels == zone_id
             zone_data = data[mask]
             zone_mean = zone_data.mean(axis=0)

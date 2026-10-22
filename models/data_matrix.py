@@ -162,7 +162,7 @@ class DataMatrix:
         # Initialize metadata
         self._metadata: dict[str, Any] = dict(metadata) if metadata is not None else {}
         self._specimen_metadata: list[dict[str, Any]] = self._init_specimen_metadata(n_samples, specimen_metadata)
-        self._column_metadata: dict[str, dict[str, Any]] = self._init_column_metadata(n_variables, column_metadata)
+        self._column_metadata: list[dict[str, Any]] = self._init_column_metadata(n_variables, column_metadata)
 
         # Thread lock for concurrent access
         self._lock = threading.RLock()
@@ -184,19 +184,32 @@ class DataMatrix:
         return [dict(m) for m in specimen_metadata]  # Deep copy
 
     def _init_column_metadata(
-        self, n_variables: int, column_metadata: dict[str, dict[str, Any]] | None
-    ) -> dict[str, dict[str, Any]]:
-        """Initialize column metadata with validation."""
+        self, n_variables: int, column_metadata: dict[str, dict[str, Any]] | list[dict[str, Any]] | None
+    ) -> list[dict[str, Any]]:
+        """Initialize column metadata, one entry per column index.
+
+        The store is keyed by INDEX, not by label.  A label-keyed store
+        cannot represent a matrix whose two columns carry the same label:
+        the second silently overwrote the first, so
+        ``get_column_metadata(1)`` handed back column 0's units and data
+        type for column 1 -- a wrong answer rather than a missing one.
+        Duplicate column labels are reachable from real input, because the
+        CSV loader takes the header row as it is.
+
+        ``column_metadata`` may be given either as a label-keyed dict (the
+        historical form) or as a list of per-column dicts (the exact form,
+        used when the caller knows the columns are not uniquely labelled).
+        """
         if column_metadata is None:
-            return {label: {} for label in self._col_labels}
-        # Validate that all keys correspond to existing columns
-        result: dict[str, dict[str, Any]] = {}
-        for i, label in enumerate(self._col_labels):
-            if label in column_metadata:
-                result[label] = dict(column_metadata[label])
-            else:
-                result[label] = {}
-        return result
+            return [{} for _ in range(n_variables)]
+        if isinstance(column_metadata, list):
+            if len(column_metadata) != n_variables:
+                raise MatrixDimensionError(
+                    "Column metadata list must have one entry per variable",
+                    details={"n_variables": n_variables, "n_entries": len(column_metadata)},
+                )
+            return [dict(entry) for entry in column_metadata]
+        return [dict(column_metadata.get(label, {})) for label in self._col_labels]
 
     # =========================================================================
     # Properties
@@ -444,10 +457,14 @@ class DataMatrix:
         Get the per-column (variable) metadata.
 
         Returns:
-            Dict[str, Dict[str, Any]]: Copy of column metadata
+            Dict[str, Dict[str, Any]]: Copy of column metadata, keyed by
+            column label.  When two columns share a label they share one
+            entry here; the per-column store behind it keeps them apart,
+            and :meth:`get_column_metadata` addresses a column by index
+            to reach the right one.
         """
         with self._lock:
-            return {k: dict(v) for k, v in self._column_metadata.items()}
+            return {label: dict(self._column_metadata[i]) for i, label in enumerate(self._col_labels)}
 
     @column_metadata.setter
     def column_metadata(self, column_metadata: dict[str, dict[str, Any]]) -> None:
@@ -468,7 +485,7 @@ class DataMatrix:
                     "Column metadata keys must match existing column labels",
                     details={"missing_columns": list(missing), "extra_columns": list(extra)},
                 )
-            self._column_metadata = {k: dict(v) for k, v in column_metadata.items()}
+            self._column_metadata = [dict(column_metadata.get(label, {})) for label in self._col_labels]
 
     def get_specimen_metadata(self, specimen_id: Union[int, str]) -> dict[str, Any]:
         """
@@ -541,13 +558,16 @@ class DataMatrix:
         with self._lock:
             if isinstance(column, int):
                 if 0 <= column < len(self._col_labels):
-                    label = self._col_labels[column]
-                    return dict(self._column_metadata[label])
+                    # By index, so a column is reachable even when its
+                    # label is shared with another column.
+                    return dict(self._column_metadata[column])
                 raise IndexError(f"Column index {column} out of range [0, {len(self._col_labels)}])")
             else:
-                if column in self._column_metadata:
-                    return dict(self._column_metadata[column])
-                raise KeyError(f"Column label '{column}' not found")
+                try:
+                    index = self._col_labels.index(column)
+                except ValueError:
+                    raise KeyError(f"Column label '{column}' not found") from None
+                return dict(self._column_metadata[index])
 
     # =========================================================================
     # Data Access Methods
@@ -601,6 +621,23 @@ class DataMatrix:
             col_labels = [self._col_labels[i] for i in col_key]
         else:
             col_labels = [self._col_labels[col_key]]
+
+        # A 1-D result has had one axis indexed away, so the labels above
+        # no longer describe a 2-D grid: m[:, 0] used to return a view
+        # whose row_labels had 3 entries and whose col_labels had 1 while
+        # the data itself was 1-D of length 3.  A consumer that assumes
+        # "label index == data index" then read the wrong specimen's
+        # value, and to_matrix() rejected the view outright.  Put the data
+        # back into 2-D on the axis that was NOT indexed away, so that
+        # len(row_labels) == shape[0] and len(col_labels) == shape[1]
+        # hold for every view.
+        if data.ndim == 1:
+            row_is_scalar = isinstance(row_key, (int, np.integer)) and not isinstance(row_key, bool)
+            col_is_scalar = isinstance(col_key, (int, np.integer)) and not isinstance(col_key, bool)
+            if col_is_scalar and not row_is_scalar:
+                data = data.reshape(-1, 1)  # a single column
+            else:
+                data = data.reshape(1, -1)  # a single row
 
         view = DataMatrixView(data=data, row_labels=row_labels, col_labels=col_labels, parent=self)
         return view
@@ -696,16 +733,18 @@ class DataMatrix:
             DataMatrix: Transposed matrix
         """
         with self._lock:
-            # Original specimen_metadata (per-row) becomes new column_metadata (per-column)
-            # Original col_labels[i] becomes new column label, so use specimen_metadata[i]
-            new_column_meta: dict[str, dict[str, Any]] = {
-                row_label: dict(self._specimen_metadata[i]) for i, row_label in enumerate(self._row_labels)
-            }
+            # Original specimen_metadata (per-row) becomes new column_metadata
+            # (per-column).  It is passed as a LIST, so a matrix whose row
+            # labels repeat keeps its per-column metadata apart; a
+            # label-keyed dict would collapse them into a single entry.
+            new_column_meta: list[dict[str, Any]] = [
+                dict(self._specimen_metadata[i]) for i in range(len(self._row_labels))
+            ]
 
-            # Original column_metadata (per-column) becomes new specimen_metadata (per-row)
-            # Original col_labels[i] becomes new row label
+            # Original column_metadata (per-column) becomes new specimen_metadata
+            # (per-row), again addressed by index rather than by label.
             new_specimen_meta: list[dict[str, Any]] = [
-                dict(self._column_metadata.get(col_label, {})) for col_label in self._col_labels
+                dict(self._column_metadata[i]) for i in range(len(self._col_labels))
             ]
 
             return DataMatrix(
@@ -764,7 +803,7 @@ class DataMatrix:
                 name=f"{self._name}_rows_subset",
                 metadata=self._metadata.copy(),
                 specimen_metadata=new_spec_meta,
-                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
+                column_metadata=[entry.copy() for entry in self._column_metadata],
             )
 
     def subset_columns(self, indices: Union[list[int], npt.NDArray]) -> "DataMatrix":
@@ -785,7 +824,7 @@ class DataMatrix:
 
             new_data = self._data[:, indices].copy()
             new_col_labels = [self._col_labels[i] for i in indices]
-            new_col_meta = {self._col_labels[i]: self._column_metadata[self._col_labels[i]].copy() for i in indices}
+            new_col_meta = [self._column_metadata[i].copy() for i in indices]
 
             return DataMatrix(
                 data=new_data,
@@ -852,6 +891,13 @@ class DataMatrix:
             DataMatrix: Matrix without rows exceeding threshold
         """
         with self._lock:
+            if self.n_variables == 0:
+                # A matrix with no variables holds no values, so no row can
+                # carry a missing one and no row can be dropped.  The
+                # arithmetic below computes max_allowed_nan = n_variables - 1
+                # = -1 for such a matrix, which marks every row invalid and
+                # silently empties it.
+                return self.copy()
             nan_counts = np.sum(np.isnan(self._data), axis=1)
             # Cap threshold below 1.0 so threshold == 1.0 means "drop rows that
             # are entirely NaN" (matching the documented behaviour).
@@ -926,7 +972,7 @@ class DataMatrix:
         """
         with self._lock:
             return [
-                self._column_metadata.get(label, {}).get("data_type", DataType.CONTINUOUS) for label in self._col_labels
+                self._column_metadata[i].get("data_type", DataType.CONTINUOUS) for i in range(len(self._col_labels))
             ]
 
     def _column_type_set(self) -> set[str]:
@@ -1102,7 +1148,7 @@ class DataMatrix:
                 name=f"{self._name}_mean_imputed",
                 metadata=self._metadata.copy(),
                 specimen_metadata=[m.copy() for m in self._specimen_metadata],
-                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
+                column_metadata=[entry.copy() for entry in self._column_metadata],
             )
 
     def impute_median(self) -> "DataMatrix":
@@ -1149,7 +1195,7 @@ class DataMatrix:
                 name=f"{self._name}_median_imputed",
                 metadata=self._metadata.copy(),
                 specimen_metadata=[m.copy() for m in self._specimen_metadata],
-                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
+                column_metadata=[entry.copy() for entry in self._column_metadata],
             )
 
     def impute_knn(self, k: int = 5) -> "DataMatrix":
@@ -1260,7 +1306,7 @@ class DataMatrix:
                 name=f"{self._name}_knn_imputed",
                 metadata=self._metadata.copy(),
                 specimen_metadata=[m.copy() for m in self._specimen_metadata],
-                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
+                column_metadata=[entry.copy() for entry in self._column_metadata],
             )
 
     # =========================================================================
@@ -1284,7 +1330,7 @@ class DataMatrix:
                 name=self._name,
                 metadata=self._metadata.copy(),
                 specimen_metadata=[m.copy() for m in self._specimen_metadata],
-                column_metadata={k: v.copy() for k, v in self._column_metadata.items()},
+                column_metadata=[entry.copy() for entry in self._column_metadata],
             )
 
     def to_numpy(self) -> npt.NDArray:
@@ -1327,7 +1373,7 @@ class DataMatrix:
                 "missing_info": self.missing_info,
                 "metadata": dict(self._metadata),
                 "specimen_metadata": [dict(m) for m in self._specimen_metadata],
-                "column_metadata": {k: dict(v) for k, v in self._column_metadata.items()},
+                "column_metadata": {label: dict(self._column_metadata[i]) for i, label in enumerate(self._col_labels)},
             }
 
     @classmethod

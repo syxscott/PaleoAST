@@ -19,13 +19,20 @@ where:
     n = total number of samples
 
 SS_B and SS_W are computed from the distance matrix (Anderson 2001):
-    SS_T = (1/(n-1)) * Σ_{i<j} d²_ij          (upper triangle, unordered pairs)
-    SS_W = Σ_g (1/(n_g-1)) * Σ_{i<j in g} d²_ij
+    SS_T = (1/n) * Σ_{i<j} d²_ij           (upper triangle, unordered pairs)
+    SS_W = Σ_g (1/n_g) * Σ_{i<j in g} d²_ij
     SS_B = SS_T - SS_W
 
-The n-1 and n_g-1 denominators are essential: using n or
-n_g systematically inflates F whenever group sizes differ,
-because the two scaling factors do not cancel out.
+The n and n_g denominators are the ones Anderson (2001) uses, and they
+are what ``vegan::adonis2`` reproduces.  They were n - 1 and n_g - 1 for
+a while, and a note in this header called THAT version "essential" while
+the implementation below used n and n_g -- so the header and the code
+disagreed about which one was the bug, and a maintainer following the
+header would have "fixed" the correct implementation back into the
+broken one.  The scaling is not arbitrary: the two factors do not cancel
+out when the group sizes differ, which is why the two forms give
+different F values (measured on the cross-validation fixture: R² 0.8639
+against adonis2's 0.8636 with n, and 0.8539 with n - 1).
 
 A design without replication (n - g <= 0) or with zero within-group
 dispersion has no defined F ratio; such tests raise ComputationError rather
@@ -45,8 +52,8 @@ import numpy.typing as npt
 
 from config.constants import PERMUTATION_TESTS
 from config.i18n import _
-from utils.exceptions import ComputationError, MatrixDimensionError
-from utils.statistics_core import permutation_pvalue
+from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
+from utils.statistics_core import ordered_unique_labels, permutation_pvalue
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -130,8 +137,11 @@ class PERMANOVAAnalyzer:
             metric: Distance metric used (for reference)
             random_seed: Optional seed for the permutation RNG so that
                 the resulting p-value is reproducible. Without a seed,
-                ``np.random`` is used as-is and two calls with the same
-                data may return slightly different p-values.
+                the p-value comes from a freshly drawn source of entropy,
+                so two calls with the same data may return slightly
+                different p-values. The generator is isolated either
+                way, so an unseeded PERMANOVA never moves the global
+                ``np.random`` stream.
 
         Returns:
             PERMANOVAResult: PERMANOVA analysis results
@@ -152,8 +162,19 @@ class PERMANOVAAnalyzer:
             # (the previous code read ``groups`` before its length had been
             # validated and then recomputed it once more below).
             groups_array = np.array(groups)
-            unique_groups = sorted(set(groups), key=lambda x: str(x))
+            unique_groups = ordered_unique_labels(groups)
             g = len(unique_groups)
+            # PERMANOVA contrasts groups with each other, so a design with
+            # one group has nothing to contrast.  The statistic used to
+            # come back as F = 0 with p = 1 -- a complete-looking report
+            # saying "no difference between groups" for a comparison that
+            # does not exist.  ANOSIM, which faces the same degeneracy,
+            # already refuses it.
+            if g < 2:
+                raise ValidationError(
+                    "PERMANOVA requires at least 2 groups",
+                    details={"n_groups": g},
+                )
             self._logger.info(
                 f"PERMANOVA analyze started: n_samples={n}, n_groups={g}, "
                 f"n_permutations={n_permutations}, random_seed={random_seed}"

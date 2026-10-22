@@ -59,7 +59,7 @@ from config.i18n import _
 from phylogenetics.signal import _blomberg_k_from_vcv
 from phylogenetics.tree import NodeType, PhyloNode, PhyloTree
 from utils.exceptions import ComputationError, ValidationError
-from utils.statistics_core import permutation_pvalue
+from utils.statistics_core import ordered_unique_labels, permutation_pvalue
 
 logger = logging.getLogger(__name__)
 
@@ -880,7 +880,7 @@ class PCMAnalyzer:
         if not tips_with_groups:
             raise ValidationError(_("No valid group assignments"))
 
-        groups = sorted(set(tips_with_groups.values()))
+        groups = ordered_unique_labels(tips_with_groups.values())
         n_groups = len(groups)
 
         # Compute contrasts

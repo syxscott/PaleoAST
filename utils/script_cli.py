@@ -182,6 +182,14 @@ def main(argv: list[str] | None = None) -> int:
         if not args.quiet and result.text:
             print(result.text)
         return EXIT_OK
+    # The failure detail goes to stderr, and stdout keeps only what the
+    # script itself printed.  An analysis that failed inside run() reports
+    # its traceback through the script's own output, so that is written
+    # out here too rather than dropped.
+    if result.output:
+        sys.stderr.write(result.output)
+        if not result.output.endswith("\n"):
+            sys.stderr.write("\n")
     sys.stderr.write(result.error or "the script raised\n")
     return EXIT_SCRIPT_ERROR
 

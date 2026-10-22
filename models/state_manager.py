@@ -547,6 +547,13 @@ class StateManager:
             # readable after undo.
             self._analysis_cache.clear()
         get_event_bus().emit_undo_stack_changed()
+        # The matrix itself changed, so the subscribers that redraw from
+        # ``data_changed`` -- the spreadsheet among them -- have to be
+        # told.  Without this, undoing through DataController.undo()
+        # restored the state while the table kept showing the pre-undo
+        # numbers: every analysis read the state and the user read the
+        # screen, and the two disagreed.
+        get_event_bus().emit_data_changed(self._data_matrix)
 
     def redo(self) -> None:
         """Redo the last undone change."""
@@ -561,6 +568,7 @@ class StateManager:
             self._restore_state(state)
             self._analysis_cache.clear()
         get_event_bus().emit_undo_stack_changed()
+        get_event_bus().emit_data_changed(self._data_matrix)
 
     # =========================================================================
     # File Operations

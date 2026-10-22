@@ -243,15 +243,21 @@ class DataLoadTask:
             if missing_value:
                 na_values.add(missing_value)
 
-            df = pd.read_csv(
-                path,
+            # The same encoding fallback the synchronous path uses
+            # (utf-8-sig -> gbk -> latin-1).  This path used to hardcode
+            # ``encoding="utf-8", encoding_errors="replace"``, which does
+            # NOT raise on a GBK/CP936-encoded Chinese CSV -- it silently
+            # substitutes U+FFFD, destroying every column header and every
+            # text row label with no warning.  The same file loaded through
+            # the menu came out clean and the same file loaded in the
+            # background came out as mojibake.
+            df, _encoding = read_csv_with_fallback(
+                str(path),
                 sep=delimiter,
                 header=0 if has_header else None,
                 index_col=False,  # we handle row labels manually
                 na_values=na_values,
                 keep_default_na=True,
-                encoding="utf-8",
-                encoding_errors="replace",
                 low_memory=False,
             )
 
@@ -294,7 +300,26 @@ class DataLoadTask:
                 col_labels = [str(c) for c in df.columns.tolist()]
 
             # Convert remaining columns to float (coerce errors to NaN)
-            data = df.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+            numeric = df.apply(pd.to_numeric, errors="coerce")
+            data = numeric.to_numpy(dtype=float)
+            # Report the columns that held no numbers at all, exactly as
+            # the synchronous path does.  The background loader used to
+            # drop them silently while the menu loader warned about them,
+            # so the same file behaved differently depending on which path
+            # the user happened to take.
+            fully_text = [
+                col_labels[i]
+                for i in range(numeric.shape[1])
+                if numeric.shape[0] > 0 and numeric.iloc[:, i].isna().all()
+            ]
+            if fully_text:
+                self._logger.warning(
+                    "Loaded %d column(s) that contain no numbers and are now empty: %s. "
+                    "They were most likely text labels; pass has_row_labels=False and "
+                    "drop them, or re-import with the correct delimiter.",
+                    len(fully_text),
+                    ", ".join(fully_text),
+                )
             rows_processed = data.shape[0]
 
             # Emit final progress

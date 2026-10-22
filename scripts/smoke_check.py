@@ -493,3 +493,9 @@ if errors:
     for name, err in errors:
         print(f"  - {name}: {err}")
 print("=" * 60)
+
+# The exit code is what a caller reads.  Without it this script reports
+# "5 failed" on stdout and then exits 0, so CI, a task scheduler or any
+# wrapper that checks `$?` records a PASS for a build that is broken.
+# Every other audit script in this directory already ends this way.
+sys.exit(1 if failed else 0)

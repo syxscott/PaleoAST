@@ -92,6 +92,27 @@ _EXTENSION_ALIASES: dict[str, str] = {
 }
 
 
+def canonical_extension(suffix: str) -> str:
+    """The canonical format name for a file extension.
+
+    ``.jpeg`` is the official JPEG abbreviation, so it is accepted as an
+    alias of ``jpg``; every other extension is returned lower-cased and
+    without its dot.
+
+    Parameters
+    ----------
+    suffix:
+        The extension, with or without a leading dot.
+
+    Returns
+    -------
+    str
+        The canonical format name (``"jpg"`` for ``"jpeg"``).
+    """
+    cleaned = suffix.lower().lstrip(".")
+    return _EXTENSION_ALIASES.get(cleaned, cleaned)
+
+
 def _normalize_path(path: str, fmt: str) -> str:
     """Ensure the file path ends with the correct extension.
 
@@ -102,8 +123,7 @@ def _normalize_path(path: str, fmt: str) -> str:
     p = Path(path)
     if p.suffix == "":
         return str(p.with_suffix(f".{_FORMAT_EXTENSIONS[fmt]}"))
-    suffix = p.suffix.lower().lstrip(".")
-    suffix = _EXTENSION_ALIASES.get(suffix, suffix)
+    suffix = canonical_extension(p.suffix)
     if suffix != _FORMAT_EXTENSIONS[fmt]:
         raise ValueError(
             f"File extension {p.suffix!r} does not match export format {fmt!r}. "
@@ -368,6 +388,11 @@ def parse_options_from_path(path: str, format: str | None = None) -> PlotExportO
     fmt = format or Path(path).suffix.lower().lstrip(".")
     if not fmt:
         raise ValueError(f"Cannot infer export format from path {path!r}: no extension.")
+    # ``.jpeg`` is the official JPEG abbreviation and is accepted as an
+    # alias of ``jpg`` everywhere else in this module; the inference here
+    # did not know about it, so a path ending in ``.jpeg`` was rejected
+    # even though exporting to it worked.
+    fmt = canonical_extension(fmt)
     if fmt not in _FORMAT_EXTENSIONS:
         raise ValueError(f"Path {path!r} has unsupported extension {fmt!r}. Use one of {sorted(_FORMAT_EXTENSIONS)}.")
     return PlotExportOptions(format=fmt)  # type: ignore[arg-type]

@@ -282,6 +282,14 @@ class ScriptSession:
         self._controller = controller
         self._registry: Any = None
         self._catalog_loaded = False
+        # Counts analyses that failed inside :meth:`run`.  ``run`` reports a
+        # failure by returning its error text, because the script console
+        # wants to show the message rather than raise.  A headless runner
+        # wants the opposite: an analysis that failed must not be reported
+        # as a successful run.  The counter is what lets both hold --
+        # ``execute`` compares it across one execution and fails the whole
+        # script when an analysis inside it failed.
+        self._analysis_failures = 0
         self.namespace: dict[str, Any] = {
             "__name__": "paleoast_script",
             "__builtins__": __builtins__,
@@ -422,6 +430,7 @@ class ScriptSession:
         """
         self._ensure_catalog_loaded()
         if self._registry is None or self._registry.get(name) is None:
+            self._analysis_failures += 1
             available = ", ".join(self.analyses()[:20])
             return f"No analysis named {name!r}.\nAvailable ({len(self.analyses())}): {available} ..."
         payload = self.data if data is None else data
@@ -430,6 +439,7 @@ class ScriptSession:
         try:
             outcome = self._registry.get(name).analyze(payload, **kwargs)
         except Exception:  # the analysis's own error, rendered not swallowed
+            self._analysis_failures += 1
             return traceback.format_exc()
         text = _format_result(outcome)
         if show:
@@ -459,6 +469,12 @@ class ScriptSession:
         body, trailing = _split_trailing_expression(source)
         buffer = io.StringIO()
         value_text: str | None = None
+        # An analysis that failed inside ``run`` does not raise, so the
+        # try/except below cannot see it.  Compare the failure counter
+        # across this execution instead: a run() call that failed inside
+        # THIS script makes the whole script a failure, while a failure
+        # left over from an earlier, unrelated call does not.
+        failures_before = self._analysis_failures
         try:
             with contextlib.redirect_stdout(buffer):
                 if body.strip():
@@ -475,6 +491,20 @@ class ScriptSession:
                 ok=False,
                 output=buffer.getvalue(),
                 error=traceback.format_exc(),
+                namespace_keys=self._public_keys(),
+            )
+        failed_analyses = self._analysis_failures - failures_before
+        if failed_analyses:
+            # The analysis reported its own error as text rather than
+            # raising it.  That text was printed to stdout by run(); the
+            # failure itself belongs on stderr, which is where a headless
+            # runner's caller looks for it.
+            return ExecutionResult(
+                ok=False,
+                output=buffer.getvalue(),
+                error=(
+                    f"{failed_analyses} analysis call(s) in this script failed. See the output above for the traceback."
+                ),
                 namespace_keys=self._public_keys(),
             )
         return ExecutionResult(

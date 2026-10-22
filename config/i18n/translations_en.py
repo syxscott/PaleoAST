@@ -1417,4 +1417,19 @@ TRANSLATIONS = {
     "Teal": "Teal",
     "Dark theme": "Dark theme",
     "Use the dark theme for the interface and the interactive figures.": "Use the dark theme for the interface and the interactive figures.",
+    # =========================================================================
+    # Missing value report (config/imputation.py)
+    #
+    # These five were used by MissingValueReport.summary() but were in
+    # neither dictionary, so the report fell back to the raw key -- the
+    # Chinese interface showed the whole report in English.
+    # =========================================================================
+    "Missing Value Report": "Missing Value Report",
+    "Total NaN count: {0}": "Total NaN count: {0}",
+    "NaN proportion: {0:.2f}%": "NaN proportion: {0:.2f}%",
+    "Rows with NaN: {0}": "Rows with NaN: {0}",
+    "Columns with NaN: {0}": "Columns with NaN: {0}",
+    # Fallback tab title for a workspace view that was added without a
+    # name.  Every call site passes one, so this is a safety net.
+    "Result": "Result",
 }

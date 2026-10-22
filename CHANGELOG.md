@@ -200,6 +200,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moment it is changed.
 
 ### Fixed
+- **The workspace keeps every analysis result on its own tab**
+  (`views/ui_main_window.py`) -- the workspace was a `QStackedWidget`, so only
+  the newest view was ever reachable: the title that the ~30 call sites pass
+  (`"PCA Score Plot"`, `"UAZ Hierarchy"`, ...) was dropped on the floor, and the
+  FIFO eviction then deleted results the user could no longer get back to. It
+  is a `QTabWidget` now, every view carries the title it was handed, and an
+  earlier result stays reachable. The welcome pane is retired -- and the tab
+  bar appears -- as soon as a real view is in front.
+- **Running the biostratigraphic tree no longer wipes the workspace**
+  (`views/ui_main_window.py`) -- `_show_uaz_tree` called `_cleanup_plot_widgets()`,
+  which removed and destroyed every analysis result the user had computed, for
+  an operation with nothing to do with the tree. The tree now goes in as a
+  view of its own, next to the results.
+- **The headless runner no longer reports a failed analysis as a success**
+  (`utils/script_cli.py`, `utils/script_session.py`) -- `run()` reports an
+  analysis' failure as text rather than raising, so the exception never
+  reached the caller and the exit code was 0: a scheduler read "the analysis
+  failed" as "the analysis succeeded". The session now counts the failures,
+  and the CLI exits non-zero when a script ran an analysis that failed.
+- **The regression script can fail** (`scripts/smoke_check.py`) -- it had no
+  exit call at all, so it reported 0 to the caller however many of its checks
+  failed. Every other audit script in that directory already ended with
+  `sys.exit(1 if failed else 0)`.
+- **A crash no longer exits with code 0** (`main.py`) -- the crash dialog's
+  Quit button made `QApplication.quit()` return 0 from the event loop, so a
+  process that died from an unhandled exception reported success to whatever
+  launched it.
+- **The coverage rarefaction no longer loses a species that must be present**
+  (`ecology/beta_diversity.py`) -- the q=0 rarefaction computed
+  `log C(N-k, n)` with a helper that returns 0 where the value is `-inf`, so a
+  species with more than N-n individuals -- one that is *certain* to be in the
+  subsample -- was counted as absent with probability (N-k)!(N-n)!/N!. A
+  one-species sample of ten individuals was reported as **0.9 species**, and
+  the q=0 curve is the default. The computation now uses the same exact
+  integer arithmetic as `ecology/rarefaction.py`, which also removes a ~1e-4
+  relative-accuracy loss for N >= 60.
+- **The three sibling terms of a two-way ANOVA share one permutation**
+  (`stats/design_tests.py`) -- each of the three permutation tests drew its own
+  random null distribution, so the terms' p-values could not be compared with
+  one another, and the result could not report the seed that produced them
+  (it reported the `None` the caller had passed). One seed is resolved once
+  and used for all three, and the result carries it.
+- **The Procrustes distance no longer depends on the size of the shapes**
+  (`morpho3d/gpa3d.py`) -- the function computed the optimal scale and then
+  did not apply it, so the residual grew with the overall size of the
+  configurations: two identical shapes at different sizes scored a distance
+  of 8.2 instead of 0. The scale is applied now, which is the full-Procrustes
+  convention `morphometrics/shape_stats.py` already uses.
+- **The data matrix keeps its labels on the axes they describe**
+  (`models/data_matrix.py`) -- indexing one axis produced a view whose labels
+  no longer matched its data (`m[:, 0]` gave three row labels and one column
+  label around a 1-D array), so a consumer that assumed "label index == data
+  index" silently read the wrong specimen's value. A view is now two
+  dimensional, and `to_matrix()` accepts it.
+- **Two columns with the same label keep their own metadata**
+  (`models/data_matrix.py`) -- the per-column metadata was keyed by label, so
+  duplicate labels collapsed into one entry and the second column reported
+  the first one's units and data type. The store is keyed by column index
+  now; the public property still presents the label-keyed view.
+- **A matrix with no columns no longer loses its rows**
+  (`models/data_matrix.py`) -- `remove_rows_with_missing()` computed a
+  threshold of -1 for a matrix with no variables, marked every row invalid
+  and emptied it.
+- **Undo and redo now tell the spreadsheet** (`models/state_manager.py`) --
+  they restored the state but emitted only the undo-stack event, so the table
+  kept showing the pre-undo numbers while every analysis read the restored
+  state: what the user saw and what was computed disagreed.
+- **The binary cache refuses labels that do not match its matrix**
+  (`parsers/binary_cache.py`) -- the label count and the matrix's row count
+  were read independently and never compared, so a cache written with the
+  wrong number of labels loaded back without complaint, with every label
+  offset against the data. The checksum could not catch it either: it was
+  computed over the same serialised bytes that were read back.
+- **Saving clears the "modified" flag, and reading a file does not set it**
+  (`views/ui_main_window.py`) -- the save path never called `mark_saved`, so a
+  successful save still left the document dirty: the status bar said
+  "modified" and closing the window asked the user to save changes that were
+  already on disk. The drag-and-drop load path, the only one of the four that
+  did not say `mark_modified=False`, marked a file the user had merely opened
+  as edited.
+- **Degenerate designs are refused instead of reported**
+  (`stats/permanova.py`, `stats/design_tests.py`, `stats/simper.py`,
+  `stats/univariate.py`) -- a single-group PERMANOVA returned `F = 0` and
+  `p = 1`, a complete-looking answer to a comparison that does not exist
+  (ANOSIM already refused it); a contingency table with an empty row divided
+  by zero and returned `chi2 = nan, p = nan, V = nan`, and because
+  "significant" tests `p < 0.05`, a NaN p-value reads as *not significant*; a
+  short `variable_names` list raised a bare `IndexError` after every statistic
+  had been computed; and a group column holding both a number and text made
+  the sort raise a bare `TypeError` from inside `sorted(set(...))`. All four
+  now raise a project exception, or -- for the group labels -- are ordered
+  by a shared helper that keeps the natural order for homogeneous labels.
+- **The missing-value report is translated** (`config/imputation.py`,
+  `config/i18n/`) -- five strings of the report were in neither dictionary, so
+  the Chinese interface showed that report in English.
+- **The background CSV loader reads a GBK file** (`controllers/data_controller.py`)
+  -- it hardcoded `encoding="utf-8"` while the menu loader used the
+  utf-8-sig -> gbk -> latin-1 fallback chain, so the same file came out clean
+  through the menu and as mojibake through the background loader. Both paths
+  now use the shared reader, and both report the text columns that came out
+  empty.
+- **The MSI build derives its package list from `pyproject.toml`**
+  (`packaging/build_msi.py`) -- the cx_Freeze list was written out by hand and
+  had drifted: `plugins`, `presets`, `reporting`, `state_machine`, `hpc` and
+  `morpho3d` were all missing from the frozen tree. It is read from the
+  wheel's own list now, so the two cannot drift apart again.
+- **The start-up check verifies the analysis modules**
+  (`main.py`) -- importing a package only runs its `__init__.py`, so a
+  submodule that was renamed or deleted was not noticed: the splash reported
+  the engine as loaded and the `ImportError` surfaced much later, when the
+  user finally ran that analysis.
+- **A test that could not fail now can** (`tests/ecology/test_coverage_rarefaction.py`)
+  -- `test_different_seeds_different_results` ended in `assert True`, so the
+  claim in its own name was never checked and a refactor that dropped the seed
+  on the way to the generator would have left it green.
+- **The documentation no longer contradicts the code**
+  (`stats/permanova.py`, `stats/anosim.py`, `ecology/diversity.py`,
+  `ecology/beta_diversity.py`, `plot_export.py`, `views/ui_plot_export_dialog.py`,
+  `data/loader.py`) -- the PERMANOVA module header gave the `n-1` / `n_g-1`
+  denominators and called the correct implementation the bug, so a maintainer
+  following it would have "fixed" the code back into the broken state; the
+  ANOSIM and PERMANOVA docstrings still described a global `np.random` stream
+  the code had stopped using; `chao1_confidence_interval` was called
+  "bias-corrected" while computing the classic lower bound (the wording is
+  now explicit about which one it is, and why); the `beta_diversity` module
+  header gave Sorensen as a similarity where the code returns the beta
+  distance; the `.jpeg` alias was accepted on export and rejected by the
+  path inference and the export dialog; and `data/loader.py` claimed its
+  example loaders shared the encoding fallback while calling `pd.read_csv`
+  directly.
 - **The spreadsheet no longer aborts the application on an infinite cell
   value** (`views/ui_spreadsheet.py`) -- typing `inf` reached the DataMatrix
   validator, whose `DataValidationError` escaped the Qt slot, and PyQt6

@@ -614,7 +614,18 @@ class NewickParser:
             if stripped.startswith("&&NHX"):
                 metadata.update(NewickParser._parse_nhx_pairs(stripped[len("&&NHX") :]))
 
-        node = TreeNode(name=spec.name, branch_length=spec.branch_length)
+        try:
+            node = TreeNode(name=spec.name, branch_length=spec.branch_length)
+        except ValueError as exc:
+            # TreeNode rejects a negative branch length with a plain
+            # ValueError.  That escaped the parser's own contract --
+            # ``parse`` documents NewickParseError, and NewickParseError
+            # is a SUBCLASS of ValueError, so ``except NewickParseError``
+            # did not catch it.  The GUI matches on that type to show its
+            # friendly "phylogenetic tree parse failed" message, so a
+            # negative branch length used to reach the user as a generic
+            # error with no location information.
+            raise NewickParseError(f"{exc} (node {(spec.name or '<unnamed>')!r})") from exc
         if metadata:
             node.metadata.update(metadata)
 

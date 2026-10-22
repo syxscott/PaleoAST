@@ -50,6 +50,7 @@ from typing import Any
 import numpy as np
 
 from config.colors import get_color_scheme, resolve_palette_name
+from utils.statistics_core import ordered_unique_labels
 
 __all__ = [
     "ELLIPSE_MIN_N",
@@ -442,7 +443,7 @@ class RScriptExporter:
         group_col = None
         if groups is not None and len(groups) == n:
             vals = [str(g) for g in groups]
-            levels = sorted(set(vals))
+            levels = ordered_unique_labels(vals)
             group_col = ("group", vals, levels)
         label_col = None
         if labels is not None and len(labels) == n:

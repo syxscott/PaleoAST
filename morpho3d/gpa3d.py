@@ -509,13 +509,18 @@ def procrustes_distance_3d(config1: np.ndarray, config2: np.ndarray) -> tuple[fl
     # SVD旋转
     R = RotationMatrix.from_svd(n1, n2)
 
-    # 应用变换
-    rotated = cs1 * n1 @ R.T
+    # 缩放比: the Procrustes scale that maps config1's size onto config2's.
+    s = cs2 / cs1 if cs1 > 1e-10 else 1.0
+
+    # 应用变换: the full Procrustes fit is translation + rotation + scale.
+    # The scale used to be computed and returned but never applied to the
+    # residual, so the distance grew with the overall size of the
+    # configurations: two identical shapes at different sizes scored a
+    # large distance instead of zero.  This is the same "full Procrustes"
+    # convention as morphometrics/shape_stats.py::procrustes_distance.
+    rotated = s * ((cs1 * n1) @ R.T)
 
     # 计算距离
     d = np.sqrt(np.sum((rotated - c2) ** 2))
-
-    # 缩放比
-    s = cs2 / cs1 if cs1 > 1e-10 else 1.0
 
     return d, R, s

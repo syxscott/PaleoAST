@@ -57,6 +57,7 @@ from config.design_system import get_palette
 from config.i18n import _
 from config.matplotlib_theme import rc_params as matplotlib_rc_params
 from config.matplotlib_theme import theme_colors as matplotlib_theme_colors
+from utils.statistics_core import ordered_unique_labels
 
 # Publication quality style settings
 try:
@@ -1842,7 +1843,7 @@ class InteractivePlotCanvas(QWidget):
                         raise ValueError(f"column {col} out of range for {n_vars} column(s)")
                 values_all = data[:, col]
 
-        unique_groups = sorted(set(groups))
+        unique_groups = ordered_unique_labels(groups)
         if not unique_groups:
             raise ValueError("plot_anova_boxplot needs at least one group")
         if group_names is None:
@@ -3504,7 +3505,7 @@ class InteractivePlotCanvas(QWidget):
         self._figure.clear()
 
         groups_arr = np.asarray(groups)
-        unique_groups = sorted(set(groups_arr.tolist()))
+        unique_groups = ordered_unique_labels(groups_arr.tolist())
         n_vars = min(data.shape[1], 9)
         ncols = min(3, n_vars)
         nrows = (n_vars + ncols - 1) // ncols

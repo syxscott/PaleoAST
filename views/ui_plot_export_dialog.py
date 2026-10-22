@@ -39,6 +39,7 @@ from config.i18n import _
 from plot_export import (
     PlotExportOptions,
     apply_preset,
+    canonical_extension,
     parse_options_from_path,
 )
 
@@ -215,7 +216,7 @@ class PlotExportDialog(QDialog):
         # ``.lstrip("")`` stripped nothing (empty separator is a no-op),
         # so the dot survived and the combo always fell back to PNG.
         # Strip the dot so e.g. ``report.svg`` selects the SVG entry.
-        default_fmt = default_path.suffix.lower().lstrip(".")
+        default_fmt = canonical_extension(default_path.suffix)
         if default_fmt not in self.FORMAT_LABELS:
             default_fmt = "png"
         idx = next(
@@ -396,9 +397,12 @@ class PlotExportDialog(QDialog):
         self._embed_fonts_checkbox.setChecked(options.embed_fonts)
         self._width_spin.setValue(options.width_inches or 0.0)
         self._height_spin.setValue(options.height_inches or 0.0)
-        # Update the path suffix to match the format.
+        # Update the path suffix to match the format.  The comparison goes
+        # through the shared alias table, so a ``.jpeg`` destination is
+        # recognised as the jpg format instead of being rewritten to
+        # ``.jpg`` behind the user's back.
         p = Path(self._path_edit.text())
-        if p.suffix.lower().lstrip(".") != options.format:
+        if canonical_extension(p.suffix) != options.format:
             self._path_edit.setText(str(p.with_suffix(f".{options.format}")))
         self._sync_format_dependent_widgets()
 
@@ -451,7 +455,7 @@ class PlotExportDialog(QDialog):
         # Validate the extension; raise a clearer error than the facade
         # would so the UI can show it inline.
         p = Path(path)
-        if p.suffix.lower().lstrip(".") != fmt:
+        if canonical_extension(p.suffix) != fmt:
             raise ValueError(_("File extension does not match format {0}. Expected .{0}.").format(fmt))
 
         bg_label = self._bg_combo.currentText()

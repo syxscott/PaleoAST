@@ -31,7 +31,13 @@ For presence-absence data between sites i and j:
     c = species only in site j
 
 Jaccard: J = (b + c) / (a + b + c)
-Sorensen: S = 2a / (2a + b + c)
+Sorensen: S = (b + c) / (2a + b + c)
+
+Both are the beta DISTANCE forms -- 1 minus the similarity -- so that
+they sit on the same scale and can be compared with each other. The
+Sorensen line used to carry the similarity form 2a / (2a + b + c),
+which is the complement of the value the code actually returns and the
+opposite of the Jaccard line beside it.
 
 Turnover component:
     J_tu = 2*min(b, c) / (a + 2*min(b, c))
@@ -1071,17 +1077,31 @@ def _rarefaction_species(species_counts: npt.NDArray, n: int) -> float:
     if n >= N:
         return float(len(species_counts))
 
+    # Exact integer arithmetic, the same route ``ecology/rarefaction.py``
+    # uses.  The log-gamma route this replaces got the boundary wrong: for
+    # a species with more than N-n individuals the combination C(N-k, n) is
+    # zero, so the species is CERTAIN to be present in the subsample -- but
+    # the log-gamma expression evaluates log C(N-k, n) as 0 rather than
+    # -inf, which turned "certainly present" into a probability of
+    # absence of (N-k)!(N-n)!/N!.  A one-species sample of ten
+    # individuals was therefore reported as 0.9 species.  The log-gamma
+    # route also lost ~1e-4 of relative accuracy for N >= 60, where it
+    # switched to Stirling.
+    total_choose_n = math.comb(N, n)
     expected_s = 0.0
     for k in species_counts:
-        # P(species absent in sample of size n) = C(N-k, n) / C(N, n)
-        log_prob_absent = (
-            _lgamma(N - k + 1)
-            - _lgamma(n + 1)
-            - _lgamma(N - k - n + 1)
-            - (_lgamma(N + 1) - _lgamma(n + 1) - _lgamma(N - n + 1))
-        )
-        prob_present = 1.0 - math.exp(log_prob_absent)
-        expected_s += prob_present
+        k_float = float(k)
+        if not np.isfinite(k_float):
+            raise ValueError(f"Species abundance must be a finite number, got {k!r}")
+        k_int = round(k_float)
+        if N - k_int < n:
+            # Species is definitely present (it cannot be excluded from a
+            # subsample of this size).
+            expected_s += 1.0
+        else:
+            # P(species absent in sample of size n) = C(N-k, n) / C(N, n)
+            prob_absent = math.comb(N - k_int, n) / total_choose_n
+            expected_s += 1.0 - prob_absent
     return expected_s
 
 
@@ -1228,11 +1248,6 @@ def _multinomial_resample(species_counts: npt.NDArray, N: int, rng: np.random.Ge
     resampled = rng.multinomial(N, p_hat)
 
     return np.asarray(resampled, dtype=np.float64)
-
-
-def _lgamma(x: float) -> float:
-    """Log gamma function wrapper for numerical stability."""
-    return math.lgamma(x) if x > 0 else 0.0
 
 
 class CoverageRarefactionAnalyzer:

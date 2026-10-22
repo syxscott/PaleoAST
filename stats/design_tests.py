@@ -254,7 +254,7 @@ from utils.exceptions import (
     MatrixDimensionError,
     ValidationError,
 )
-from utils.statistics_core import permutation_pvalue
+from utils.statistics_core import permutation_pvalue, resolve_seed
 
 logger = logging.getLogger(__name__)
 
@@ -956,6 +956,20 @@ class DesignTestAnalyzer:
                 )
 
             ms_error = ss["error"] / df_error
+            # Resolve the permutation seed ONCE, here.  Each of the three
+            # permutation_pvalue calls inside _two_way_permutation_p used to
+            # resolve its own, so the three sibling terms were compared
+            # against three independent random null distributions: their
+            # p-values could not be compared with one another, and the
+            # result could not report the seed that produced them.  One
+            # seed means one permutation sequence, shared by all three
+            # terms -- which is what makes them comparable.
+            permutation_seed = random_seed
+            if n_permutations > 0:
+                permutation_seed = resolve_seed(
+                    random_seed,
+                    context=f"two-way ANOVA ({factor_a_name} x {factor_b_name})",
+                )
             permutation_p = _two_way_permutation_p(
                 response,
                 labels_a,
@@ -965,7 +979,7 @@ class DesignTestAnalyzer:
                 factor_a_name,
                 factor_b_name,
                 n_permutations,
-                random_seed,
+                permutation_seed,
             )
 
             terms: dict[str, ANOVATerm] = {}
@@ -1007,7 +1021,7 @@ class DesignTestAnalyzer:
                 n_missing=n_missing,
                 balanced=bool(len({c for row in counts.values() for c in row.values()}) == 1),
                 n_permutations=int(n_permutations),
-                random_seed=random_seed,
+                random_seed=permutation_seed,
             )
             self._last_result = result
             self._logger.info(
@@ -1525,7 +1539,8 @@ class DesignTestAnalyzer:
         MatrixDimensionError
             If the table is not 2-D with at least two rows and columns.
         DataValidationError
-            If a count is negative or not finite.
+            If a count is negative or not finite, or a row or a column
+            of the table sums to zero (an empty category).
         ValidationError
             If the table totals zero.
         """
@@ -1550,6 +1565,28 @@ class DesignTestAnalyzer:
 
             row_totals = np.sum(observed, axis=1, keepdims=True)
             col_totals = np.sum(observed, axis=0, keepdims=True)
+            # A row or a column that sums to zero contributes no
+            # observations, so its expected counts are all zero and the
+            # chi-square sum divides by zero.  np.errstate below swallows
+            # the warning, so the analysis used to return chi2 = nan,
+            # p = nan and Cramer's V = nan -- and since ``significant``
+            # tests ``p < 0.05``, a NaN p-value reads as "not
+            # significant".  A table with an empty category says nothing
+            # about independence, so it is refused rather than reported
+            # as a null result.
+            empty_rows = np.flatnonzero(row_totals.ravel() <= 0)
+            empty_cols = np.flatnonzero(col_totals.ravel() <= 0)
+            if empty_rows.size or empty_cols.size:
+                raise DataValidationError(
+                    "Contingency table has an empty row or column (its counts "
+                    f"sum to zero): row(s) {empty_rows.tolist()}, column(s) "
+                    f"{empty_cols.tolist()}. Remove the empty categories, or "
+                    "fill them, before testing for independence.",
+                    details={
+                        "empty_rows": empty_rows.tolist(),
+                        "empty_cols": empty_cols.tolist(),
+                    },
+                )
             expected = row_totals @ col_totals / total
             with np.errstate(divide="ignore", invalid="ignore"):
                 chi_square = float(np.sum((observed - expected) ** 2 / expected))

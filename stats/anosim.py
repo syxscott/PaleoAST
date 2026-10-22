@@ -39,7 +39,7 @@ import numpy.typing as npt
 from config.constants import PERMUTATION_TESTS
 from config.i18n import _
 from utils.exceptions import ComputationError, MatrixDimensionError, ValidationError
-from utils.statistics_core import permutation_pvalue
+from utils.statistics_core import ordered_unique_labels, permutation_pvalue
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -135,10 +135,12 @@ class ANOSIMAnalyzer:
             n_permutations: Number of permutations for p-value
             metric: Distance metric used (for reference)
             random_seed: Optional seed for the permutation RNG so the
-                p-value is reproducible. Without a seed the global
-                ``np.random`` state is used, which means successive
-                calls with identical inputs may return slightly
-                different p-values.
+                p-value is reproducible. Without a seed the p-value comes
+                from a freshly drawn source of entropy, so successive
+                calls with identical inputs may return slightly different
+                p-values -- but the generator is always isolated, so an
+                unseeded ANOSIM never moves the global ``np.random``
+                stream that the caller's own data generation draws from.
             pai: If True (default), apply the PAI correction
                 (``R_PAI = (R - E[R|H0]) / (1 - E[R|H0])`` with
                 ``E[R|H0] = -1/(n-1)``) to the raw R statistic. This
@@ -172,7 +174,7 @@ class ANOSIMAnalyzer:
             # Group bookkeeping is validated *before* it is used (both for the
             # log message and for the result), and it needs the sample count
             # check above to have run first.
-            unique_groups = sorted(set(groups), key=lambda x: str(x))
+            unique_groups = ordered_unique_labels(groups)
             self._logger.info(
                 f"ANOSIM analyze started: n_samples={n}, n_groups={len(unique_groups)}, "
                 f"n_permutations={n_permutations}, random_seed={random_seed}"

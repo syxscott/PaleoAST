@@ -22,6 +22,7 @@ from scipy import stats as sp_stats
 
 from config.i18n import _
 from utils.exceptions import ComputationError, ValidationError
+from utils.statistics_core import ordered_unique_labels
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,7 @@ def _split_two_groups(
     wrong pairings.
     """
     _check_group_length(groups, data.shape[0])
-    unique_groups = sorted(set(groups))
+    unique_groups = ordered_unique_labels(groups)
     if len(unique_groups) != 2:
         raise ComputationError(f"{label} requires exactly 2 groups, got {len(unique_groups)}")
 
@@ -603,7 +604,7 @@ class UnivariateAnalyzer:
             # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
             _check_group_length(groups, values.shape[0])
 
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             n_groups = len(unique_groups)
 
             if n_groups < 2:
@@ -678,7 +679,7 @@ class UnivariateAnalyzer:
             # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
             _check_group_length(groups, values.shape[0])
 
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             group_data = []
             for g in unique_groups:
                 g_vals = values[[i for i, gr in enumerate(groups) if gr == g]]
@@ -721,7 +722,7 @@ class UnivariateAnalyzer:
             # 分组, Kruskal p 从 0.000157 变成 0.0022), 多给会抛裸 IndexError。
             _check_group_length(groups, values.shape[0])
 
-            unique_groups = sorted(set(groups))
+            unique_groups = ordered_unique_labels(groups)
             if len(unique_groups) != 2:
                 raise ComputationError("Mann-Whitney requires exactly 2 groups")
 
@@ -730,6 +731,19 @@ class UnivariateAnalyzer:
             vals_1 = values[[i for i, g in enumerate(groups) if g == g1]]
             vals_0 = vals_0[~np.isnan(vals_0)]
             vals_1 = vals_1[~np.isnan(vals_1)]
+
+            # A group whose every value was missing leaves nothing to
+            # compare.  scipy raises a bare ValueError for an empty
+            # sample, which escapes the project's exception hierarchy; the
+            # t-test in this module already refuses the same situation
+            # with its own message.
+            if len(vals_0) == 0 or len(vals_1) == 0:
+                empty = g0 if len(vals_0) == 0 else g1
+                raise ComputationError(
+                    f"Mann-Whitney: group {empty!r} has no valid values after "
+                    "NaN filtering, so there is nothing to compare.",
+                    details={"group": str(empty), "n1": len(vals_0), "n2": len(vals_1)},
+                )
 
             u_stat, p_val = sp_stats.mannwhitneyu(vals_0, vals_1, alternative="two-sided")
 

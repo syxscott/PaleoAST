@@ -100,6 +100,11 @@ class ExceptionHandler:
         """初始化"""
         self._original_hook = None
         self._logger = logging.getLogger("PaleoAST.ExceptionHandler")
+        # The exit code the application should end with.  Zero means "the
+        # user closed the window normally".  The crash dialog's Quit button
+        # sets it to 1, because a process that died from an unhandled
+        # exception must not report success to whatever launched it.
+        self.exit_code = 0
 
     def install(self) -> None:
         """安装异常处理器"""
@@ -205,6 +210,10 @@ class ExceptionHandler:
                 # sys.exit() inside a Qt slot raises SystemExit within the
                 # event loop (swallowed or re-routed back into this hook);
                 # close the dialog and quit through the QApplication API.
+                # The exit code is set first: app.quit() makes exec()
+                # return 0, so without this the process would report a
+                # successful run for one that died from the crash.
+                self.exit_code = 1
                 dialog.reject()
                 app.quit()
 
@@ -528,7 +537,13 @@ class PaleoASTApplication:
             self._logger.info(f"{self.APP_NAME} v{self.VERSION} started successfully")
 
             # 进入事件循环
-            return self._app.exec()
+            code = self._app.exec()
+            # app.quit() from the crash dialog makes exec() return 0.
+            # The exception handler's exit code is what tells "the user
+            # closed the window" apart from "the process died on an
+            # unhandled exception"; without it the crash reports success.
+            handler_exit = getattr(self._exception_handler, "exit_code", 0)
+            return code if code else handler_exit
 
         except Exception as e:
             self._logger.critical(f"Failed to start application: {e}")
@@ -630,6 +645,45 @@ class PaleoASTApplication:
                 self._logger.info(f"Module loaded: {module_name}")
             except ImportError as e:
                 self._logger.warning(f"Module not loaded: {module_name} - {e}")
+
+        # Importing a package only runs its ``__init__.py``, so a
+        # submodule that was renamed or deleted was not noticed at all:
+        # the splash reported the engine as loaded and the ImportError
+        # surfaced much later, when the user finally ran that analysis.
+        # The plugin catalog names every analysis module without
+        # importing them, so checking that each one is really there costs
+        # no start-up time.
+        missing = self._missing_analysis_modules()
+        if missing:
+            self._logger.warning(
+                "Analysis modules named by the catalog are not importable: %s. Running those analyses will fail.",
+                ", ".join(missing),
+            )
+
+    @staticmethod
+    def _missing_analysis_modules() -> list[str]:
+        """The catalogued analysis modules that are not importable.
+
+        Returns:
+            The module names, sorted.  Empty when the catalog is
+            unavailable or everything it names is present.
+        """
+        import importlib.util
+
+        try:
+            from plugins.catalog import BUILTIN_ANALYSES
+        except Exception:
+            # The catalog is optional: a build without it still starts.
+            return []
+
+        missing: list[str] = []
+        for entry in BUILTIN_ANALYSES:
+            try:
+                if importlib.util.find_spec(entry.module) is None:
+                    missing.append(entry.module)
+            except (ImportError, AttributeError, ValueError):
+                missing.append(entry.module)
+        return sorted(set(missing))
 
     def _create_main_window(self) -> None:
         """创建主窗口"""
