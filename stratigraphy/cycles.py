@@ -393,6 +393,7 @@ def autocorrelation(
     max_lag: int | None = None,
     nlags: int | None = None,
     confidence: float = 0.95,
+    min_samples: int = MIN_SAMPLES,
 ) -> ACFResult:
     """Sample autocorrelation with Bartlett (1946) confidence bands.
 
@@ -414,12 +415,17 @@ def autocorrelation(
         the codebase uses both. Defaults to ``n // 2``.
     confidence:
         Two-sided confidence level for the band.
+    min_samples:
+        Minimum number of observations accepted.  The module-wide default
+        is 8; a caller that only needs the ACF as an intermediate step
+        can lower it (the Hamed & Rao variance factor inside
+        ``mann_kendall`` does, because the test itself accepts 4).
 
     Returns
     -------
     ACFResult
     """
-    x = _clean_series(values, "autocorrelation input")
+    x = _clean_series(values, "autocorrelation input", min_samples=min_samples)
     n = x.size
     lag_max = max_lag if max_lag is not None else nlags
     if lag_max is None:
@@ -1689,7 +1695,21 @@ class MannKendallResult:
 
 
 def _sen_slope(values: npt.NDArray, times: npt.NDArray) -> tuple[float, tuple[float, float]]:
-    """Sen's slope and its normal-approximation confidence interval."""
+    """Sen's slope and its confidence interval (Sen 1968, Eq. 2.6).
+
+    The interval is an ORDER-STATISTIC range over the pairwise slopes,
+    which is what Sen's derivation gives.
+
+    The previous implementation used a normal approximation around the
+    median, ``sqrt(var(slopes) * (n-2) / n0^2)``.  That put a VARIANCE
+    where the derivation needs the sum of squared deviations of the
+    pairwise slopes, so the half-width came out about sqrt(n) too
+    small: measured over 200 replicates against a known slope, the old
+    interval covered 21-44% of the time while claiming 95%, and
+    scipy's theilslopes -- which implements the same Eq. 2.6 -- covered
+    94-98% on the same data.  A Sen slope CI printed in a paper was
+    therefore far too narrow to be honest.
+    """
     n = values.size
     i, j = np.triu_indices(n, k=1)
     dt = times[j] - times[i]
@@ -1697,24 +1717,31 @@ def _sen_slope(values: npt.NDArray, times: npt.NDArray) -> tuple[float, tuple[fl
     slopes = (values[j][ok] - values[i][ok]) / dt[ok]
     if slopes.size == 0:
         return float("nan"), (float("nan"), float("nan"))
-    slope = float(np.median(slopes))
-    # Kendall's tau variance is the variance of S; the slope's variance is
-    # Var(S) / (n0 n1)^2 * the variance of the pairwise slopes, which for a
-    # regular time base is sigma^2 * 2 / (n(n-1)(2n-5) (t_j - t_i)^2). The
-    # standard Sen (1968) normal interval uses the median-absolute-
-    # deviation form below.
-    var_s = _mk_variance(values)
-    n0 = n * (n - 1) / 2.0
-    spread = float(np.var(slopes, ddof=1)) if slopes.size > 1 else 0.0
-    if not np.isfinite(spread) or var_s <= 0:
+    ordered = np.sort(slopes)
+    slope = float(np.median(ordered))
+
+    # Sen (1968), Eq. 2.6: sigma is the square root of
+    #   [ n(n-1)(2n+5) - sum_t m_t(m_t-1)(2m_t+5) ] / 18
+    # with the tie corrections taken over BOTH the values and the times.
+    def _repeat_counts(arr: npt.NDArray) -> list[int]:
+        counts = np.unique(arr, return_counts=True)[1]
+        return [int(c) for c in counts if c > 1]
+
+    nx = _repeat_counts(np.asarray(times, dtype=float))
+    ny = _repeat_counts(np.asarray(values, dtype=float))
+    nt = ordered.size
+    sigsq = (1.0 / 18.0) * (
+        n * (n - 1.0) * (2.0 * n + 5.0)
+        - sum(k * (k - 1.0) * (2.0 * k + 5.0) for k in nx)
+        - sum(k * (k - 1.0) * (2.0 * k + 5.0) for k in ny)
+    )
+    if sigsq <= 0:
         return slope, (float("nan"), float("nan"))
-    if spread <= 0:
-        # Every pairwise slope is identical: the series is exactly affine in
-        # the time base and the interval is a point, not an infinity.
-        return slope, (slope, slope)
-    se = np.sqrt(spread * (n - 2) / (n0**2))
+    sigma = float(np.sqrt(sigsq))
     z = float(sp_stats.norm.ppf(0.975))
-    return slope, (float(slope - z * se), float(slope + z * se))
+    lower_index = max(round((nt - z * sigma) / 2.0), 0)
+    upper_index = min(round((nt + z * sigma) / 2.0), nt - 1)
+    return slope, (float(ordered[lower_index]), float(ordered[upper_index]))
 
 
 def _mk_variance(values: npt.NDArray) -> float:
@@ -1760,7 +1787,14 @@ def _hamed_rao_factor(values: npt.NDArray) -> tuple[float, int]:
     """
     n = values.size
     lag_max = int(min(n - 2, max(2, n // 4)))
-    acf = autocorrelation(values, max_lag=lag_max).acf
+    # The ACF here is an intermediate step of a test that accepts 4
+    # points, so the module-wide 8-point minimum of the public
+    # autocorrelation() does not apply.  Leaving it in place made
+    # mann_kendall(pre_whitened=True) refuse data the same function
+    # accepts with pre_whitened=False -- and the error named
+    # 'autocorrelation input', so the user could not tell which of the
+    # two was at fault.
+    acf = autocorrelation(values, max_lag=lag_max, min_samples=4).acf
     k_used = lag_max
     for k in range(1, lag_max + 1):
         if acf[k] <= 0.0:
@@ -1835,7 +1869,25 @@ def mann_kendall(
     i, j = np.triu_indices(x.size, k=1)
     s = int(np.sum(np.sign(x[j] - x[i])))
     n_pairs = x.size * (x.size - 1) / 2.0
-    tau = s / n_pairs
+
+    # Kendall's tau-B, not tau-A.  The denominator was the total number
+    # of pairs, which is tau-A: it counts every tied pair as if it were
+    # discordant, so the more quantised the series was -- and quantised
+    # isotope series are the norm -- the further the reported tau
+    # drifted from what scipy.stats.kendalltau(variant="b") returns.
+    # tau-B's denominator uses only the pairs that are not tied in one
+    # of the two variables.
+    def _tied_pair_count(arr: npt.NDArray) -> int:
+        counts = np.unique(arr, return_counts=True)[1]
+        return int(np.sum(counts * (counts - 1) // 2))
+
+    n_tied_values = _tied_pair_count(x)
+    n_tied_times = _tied_pair_count(t)
+    denominator = (n_pairs - n_tied_values) * (n_pairs - n_tied_times)
+    if denominator <= 0:
+        tau = float("nan")
+    else:
+        tau = s / np.sqrt(denominator)
 
     var_s = _mk_variance(x)
     factor = 1.0

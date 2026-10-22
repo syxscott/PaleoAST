@@ -59,6 +59,7 @@ from config.i18n import _
 from models.data_matrix import DataMatrix
 from models.state_manager import get_state_manager
 from utils.event_bus import get_event_bus
+from utils.exceptions import DataValidationError
 
 
 class MarkerStyle(Enum):
@@ -928,8 +929,15 @@ class ScientificSpreadsheet(QWidget):
             self._state.set_col_metadata(col, self._col_metadata[col])
 
         elif action_type == "transform":
-            # Apply transformation
-            self._apply_column_transform(col, value)
+            # Apply transformation.
+            # A transform can refuse the data -- a Log transform of a value
+            # at or below -1 has no real answer.  The refusal has to be
+            # caught HERE: an exception that escapes a Qt slot aborts the
+            # whole process, taking the user's unsaved work with it.
+            try:
+                self._apply_column_transform(col, value)
+            except DataValidationError as exc:
+                QMessageBox.warning(self, _("Cannot Transform Column"), str(exc))
 
         elif action_type == "sort":
             # Sort column
@@ -1035,7 +1043,20 @@ class ScientificSpreadsheet(QWidget):
 
         if transform == "log":
             # Log transform: x' = ln(x + 1)
-            # Handle negative values and zeros
+            #
+            # A value of exactly -1 makes ln(x+1) = -inf, and a value
+            # below -1 makes it NaN.  The old code computed the result
+            # and wrote it into the sheet FIRST, so the -inf reached the
+            # DataMatrix validator, whose error escaped the Qt slot --
+            # and PyQt6 aborts the process on an unhandled exception in
+            # a slot.  A value below -1 did not raise at all: the column
+            # silently became NaN and the numbers were lost.  The check
+            # is before the write, and the message is the project's own
+            # so the caller can show it.
+            if np.any(col_data <= -1):
+                raise DataValidationError(
+                    _("The Log transform needs every value to be greater than -1; log(x + 1) is undefined below that.")
+                )
             new_data = np.log1p(col_data)  # log1p(x) = ln(x + 1)
 
         elif transform == "zscore":

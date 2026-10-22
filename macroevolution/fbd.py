@@ -690,6 +690,16 @@ class FossilizedBirthDeathProcess:
 
                 if node.is_leaf:
                     # 叶节点：现存采样或灭绝终止
+                    #
+                    # ``metadata["is_extant"]`` decides which of the two a
+                    # tip is, and it DEFAULTS TO True -- a tip is treated
+                    # as an extant sampled taxon unless the caller says
+                    # otherwise.  With the default sampling probability of
+                    # 1 (so log rho = 0) that means the mu term and the
+                    # E term of every extinct tip simply do not appear:
+                    # the extinction rate has no influence at all on the
+                    # likelihood of a tree that actually contains extinct
+                    # taxa.  A tip that is a fossil has to say so.
                     if node.metadata.get("is_extant", True):
                         # 现存采样叶：贡献 ρ（λ 已在父节点分支事件计入）
                         log_lik += safe_log(rho)

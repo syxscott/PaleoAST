@@ -22,9 +22,9 @@ import numpy.typing as npt
 from matplotlib.figure import Figure
 
 from config.colors import current_palette
-from utils.statistics_core import ordered_unique_labels
 
 from ._style_scope import scoped_plot_methods
+from .generic_plots import group_codes
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +264,8 @@ class EvolutionRatePlotter:
         ax = fig.add_subplot(111)
 
         if groups is not None:
-            unique_groups = ordered_unique_labels(groups)
-            data_by_group = [trait_series[np.array(groups) == g] for g in unique_groups]
+            codes, unique_groups = group_codes(groups, len(trait_series))
+            data_by_group = [trait_series[codes == g] for g in range(len(unique_groups))]
 
             parts = ax.violinplot(data_by_group, positions=range(len(unique_groups)), showmeans=True, showmedians=True)
 

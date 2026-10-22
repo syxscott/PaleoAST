@@ -77,6 +77,12 @@ class AnalysisEntry:
     method: str
     category: str
     description: str
+    #: The parameter the data belongs in, when the automatic choice is
+    #: wrong.  ``analyze(time, values)`` has TWO array parameters, and
+    #: the automatic rule picked the first one -- so the whole sheet went
+    #: in as the TIME axis, the values were never passed, and the
+    #: analysis could not run at all.
+    data_slot: str | None = None
 
 
 def _e(
@@ -86,9 +92,10 @@ def _e(
     method: str,
     category: str,
     description: str,
+    data_slot: str | None = None,
 ) -> AnalysisEntry:
     """Terse constructor, so the table below stays readable."""
-    return AnalysisEntry(name, module, class_name, method, category, description)
+    return AnalysisEntry(name, module, class_name, method, category, description, data_slot=data_slot)
 
 
 def _f(
@@ -395,6 +402,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "analyze",
         "time-series",
         "Periodogram with an AR(1) red-noise test",
+        data_slot="values",
     ),
     _e(
         "wavelet",
@@ -403,6 +411,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "wavelet_transform",
         "time-series",
         "Continuous wavelet transform",
+        data_slot="values",
     ),
     _e(
         "spectral_peaks",
@@ -958,7 +967,7 @@ class BuiltinAnalysisPlugin(AnalysisPlugin):
         there by keyword. A target with no such parameter gets the form's
         arguments alone.
         """
-        slot = data_slot_name(inspect.signature(method))
+        slot = self._entry.data_slot or data_slot_name(inspect.signature(method))
         if slot is None:
             return method(**kwargs)
         if slot in kwargs:

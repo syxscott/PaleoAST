@@ -200,6 +200,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moment it is changed.
 
 ### Fixed
+- **The second review round: the parts of the tree the first round never
+  reached** -- a follow-up review of `stratigraphy/`, `phylogenetics/`,
+  `macroevolution/`, `visualization/`, `hpc/`, `reporting/`, `presets/`,
+  `state_machine/`, `parsers/` and the unread regions of the view layer
+  found 49 more defects.  The ones that changed numbers, or reported a
+  success that was not one:
+  - **A single missing value silenced whole analyses.**  A NaN anywhere in
+    an isotope series made the mean and the spread NaN, and `NaN > threshold`
+    is False -- so `detect_excursions_from_values` reported *no excursions*
+    and `remove_outliers` emptied the series, both without a warning.  The
+    GUI only skips a column that is entirely NaN, so a column with a few
+    gaps was silently reported as clean.
+  - **The frequency grid was set by the sampling density, not by the
+    record.**  The grid step was Nyquist/n_frequencies, which grows as the
+    record is sampled more densely -- so sampling the *same* 100-unit
+    record more finely made the reported period worse (7.0 came back as
+    9.89 at 20000 samples).  The step is now never coarser than the
+    record's own Rayleigh resolution, and the longest period the grid
+    offers is the record length instead of ten times it.
+  - **A constant series was reported as a significant cycle.**  The linear
+    detrend leaves a residue of about 1e-16 on a constant series, and the
+    periodogram's 1/(2 sigma^2) normalisation amplified that float noise
+    into a peak of ~95, which cleared the AR(1) 5% threshold.  A constant
+    series is now refused.
+  - **The wavelet frequency axis was in samples, not in the caller's time
+    units.**  `dt` defaulted to 1.0 and the time axis never took part in
+    the computation, so a series sampled every 0.1 Ma was reported with
+    its frequencies ten times too small -- and the scalogram's y axis
+    ("Frequency") did not match its x axis (Ma).  The step is now taken
+    from the time axis.
+  - **The Sen slope confidence interval covered 21-44% while claiming 95%.**
+    The normal approximation put a variance where the derivation needs the
+    sum of squared deviations of the pairwise slopes, so the half-width was
+    about sqrt(n) too small.  The interval is now Sen's (1968) Eq. 2.6
+    order-statistic range, and it covers 94-98% on the same data.
+  - **Kendall's tau was tau-A while the docstring said tau-B.**  The
+    denominator was the total number of pairs, which counts tied pairs as
+    if they were discordant -- and quantised isotope series are full of
+    ties.  The module already had the tie counts, for the variance.
+  - **Fitch over-counted parsimony steps on a polytomy.**  The tie-break
+    read each leaf's sequence from a field nothing in the package ever
+    wrote to, so the support was always empty and the root state fell
+    back to the lexicographically smallest -- which on a polytomy can be
+    the opposite of the majority.  A four-taxon polytomy scored 3 steps
+    where the true minimum is 1.
+  - **NNI on the root's own edge only produced self-loops.**  The root has
+    degree 2, so moving a subtree across it reproduces the same *unrooted*
+    topology; half the real neighbourhood was unreachable, and the search
+    ran on a permanently incomplete one.
+  - **The Kaplan-Meier confidence band collapsed to a line where the curve
+    reaches zero.**  The Greenwood term diverges when the last subjects at
+    risk die, and the guard skipped it instead of letting it go to
+    infinity, so the upper bound came out as 5e-12 instead of 1.0.
+  - **The headless runner, the smoke script and the crash dialog all
+    reported success when they had not.**  An analysis that failed inside
+    the script console was turned into text, so the CLI exited 0; the
+    smoke script had no exit call at all; and the crash dialog's Quit
+    button made the event loop return 0.
+  - **The LaTeX builder reported a failed compile as a success** and
+    handed the caller the *previous* run's PDF, because success was
+    decided by the presence of the output file rather than by the
+    compiler's return code.
+  - **The parallel distance matrix ignored the metric it was given** and
+    always returned Euclidean distances, so a caller asking for
+    Bray-Curtis got Euclidean numbers with no error at all.
+  - **A shut-down scheduler hung forever**, because the guard that was
+    meant to catch a vanished worker loop was inactive in exactly that
+    case.
+  - **A missing group label became a group of its own** -- NaN is not
+    equal to itself, so every empty cell produced its own legend entry,
+    and one plot showed four groups where the data had two.
+  - **The significance band under the periodogram was the mirror image of
+    the power curve**, so the colours said the opposite of the power.
+  - Plus: the `get_scale` interval filter pulled the neighbours of a named
+    interval into the bin table; the `n_layers_above_lad` field counted
+    the layers *below* each LAD; the taxonomy plot's Log transform turned
+    a value of -1 into a process abort and a value below -1 into silent
+    NaN; the log-rank branch of the survival plot read a different
+    analysis's cache entry; a named sample that did not exist silently
+    analysed the first row; the macroevolution entries all opened the
+    first tab; `_apply_preferences` crashed on a partial state; the
+    report's title, authors and abstract were the only caller text not
+    escaped for LaTeX; a broken preset file in the directory took the
+    whole lookup down; a NEXUS gap inside a state string was eaten by
+    the integer rule; an empty `POINTS=` line became an empty landmark;
+    and the majority-rule consensus tree depended on `PYTHONHASHSEED`.
 - **The workspace keeps every analysis result on its own tab**
   (`views/ui_main_window.py`) -- the workspace was a `QStackedWidget`, so only
   the newest view was ever reachable: the title that the ~30 call sites pass

@@ -31,7 +31,7 @@ import numpy as np
 import numpy.typing as npt
 
 from config.i18n import _
-from utils.exceptions import ComputationError
+from utils.exceptions import ComputationError, ValidationError
 from utils.validators import validate_data_array
 
 logger = logging.getLogger(__name__)
@@ -202,6 +202,15 @@ class UAAnalyzer:
                 raise ComputationError("FAD and LAD matrices must have same shape")
 
             n_sections, n_events = fad.shape
+            if n_events == 0:
+                # A matrix with no events has no units to associate, and
+                # the "everything was filtered out" fallback below then
+                # indexed a zero-column array and raised a bare
+                # IndexError.
+                raise ComputationError(
+                    "UA needs at least one event; the FAD/LAD matrices have none",
+                    details={"n_sections": int(n_sections), "n_events": int(n_events)},
+                )
 
             self._logger.info(f"UA analyze started: {n_sections} sections, {n_events} events")
 
@@ -846,6 +855,14 @@ class RASCAnalyzer:
             # Default names
             if event_names is None:
                 event_names = [f"Event_{i + 1}" for i in range(n_events)]
+            elif len(event_names) != n_events:
+                # The names are looked up by event index further down, so a
+                # short list raised a bare IndexError from inside the
+                # ranking.  UA's own filter checks this; RASC did not.
+                raise ValidationError(
+                    f"RASC was given {len(event_names)} event name(s) for {n_events} event(s); they must match.",
+                    details={"n_names": len(event_names), "n_events": int(n_events)},
+                )
 
             # Initialize ranking as sequence 0, 1, 2, ...
             ranking = list(range(n_events))

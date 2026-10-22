@@ -565,7 +565,17 @@ class ARMAAnalyzer:
                     # For differenced model, integrate
                     forecast = np.mean(recent)
                 else:
-                    forecast = np.dot(result.ar_params, recent[::-1])
+                    if result.ar_params.size:
+                        forecast = np.dot(result.ar_params, recent[::-1])
+                    else:
+                        # p = 0: a pure MA model has no autoregressive
+                        # contribution, so the forecast is the series mean.
+                        # np.dot against an empty parameter vector raised
+                        # "shapes (0,) and (1,) not aligned" -- and
+                        # cross_validate's search space includes p = 0, so
+                        # the model it could select was the one it could
+                        # not forecast.
+                        forecast = 0.0
 
                 # Back to the original scale for the reported value...
                 forecasts[h] = forecast + mu

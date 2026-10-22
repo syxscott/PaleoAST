@@ -1394,4 +1394,6 @@ TRANSLATIONS = {
     # Fallback tab title for a workspace view that was added without a
     # name.  Every call site passes one, so this is a safety net.
     "Result": "结果",
+    "Cannot Transform Column": "无法变换该列",
+    "The Log transform needs every value to be greater than -1; log(x + 1) is undefined below that.": "对数变换要求每个值都大于 -1；小于该值时 log(x + 1) 没有定义。",
 }

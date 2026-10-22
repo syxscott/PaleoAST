@@ -237,7 +237,7 @@ class FitchAlgorithm:
             character_states[site_idx] = node_states
 
             # 上推阶段
-            site_changes = self._fitch_up(tree.root, node_states, site_idx=site_idx)
+            site_changes = self._fitch_up(tree.root, node_states, site_idx=site_idx, site_states=states)
             changes.extend(site_changes)
 
             # 计算该位点的分数
@@ -368,7 +368,12 @@ class FitchAlgorithm:
         return node_states
 
     @staticmethod
-    def _leaf_support(node: PhyloNode, wanted: set[Any], missing_char: str = "?") -> dict[Any, int]:
+    def _leaf_support(
+        node: PhyloNode,
+        wanted: set[Any],
+        missing_char: str = "?",
+        site_states: dict[str, Any] | None = None,
+    ) -> dict[Any, int]:
         """Count, per state, how many descendant leaves show that state.
 
         Used to break ties deterministically AND sanely when a multifurcation
@@ -382,11 +387,20 @@ class FitchAlgorithm:
         while stack:
             n = stack.pop()
             if n.is_leaf:
-                seq = n.data
-                if isinstance(seq, (list, tuple)):
-                    st = seq[0] if seq else missing_char
+                if site_states is not None:
+                    # The site's own state for this leaf.  Reading it from
+                    # ``n.data`` never worked -- nothing in the package
+                    # writes a leaf's sequence there -- so the support was
+                    # always empty and the tie-break fell back to the
+                    # lexicographically smallest state, which on a
+                    # POLYTOMY can be the opposite of the majority.
+                    st = site_states.get(n.name, missing_char)
                 else:
-                    st = seq
+                    seq = n.data
+                    if isinstance(seq, (list, tuple)):
+                        st = seq[0] if seq else missing_char
+                    else:
+                        st = seq
                 if st in wanted:
                     counts[st] = counts.get(st, 0) + 1
             else:
@@ -394,7 +408,13 @@ class FitchAlgorithm:
         return counts
 
     @classmethod
-    def _pick_state(cls, node: PhyloNode, states: set[Any], missing_char: str = "?") -> Any:
+    def _pick_state(
+        cls,
+        node: PhyloNode,
+        states: set[Any],
+        missing_char: str = "?",
+        site_states: dict[str, Any] | None = None,
+    ) -> Any:
         """Choose one state from ``states`` deterministically.
 
         Highest leaf support wins; ties are broken by ``sorted()`` so the result
@@ -404,11 +424,15 @@ class FitchAlgorithm:
             return None
         if len(states) == 1:
             return next(iter(states))
-        counts = cls._leaf_support(node, states, missing_char)
+        counts = cls._leaf_support(node, states, missing_char, site_states)
         return sorted(states, key=lambda s: (-counts.get(s, 0), str(s)))[0]
 
     def _fitch_up(
-        self, node: PhyloNode, node_states: dict[PhyloNode, set[Any]], site_idx: int = -1
+        self,
+        node: PhyloNode,
+        node_states: dict[PhyloNode, set[Any]],
+        site_idx: int = -1,
+        site_states: dict[str, Any] | None = None,
     ) -> list[tuple[PhyloNode, PhyloNode, int, Any, Any]]:
         """
         Fitch上推阶段
@@ -449,7 +473,7 @@ class FitchAlgorithm:
             if parent_state is not None and parent_state in current_states:
                 current_state = parent_state
             else:
-                current_state = pick(node, current_states)
+                current_state = pick(node, current_states, site_states=site_states)
                 if parent_state is not None and current_state != parent_state:
                     changes.append((node.parent if node.parent else node, node, site_idx, parent_state, current_state))
 
@@ -459,7 +483,7 @@ class FitchAlgorithm:
             return current_state
 
         root_states = node_states.get(node, set())
-        root_state = pick(node, root_states) if root_states else None
+        root_state = pick(node, root_states, site_states=site_states) if root_states else None
 
         for child in node.children:
             _up_from(child, root_state)

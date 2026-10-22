@@ -338,7 +338,12 @@ class DFA(FiniteAutomaton):
     def _find_transition(self, source: State, symbol: str) -> Transition | None:
         """查找确定性转移"""
         for trans in self._transitions.get(source.state_id, set()):
-            if trans.symbol == symbol:
+            # ``Transition.matches`` also evaluates the transition's
+            # condition.  Comparing the symbol alone ignored it, so
+            # accepts_string() and process() gave opposite answers on the
+            # same object, and the minimisation grouped states the
+            # condition actually separates.
+            if trans.matches(symbol):
                 return trans
         return None
 

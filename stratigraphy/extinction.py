@@ -211,9 +211,16 @@ class ExtinctionIntervalAnalyzer:
             lad_sorted = np.sort(lad_positions)[::-1]
             n_taxa = len(lad_sorted)
 
-            # Compute number of layers above each LAD
-            # LAD at position k means k layers above it
-            n_layers_above = np.array([np.sum(lad_sorted > lad) for lad in lad_sorted], dtype=np.int64)
+            # Compute number of layers above each LAD.
+            #
+            # The layer numbers grow with DEPTH, so a LAD deeper in the
+            # section has MORE layers above it.  Counting the layers BELOW
+            # it (which is what the old expression did) gave the deepest
+            # LAD a count of zero, and the detection probability that is
+            # derived from this came out reversed: the oldest taxon was
+            # reported as the least likely to have been detected, which is
+            # backwards -- an old taxon has had longer to be found.
+            n_layers_above = np.array([np.sum(lad_sorted < lad) for lad in lad_sorted], dtype=np.int64)
 
             # Compute probability of detection per layer
             # Based on the proportion of taxa still present
@@ -398,6 +405,13 @@ class ExtinctionIntervalAnalyzer:
             Estimated detection probability
         """
         lad_sorted = np.sort(lad_positions)[::-1]
+        if lad_sorted.size == 0:
+            # No LADs means nothing to estimate from.  np.max on the empty
+            # array raised a bare ValueError from inside numpy.
+            raise ValidationError(
+                "Detection probability needs at least one LAD position",
+                details={"n_lads": 0},
+            )
 
         if known_extinction_layer is not None:
             # Use known extinction to calibrate

@@ -324,8 +324,16 @@ class TaskScheduler:
                 if task_id not in self._tasks:
                     raise KeyError(f"Unknown task id {task_id!r}. {len(self._tasks)} task(s) known to this scheduler.")
 
-                if not self._running and not self._shutdown_event.is_set():
+                if not self._running:
                     # The worker loop is gone, so this task can never finish.
+                    #
+                    # The shutdown event used to be part of this condition,
+                    # which made the guard inactive in exactly the case it
+                    # was written for: shutdown() SETS the event, so after
+                    # a shutdown both wait_all() and get_result() spun
+                    # forever on a task that could never run.
+                    if self._shutdown_event.is_set():
+                        raise RuntimeError(f"Task {task_id} cannot complete: the scheduler was shut down.")
                     raise RuntimeError(
                         f"Task {task_id} cannot complete: the scheduler was never started. Call start() first."
                     )
@@ -357,7 +365,12 @@ class TaskScheduler:
                 # Same guard get_result() uses. Without it a caller who never
                 # called start() spins here forever on the default
                 # timeout=None, and nothing will ever decrement `pending`.
-                if not self._running and not self._shutdown_event.is_set():
+                if not self._running:
+                    # Same guard as get_result(): after shutdown() the
+                    # worker loop is gone and the task can never run, so
+                    # waiting for it would never end.
+                    if self._shutdown_event.is_set():
+                        raise RuntimeError(f"{pending} task(s) cannot complete: the scheduler was shut down.")
                     raise RuntimeError(
                         f"{pending} task(s) cannot complete: the scheduler was never started. Call start() first."
                     )

@@ -431,9 +431,18 @@ class RScriptExporter:
         pc2: int = 1,
         labels: Sequence[str] | None = None,
         groups: Sequence[Any] | None = None,
+        group_names: Sequence[str] | None = None,
         stem: str = "pca_scores",
     ) -> RExportResult:
-        """Emit a ggplot2 score plot (PC1 vs PC2) with an optional 95% ellipse."""
+        """Emit a ggplot2 score plot (PC1 vs PC2) with an optional 95% ellipse.
+
+        ``group_names`` carries the human-readable group names when the
+        caller has them.  The application passes the group INDEX, so
+        without this the legend of the delivered R figure read ``0``/``1``
+        while the same plot in the application read ``Habitat 1``/
+        ``Habitat 2`` -- the script is handed to colleagues to run, and
+        its legend did not match the screen.
+        """
         spec = spec or RPlotSpec()
         scores = np.asarray(result.get_scores(n_components=max(pc1, pc2) + 1))
         x = scores[:, pc1]
@@ -442,7 +451,10 @@ class RScriptExporter:
 
         group_col = None
         if groups is not None and len(groups) == n:
-            vals = [str(g) for g in groups]
+            if group_names is not None and len(group_names) == n:
+                vals = [str(name) for name in group_names]
+            else:
+                vals = [str(g) for g in groups]
             levels = ordered_unique_labels(vals)
             group_col = ("group", vals, levels)
         label_col = None
@@ -631,6 +643,11 @@ p <- ggplot(data, {aes_expr}) +
 ## once here: referring to data$ inside the scale's lambda triggers a
 ## discouraged-data warning and obscures where the scaling comes from.
 YMAX <- max(data$variance_pct)
+## A PCA of a constant matrix has no explained variance at all, and
+## YMAX = 0 made the secondary axis divide by zero -- the script
+## failed on the user's machine with "need at least two non-NA values
+## to interpolate", even though it had passed the syntax check.
+if (!is.finite(YMAX) || YMAX <= 0) YMAX <- 1
 
 LABELS <- list(
   title    = "PCA Scree Plot",

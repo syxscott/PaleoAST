@@ -1,3 +1,5 @@
+from utils.exceptions import ValidationError
+
 # stratigraphy/isotope_analysis.py
 """
 Isotope Time Series Analysis for PaleoAST
@@ -42,6 +44,12 @@ class IsotopeData:
             lengths.append(len(self.sr))
         if self.nd is not None:
             lengths.append(len(self.nd))
+        if self.other:
+            # The 'other' arrays were left out of the check, so a
+            # mismatched one was accepted here and only surfaced much
+            # later, from analyze(), as a bare ValueError about the AGE
+            # length -- pointing at the wrong array.
+            lengths.extend(len(np.asarray(v).ravel()) for v in self.other.values())
 
         if len(set(lengths)) > 1:
             raise ValueError("All isotope arrays must have same length as depth/age")
@@ -115,7 +123,11 @@ class IsotopeResult:
             "Isotope Time Series Analysis Results",
             "=" * 50,
             f"Data points: {len(self.data.depth)}",
-            f"Age range: {self.data.age.min():.2f} - {self.data.age.max():.2f}",
+            (
+                f"Age range: {self.data.age.min():.2f} - {self.data.age.max():.2f}"
+                if self.data.age.size
+                else "Age range: (empty series)"
+            ),
             "",
             f"Excursions detected: {len(self.excursions)}",
         ]
@@ -293,7 +305,7 @@ def compute_moving_average(values: np.ndarray, window: int = 5, mode: str = "cen
         平滑后的数组
     """
     if window < 1:
-        return values
+        return np.asarray(values, dtype=float)
 
     if window % 2 == 0:
         window += 1  # 必须奇数
@@ -306,8 +318,12 @@ def compute_moving_average(values: np.ndarray, window: int = 5, mode: str = "cen
         counts = np.convolve(np.ones_like(values), np.ones(window), mode="same")
         smoothed = smoothed / counts
     else:
-        # 右对齐
-        smoothed = np.zeros_like(values)
+        # 右对齐。
+        # ``np.zeros_like`` 继承输入的 dtype, 整数序列的均值因此被向零截断:
+        # [1..6] window=3 得到 [1, 1, 2, 3, 4, 5] 而不是 [1.0, 1.5, 2.0, ...]。
+        # center 模式因为 np.convolve 会提升为 float 而是对的, 于是同一个
+        # 输入在两个模式下给出不同结果。
+        smoothed = np.zeros(len(values), dtype=float)
         for i in range(len(values)):
             start = max(0, i - window + 1)
             smoothed[i] = np.mean(values[start : i + 1])
@@ -343,24 +359,33 @@ def detect_excursions_from_values(
         if len(age) != len(values):
             raise ValueError(f"age length ({len(age)}) must match values length ({len(values)})")
 
-    # 估计背景和标准差
+    # 估计背景和标准差。
+    #
+    # 只用有限点计算。单个 NaN 曾同时污染均值和标准差, 而
+    # ``NaN > threshold`` 恒为 False, 于是整个序列被判为"没有偏移"并
+    # 返回空列表, 没有任何警告。GUI 侧只在整列全 NaN 时跳过该列, 所以
+    # 零星缺失的列会显示"0 excursions detected" -- 一个静默的错误结果。
+    finite = np.isfinite(values)
+    if not finite.any():
+        return []
     if background == "mean":
-        bg = np.mean(values)
-        std = np.std(values)
+        bg = float(np.mean(values[finite]))
+        std = float(np.std(values[finite]))
     else:
-        bg = np.median(values)
+        bg = float(np.median(values[finite]))
         # MAD (Median Absolute Deviation) - scale by 1.4826 for normal distribution
-        mad = np.median(np.abs(values - bg))
+        mad = float(np.median(np.abs(values[finite] - bg)))
         std = mad * 1.4826
 
-    if std == 0:
+    if not np.isfinite(std) or std == 0:
         std = 1.0
 
     # 计算 z-score
-    z_scores = np.abs(values - bg) / std
+    z_scores = np.zeros(len(values), dtype=float)
+    z_scores[finite] = np.abs(values[finite] - bg) / std
 
-    # 标记 excursion 点
-    is_excursion = z_scores > threshold
+    # 标记 excursion 点。缺失点不是偏移, 也不属于任何一段偏移。
+    is_excursion = (z_scores > threshold) & finite
 
     # 找连续的 excursion 区域
     excursions = []
@@ -435,6 +460,16 @@ def compute_correlation(x: np.ndarray, y: np.ndarray, method: str = "pearson") -
 
     x = np.asarray(x)
     y = np.asarray(y)
+
+    if len(x) != len(y):
+        # The NaN mask below paired the two arrays position by position, so
+        # a length mismatch came out of numpy as "operands could not be
+        # broadcast together" -- a bare error naming neither the arrays
+        # nor the lengths.
+        raise ValidationError(
+            f"compute_correlation needs two series of the same length; got {len(x)} and {len(y)}",
+            details={"n_x": len(x), "n_y": len(y)},
+        )
 
     # 移除 NaN
     mask = ~(np.isnan(x) | np.isnan(y))
@@ -517,7 +552,10 @@ def lowess_smooth(age: np.ndarray, values: np.ndarray, span: float = 0.3) -> np.
     values_valid = values[mask]
 
     if len(age_valid) < 3:
-        return values_valid
+        # 契约是"每个输入点对应一个平滑值"。返回剔除 NaN 后的短数组,
+        # 长度与输入不一致, 调用方按位置对齐时就会错位。点太少无法平滑
+        # 时原样返回, NaN 也原样保留。
+        return np.asarray(values, dtype=float).copy()
 
     # LOWESS 拟合 - returns array with [age, smoothed_value] sorted by age
     result = stats_lowess(values_valid, age_valid, frac=span, return_sorted=True)
@@ -541,19 +579,36 @@ def remove_outliers(values: np.ndarray, method: str = "iqr", threshold: float = 
         (cleaned_values, mask) mask=True 表示保留
     """
     values = np.asarray(values)
-    mask = np.ones(len(values), dtype=bool)
+    # A non-finite point is never "kept", and it must not poison the
+    # statistics either: np.percentile over a series with a NaN returned
+    # NaN bounds, so the mask came out all-False and the whole series
+    # was silently emptied.  The GUI only skips a column that is entirely
+    # NaN, so a column with a few gaps lost everything.
+    finite = np.isfinite(values.astype(float))
+    mask = finite.copy()
 
     if method == "iqr":
-        q1 = np.percentile(values, 25)
-        q3 = np.percentile(values, 75)
-        iqr = q3 - q1
-        lower = q1 - threshold * iqr
-        upper = q3 + threshold * iqr
-        mask = (values >= lower) & (values <= upper)
+        if finite.any():
+            valid = values[finite].astype(float)
+            q1 = np.percentile(valid, 25)
+            q3 = np.percentile(valid, 75)
+            iqr = q3 - q1
+            lower = q1 - threshold * iqr
+            upper = q3 + threshold * iqr
+            mask &= (values >= lower) & (values <= upper)
 
     elif method == "zscore":
-        z = np.abs((values - np.mean(values)) / np.std(values))
-        mask = z < threshold
+        if finite.any():
+            valid = values[finite].astype(float)
+            std = float(np.std(valid))
+            if not np.isfinite(std) or std == 0:
+                # Every value is the same, so no value is an outlier.  The
+                # division used to produce NaN, and ``NaN < threshold`` is
+                # False, which dropped EVERY point -- a silent total loss.
+                pass
+            else:
+                z = np.abs((values - np.mean(valid)) / std)
+                mask &= z < threshold
 
     return values[mask], mask
 
@@ -1004,6 +1059,17 @@ def block_bootstrap_ci(
     if block_size is None:
         block_size = _optimal_block_size(data)
         block_size = max(1, min(block_size, n // 2))
+    else:
+        # An explicit block_size was never checked, so a value larger than
+        # the series reached numpy's ``rng.integers(0, n - block_size + 1)``
+        # with a negative high and raised a bare "high <= 0".
+        block_size = int(block_size)
+        if block_size < 1:
+            raise ValidationError(
+                f"block_size must be at least 1, got {block_size}",
+                details={"block_size": int(block_size)},
+            )
+        block_size = min(block_size, n)
 
     # 2. Block bootstrap 重采样
     bootstrap_stats = np.empty(n_bootstrap)

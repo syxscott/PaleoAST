@@ -147,12 +147,16 @@ class ReportBuilder:
 
     def set_title(self, title: str) -> ReportBuilder:
         """设置标题"""
-        self._title = title
+        # The title is caller text.  Every other piece of caller text in
+        # this module is escaped; the title, the author names and the
+        # abstract were the exceptions, and an "&" or "_" in any of them
+        # made LaTeX fail to compile the report.
+        self._title = _escape_latex(title)
         return self
 
     def add_author(self, name: str, affiliation: str | None = None, email: str | None = None) -> ReportBuilder:
         """添加作者"""
-        self._authors.append(name)
+        self._authors.append(_escape_latex(name))
         if affiliation:
             self._affiliations.append(affiliation)
         return self
@@ -172,6 +176,10 @@ class ReportBuilder:
             abstract: 摘要内容
             keywords: 关键词列表
         """
+        # The abstract is caller text, and every other piece of caller
+        # text in this module goes through _escape_latex.  A bare "&" or
+        # "_" in it made LaTeX refuse to compile the whole report.
+        abstract = _escape_latex(abstract)
         if keywords:
             # Keywords are caller-supplied text, same as the section titles and
             # captions escaped below. An author typing "N=5 & 95% CI" would
@@ -535,6 +543,28 @@ class LatexCompiler:
 
         tex_basename = os.path.splitext(self._tex_path)[0]
 
+        # The output path is needed before the first pass, so that a stale
+        # file from an earlier run can be removed: a failed compile must
+        # not be able to leave the previous run's PDF in place and then be
+        # reported as a success.
+        #
+        # pdflatex is executed with cwd=self._output_dir, so the PDF/DVI
+        # is written into the output directory. The previous code resolved
+        # ``tex_basename + ".pdf"`` against the *process* CWD, reporting
+        # failure even though compilation succeeded whenever output_dir
+        # differed from the CWD. Join the output directory instead
+        # (falling back to the tex file's directory or ".") and only compare
+        # basenames, because pdflatex writes the output next to the job
+        # under its own name.
+        out_dir = self._output_dir or os.path.dirname(self._tex_path) or "."
+        extension = "pdf" if output_format == "pdf" else "dvi"
+        output_path = os.path.join(out_dir, os.path.basename(tex_basename) + "." + extension)
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError as exc:
+                self._logger.warning(f"Could not remove the stale output {output_path}: {exc}")
+
         # 构建命令
         if output_format == "pdf":
             cmd = ["pdflatex", "-interaction=nonstopmode", self._tex_path]
@@ -549,8 +579,14 @@ class LatexCompiler:
                 result = subprocess.run(cmd, cwd=self._output_dir, capture_output=True, text=True, timeout=60)
 
                 if result.returncode != 0:
+                    # The return code is the verdict.  The old code only
+                    # logged it and then decided "success" from the mere
+                    # presence of the output file -- which the PREVIOUS
+                    # run had left behind, so a failed compile handed the
+                    # caller a stale PDF and said it had worked.
                     self._logger.warning(f"Pass {pass_num + 1} had errors")
                     self._logger.debug(result.stderr)
+                    return False, ""
 
             except subprocess.TimeoutExpired:
                 self._logger.error("Compilation timeout")
@@ -559,19 +595,8 @@ class LatexCompiler:
                 self._logger.error("pdflatex not found")
                 return False, ""
 
-        # 确定输出文件
-        # pdflatex is executed with cwd=self._output_dir, so the PDF/DVI
-        # is written into the output directory. The previous code
-        # resolved ``tex_basename + ".pdf"`` against the *process* CWD,
-        # reporting failure even though compilation succeeded whenever
-        # output_dir differed from the CWD. Join the output directory
-        # instead (falling back to the tex file's directory or ".")
-        # and only compare basenames, because pdflatex writes the
-        # output next to the job under its own name.
-        out_dir = self._output_dir or os.path.dirname(self._tex_path) or "."
-        extension = "pdf" if output_format == "pdf" else "dvi"
-        output_path = os.path.join(out_dir, os.path.basename(tex_basename) + "." + extension)
-
+        # The output file was resolved before the first pass (and the
+        # stale one removed), so all that is left is to check it.
         success = os.path.exists(output_path)
 
         if success:

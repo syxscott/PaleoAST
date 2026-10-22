@@ -182,8 +182,20 @@ def get_scale(
             raise DataValidationError(_("interval must be NULL or of length 1 or 2"))
         try:
             bounds = [float(n) for n in names]  # type: ignore[arg-type]
+            numeric_window = True
         except (TypeError, ValueError):
-            # name-based selection: unique-prefix matching, window = union of matched spans
+            numeric_window = False
+            # name-based selection: unique-prefix matching, window = union of matched spans.
+            #
+            # A NAMED interval is not a numeric window.  The numeric rule
+            # below keeps every interval that merely TOUCHES the window
+            # (inclusive, as in palaeoverse), and applying it to a name
+            # pulled in the neighbours: "Jurassic" (145-201.4 Ma) also
+            # returned Triassic and Cretaceous, so the caller's bin table
+            # silently became three periods wide.  For a name the intervals
+            # CONTAINED in the requested span are the right ones -- which
+            # is also what a two-name window means: the two named
+            # intervals and everything between them.
             bounds = []
             for n in names:
                 matches = [t for t in table if t["interval_name"] == n] or [
@@ -204,7 +216,12 @@ def get_scale(
         lo, hi = min(bounds), max(bounds)
         if hi > 4600.0 or lo < 0.0:
             raise DataValidationError(_("interval ages must lie within [0, 4600] Ma"))
-        table = [t for t in table if float(t[MAX_MA]) >= lo and float(t[MIN_MA]) <= hi]
+        if numeric_window:
+            # A numeric window keeps the intervals that merely touch it.
+            table = [t for t in table if float(t[MAX_MA]) >= lo and float(t[MIN_MA]) <= hi]
+        else:
+            # A named interval keeps the intervals CONTAINED in the span.
+            table = [t for t in table if float(t[MAX_MA]) <= hi and float(t[MIN_MA]) >= lo]
 
     rows = [t for t in table if t["rank"] == rank]
     if not rows:
@@ -524,7 +541,14 @@ def bin_time(
             picks.append(np.full(reps, lo))
             continue
         grid = np.arange(lo, hi + resolution / 2, resolution)
-        prob = np.asarray(fun(np.linspace(0.0, 1.0, len(grid))), dtype=float)
+        # ``np.atleast_1d`` so a density function that returns a SCALAR
+        # (a constant density, say) is read as one weight per grid point
+        # instead of a 0-d array whose ``shape[0]`` raised a bare
+        # IndexError.
+        prob = np.atleast_1d(np.asarray(fun(np.linspace(0.0, 1.0, len(grid))), dtype=float))
+        if prob.size == 1:
+            # A constant density (a scalar) applies to every grid point.
+            prob = np.full(grid.shape[0], float(prob[0]))
         if prob.shape[0] != grid.shape[0] or not np.all(np.isfinite(prob)) or prob.sum() <= 0:
             raise DataValidationError(_("point density must be finite with positive total weight"))
         p = prob / prob.sum()

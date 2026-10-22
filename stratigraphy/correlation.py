@@ -1,3 +1,5 @@
+from utils.exceptions import ValidationError
+
 # stratigraphy/correlation.py
 """
 Stratigraphic Correlation and Age Modeling for PaleoAST
@@ -215,6 +217,14 @@ class AgeModelAnalyzer:
         """
         from scipy.interpolate import PchipInterpolator, interp1d
 
+        if len(age_constraints) < 2:
+            # One constraint cannot define a line or a spline: the fit
+            # returned all-NaN ages with no error at all, and an empty
+            # list reached numpy's reshape and raised from inside it.
+            raise ValidationError(
+                f"An age model needs at least 2 age constraints; got {len(age_constraints)}",
+                details={"n_constraints": len(age_constraints)},
+            )
         constraint_heights = np.array([c[0] for c in age_constraints])
         constraint_ages = np.array([c[1] for c in age_constraints])
         constraint_errors = np.array([c[2] for c in age_constraints])
@@ -509,7 +519,23 @@ class SedimentationRateAnalyzer:
         ages = section.ages
 
         if ages is None:
-            raise ValueError("需要年龄数据来计算沉积速率")
+            raise ValidationError(
+                "Sedimentation rate needs age data: the section carries no ages",
+                details={"n_heights": len(heights)},
+            )
+        if len(ages) != len(heights):
+            raise ValidationError(
+                f"Sedimentation rate needs one age per height; got {len(ages)} for {len(heights)} height(s)",
+                details={"n_ages": len(ages), "n_heights": len(heights)},
+            )
+        if len(heights) < 2:
+            # A rate is a difference over an interval, so a single point
+            # has none.  np.gradient on one point indexed an empty array
+            # and raised a bare IndexError.
+            raise ValidationError(
+                f"Sedimentation rate needs at least 2 heights; got {len(heights)}",
+                details={"n_heights": len(heights)},
+            )
 
         rates = np.zeros(len(heights))
         with np.errstate(divide="ignore", invalid="ignore"):

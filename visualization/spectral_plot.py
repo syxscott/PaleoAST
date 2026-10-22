@@ -15,7 +15,6 @@ version: 1.1.0
 
 import logging
 
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -61,7 +60,8 @@ class SpectralPlotter:
             f"plot_periodogram called: n_frequencies={len(result.frequencies)}, peak_period={result.peak_period}"
         )
 
-        fig, axes = plt.subplots(2, 1, figsize=self._figure_size, gridspec_kw={"height_ratios": [3, 1]})
+        fig = Figure(figsize=self._figure_size)
+        axes = fig.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]})
 
         # Main periodogram
         ax1 = axes[0]
@@ -108,7 +108,12 @@ class SpectralPlotter:
         max_power = np.max(result.power)
         normalized_power = result.power / max_power
 
-        colors = [current_palette()[1] if p < peak_threshold else current_palette()[5] for p in normalized_power]
+        # The spans below are drawn in REVERSED period order, so the
+        # colours have to be in the same order.  They were not: every
+        # band came out the colour of the opposite end of the axis, which
+        # made the significance panel say the opposite of the power curve
+        # above it.
+        colors = [current_palette()[1] if p < peak_threshold else current_palette()[5] for p in normalized_power[::-1]]
 
         for i in range(len(result.periods) - 1):
             ax2.axvspan(result.periods[::-1][i], result.periods[::-1][i + 1], alpha=0.3, color=colors[i])
@@ -116,7 +121,7 @@ class SpectralPlotter:
         ax2.axhline(y=0.5, color="gray", linestyle="--", linewidth=1)
         ax2.set_xlim(ax1.get_xlim())
 
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
 
     def plot_frequency_spectrum(self, result: SpectralResult, title: str | None = None) -> Figure:
@@ -132,7 +137,8 @@ class SpectralPlotter:
         """
         self._logger.info(f"plot_frequency_spectrum called: n_frequencies={len(result.frequencies)}")
 
-        fig, ax = plt.subplots(figsize=self._figure_size)
+        fig = Figure(figsize=self._figure_size)
+        ax = fig.subplots()
 
         ax.plot(result.frequencies, result.power, "-", color=current_palette()[0], linewidth=1.5)
 
@@ -157,7 +163,7 @@ class SpectralPlotter:
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.grid(True, linestyle="--", alpha=0.3)
 
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
 
     def plot_spectral_summary(self, result: SpectralResult, peaks: list[dict[str, float]] | None = None) -> Figure:
@@ -176,7 +182,7 @@ class SpectralPlotter:
             f"n_peaks={len(peaks) if peaks else 0}"
         )
 
-        fig = plt.figure(figsize=(12, 8))
+        fig = Figure(figsize=(12, 8))
 
         # Create grid
         gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
@@ -243,6 +249,6 @@ class SpectralPlotter:
             0.1, 0.9, stats_text, transform=ax3.transAxes, fontsize=9, verticalalignment="top", fontfamily="monospace"
         )
 
-        plt.suptitle("Spectral Analysis Results", fontsize=14, fontweight="bold")
+        fig.suptitle("Spectral Analysis Results", fontsize=14, fontweight="bold")
 
         return fig

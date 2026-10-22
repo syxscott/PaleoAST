@@ -227,7 +227,7 @@ class NexusLexer(BaseLexer):
         # hyphenated words to fail loudly via LexerError instead of quietly
         # becoming the wrong label. ``?`` and ``*`` are never valid identifier
         # characters, so they need no such guard.
-        self.add_rule(NexusTokenType.MISSING, r"\?|\*|(?<![A-Za-z0-9_])-(?![A-Za-z0-9_])", priority=6)
+        self.add_rule(NexusTokenType.MISSING, r"\?|\*|(?<![A-Za-z_])-(?![A-Za-z_])", priority=6)
 
         # #NEXUS 头部
         self.add_rule(NexusTokenType.NEXUS_HEADER, r"^#NEXUS", priority=1)
@@ -244,7 +244,7 @@ class NexusLexer(BaseLexer):
         )
 
         # 整数
-        self.add_rule(NexusTokenType.INTEGER, r"-?\d+", priority=20)
+        self.add_rule(NexusTokenType.INTEGER, r"(?<![A-Za-z0-9_.])-?\d+", priority=20)
 
         # 标识符 (包括关键字)
         # NEXUS taxon labels are frequently non-ASCII (`Félix cánidé`), so the

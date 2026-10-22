@@ -331,7 +331,12 @@ class StrictConsensusTree:
             return PhyloTree(root=PhyloNode(name=next(iter(taxa)), node_type=NodeType.LEAF))
 
         # 仅保留真子集 clade，按大小降序 (自顶向下)
-        usable = sorted({c for c in clades if c and c < taxa}, key=len, reverse=True)
+        # Sorted by size, then by the taxa themselves.  Sorting a SET by
+        # length alone leaves equal-length clades in the set's iteration
+        # order, and for frozenset[str] that order is hash-randomised: the
+        # same input gave a different consensus tree in a different
+        # process.
+        usable = sorted({c for c in clades if c and c < taxa}, key=lambda c: (-len(c), sorted(c)))
 
         def build_group(group: set[str]) -> PhyloNode:
             remaining = set(group)

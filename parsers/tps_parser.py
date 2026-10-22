@@ -451,6 +451,19 @@ class TPSParser:
                         self._current_curve = {"order": [], "points": []}
                         target.curve_points["curves"].append(self._current_curve)
                         target.curve_points["points"] = self._current_curve["points"]
+                    if not value.strip():
+                        # An empty POINTS= line used to be stored as one
+                        # EMPTY point, so the curve had one landmark more
+                        # than it declared and every later curve's block
+                        # was offset -- the parse then failed with
+                        # "Curve blocks need 8 landmarks but LM= declares 7",
+                        # with no error at the point of the mistake.
+                        raise TPSParseError(
+                            "POINTS= has no coordinates",
+                            file_path=self._parse_errors.file_path,
+                            line_number=line_num,
+                            line_content=line,
+                        )
                     try:
                         coords = [float(x) for x in value.split()]
                     except ValueError as e:

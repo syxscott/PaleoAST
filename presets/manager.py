@@ -82,7 +82,15 @@ class PresetManager:
     def load_by_name(self, name: str) -> Preset:
         """Load the preset whose validated name equals ``name``."""
         for entry in self.iter_files():
-            preset = load_preset_file(entry)
+            # An unrelated broken file in the directory used to take the
+            # whole lookup down with a bare JSONDecodeError, so the
+            # preset the caller asked for was unreachable.  list_names()
+            # already skips the bad ones; this does the same.
+            try:
+                preset = load_preset_file(entry)
+            except (OSError, ValueError) as exc:
+                self._logger.warning(f"Skipping invalid preset file {entry}: {exc}")
+                continue
             if preset.name == name:
                 return preset
         raise PresetError(f"No preset named '{name}' in {self.directory}")

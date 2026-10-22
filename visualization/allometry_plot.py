@@ -25,6 +25,7 @@ from scipy import stats
 from utils.statistics_core import ordered_unique_labels
 
 from ._style_scope import scoped_plot_methods
+from .generic_plots import group_codes
 
 logger = logging.getLogger(__name__)
 
@@ -115,11 +116,11 @@ class AllometryPlotter:
 
         # Plot points by group
         if groups is not None:
-            unique_groups = ordered_unique_labels(groups)
+            codes, unique_groups = group_codes(groups, len(log_cs))
             colors = plt.cm.Set1(np.linspace(0, 1, len(unique_groups)))
 
             for idx, group in enumerate(unique_groups):
-                mask = np.array(groups) == group
+                mask = codes == idx
                 ax.scatter(
                     log_cs[mask],
                     shape_scores[mask],

@@ -734,8 +734,18 @@ def test_mann_kendall_counts_ties() -> None:
     """Ties are not concordant, and the tie correction changes the variance.
 
     ``[1, 1, 2, 2]`` has six pairs: two of them are ties (contributing 0) and
-    four are (1 -> 2) steps contributing +1, so S = 4 and tau = 4/6 = 0.667,
-    not 0. The tie term subtracts ``2 m(m-1)(2m+5) = 2*2*1*9 = 36`` for each
+    four are (1 -> 2) steps contributing +1, so S = 4.
+
+    The tau is Kendall's tau-B, the form the docstring promises and the
+    one scipy reports: its denominator uses only the pairs that are not
+    tied in one of the variables, so the two tied pairs are excluded from
+    it and tau = 4 / sqrt(4 * 6) = 0.8165.  It used to be S / 6 = 0.667,
+    which is tau-A -- the total number of pairs, counting the tied pairs
+    as if they were discordant.  The more quantised a series is, the
+    further the two drift apart, and quantised isotope series are full of
+    ties.
+
+    The tie term subtracts ``2 m(m-1)(2m+5) = 2*2*1*9 = 36`` for each
     of the two groups of size 2, so
 
         Var(S) = [4*3*13 - 2*2*1*9] / 18 = (156 - 36)/18 = 20/3
@@ -748,7 +758,13 @@ def test_mann_kendall_counts_ties() -> None:
     result = mann_kendall([1.0, 1.0, 2.0, 2.0])
     assert result.n == 4
     assert result.s == 4
-    assert result.tau == pytest.approx(4.0 / 6.0)
+    assert result.tau == pytest.approx(4.0 / np.sqrt(4.0 * 6.0))
+    # The same number, from the reference implementation.
+    from scipy import stats as _sp_stats
+
+    assert result.tau == pytest.approx(
+        _sp_stats.kendalltau(np.array([1.0, 1.0, 2.0, 2.0]), np.arange(4.0), variant="b").statistic
+    )
     assert result.n_tied_groups == 2
     assert result.variance_s == pytest.approx(20.0 / 3.0, rel=1e-12)
     assert result.z == pytest.approx(1.161895, abs=1e-5)

@@ -235,10 +235,24 @@ class KaplanMeierAnalyzer:
 
                     # Greenwood's formula:
                     # Var(S_i) = S_i^2 * sum_j d_j / (n_j * (n_j - d_j))
-                    if n_events[i] > 0 and n_at_risk[i] > n_events[i]:
-                        greenwood_sum += n_events[i] / (n_at_risk[i] * (n_at_risk[i] - n_events[i]))
+                    if n_events[i] > 0:
+                        if n_at_risk[i] > n_events[i]:
+                            greenwood_sum += n_events[i] / (n_at_risk[i] * (n_at_risk[i] - n_events[i]))
+                        else:
+                            # Every subject still at risk died at this
+                            # time, so the Greenwood term d/(n(n-d))
+                            # diverges: the variance is infinite and the
+                            # log-log interval is the whole (0, 1).  The
+                            # old guard SKIPPED the term, which understated
+                            # the uncertainty to nothing -- the upper
+                            # bound came out as 5e-12 instead of 1.0, and
+                            # the plotted band collapsed to a line.
+                            greenwood_sum = float("inf")
                     greenwood[i] = greenwood_sum
-                    std_error[i] = survival_prob[i] * np.sqrt(greenwood_sum)
+                    if np.isinf(greenwood_sum):
+                        std_error[i] = float("inf")
+                    else:
+                        std_error[i] = survival_prob[i] * np.sqrt(greenwood_sum)
                 else:
                     std_error[i] = std_error[i - 1] if i > 0 else 0
                     greenwood[i] = greenwood_sum

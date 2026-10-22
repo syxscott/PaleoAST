@@ -55,7 +55,8 @@ class DiversityPlotter:
         """
         self._logger.info(f"plot_rarefaction called: sample_name='{result.sample_name}'")
 
-        fig, ax = plt.subplots(figsize=self._figure_size)
+        fig = Figure(figsize=self._figure_size)
+        ax = fig.subplots()
 
         ax.plot(
             result.sample_sizes,
@@ -85,7 +86,7 @@ class DiversityPlotter:
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.grid(True, linestyle="--", alpha=0.3)
 
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
 
     def plot_multiple_rarefaction(
@@ -111,7 +112,7 @@ class DiversityPlotter:
                 result.sample_sizes,
                 result.expected_taxa,
                 "o-",
-                color=colors[i],
+                color=colors[i % len(colors)],
                 linewidth=2,
                 markersize=5,
                 label=result.sample_name,
@@ -125,7 +126,7 @@ class DiversityPlotter:
         ax.legend(loc="lower right", frameon=True, fancybox=True)
         ax.grid(True, linestyle="--", alpha=0.3)
 
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
 
     def plot_diversity_comparison(
@@ -190,7 +191,7 @@ class DiversityPlotter:
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.grid(True, axis="y", linestyle="--", alpha=0.3)
 
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
 
     def plot_diversity_summary(self, result: DiversityResult) -> Figure:
@@ -207,7 +208,8 @@ class DiversityPlotter:
             f"plot_diversity_summary called: sample_name='{result.sample_name}', taxa_count={result.taxa_count}"
         )
 
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        fig = Figure(figsize=(12, 10))
+        axes = fig.subplots(2, 2)
 
         # 1. Shannon vs Simpson comparison.
         #
@@ -311,7 +313,7 @@ class DiversityPlotter:
             ax4.axis("off")
             ax4.text(0.5, 0.5, "Evenness not available", transform=ax4.transAxes, ha="center", va="center", fontsize=10)
 
-        plt.suptitle(f"Diversity Analysis: {result.sample_name}", fontsize=14, fontweight="bold")
-        plt.tight_layout()
+        fig.suptitle(f"Diversity Analysis: {result.sample_name}", fontsize=14, fontweight="bold")
+        fig.tight_layout()
 
         return fig

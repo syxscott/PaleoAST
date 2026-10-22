@@ -1432,4 +1432,6 @@ TRANSLATIONS = {
     # Fallback tab title for a workspace view that was added without a
     # name.  Every call site passes one, so this is a safety net.
     "Result": "Result",
+    "Cannot Transform Column": "Cannot Transform Column",
+    "The Log transform needs every value to be greater than -1; log(x + 1) is undefined below that.": "The Log transform needs every value to be greater than -1; log(x + 1) is undefined below that.",
 }

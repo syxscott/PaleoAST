@@ -162,6 +162,33 @@ def _divergent_sequences(labels) -> dict[str, str]:
 # =============================================================================
 
 
+def _nni_edge(tree):
+    """An edge a rooted NNI can actually move.
+
+    "Both endpoints are internal" is not enough.  On the ROOT's own edge
+    the unrooted edge is between the root's two children -- the root has
+    degree 2 and is suppressed -- so that edge is movable only when the
+    root's OTHER child has two children of its own.  Picking an edge
+    without that check can land on a pendant edge, which has no NNI move
+    at all, and the operation then refuses it.
+
+    Returns the edge, or None.
+    """
+    for parent in tree.root.preorder_traverse():
+        for child in parent.children:
+            if parent.is_leaf or child.is_leaf:
+                continue
+            others = [c for c in parent.children if c is not child]
+            if not others:
+                continue
+            if parent is tree.root and len(others[0].children) < 2:
+                continue
+            if len(child.children) < 2:
+                continue
+            return parent, child
+    return None
+
+
 class TestNNINeighborhoodSize:
     """``|N_NNI(T)| = 2 * (n - 2)`` for a binary tree with ``n`` leaves.
 
@@ -185,8 +212,13 @@ class TestNNINeighborhoodSize:
         rather than a closed form.
 
         n = 4 is the degenerate case: the single internal edge IS the
-        root-adjacent one, so a 4-taxon tree has no reachable NNI neighbour
-        at all. Pinned because it is why the search starts from larger trees.
+        root-adjacent one.  It used to produce no neighbour at all,
+        because the root has degree 2 in the unrooted tree, so moving a
+        subtree across the root only re-roots it -- the same unrooted
+        topology, which the self-loop filter then removed.  The edge is
+        real: the root's two children are joined by it, and NNI on it
+        gives the two other unrooted topologies.  The search now explores
+        them, which is why it reaches the global optimum far more often.
         """
         labels = [chr(ord("A") + i) for i in range(n)]
         tree = _binary_tree(labels, seed=42)
@@ -200,12 +232,7 @@ class TestNNINeighborhoodSize:
         assert len(neighbours) <= 2 * (n - 3) + 2, (
             f"NNI produced {len(neighbours)} neighbours, more than the textbook bound for n = {n}"
         )
-        if n >= 5:
-            assert neighbours, f"no NNI neighbour produced for n = {n}"
-        else:
-            assert neighbours == [], (
-                "a 4-taxon tree has only the root-adjacent internal edge, which a rooted representation cannot NNI"
-            )
+        assert neighbours, f"no NNI neighbour produced for n = {n}"
 
     @pytest.mark.parametrize("n", [4, 5, 6, 7, 8])
     def test_no_neighbour_is_the_starting_tree(self, n: int):
@@ -286,14 +313,7 @@ class TestNNINeighborhoodTopology:
         labels = ["A", "B", "C", "D", "E"]
         tree = _binary_tree(labels, seed=42)
         # Pick an internal edge (parent internal, child internal).
-        edge = None
-        for parent in tree.root.preorder_traverse():
-            for child in parent.children:
-                if not parent.is_leaf and not child.is_leaf and child in parent.children:
-                    edge = (parent, child)
-                    break
-            if edge is not None:
-                break
+        edge = _nni_edge(tree)
         assert edge is not None, "test fixture: no internal edge to swap on"
         parent, child = edge
 
@@ -335,14 +355,8 @@ class TestNNINonMutation:
         tree = _binary_tree(labels, seed=42)
         before = tree.to_newick()
         # Find any internal edge.
-        edge = None
-        for parent in tree.root.preorder_traverse():
-            for child in parent.children:
-                if not parent.is_leaf and not child.is_leaf and child in parent.children:
-                    edge = (parent, child)
-                    break
-            if edge is not None:
-                break
+        edge = _nni_edge(tree)
+        assert edge is not None, "test fixture: no internal edge to swap on"
         NNIOperation(edge[0], edge[1], swap_option=1).apply(tree)
         assert tree.to_newick() == before
 
@@ -350,14 +364,8 @@ class TestNNINonMutation:
         labels = ["A", "B", "C", "D", "E"]
         tree = _binary_tree(labels, seed=42)
         root_id_before = id(tree.root)
-        edge = None
-        for parent in tree.root.preorder_traverse():
-            for child in parent.children:
-                if not parent.is_leaf and not child.is_leaf and child in parent.children:
-                    edge = (parent, child)
-                    break
-            if edge is not None:
-                break
+        edge = _nni_edge(tree)
+        assert edge is not None, "test fixture: no internal edge to swap on"
         NNIOperation(edge[0], edge[1], swap_option=2).apply(tree)
         assert id(tree.root) == root_id_before
 

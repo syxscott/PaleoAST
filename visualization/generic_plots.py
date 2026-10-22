@@ -52,10 +52,14 @@ from matplotlib.figure import Figure
 
 from config.colors import current_palette
 from utils.exceptions import DataValidationError, PlottingError
+from utils.statistics_core import MISSING_GROUP
 
 from ._style_scope import scoped_plot_methods
 
 logger = logging.getLogger(__name__)
+
+#: Legend label for the rows whose group cell was empty.
+_MISSING_GROUP_LABEL = "missing"
 
 __all__ = ["GenericPlotter"]
 
@@ -71,6 +75,22 @@ def _as_1d(values: object, name: str) -> npt.NDArray[np.float64]:
     if array.ndim > 1:
         raise DataValidationError(f"{name} must be a single column; got an array with shape {array.shape}")
     return array
+
+
+def _as_float_array(values: object, name: str) -> npt.NDArray:
+    """Convert to a float array, or say which table is not numeric.
+
+    The matrix plotters used ``np.asarray(matrix, dtype=float)`` directly,
+    so a table with a text cell raised numpy's own
+    "could not convert string to float" -- a raw traceback in the GUI's
+    output panel, naming no column.  The column plotters already went
+    through :func:`_as_1d`, which explains the problem; the matrix ones
+    did not.
+    """
+    try:
+        return np.asarray(values, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(f"{name} must be a table of numbers; this one is not ({exc})") from exc
 
 
 def _paired(x: object, y: object) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
@@ -89,6 +109,36 @@ def _paired(x: object, y: object) -> tuple[npt.NDArray[np.float64], npt.NDArray[
     return xa, ya
 
 
+def group_codes(groups: Sequence[object] | None, n: int) -> tuple[npt.NDArray[np.intp], list[object]]:
+    """Integer codes for a grouping column, and the label of each code.
+
+    Every missing label lands in ONE group.  Comparing the labels with
+    ``==`` does not: NaN is not equal to itself, so a group of missing
+    labels matched nothing, and the legend grew an entry with no points
+    behind it.
+    """
+    if groups is None:
+        return np.zeros(n, dtype=np.intp), []
+    gs = list(groups)
+    if len(gs) != n:
+        raise DataValidationError(f"groups has {len(gs)} entries but there are {n} data points")
+    order: dict[object, int] = {}
+    names: list[object] = []
+    codes = np.empty(n, dtype=np.intp)
+    for i, g in enumerate(gs):
+        key = g.item() if isinstance(g, np.generic) else g
+        if key is None or (isinstance(key, float) and not np.isfinite(key)):
+            key = MISSING_GROUP
+            name: object = _MISSING_GROUP_LABEL
+        else:
+            name = key
+        if key not in order:
+            order[key] = len(order)
+            names.append(name)
+        codes[i] = order[key]
+    return codes, names
+
+
 def _groups_of(n: int, groups: Sequence[object] | None) -> npt.NDArray[np.intp]:
     """Normalise a grouping column to integer codes.
 
@@ -101,13 +151,7 @@ def _groups_of(n: int, groups: Sequence[object] | None) -> npt.NDArray[np.intp]:
     gs = list(groups)
     if len(gs) != n:
         raise DataValidationError(f"groups has {len(gs)} entries but there are {n} data points")
-    order: dict[object, int] = {}
-    codes = np.empty(n, dtype=np.intp)
-    for i, g in enumerate(gs):
-        key = g.item() if isinstance(g, np.generic) else g
-        if key not in order:
-            order[key] = len(order)
-        codes[i] = order[key]
+    codes, _ = group_codes(groups, n)
     return codes
 
 
@@ -119,15 +163,34 @@ def _labels_for(codes: npt.NDArray[np.intp], n_unique: int, labels: Sequence[str
     return [f"Group {i + 1}" for i in range(n_unique)]
 
 
-def _strip_nonfinite(x: npt.NDArray[np.float64], y: npt.NDArray[np.float64]) -> tuple[...]:
+def _strip_nonfinite(
+    x: npt.NDArray[np.float64], y: npt.NDArray[np.float64]
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray]:
     """Drop rows where either value is NaN or infinite.
 
     matplotlib draws a non-finite point as nothing at all, which is usually
     what you want -- but a log axis will also warn and drop the whole axis, so
     the non-finite values come out here with a reason instead.
+
+    The mask is returned as well, because the grouping column has to be
+    filtered with it.  It used to be left at its original length, so one
+    empty cell made the lengths disagree and the plot was refused with
+    "groups has 3 entries but there are 2 data points" -- an error that
+    pointed at the grouping column when the real problem was the empty
+    cell.
     """
     mask = np.isfinite(x) & np.isfinite(y)
-    return x[mask], y[mask]
+    return x[mask], y[mask], mask
+
+
+def _filter_groups(groups: Sequence[object] | None, mask: npt.NDArray) -> list[object] | None:
+    """The grouping column with the non-finite rows removed."""
+    if groups is None:
+        return None
+    gs = list(groups)
+    if len(gs) != mask.size:
+        raise DataValidationError(f"groups has {len(gs)} entries but there are {mask.size} data points")
+    return [g for g, keep in zip(gs, mask, strict=True) if keep]
 
 
 @scoped_plot_methods
@@ -176,8 +239,8 @@ class GenericPlotter:
         answer to "fit each group separately" is a different plot.
         """
         xa, ya = _paired(x, y)
-        xa, ya = _strip_nonfinite(xa, ya)
-        codes = _groups_of(xa.size, groups)
+        xa, ya, finite = _strip_nonfinite(xa, ya)
+        codes = _groups_of(xa.size, _filter_groups(groups, finite))
         if log_x:
             if np.any(xa <= 0):
                 raise DataValidationError("a log x-axis needs every x to be greater than zero")
@@ -469,7 +532,7 @@ class GenericPlotter:
         ``normalize=True`` converts each row to percentages, which is the form
         a palaeontologist usually wants for a community table.
         """
-        arr = np.asarray(matrix, dtype=float)
+        arr = _as_float_array(matrix, "matrix")
         if arr.ndim != 2:
             raise DataValidationError(f"a stacked chart needs a 2-D matrix; got shape {arr.shape}")
         if arr.shape[0] == 0 or arr.shape[1] == 0:
@@ -665,6 +728,7 @@ class GenericPlotter:
             raise DataValidationError("bubble sizes cannot be negative")
         finite = np.isfinite(xa) & np.isfinite(ya) & np.isfinite(sa)
         xa, ya, sa = xa[finite], ya[finite], sa[finite]
+        groups = _filter_groups(groups, finite)
         if sa.max() <= 0:
             raise DataValidationError("every bubble size is zero, so there is nothing to scale by")
         areas = 20.0 + 180.0 * (sa / sa.max())
@@ -701,7 +765,7 @@ class GenericPlotter:
         two-sided ramp for data with a meaningful zero, which is a different
         claim than "more of something" and looks different if you get it wrong.
         """
-        arr = np.asarray(matrix, dtype=float)
+        arr = _as_float_array(matrix, "matrix")
         if arr.ndim != 2:
             raise DataValidationError(f"a matrix plot needs a 2-D array; got shape {arr.shape}")
         if arr.size == 0:
@@ -733,7 +797,7 @@ class GenericPlotter:
         margin would make a rectangle of zero width, which is meaningless, so
         it is rejected.
         """
-        arr = np.asarray(table, dtype=float)
+        arr = _as_float_array(table, "table")
         if arr.ndim != 2:
             raise DataValidationError(f"a mosaic plot needs a 2-D contingency table; got shape {arr.shape}")
         if arr.size == 0:
@@ -850,7 +914,7 @@ class GenericPlotter:
         title: str = "",
     ) -> Figure:
         """Radar (spider) plot: one polygon per row of a 2-D matrix."""
-        arr = np.asarray(matrix, dtype=float)
+        arr = _as_float_array(matrix, "matrix")
         if arr.ndim != 2:
             raise DataValidationError(f"a radar plot needs a 2-D matrix; got shape {arr.shape}")
         if arr.shape[1] < 3:
@@ -976,7 +1040,11 @@ class GenericPlotter:
         for i in range(n_nodes):
             ax.scatter(*positions[i], s=420, c=[palette[i % len(palette)]], zorder=2, edgecolors="white")
             name = node_labels[i] if node_labels and i < len(node_labels) else str(i)
-            ax.text(*positions[i], str(name), ha="center", va="center", fontsize=8, color="white", zorder=3)
+            # Unpacked explicitly rather than with ``*positions[i]``: a star
+            # unpack of an array leaves the arity to the reader, and a type
+            # checker cannot tell that it is exactly two numbers.
+            px, py = positions[i]
+            ax.text(px, py, str(name), ha="center", va="center", fontsize=8, color="white", zorder=3)
         ax.set_aspect("equal")
         ax.set_axis_off()
         if title:
@@ -1017,6 +1085,7 @@ class GenericPlotter:
             raise DataValidationError(f"z has {za.size} values but x has {xa.size}")
         finite = np.isfinite(xa) & np.isfinite(ya) & np.isfinite(za)
         xa, ya, za = xa[finite], ya[finite], za[finite]
+        groups = _filter_groups(groups, finite)
         if xa.size == 0:
             raise DataValidationError("no finite triples to plot")
         mode = mode.lower()
@@ -1070,7 +1139,7 @@ class GenericPlotter:
         quietly plotted with a spacing that means nothing. Use ``as_points`` to
         plot scattered heights instead.
         """
-        arr = np.asarray(z, dtype=float)
+        arr = _as_float_array(z, "z")
         if arr.ndim != 2:
             raise DataValidationError(f"a surface needs a 2-D grid of heights; got shape {arr.shape}")
         if arr.shape[0] < 2 or arr.shape[1] < 2:

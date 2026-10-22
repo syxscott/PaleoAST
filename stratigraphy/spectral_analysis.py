@@ -478,24 +478,62 @@ class SpectralAnalyzer:
             else:
                 values_proc = values
 
+            # A constant series has no periodicity to find, and the linear
+            # detrend leaves a residue of about 1e-16 on it.  The
+            # periodogram's 1/(2 sigma^2) normalisation amplified that
+            # float noise into a peak of ~95, which cleared the AR(1) 5%
+            # threshold: a constant series was reported as a significant
+            # cycle with a period of ten times the record length.
+            if float(np.ptp(values)) == 0.0:
+                raise ComputationError(
+                    "Spectral analysis is undefined for a constant series: every "
+                    "value is the same, so there is no periodicity to find.",
+                    details={"n_points": len(values)},
+                )
+            signal_scale = float(np.max(np.abs(values)))
+            if signal_scale > 0 and float(np.ptp(values_proc)) <= 1e-12 * signal_scale:
+                raise ComputationError(
+                    "Spectral analysis needs a series that varies: after detrending "
+                    "there is no signal left to analyse.",
+                    details={"n_points": len(values)},
+                )
+
             # Determine frequency range
+            time_span = float(time[-1] - time[0])
+            if time_span <= 0:
+                raise ComputationError(
+                    "Time span must be positive for spectral analysis",
+                    details={"time_span": time_span, "n_points": len(time)},
+                )
             if frequency_range is None:
-                # Auto-calculate based on data
-                time_span = time[-1] - time[0]
-                if time_span <= 0:
-                    raise ComputationError(
-                        "Time span must be positive for spectral analysis",
-                        details={"time_span": time_span, "n_points": len(time)},
-                    )
-                min_freq = 1.0 / (10 * time_span)  # Very low frequency
-                max_freq = len(time) / (2 * time_span)  # Nyquist-like
+                # The grid is set by the RECORD, not by the sampling density.
+                #
+                # The Rayleigh resolution of a record of length T is 1/T: a
+                # periodogram cannot locate a period more finely than that.
+                # The old grid spanned [1/(10T), n/(2T)] with a fixed number
+                # of points, so its step was Nyquist/n_frequencies -- which
+                # GROWS as the record is sampled more densely.  Sampling the
+                # same 100-unit record more densely therefore made the
+                # answer WORSE: a 7-period signal came back as 9.89 at
+                # 20000 samples.  The step is now never coarser than the
+                # record's own resolution.
+                resolution = 1.0 / time_span
+                nyquist = len(time) / (2 * time_span)
+                budget = max(int(n_frequencies), 2)
+                step = min((nyquist - resolution) / (budget - 1), resolution)
+                if step <= 0:
+                    step = resolution
+                min_freq = resolution  # the longest measurable period is the record
+                max_freq = min_freq + (budget - 1) * step
+                if max_freq > nyquist:
+                    # The band is shorter than the budget allows, so the
+                    # step can be finer than the record's resolution.
+                    max_freq = nyquist
+                    step = (max_freq - min_freq) / (budget - 1)
+                frequencies = min_freq + np.arange(budget) * step
             else:
                 min_freq, max_freq = frequency_range
-
-            logger.info(f"Frequency range: [{min_freq:.6f}, {max_freq:.6f}]")
-
-            # Generate frequency array
-            frequencies = np.linspace(min_freq, max_freq, n_frequencies)
+                frequencies = np.linspace(min_freq, max_freq, n_frequencies)
 
             # Compute Lomb-Scargle periodogram
             power = self._lomb_scargle(time, values_proc, frequencies)
@@ -679,7 +717,7 @@ class SpectralAnalyzer:
         values: npt.NDArray,
         wavelet: str = "morlet",
         scales: npt.NDArray | None = None,
-        dt: float = 1.0,
+        dt: float | None = None,
     ) -> WaveletResult:
         """
         Perform Continuous Wavelet Transform (CWT).
@@ -688,8 +726,11 @@ class SpectralAnalyzer:
             time: Time points
             values: Signal values
             wavelet: Wavelet type ('morlet', 'ricker', 'mexican_hat')
-            scales: Wavelet scales. If None, auto-calculated.
-            dt: Time step between samples
+            scales: Wavelet scales. If None, auto-calculated.  The scales
+                are in SAMPLES, as the transform is dilated along the
+                sample index.
+            dt: Time step between samples.  Derived from the time axis
+                when it is not given.
 
         Returns:
             WaveletResult: Wavelet analysis results
@@ -702,6 +743,30 @@ class SpectralAnalyzer:
 
         if len(time) != len(values):
             raise ComputationError("Time and values must have same length")
+
+        if dt is None:
+            # The time axis is the only thing that knows the sampling
+            # step.  It used to default to 1.0 and never took part in the
+            # computation at all, so a series sampled every 0.1 Ma was
+            # reported with its frequencies ten times too small: the
+            # scalogram's y axis ("Frequency") did not match its x axis
+            # (Ma).  The real caller in views/ui_main_window.py does not
+            # pass dt, so this was the path that actually ran.
+            if len(time) < 2:
+                raise ComputationError(
+                    "Need at least 2 time points to determine the sampling step",
+                    details={"n_points": len(time)},
+                )
+            steps = np.diff(np.sort(time))
+            positive = steps[steps > 0]
+            if positive.size == 0:
+                raise ComputationError(
+                    "Time values must increase to determine the sampling step",
+                    details={"n_points": len(time)},
+                )
+            dt = float(np.median(positive))
+        if dt <= 0:
+            raise ComputationError("dt must be positive", details={"dt": float(dt)})
 
         # Auto-calculate scales if not provided
         if scales is None:

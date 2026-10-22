@@ -3383,7 +3383,13 @@ class MainWindow(QMainWindow):
         to take effect.
         """
         settings = QSettings("PaleoAST", "PaleoAST")
-        settings.setValue("preferences/language", new_state["language"])
+        # Written only when the caller supplied it, for the same reason the
+        # theme is: this method is deliberately callable with a PARTIAL
+        # state, and a direct lookup of a key that is not there raised
+        # KeyError on the first one it met -- before it had written
+        # anything, so even the keys that WERE supplied were lost.
+        if "language" in new_state:
+            settings.setValue("preferences/language", new_state["language"])
         # The language actually in force lives under the key the Language
         # menu writes.  Writing only "preferences/language" meant a change
         # made here was stored and then ignored, so the field looked like it
@@ -3401,10 +3407,15 @@ class MainWindow(QMainWindow):
         # the Preferences dialog.
         if "dark_theme" in new_state:
             settings.setValue("preferences/dark_theme", bool(new_state["dark_theme"]))
-        settings.setValue("preferences/csv_has_header", new_state["csv_has_header"])
-        settings.setValue("preferences/csv_has_row_labels", new_state["csv_has_row_labels"])
-        settings.setValue("preferences/plot_dpi", new_state["plot_dpi"])
-        settings.setValue("preferences/plot_figsize", new_state["plot_figsize"])
+        # These are written only when the caller supplied them, for the
+        # same reason the theme is: this method is deliberately callable
+        # with a PARTIAL state, and a direct lookup of a key that is not
+        # there raised KeyError on the first one it met -- before it had
+        # written anything, so even the keys that WERE supplied were
+        # lost.
+        for key in ("csv_has_header", "csv_has_row_labels", "plot_dpi", "plot_figsize"):
+            if key in new_state:
+                settings.setValue(f"preferences/{key}", new_state[key])
         # R export settings. Read back through _get_preferences_state() when a
         # script is generated or run, so changing them takes effect on the next
         # export rather than needing a restart.
@@ -4816,7 +4827,7 @@ class MainWindow(QMainWindow):
                 return idx
         except (ValueError, TypeError):
             pass
-        return 0
+        return None
 
     def _on_run_spectral(self) -> None:
         """Run spectral analysis (power spectrum and periodogram analysis).
@@ -6906,8 +6917,17 @@ class MainWindow(QMainWindow):
             name = _("Survival Analysis")
         elif kind == "survival_logrank":
             # A log-rank result has no curve; report it in a results tab.
+            #
+            # The cache was read under "survival_result", which holds the
+            # ordinary survival analysis -- a DIFFERENT analysis.  Either
+            # it was absent, and None went into the plotter (the
+            # AttributeError escaped the Qt slot, and PyQt6 aborts the
+            # process on that), or it held the curve of an EARLIER run, so
+            # the figure showed a stale curve beside this run's p-value.
             plot = InteractivePlotCanvas()
-            plot.plot_survival_curve(self._statistics_controller.get_cached_result("survival_result"))
+            cached = self._statistics_controller.get_cached_result("survival_logrank_result")
+            if cached is not None and hasattr(cached, "times_full"):
+                plot.plot_survival_curve(cached)
             name = _("Survival Analysis (log-rank p={0:.4f})").format(payload.p_value)
         elif kind == "fbd":
             plot.plot_fbd_diversity(payload)
@@ -6938,6 +6958,13 @@ class MainWindow(QMainWindow):
             return
         dialog = self._macroevolution_dialog()
         dialog.setProperty("tab", 1)
+        # The dialog reads the "tab" property in its CONSTRUCTOR, so
+        # setting it afterwards could not change the page it opened on --
+        # all three entries opened the first tab and the analysis the
+        # user asked for never appeared.
+        _tabs = getattr(dialog, "_tabs", None)
+        if _tabs is not None:
+            _tabs.setCurrentIndex(1)
         dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
         dialog.exec()
 
@@ -6948,6 +6975,13 @@ class MainWindow(QMainWindow):
             return
         dialog = self._macroevolution_dialog()
         dialog.setProperty("tab", 2)
+        # The dialog reads the "tab" property in its CONSTRUCTOR, so
+        # setting it afterwards could not change the page it opened on --
+        # all three entries opened the first tab and the analysis the
+        # user asked for never appeared.
+        _tabs = getattr(dialog, "_tabs", None)
+        if _tabs is not None:
+            _tabs.setCurrentIndex(2)
         dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
         dialog.exec()
 
@@ -6955,6 +6989,13 @@ class MainWindow(QMainWindow):
         """Fossilised birth-death simulation (parameters only, no data needed)."""
         dialog = self._macroevolution_dialog()
         dialog.setProperty("tab", 3)
+        # The dialog reads the "tab" property in its CONSTRUCTOR, so
+        # setting it afterwards could not change the page it opened on --
+        # all three entries opened the first tab and the analysis the
+        # user asked for never appeared.
+        _tabs = getattr(dialog, "_tabs", None)
+        if _tabs is not None:
+            _tabs.setCurrentIndex(3)
         dialog.resultsReady.connect(lambda kind, payload: self._plot_macroevolution_result(kind, payload))
         dialog.exec()
 

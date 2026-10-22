@@ -241,6 +241,31 @@ class NNIOperation(TreeOperation):
         swap_index = self.swap_option - 1
         if swap_index not in (0, 1):
             raise ValueError(f"NNI swap_option must be 1 or 2, got {self.swap_option}")
+
+        if node1.parent is None:
+            # node1 is the ROOT, so the edge (node1, node2) is not an edge
+            # of the UNROOTED tree: the root has degree 2, and moving a
+            # whole subtree across it reproduces the same unrooted
+            # topology -- every such move was a self-loop, and the
+            # neighbourhood was permanently missing half of the real
+            # neighbours.  The real edge is (sib, node2), and the NNI on
+            # it exchanges a child of sib with a child of node2.
+            sib_children = [c for c in sib.children if c is not node1]
+            if len(sib_children) < 2 or len(b_children) < 2:
+                raise ValueError("NNI requires nodes with at least 2 children")
+            moved = sib_children[swap_index]
+            other = b_children[swap_index]
+
+            i = sib.children.index(moved)
+            sib.children[i] = other
+            other.parent = sib
+
+            j = node2.children.index(other)
+            node2.children[j] = moved
+            moved.parent = node2
+
+            return PhyloTree(new_root)
+
         moved = b_children[swap_index]
 
         # 原位交换: node1 失去 sib 得到 moved; node2 失去 moved 得到 sib

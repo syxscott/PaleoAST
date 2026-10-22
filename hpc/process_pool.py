@@ -372,7 +372,7 @@ class ProcessPool:
             # wait_all counts it as finished.
             self._errors[task_id] = error
 
-    def get_result(self, task_id: str, timeout: float | None = None) -> Any:
+    def get_result(self, task_id: str | Task, timeout: float | None = None) -> Any:
         """
         获取任务结果，**等待**至完成
 
@@ -395,6 +395,12 @@ class ProcessPool:
             worker had not finished yet -- the ``timeout`` parameter was
             accepted and never used.
         """
+        if isinstance(task_id, Task):
+            # submit_task returns the Task object, so handing it straight
+            # back is the natural sequence -- and it used to raise a bare
+            # "TypeError: unhashable type: 'Task'", because a dataclass
+            # without __hash__ cannot be looked up in a dict.
+            task_id = task_id.task_id
         if task_id not in self._tasks:
             raise KeyError(f"Task {task_id} was never submitted to this pool")
 
@@ -423,6 +429,20 @@ class ProcessPool:
         """
         if self._pool is None:
             return {}
+
+        # ``join()`` waits for the whole queue, so the timeout was
+        # ignored: a caller that asked for half a second waited for
+        # every task to finish, and a worker that hung hung the caller
+        # with it.  Poll against a deadline instead, and say what was
+        # still outstanding when it passes.
+        deadline = None if timeout is None else time.time() + timeout
+        while True:
+            pending = [tid for tid in self._tasks if tid not in self._results and tid not in self._errors]
+            if not pending:
+                break
+            if deadline is not None and time.time() > deadline:
+                raise TimeoutError(f"{len(pending)} task(s) did not complete within {timeout}s: {pending[:10]}")
+            time.sleep(0.01)
 
         self._pool.close()
         self._pool.join()
@@ -454,14 +474,25 @@ class ProcessPool:
         """
         n = matrix.shape[0]
 
+        # The metric used to be accepted and then ignored: every request
+        # came back as the Euclidean matrix, element for element, so a
+        # caller asking for Bray-Curtis got Euclidean numbers with no
+        # error at all -- and then used them for a PCoA.
+        metric_key = str(metric).lower()
+        if metric_key not in ("euclidean", "manhattan", "cityblock", "l1", "bray_curtis"):
+            raise ValueError(
+                f"unknown distance metric {metric!r}; use one of "
+                "'euclidean', 'manhattan', 'cityblock', 'l1', 'bray_curtis'"
+            )
+
         # 生成所有对的索引
         pairs = []
         for i in range(n):
             for j in range(i + 1, n):
                 pairs.append((i, j))
 
-        # 并行计算 (pass matrix as second element of each item)
-        items = [((i, j), matrix) for (i, j) in pairs]
+        # 并行计算 (pass matrix and metric with each item)
+        items = [((i, j), matrix, metric_key) for (i, j) in pairs]
         distances = self.map(
             func=_compute_pair_distance,
             items=items,
@@ -555,10 +586,23 @@ def _worker_map(func: Callable[[Any], Any], items: list[Any]) -> list[Any]:
 
 def _compute_pair_distance(pair_and_matrix: tuple) -> float:
     """计算一对样本的距离"""
-    (i, j), matrix = pair_and_matrix
+    if len(pair_and_matrix) == 2:
+        (i, j), matrix = pair_and_matrix
+        metric = "euclidean"
+    else:
+        (i, j), matrix, metric = pair_and_matrix
     vec_i = matrix[i]
     vec_j = matrix[j]
-    return float(np.sqrt(np.sum((vec_i - vec_j) ** 2)))
+    if metric == "euclidean":
+        return float(np.sqrt(np.sum((vec_i - vec_j) ** 2)))
+    if metric in ("manhattan", "cityblock", "l1"):
+        return float(np.sum(np.abs(vec_i - vec_j)))
+    if metric == "bray_curtis":
+        denominator = float(np.sum(np.abs(vec_i) + np.abs(vec_j)))
+        if denominator <= 0:
+            return 0.0
+        return float(np.sum(np.abs(vec_i - vec_j)) / denominator)
+    raise ValueError(f"unknown distance metric {metric!r}")
 
 
 def _bootstrap_single(data: np.ndarray) -> float:
