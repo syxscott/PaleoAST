@@ -343,27 +343,20 @@ def normalized_robinson_foulds_distance(tree1: PhyloTree, tree2: PhyloTree) -> f
 
     Divides the unweighted RF distance by the maximum possible RF for two
     trees sharing the same taxon set, so the metric becomes comparable
-    across trees of different size.  The maximum is
+    across trees of different size.
 
-        max_RF(tree1, tree2) = |S(tree1) Δ S(tree2)| when *both* trees span
-        every possible non-trivial split (i.e. each is fully resolved, which
-        happens iff both are unrooted binary).
+    The divisor is the number of splits a fully resolved tree over ``n``
+    taxa spans, counted twice: a binary unrooted tree has ``n - 3``
+    internal edges, and the symmetric difference can hold each of those
+    splits twice -- once because only one of the two trees has it, once
+    because only the other has it.  Hence
 
-    Concretely: if both trees are binary, ``max_RF = 2 * (n - 3)``.  When
-    either tree is non-binary (a polytomy), the maximum drops because the
-    fully-resolved tree contributes splits that the polytomous tree cannot.
-    We compute the upper bound from the larger of the two split sets:
+        max_RF = 2 * (n - 3)
 
-        max_RF = |S(tree1) ∪ S(tree2)|
-                 + |S(complement of the union)|
-
-    but a simpler upper bound — and the one we use here — is the count of
-    *all* non-trivial splits possible over ``n`` taxa (``(2^(n-1) - n - 1)``
-    for unrooted binary, since each split is its own complement and the
-    trivial ones are excluded).  This bound is tight when both trees are
-    binary; for non-binary inputs it is an upper bound, so the normalized
-    value is a *lower* bound on the true RF ratio — exactly the convention
-    used by the standard ``treedist`` packages.
+    which is exact when both trees are binary.  A tree with a polytomy
+    spans fewer internal splits, so the ratio it produces is a *lower*
+    bound on the true RF ratio -- the convention used by the standard
+    ``treedist`` packages.
 
     Edge cases:
 

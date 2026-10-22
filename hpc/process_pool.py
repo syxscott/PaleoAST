@@ -136,6 +136,14 @@ class ProcessPool:
 
     def start(self) -> None:
         """启动进程池"""
+        if self._shutdown:
+            # A pool that has been shut down stays shut.  The old code did
+            # not check this flag here, so a task submitted after shutdown()
+            # silently started a brand-new pool of worker processes -- the
+            # caller was told the pool was closed, and the process table
+            # grew anyway.
+            raise ComputationError("This process pool has been shut down and cannot be restarted")
+
         if self._pool is not None:
             return
 
@@ -319,7 +327,18 @@ class ProcessPool:
 
         返回:
             Task对象
+
+        Raises:
+            ComputationError: 进程池已关闭
         """
+        if self._shutdown:
+            # Submitting here used to call start() again, which quietly
+            # brought a fresh set of worker processes up after shutdown()
+            # had already reported the pool as closed.  The caller got a
+            # task object and a live process table it had been told was
+            # gone.  A closed pool says so instead.
+            raise ComputationError("This process pool has been shut down and cannot accept new tasks")
+
         task = Task(task_id=task_id, func=func, args=args, kwargs=kwargs)
 
         self._tasks[task_id] = task

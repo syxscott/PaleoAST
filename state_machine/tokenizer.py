@@ -623,7 +623,21 @@ def create_basic_lexer() -> LexerTokenizer:
         # 空白和注释
         LexerRule(TokenType.WHITESPACE, re.compile(r"[ \t]+"), skip=True),
         LexerRule(TokenType.NEWLINE, re.compile(r"\r?\n")),
-        LexerRule(TokenType.COMMENT, re.compile(r"--.*$|//.*$|#.*$", re.MULTILINE)),
+        # The comment rule needs a priority that beats the OPERATOR rule
+        # (40), otherwise "--" and "//" are consumed as runs of arithmetic
+        # operators and the COMMENT token type is unreachable -- the rule was
+        # dead, so "-- a note" lexed as OPERATOR('--') IDENTIFIER('a')
+        # IDENTIFIER('note') and a comment read as two identifiers.
+        #
+        # The two-character forms are only treated as comments at the start of
+        # a line or after whitespace: "x--y" is two minus signs, not a
+        # comment.  A lookbehind cannot be combined with "^" in one group, so
+        # the two alternatives are spelled out.
+        LexerRule(
+            TokenType.COMMENT,
+            re.compile(r"(?:^|(?<=\s))--.*$|(?:^|(?<=\s))//.*$|#.*$", re.MULTILINE),
+            priority=35,
+        ),
         # 标识符和关键字
         LexerRule(TokenType.IDENTIFIER, re.compile(r"[A-Za-z_][A-Za-z0-9_]*"), priority=10),
         # 数字

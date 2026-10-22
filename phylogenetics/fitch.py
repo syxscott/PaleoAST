@@ -57,6 +57,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .tree import PhyloNode, PhyloTree
+from .tree_distance import robinson_foulds_distance
 
 logger = logging.getLogger(__name__)
 
@@ -550,6 +551,11 @@ class FitchAlgorithm:
         """
         提取树的所有非平凡分割（用于Robinson-Foulds距离计算）
 
+        Deprecated:
+            这份实现把终止边（单个分类单元对其余全部）也算作非平凡分割，
+            因此与 ``phylogenetics.tree_distance`` 的标准分割集不一致，
+            ``compute_distance_from_parsimony`` 已改用那一份实现。
+
         Parameters:
             tree: 系统发育树
 
@@ -586,11 +592,21 @@ class FitchAlgorithm:
 
         Returns:
             Robinson-Foulds距离 (非负整数)
+
+        Raises:
+            DataValidationError: 若两棵树覆盖的分类单元集合不同，或叶标签重复。
         """
-        splits1 = self._extract_splits(tree1)
-        splits2 = self._extract_splits(tree2)
-        rf_distance = len(splits1.symmetric_difference(splits2))
-        return rf_distance
+        # This used to take the symmetric difference with a local
+        # _extract_splits helper, which had two problems.  It counted a
+        # terminal edge (one taxon against all the rest) as a non-trivial
+        # split, so ((A,B),(C,D)) against ((A,B,C),D) scored 2 where the
+        # Robinson-Foulds distance is 1 -- and it compared two trees that
+        # need not span the same taxa, so a tree over {A,B,C,D} and one over
+        # {A,B,C,E} scored 2, a number with no meaning at all, while the
+        # module's own robinson_foulds_distance() raised DataValidationError
+        # for the same pair.  The shared implementation is the one the rest
+        # of the package uses, and the two now agree.
+        return robinson_foulds_distance(tree1, tree2)
 
 
 def compute_parsimony_score(tree: PhyloTree, sequences: dict[str, str]) -> int:

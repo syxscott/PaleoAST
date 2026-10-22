@@ -444,7 +444,24 @@ class RScriptExporter:
         its legend did not match the screen.
         """
         spec = spec or RPlotSpec()
-        scores = np.asarray(result.get_scores(n_components=max(pc1, pc2) + 1))
+        # pc1/pc2 are component indices, and the old code used them two ways
+        # that disagree once the index is out of range: the scores were
+        # indexed positionally ("scores[:, pc2]") while the explained
+        # variance was range-checked ("ev[pc2] if pc2 < len(ev) else nan").
+        # So pc2=7 on a four-component PCA raised a bare IndexError from the
+        # indexing, and pc1=-1 silently took the LAST column while the
+        # header still said "PC0" -- a delivered figure whose axis label did
+        # not match its data.  Both shapes are rejected here, where the
+        # caller still knows which component it asked for.
+        all_scores = np.asarray(result.get_scores())
+        n_available = int(all_scores.shape[1]) if all_scores.ndim == 2 else 0
+        for label, index in (("pc1", pc1), ("pc2", pc2)):
+            if not isinstance(index, (int, np.integer)) or index < 0 or index >= n_available:
+                raise ValueError(
+                    f"Cannot export PCA scores: {label}={index!r} is outside the "
+                    f"{n_available} available component(s) (0..{n_available - 1})"
+                )
+        scores = all_scores
         x = scores[:, pc1]
         y = scores[:, pc2]
         n = len(x)

@@ -286,6 +286,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     whole lookup down; a NEXUS gap inside a state string was eaten by
     the integer rule; an empty `POINTS=` line became an empty landmark;
     and the majority-rule consensus tree depended on `PYTHONHASHSEED`.
+- **The second review round's tail: seven findings the round filed but did
+  not close** -- the round reported them and they were left standing.  All
+  seven were reproduced before anything was changed:
+  - **A comment rule that could never fire.**  The COMMENT rule sat at the
+    default priority (100) while the OPERATOR rule -- whose character class
+    holds both `-` and `/` -- sat at 40, and the rules are tried in priority
+    order.  So `-- a comment` lexed as OPERATOR("--"), IDENTIFIER("a"),
+    IDENTIFIER("comment"): a comment was three tokens and the COMMENT type
+    was never produced at all.  The rule now outranks the operator, and
+    only starts at the beginning of a line or after whitespace, so `x--y`
+    is still two minus signs.
+  - **The NFA-to-DFA conversion reported a missing attribute instead of a
+    missing initial state.**  The subset construction is seeded from the
+    epsilon closure of `{q0}`; with no `q0` the closure was handed `{None}`
+    and died with "'NoneType' object has no attribute 'state_id'".
+  - **The R export indexed a component that was not there.**  The scores
+    were read positionally while the explained variance was range-checked,
+    so the two halves disagreed: `pc2=7` raised a bare `IndexError` out of
+    the indexing, and `pc1=-1` -- a legal Python index -- took the *last*
+    column while the header still said "PC0", so the delivered R script
+    plotted one component and labelled it as another.
+  - **The preset library could hold two presets under one name.**
+    `path_for` keeps the *file* names unique by appending `_2`, `_3`... but
+    the preset's own name was left alone, so the picker offered the same
+    name twice and the second was unreachable by name.
+  - **A shut-down process pool came back from the dead.**  `shutdown()` set
+    the `_shutdown` flag and nothing read it: a task submitted afterwards
+    called `start()`, which brought up a fresh set of worker processes --
+    the caller had been told the pool was closed, and the process table
+    grew anyway.
+  - **Two Robinson-Foulds distances in one package did not agree.**  The
+    copy in `phylogenetics/fitch.py` counted a terminal edge (one taxon
+    against the rest) as a non-trivial split, so `((A,B),(C,D))` against
+    `((A,B,C),D)` scored 2 where the distance is 1, and it compared trees
+    over different taxon sets without a word -- `{A,B,C,D}` against
+    `{A,B,C,E}` scored 2, a number with no meaning, while the package's
+    own `robinson_foulds_distance()` raised for the same pair.  There is
+    one implementation now.
+  - **The normalised Robinson-Foulds distance's docstring described a
+    metric that is not the one it computes.**  It gave the divisor as the
+    count of all non-trivial splits possible over `n` taxa
+    (`2^(n-1) - n - 1`) and called that "the one we use here", while the
+    code divides by `2 * (n - 3)`, the number of splits a binary tree
+    actually spans.  For four taxa the two are 3 and 2.
+
+  Three further reports were read and deliberately left alone, because
+  changing them would have broken something that is intentional: a
+  negative branch length is *kept* on purpose (`phylogenetics/tree.py`
+  says so -- NJ and least-squares methods produce them), the NEXUS writer's
+  TREES block has no caller in the application, and the process pool's
+  three manager queues are unused but harmless.
 - **The workspace keeps every analysis result on its own tab**
   (`views/ui_main_window.py`) -- the workspace was a `QStackedWidget`, so only
   the newest view was ever reachable: the title that the ~30 call sites pass

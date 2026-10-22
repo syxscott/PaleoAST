@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+from dataclasses import replace
 
 from .registry import PresetError
 from .schema import Preset, load_preset_file, save_preset_file
@@ -72,9 +73,29 @@ class PresetManager:
     def save(self, preset: Preset, path: str | None = None) -> str:
         """Validate and store ``preset``; returns the written path."""
         target = path or self.path_for(preset.name)
+        if path is None:
+            preset = self._disambiguate_name(preset, target)
         save_preset_file(target, preset)
         self._logger.info("Preset saved: %s", target)
         return target
+
+    def _disambiguate_name(self, preset: Preset, target: str) -> Preset:
+        """Give a preset whose file name collided a name of its own.
+
+        ``path_for`` keeps the *file* names unique by appending ``_2``,
+        ``_3``... but the preset's own ``name`` was left alone.  Saving
+        "My Preset" twice therefore produced two files whose names were
+        both "My Preset": ``list_names()`` offered the same name twice in
+        the picker, and ``load_by_name("My Preset")`` could only ever reach
+        the first of them -- the second was unreachable by name.  The
+        counter the file name already carries is put into the name too.
+        """
+        stem = os.path.splitext(os.path.basename(target))[0]
+        base = slugify(preset.name)
+        match = re.fullmatch(re.escape(base) + r"_(\d+)", stem)
+        if match is None:
+            return preset
+        return replace(preset, name=f"{preset.name} ({int(match.group(1))})")
 
     def load(self, path: str) -> Preset:
         return load_preset_file(path)

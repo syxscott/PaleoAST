@@ -208,6 +208,15 @@ class NFA(FiniteAutomaton):
         返回:
             等价的DFA对象
         """
+        if self._initial_state is None:
+            # The subset construction is seeded from the epsilon closure of
+            # {q0}.  Without q0 there is no seed, and the old code handed
+            # {None} to the closure, which then died with
+            # "'NoneType' object has no attribute 'state_id'" -- a message
+            # about a missing attribute rather than about the missing initial
+            # state.  The same guard already exists in StateMachine.process().
+            raise RuntimeError(f"Cannot convert NFA '{self._name}' to a DFA: no initial state defined")
+
         dfa = DFA(name=f"{self._name}_to_DFA")
 
         # 初始状态: ε-Closure({q0})
