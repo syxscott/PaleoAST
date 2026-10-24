@@ -302,6 +302,13 @@ for name in {names!r}:
             print("OK", name, sep="\\t")
     except Exception as exc:
         print("FAIL", name, "{{}}: {{}}".format(type(exc).__name__, exc), sep="\\t")
+
+# The driver exits without letting Python tear the QApplication down: on
+# Linux an offscreen widget plus a QApplication that gets collected
+# aborts the interpreter, and the abort would look like a failed run.
+sys.stdout.flush()
+sys.stderr.flush()
+os._exit(0)
 """
 
 
