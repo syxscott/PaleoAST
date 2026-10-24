@@ -11,14 +11,14 @@ What each column means:
 - **unit** -- returns the expected value on a chosen example.
 
 ```
-analyses:            149
-  compared with R:    29  (19%)   EXACT -- declared per file
-  golden reference:   28  (19%)   inferred
-  property test:      43  (29%)   inferred
-  unit test:         126  (85%)   inferred
+analyses:            163
+  compared with R:    29  (18%)   EXACT -- declared per file
+  golden reference:   42  (26%)   inferred
+  property test:      43  (26%)   inferred
+  unit test:         134  (82%)   inferred
   no test at all:      0  (0%)   inferred
-  R + (gold|prop):    19  (13%)
-  UNIT TEST ONLY:     71  (48%)   <- the gap (lower bound)
+  R + (gold|prop):    19  (12%)
+  UNIT TEST ONLY:     71  (44%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -37,8 +37,8 @@ morphometrics            8    1       5
 ordination               7    1       4
 plot                    20    9      11
 spatial                  9    0       4
-stratigraphy            17    0       6
-time-series             42    0      16
+stratigraphy            21    0       6
+time-series             52    0      16
 univariate              16   16       0
 ```
 
@@ -193,3 +193,17 @@ univariate              16   16       0
 | `insolation` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `astronomical_target_curve` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `milankovitch_periods` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
+| `dynot` | stratigraphy | `stratigraphy.dynot` |  | x |  |  |
+| `rho1_sedimentation_ratio` | stratigraphy | `stratigraphy.dynot` |  | x |  | x |
+| `lod_dimension` | stratigraphy | `stratigraphy.lod` |  | x |  | x |
+| `lr04_stack` | stratigraphy | `stratigraphy.lr04` |  | x |  |  |
+| `optimal_span_smooth` | time-series | `stratigraphy.smoothing` |  | x |  | x |
+| `moving_average_smooth` | time-series | `stratigraphy.smoothing` |  | x |  | x |
+| `standardize` | time-series | `stratigraphy.transforms` |  | x |  | x |
+| `log_transform` | time-series | `stratigraphy.transforms` |  | x |  | x |
+| `apply_function` | time-series | `stratigraphy.transforms` |  | x |  | x |
+| `detrend_series` | time-series | `stratigraphy.detrending` |  | x |  | x |
+| `remove_part` | time-series | `stratigraphy.series_edit` |  | x |  |  |
+| `remove_range` | time-series | `stratigraphy.series_edit` |  | x |  |  |
+| `plot_digitizer` | time-series | `stratigraphy.plot_digitizer` |  | x |  |  |
+| `mini_robot` | time-series | `stratigraphy.mini_robot` |  | x |  |  |

@@ -111,7 +111,9 @@ py-modules = ["main", "plot_export"]
 # so a wheel without them makes every ``load_*()`` raise FileNotFoundError.
 # ``astronomy/*.npz`` is the La04 astronomical solution consumed by
 # ``stratigraphy/astronomy.py`` (``load_astronomical_solution``).
-"data" = ["examples/*", "golden/*", "astronomy/*.npz"]
+# ``stratigraphy/*.txt`` is the LR04 benthic d18O stack consumed by
+# ``stratigraphy/lr04.py`` (``load_lr04_stack``).
+"data" = ["examples/*", "golden/*", "astronomy/*.npz", "stratigraphy/*.txt"]
 
 [tool.setuptools.packages.find]
 # NOTE: `_core`, `rthooks` and `app_infrastructure` are GONE from disk. They

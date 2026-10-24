@@ -469,6 +469,20 @@ KNOWN_UNDRIVABLE: frozenset[str] = frozenset(
         "sedimentation_rate",
         "spectral_peaks",
         "stratigraphic_correlation",
+        # The figure reader needs an image and an interactive calibration of
+        # its axes; a form has no way to ask for either.
+        "plot_digitizer",
+        # The batch runner plays a recorded list of steps against a plugin
+        # registry; a form offers neither, so it is driven from the script
+        # console.
+        "mini_robot",
+        # These three take a LIST of series rather than one table: a Markov
+        # chain wants a sequence of facies codes, the dynamic time warping
+        # wants a set of sequences, and the eigenshape wants a set of
+        # coefficient vectors.  A spreadsheet column cannot be any of them.
+        "markov",
+        "dtw",
+        "eigenshape",
     }
 )
 

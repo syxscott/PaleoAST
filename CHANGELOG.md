@@ -77,6 +77,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   coefficient method could not be run from the interface at all, because
   its range of candidate sedimentation rates has nowhere to go.
 
+- **The rest of the cyclostratigraphy family** -- fourteen more analyses,
+  bringing the catalogue to 163:
+  - **The sedimentary noise model** (`stratigraphy/dynot.py`) -- the
+    noise a record carries against an AR(1) or a white baseline, and the
+    rho1 ratio between them (Li et al. 2018, *Nature Communications*).
+    The noise band has to be a SUB-band: over the whole band the record
+    and the baseline have the same total variance, the ratio is 1
+    whatever the record, and the statistic says nothing.
+  - **The length of day** (`stratigraphy/lod.py`) -- Acycle's Milankovitch
+    calculator, which computes the length of the day and the length of
+    the year, not a fractal dimension (Laskar et al. 2004).  Today's
+    value comes out at 23.934468 h, and the year at 366.25002 days;
+    both check against the independent figure
+    86400 s / 1.00273790935.
+  - **The LR04 benthic d18O stack** (`stratigraphy/lr04.py`,
+    `data/stratigraphy/lr04_5320ka.txt`) -- Lisiecki & Raymo's reference
+    curve, 0 to 5.32 Ma, byte-identical to the published table.
+  - **Smoothing with the span chosen for you**
+    (`stratigraphy/smoothing.py`) -- the span picked by cross-validation,
+    with a moving-block bootstrap band (ordinary bootstrap understates
+    the uncertainty of a correlated series).
+  - **Nine ways to take a trend out** (`stratigraphy/detrending.py`) --
+    the mean, a polynomial of any order, LOWESS, rLOWESS, LOESS, rLOESS
+    and the EEMD residual.  The window of the smoothers is a percentage
+    of the record's span, not a number of samples, so a denser record is
+    smoothed less under the same setting.  The module implements the
+    local regression itself, because the usual library takes its window
+    in points and cannot express a window in time.
+  - **Reading a curve off a published figure** (`stratigraphy/plot_digitizer.py`)
+    -- calibrate the axes with two reference points, then trace the line.
+    On a synthetic figure the points come back to within half a pixel.
+  - **A batch runner** (`stratigraphy/mini_robot.py`) -- record a list of
+    analyses, then replay it over a batch of data.  A step that fails is
+    recorded as failed rather than taking the batch down with it.
+  - **Transforms and edits** (`stratigraphy/transforms.py`,
+    `stratigraphy/series_edit.py`) -- standardise, log-transform, apply a
+    simple function, remove one interval of a record or keep only one.
+
 - **A measurement of how every analysis was validated**
   (`scripts/validation_matrix.py`, `docs/validation-matrix.md`) -- for each
   of the 113 first-party analyses: whether it is compared against a

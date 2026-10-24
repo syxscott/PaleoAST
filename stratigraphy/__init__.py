@@ -52,7 +52,9 @@ from .cycles import (
     redfit,
     runs_test,
 )
+from .detrending import DetrendResult, available_detrending_methods, detrend_series
 from .dynamic_filter import DynamicFilterResult, dynamic_filter
+from .dynot import DynotResult, rho1_sedimentation_ratio, sedimentary_noise
 from .emd import EMDResult, eemd, emd
 from .evolutionary import (
     EvolutionarySpectrumResult,
@@ -69,8 +71,13 @@ from .isotope_analysis import (
     IsotopeResult,
     IsotopeTrend,
 )
+from .lod import LODResult, lod_day_lengthening_rate, lod_days_in_year, lod_dimension, lod_length_of_day
+from .lr04 import LR04Stack, load_lr04_stack, lr04_target_curve
+from .mini_robot import RobotResult, RobotStep, robot_from_preset, run_robot, run_robot_batch, save_robot
 from .moving_summary import MovingSummaryResult, fixed_bandwidth_summary, fixed_count_summary
 from .pda import PDABand, PDAResult, power_decomposition
+from .plot_digitizer import AxisCalibration, DigitizedSeries, calibrate_axes, digitize_curve, digitize_profile
+from .series_edit import remove_part, remove_range
 from .series_tools import (
     add_gaps,
     clip_values,
@@ -88,6 +95,7 @@ from .signal_generator import (
     generate_sine,
     generate_white_noise,
 )
+from .smoothing import SmoothingResult, moving_average_smooth, optimal_span_smooth
 from .spectral_analysis import SpectralAnalyzer, SpectralResult, WaveletResult
 from .spectral_moments import (
     SpectralMomentsResult,
@@ -103,6 +111,7 @@ from .time_bins import (
     time_bins,
 )
 from .timeaxis import TimeAxis
+from .transforms import apply_function, log_transform, standardize
 from .tuning import (
     AgeScaleResult,
     ETimeOptResult,
@@ -122,11 +131,15 @@ __all__ = [
     "AgeScaleResult",
     "AmplitudeModulationResult",
     "AstronomicalSolution",
+    "AxisCalibration",
     "BioeventResult",
     "ChangePointResult",
     "CocoResult",
     "CycleAnalyzer",
+    "DetrendResult",
+    "DigitizedSeries",
     "DynamicFilterResult",
+    "DynotResult",
     "ECocoResult",
     "EMDResult",
     "ETimeOptResult",
@@ -140,11 +153,16 @@ __all__ = [
     "IsotopeData",
     "IsotopeResult",
     "IsotopeTrend",
+    "LODResult",
+    "LR04Stack",
     "MovingSummaryResult",
     "PDABand",
     "PDAResult",
     "RASCAnalyzer",
     "RedfitResult",
+    "RobotResult",
+    "RobotStep",
+    "SmoothingResult",
     "SpectralAnalyzer",
     "SpectralMomentsResult",
     "SpectralResult",
@@ -158,14 +176,17 @@ __all__ = [
     "Zone",
     "add_gaps",
     "amplitude_modulation",
+    "apply_function",
     "ar1_prewhiten",
     "astronomical_target_curve",
     "autoassociation",
     "autocorrelation",
+    "available_detrending_methods",
     "bandpass_filter",
     "berger1989_periods",
     "bin_time",
     "build_age_scale",
+    "calibrate_axes",
     "change_points",
     "clip_values",
     "coco",
@@ -173,6 +194,9 @@ __all__ = [
     "daily_mean_insolation",
     "derivative",
     "detect_change_points",
+    "detrend_series",
+    "digitize_curve",
+    "digitize_profile",
     "dynamic_filter",
     "ecoco",
     "eemd",
@@ -195,21 +219,39 @@ __all__ = [
     "insolation_series",
     "interpolate_series",
     "load_astronomical_solution",
+    "load_lr04_stack",
+    "lod_day_lengthening_rate",
+    "lod_days_in_year",
+    "lod_dimension",
+    "lod_length_of_day",
+    "log_transform",
+    "lr04_target_curve",
     "mann_kendall",
     "merge_series",
     "milankovitch_periods",
     "milankovitch_target_spectrum",
     "minimum_rho",
+    "moving_average_smooth",
     "multitaper_spectrum",
+    "optimal_span_smooth",
     "orbital_forcing",
     "power_decomposition",
     "redfit",
+    "remove_part",
     "remove_peaks",
+    "remove_range",
+    "rho1_sedimentation_ratio",
+    "robot_from_preset",
+    "run_robot",
+    "run_robot_batch",
     "runs_test",
+    "save_robot",
+    "sedimentary_noise",
     "sedimentation_rate_to_age_model",
     "select_intervals",
     "sort_unique",
     "spectral_moments",
+    "standardize",
     "taner_filter",
     "tanner_hilbert",
     "tax_expand_time",

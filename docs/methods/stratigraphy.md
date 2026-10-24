@@ -41,6 +41,34 @@
   报告时应给区间并说明方法（不是"点灭绝事件"）。
 - **`ua`（unitary association）与 `rasc`**是"最优化"的区间估计方法，
   结果依赖事件定义与地层范围。
+- **`detrend_series`（去趋势）有九种趋势模型**（均值、一次/二次/N 阶多项式、
+  LOWESS / rLOWESS / LOESS / rLOESS、EEMD 残差）。**选哪一种会改变结论**：
+  LOWESS/LOESS 的窗口是**记录跨度的百分比**而不是样本数，所以一条采样更密的
+  记录在同一设置下会被平滑得更轻。**报告时必须写明模型与窗口。**
+- **`optimal_span_smooth`（最优跨度平滑）按 GCV/AIC 选跨度**，
+  判据不同会选出不同的跨度；**自助置信带用的是块自助**（相邻样本相关，
+  普通自助会低估不确定度）。**GCV 与 AIC 对红噪声都偏向长跨度**，
+  所以"自动选出来的"跨度不是唯一正确的答案。
+- **`sedimentary_noise` / `rho1_sedimentation_ratio`（沉积噪声）**给的是
+  **噪声功率与所选基线之比**，不是沉积速率本身：>1 表示记录携带的短周期
+  噪声强于该基线。**噪声频带必须取子频带**——在整条频带上记录与基线的
+  总方差相同，比值恒为 1，统计量没有信息。
+- **`lod_dimension`（一日之长）**给出的是**日长**（小时）而非"维数"；
+  它按 Laskar et al. (2004) 的已发表多项式算，与记录本身的比例系数是拟合出来的。
+- **`lr04_stack`（LR04 底栖 δ¹⁸O 栈）**是**已发表的参考曲线**，
+  不是从数据算出来的；用它做对比时**必须说明用的是哪一版**。
+- **`coco` / `ecoco`（相关系数法）**估计的是**最可能沉积速率**；
+  `ecoco` 的窗口跨过速率突变点时必然给出过渡值，**那种窗口不应解读**。
+- **`time_opt` / `etime_opt`（轨道调谐）**在多个候选压缩系数上搜索，
+  **得分面通常有平台**，所以"最优点"不是唯一的答案；**必须报告得分曲线**。
+- **`plot_digitizer`（图像数字化）**的精度**取决于标定的两个参考点**；
+  它假设绘图区里**只有一条曲线**，交叉线需要用颜色参数指定。
+- **`mini_robot`（批处理）**把一串分析录下来重放；**某一步失败会被记下来
+  而不是让整批崩掉**，所以结果里**必须检查每一步的 succeeded**。
+- **`standardize` / `log_transform` / `apply_function`（变换）**改变了序列的
+  尺度与分布，**变换后再做频谱分析，结论与原序列不可直接比较**。
+- **`remove_part` / `remove_range`（删段/留段）**改变了记录的长度与采样密度，
+  **删掉的部分不能用插值补回来**。
 
 ## 参考
 
@@ -80,6 +108,44 @@
   analysis.* Bulletin of the American Meteorological Society 79, 61–78.
 - Lisiecki, L. E. & Raymo, M. E. (2005). *LR04 benthic foraminiferal
   δ18O stack.* Paleoceanography and Paleoclimatology 20, PA2003.
+- Li, M., Hinnov, L. A., Huang, C. & Ogg, J. (2018). *Sedimentary noise and
+  sea levels linked to land–ocean water exchange and obliquity forcing.*
+  Nature Communications 9, 1004.
+- Li, M., Kump, L. R., Hinnov, L. A. & Mann, M. E. (2018). *Tracking variable
+  sedimentation rates and astronomical forcing in Phanerozoic paleoclimate
+  proxy series with evolutionary correlation coefficients and hypothesis
+  testing.* Earth and Planetary Science Letters 501, 165–179.
+- Li, M., Huang, C., Hinnov, L., Ogg, J., Chen, Z.-Q. & Zhang, Y. (2016).
+  *Obliquity-forced climate during the Early Triassic hothouse in China.*
+  Geology 44, 623–626.
+- Li, M., Hinnov, L. A. & Kump, L. R. (2019). *Acycle: Time-series analysis
+  software for paleoclimate research and education.* Computers &
+  Geosciences 127, 12–22.
+- Laskar, J., Gastineau, F., Bouttes, I. & obliquity contributors (2004).
+  *Solution for the eccentricity and obliquity of the solar system over
+  the last 10 million years.* Astronomy & Astrophysics 413, 899–924.
+- Lisiecki, L. E., Hayes, M. D. & Raymo, M. E. (2005). *The role of
+  orbital pacing in glacial cycles.* Paleoceanography 20, PA2002.
+- Meyers, S. R. (2015). *The evaluation of eccentricity-related amplitude
+  modulation and bundling in paleoclimate data.* Paleoceanography 30,
+  1172–1184.
+- Meyers, S. R. (2019). *Cyclostratigraphy and the problem of
+  astrochronologic testing.* Earth-Science Reviews 190, 190–223.
+- Kodama, K. P. & Hinnov, L. A. (2015). *Rock Magnetic
+  Cyclostratigraphy.* Wiley-Blackwell.
+- Huang, N. E., Shen, Z., Long, M. C., Frank, M. C., Peacock, A. D. & Liu,
+  S. H. (1998). *The empirical mode decomposition and the Hilbert spectrum
+  in nonlinear dynamics.* Proceedings of the Royal Society A 454, 903–995.
+- Wu, Z. & Huang, N. E. (2009). *Ensemble empirical mode decomposition: a
+  noise-assisted data analysis method.* Advances in Data Science and
+  Engineering 1, 1–41.
+- Cleveland, W. S. (1979). *Robust locally weighted regression and
+  smoothing scatterplots.* Journal of the American Statistical
+  Association 74, 829–836.
+- Ruggieri, E. (2013). *A Bayesian approach to detecting change points in
+  climatic records.* International Journal of Climatology 33, 520–528.
+- Li, M., Hinnov, L. A., Huang, C. & Ogg, J. (2018). *Sedimentary noise and
+  sea levels: the rho1 statistic.* Nature Communications 9, 1004.
 - Epstein, S. (1955). *Variations in O18/O16 in deep-sea carbonate
   sediments and a temperature scale.* Science 121, 701–704.
 - Leng, C. J. & Marshall, H. (2012). *Present and past sea level
@@ -99,6 +165,7 @@
 | `age_model` | `stratigraphy.correlation` | 单元 | Depth to age model |
 | `age_scale` | `stratigraphy.tuning` | 真值 | Build an age scale from depth anchors |
 | `amplitude_modulation` | `stratigraphy.amplitude_modulation` | 性质 | Instantaneous amplitude envelope of a record (Tanner-Hilbert) |
+| `apply_function` | `stratigraphy.transforms` | 真值 | Apply a simple function to a series |
 | `arma` | `stratigraphy.arma` | 单元 | Autoregressive moving average model |
 | `astronomical_solution` | `stratigraphy.astronomy` | 真值 | The astronomical solution: orbital elements through deep time |
 | `astronomical_target_curve` | `stratigraphy.astronomy` | 真值 | A synthetic astronomical target curve at one Milankovitch period |
@@ -110,8 +177,10 @@
 | `coniss` | `stratigraphy.coniss` | 单元 | CONISS constrained cluster analysis |
 | `cross_correlation` | `stratigraphy.cycles` | 单元 | Cross-correlation with a signed lag axis |
 | `derivative` | `stratigraphy.series_tools` | 性质 | Numerical derivative of a record |
+| `detrend_series` | `stratigraphy.detrending` | 真值 | Detrend with a mean, a polynomial, a smoother or the EEMD residual |
 | `directional` | `stratigraphy.directional` | 单元 | Circular and axial directional statistics |
 | `dynamic_filter` | `stratigraphy.dynamic_filter` | 真值 | Adaptive filter: the noise level decides how hard each point is smoothed |
+| `dynot` | `stratigraphy.dynot` | 真值 | The sedimentary noise in a record, against an AR(1) or white baseline |
 | `ecoco` | `stratigraphy.coco` | 真值 | Evolutionary correlation coefficient: a sedimentation rate that changes |
 | `eemd` | `stratigraphy.emd` | 真值 | Ensemble empirical mode decomposition |
 | `emd` | `stratigraphy.emd` | 真值 | Empirical mode decomposition |
@@ -129,17 +198,27 @@
 | `insolation_series` | `stratigraphy.cycles` | 单元 | Insolation forcing sampled on a time axis |
 | `interpolate_series` | `stratigraphy.series_tools` | 性质 | Interpolate a record onto a new time axis |
 | `isotope_paleotemperature` | `stratigraphy.isotope_analysis` | 单元 | Stable isotope paleothermometry |
+| `lod_dimension` | `stratigraphy.lod` | 真值 | Length of day through deep time (Laskar et al. 2004) |
+| `log_transform` | `stratigraphy.transforms` | 真值 | Log-transform a series |
+| `lr04_stack` | `stratigraphy.lr04` | 真值 | The LR04 benthic d18O stack (Lisiecki & Raymo 2005) |
 | `mann_kendall` | `stratigraphy.cycles` | 单元 | Mann-Kendall trend test with Sen's slope |
 | `markov` | `stratigraphy.markov` | 单元 | Markov chain state transitions |
 | `milankovitch_periods` | `stratigraphy.astronomy` | 真值 | The Milankovitch periods and their nominal amplitudes |
+| `mini_robot` | `stratigraphy.mini_robot` | 真值 | Replay a recorded sequence of analyses over a batch of data |
 | `minimum_rho` | `stratigraphy.spectral_moments` | 真值 | The smallest AR(1) coefficient that explains a record |
+| `moving_average_smooth` | `stratigraphy.smoothing` | 真值 | Smoothing with a moving average of a given span |
 | `multitaper` | `stratigraphy.cycles` | 单元 | Multitaper spectral estimation |
+| `optimal_span_smooth` | `stratigraphy.smoothing` | 真值 | Smoothing with the span chosen by cross-validation, plus a bootstrap band |
 | `orbital_forcing` | `stratigraphy.cycles` | 单元 | Milankovitch periods and relative amplitudes |
 | `pda` | `stratigraphy.pda` | 真值 | Power decomposition analysis into orbital-period bands (Li et al. 2016) |
+| `plot_digitizer` | `stratigraphy.plot_digitizer` | 真值 | Read a curve off a published figure |
 | `prewhiten` | `stratigraphy.cycles` | 单元 | AR(1) prewhitening of a series |
 | `rasc` | `stratigraphy.biostratigraphy` | 单元 | Ranging ancilla time scaling |
 | `redfit` | `stratigraphy.cycles` | 单元 | REDFIT spectral analysis against an AR(1) null |
+| `remove_part` | `stratigraphy.series_edit` | 真值 | Remove one interval from a record |
 | `remove_peaks` | `stratigraphy.series_tools` | 性质 | Remove peaks above a threshold |
+| `remove_range` | `stratigraphy.series_edit` | 真值 | Keep one interval of a record and drop the rest |
+| `rho1_sedimentation_ratio` | `stratigraphy.dynot` | 真值 | The rho1 ratio: the record's noise power against the chosen baseline |
 | `runs_test` | `stratigraphy.cycles` | 单元 | Runs test for randomness of a series |
 | `sedimentation_rate` | `stratigraphy.correlation` | 单元 | Sedimentation rate from an age model |
 | `sedimentation_rate_age_model` | `stratigraphy.tuning` | 真值 | Turn a sedimentation rate into an age model |
@@ -148,6 +227,7 @@
 | `spectral` | `stratigraphy.spectral_analysis` | 单元 | Periodogram with an AR(1) red-noise test |
 | `spectral_moments` | `stratigraphy.spectral_moments` | 真值 | Spectral moments: the shape of a power spectrum |
 | `spectral_peaks` | `stratigraphy.spectral_analysis` | 单元 | Significant spectral periods |
+| `standardize` | `stratigraphy.transforms` | 真值 | Standardise a series (z-score or min-max) |
 | `stratigraphic_correlation` | `stratigraphy.correlation` | 性质 | Composite standard section correlation |
 | `taner_filter` | `stratigraphy.filtering` | 真值 | Taner weighted band-pass filter (Kodama & Hinnov 2015) |
 | `tanner_hilbert` | `stratigraphy.amplitude_modulation` | 性质 | Tanner-Hilbert transform: envelope and instantaneous phase |

@@ -204,6 +204,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "morans_i",
         "spatial",
         "Global spatial autocorrelation (Moran's I)",
+        data_slots=("values",),
     ),
     _e(
         "grid_interpolate",
@@ -212,6 +213,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "grid_interpolate",
         "spatial",
         "Interpolate scattered sites onto a regular grid",
+        data_slots=("values",),
     ),
     _e(
         "nearest_neighbour",
@@ -515,6 +517,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "insolation_series",
         "time-series",
         "Insolation forcing sampled on a time axis",
+        data_slots=("times_ma",),
     ),
     _e(
         "arma",
@@ -533,6 +536,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "analyze",
         "stratigraphy",
         "Extinction interval estimation",
+        data_slots=("lad_positions",),
     ),
     _e(
         "directional",
@@ -541,6 +545,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "analyze",
         "directional",
         "Circular and axial directional statistics",
+        data_slots=("angles_deg",),
     ),
     _e(
         "isotope_paleotemperature",
@@ -1208,6 +1213,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "astronomical_target_curve",
         "stratigraphy",
         "A synthetic astronomical target curve at one Milankovitch period",
+        data_slots=("times_ma",),
     ),
     _f(
         "milankovitch_periods",
@@ -1215,6 +1221,120 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "milankovitch_periods",
         "stratigraphy",
         "The Milankovitch periods and their nominal amplitudes",
+    ),
+    # ---------------------------------------------------------------------------
+    # The last of the Acycle family: the sedimentary noise model, the length of
+    # day, the LR04 stack, the smoothing and detrending tools, the figure reader
+    # and the batch runner.
+    # ---------------------------------------------------------------------------
+    _f(
+        "dynot",
+        "stratigraphy.dynot",
+        "sedimentary_noise",
+        "stratigraphy",
+        "The sedimentary noise in a record, against an AR(1) or white baseline",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "rho1_sedimentation_ratio",
+        "stratigraphy.dynot",
+        "rho1_sedimentation_ratio",
+        "stratigraphy",
+        "The rho1 ratio: the record's noise power against the chosen baseline",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "lod_dimension",
+        "stratigraphy.lod",
+        "lod_dimension",
+        "stratigraphy",
+        "Length of day through deep time (Laskar et al. 2004)",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "lr04_stack",
+        "stratigraphy.lr04",
+        "load_lr04_stack",
+        "stratigraphy",
+        "The LR04 benthic d18O stack (Lisiecki & Raymo 2005)",
+    ),
+    _f(
+        "optimal_span_smooth",
+        "stratigraphy.smoothing",
+        "optimal_span_smooth",
+        "time-series",
+        "Smoothing with the span chosen by cross-validation, plus a bootstrap band",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "moving_average_smooth",
+        "stratigraphy.smoothing",
+        "moving_average_smooth",
+        "time-series",
+        "Smoothing with a moving average of a given span",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "standardize",
+        "stratigraphy.transforms",
+        "standardize",
+        "time-series",
+        "Standardise a series (z-score or min-max)",
+        data_slots=("values",),
+    ),
+    _f(
+        "log_transform",
+        "stratigraphy.transforms",
+        "log_transform",
+        "time-series",
+        "Log-transform a series",
+        data_slots=("values",),
+    ),
+    _f(
+        "apply_function",
+        "stratigraphy.transforms",
+        "apply_function",
+        "time-series",
+        "Apply a simple function to a series",
+        data_slots=("values",),
+    ),
+    _f(
+        "detrend_series",
+        "stratigraphy.detrending",
+        "detrend_series",
+        "time-series",
+        "Detrend with a mean, a polynomial, a smoother or the EEMD residual",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "remove_part",
+        "stratigraphy.series_edit",
+        "remove_part",
+        "time-series",
+        "Remove one interval from a record",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "remove_range",
+        "stratigraphy.series_edit",
+        "remove_range",
+        "time-series",
+        "Keep one interval of a record and drop the rest",
+        data_slots=("time", "values"),
+    ),
+    _f(
+        "plot_digitizer",
+        "stratigraphy.plot_digitizer",
+        "digitize_curve",
+        "time-series",
+        "Read a curve off a published figure",
+    ),
+    _f(
+        "mini_robot",
+        "stratigraphy.mini_robot",
+        "run_robot",
+        "time-series",
+        "Replay a recorded sequence of analyses over a batch of data",
     ),
 )
 

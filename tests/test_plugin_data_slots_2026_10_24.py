@@ -272,9 +272,120 @@ class TestMatrixAnalysesUnchanged:
                 "fixed_bandwidth_summary",
                 "fixed_count_summary",
                 "insolation",
+                # The last batch: the noise model, the length of day, the
+                # smoothing and detrending tools, the transforms and edits.
+                "dynot",
+                "rho1_sedimentation_ratio",
+                "lod_dimension",
+                "optimal_span_smooth",
+                "moving_average_smooth",
+                "standardize",
+                "log_transform",
+                "apply_function",
+                "detrend_series",
+                "remove_part",
+                "remove_range",
+                # The series-shaped analyses that had been left taking the
+                # whole sheet: the angle vector, the extinction
+                # positions, the spatial values, the time axes.
+                "astronomical_target_curve",
+                "directional",
+                "extinction",
+                "grid_interpolate",
+                "insolation_series",
+                "morans_i",
             }
         )
         assert declared == expected, f"the declared set changed: {sorted(declared ^ expected)}"
+
+    def test_a_declared_slot_is_always_an_array_parameter(self):
+        """A declared slot has to be a parameter the method really has.
+
+        The slot names the column the sheet is cut into, so a name the
+        method does not have would send the column nowhere.
+        """
+        for entry in BUILTIN_ANALYSES:
+            if entry.data_slots is None:
+                continue
+            plugin = BuiltinAnalysisPlugin(entry)
+            target = plugin._resolve()
+            parameters = inspect.signature(getattr(target, entry.method)).parameters
+            for slot in entry.data_slots:
+                assert slot in parameters, f"{entry.name} declares a slot {slot!r} the method does not have"
+                annotation = str(parameters[slot].annotation).lower()
+                assert "ndarray" in annotation, (
+                    f"{entry.name} declares {slot!r} as a data slot, but it is not an array parameter"
+                )
+
+    def test_an_analysis_that_wants_an_array_declares_its_slots(self):
+        """An analysis that takes an array but declares no slot gets the
+        WHOLE sheet -- and a whole sheet is a matrix, not a series.
+
+        That is the bug this file exists for, so the rule is enforced
+        rather than left to whoever adds the next analysis.  An analysis
+        whose first array parameter wants a series has to declare its
+        slots; one that wants a MATRIX keeps taking the sheet, and the
+        names of those are listed here so the exemption is deliberate
+        rather than a gap.
+        """
+        from tests.plugins.test_catalog import KNOWN_UNDRIVABLE
+
+        #: The first array parameter of these is a MATRIX, and the whole
+        #: sheet is what it wants.  Each name is here with a reason.
+        matrix_first = {
+            "data": "a table of observations",
+            "abundances": "abundances of several taxa per sample",
+            "abundance_matrix": "a taxon-by-sample matrix",
+            "presence_matrix": "a presence/absence matrix",
+            "distance_matrix": "a distance matrix",
+            "table": "a contingency or data table",
+            "Y": "the response matrix",
+            "X": "the predictor matrix",
+            "data_a": "the first of two matrices",
+            "data_b": "the second of two matrices",
+            "control": "the control matrix",
+            "block_a": "the first of two blocks",
+            "block_b": "the second of two blocks",
+            "configurations": "a stack of landmark configurations",
+            "aligned_configurations": "a stack of aligned configurations",
+            "procrustes_coords": "coordinates in morphospace",
+            "fad_matrix": "a first-appearance datum matrix",
+            "lad_matrix": "a last-appearance datum matrix",
+            "coordinates": "site coordinates",
+            "coords": "site coordinates",
+            "points": "a set of points",
+            "vectors": "a set of vectors",
+            "source": "the source landmark configuration",
+            "target": "the target landmark configuration",
+            "contour": "a contour's coordinates",
+            "sequences": "a list of sequences",
+            "sequence": "a sequence of facies codes",
+            "efa_coefficients_list": "a list of coefficient vectors",
+            # These three take a MATRIX named "values": the design
+            # matrices of the factorial and the repeated-measures
+            # analyses, and the targets-by-raters matrix of the
+            # intraclass correlation.
+            "values": "a design or measurement matrix (two_way_anova, repeated_measures_anova, intraclass_correlation)",
+        }
+
+        for entry in BUILTIN_ANALYSES:
+            if entry.data_slots is not None:
+                continue
+            if entry.name in KNOWN_UNDRIVABLE:
+                continue
+            plugin = BuiltinAnalysisPlugin(entry)
+            try:
+                target = plugin._resolve()
+                parameters = inspect.signature(getattr(target, entry.method)).parameters
+            except Exception:
+                continue
+            arrays = [name for name, param in parameters.items() if "ndarray" in str(param.annotation).lower()]
+            if not arrays:
+                continue
+            first = arrays[0]
+            assert first in matrix_first, (
+                f"{entry.name} takes the array {first!r} but declares no slots, so it would be handed the whole sheet"
+            )
 
 
 # ---------------------------------------------------------------------------
