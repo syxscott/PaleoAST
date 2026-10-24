@@ -202,6 +202,8 @@ class ParameterSpec:
     pair_widgets: tuple[Any, Any] | None = None
     #: For the ``band_list`` kind, the text box holding "centre:halfwidth, ...".
     band_widget: Any = None
+    #: For the ``point_list`` kind, the text box holding "x,y; x,y; ...".
+    point_widget: Any = None
 
     def value(self) -> Any:
         """Read the widget, or None when the field is blank.
@@ -238,7 +240,23 @@ class ParameterSpec:
         if self.kind == "array":
             # The column number, not the data: the runner turns it into
             # the column itself.
-            return self.column
+            #
+            # The number comes from the SPIN BOX, so the user can choose
+            # the column.  It used to come from ``self.column``, which the
+            # widget builder set to 0 for every array parameter -- so the
+            # spin box was decorative, and every data slot of a
+            # multi-slot analysis ended up on column 0.  The "coherence"
+            # analysis, which wants a time axis and TWO records, was
+            # handed the same column three times.
+            if self.widget is None:
+                return self.column
+            column = int(self.widget.value())  # type: ignore[union-attr]
+            if column < 0:
+                # "-1" means "no column": an optional array parameter the
+                # user left alone, which the analyzer's own default then
+                # decides.
+                return None
+            return column
         if self.kind == "float_pair":
             if self.pair_widgets is None:
                 return None
@@ -267,11 +285,33 @@ class ParameterSpec:
             if not bands:
                 return None
             return tuple(bands)
+        if self.kind == "point_list":
+            if self.point_widget is None:
+                return None
+            text = self.point_widget.text().strip()
+            if not text:
+                if self.default is inspect.Parameter.empty:
+                    raise ValueError(_("this field is required"))
+                return None
+            points: list[tuple[float, float]] = []
+            for chunk in text.split(";"):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                if "," not in chunk:
+                    raise ValueError(f"{chunk!r} is not 'x,y'")
+                x_text, y_text = chunk.split(",", 1)
+                points.append((float(x_text), float(y_text)))
+            if not points:
+                return None
+            return points
         return None
 
 
 def _is_array(annotation: str) -> bool:
-    return "NDArray" in annotation or "ndarray" in annotation
+    # ``npt.ArrayLike`` is an array type too: a module that says it takes
+    # one means it, and the form can fill it with a column.
+    return "NDArray" in annotation or "ndarray" in annotation or "ArrayLike" in annotation
 
 
 def _is_number(value: Any) -> bool:
@@ -464,6 +504,15 @@ def _build_specs(entry: Any, plugin: Any) -> list[ParameterSpec]:
             # A list of (centre, half-width) pairs: the orbital bands
             # the power decomposition runs over.
             spec.kind = "band_list"
+            specs.append(spec)
+            continue
+        if "Sequence[Sequence[float]]" in text:
+            # A list of (x, y) pairs: a control-point path, such as the
+            # lower and upper edges of a filter's passband, which the
+            # user draws as a curve and the form has to accept as text.
+            # The generic array rule below would render this as a COLUMN
+            # SELECTOR, which cannot express a path.
+            spec.kind = "point_list"
             specs.append(spec)
             continue
         if _is_array(base) or "Sequence" in base:
@@ -674,6 +723,7 @@ class AnalysisRunnerDialog(QDialog):
         """One widget per parameter kind."""
         if spec.kind == "int":
             low, high, step = _INT_BOUNDS.get(spec.name, (0, 100000, 1))
+            required = spec.default is inspect.Parameter.empty
             default = spec.default if _is_number(spec.default) else None
             low, high = _widen_to_default(low, high, default)
             box = QSpinBox()
@@ -681,17 +731,32 @@ class AnalysisRunnerDialog(QDialog):
             box.setSingleStep(step)
             box.setValue(int(default) if default is not None else low)
             spec.widget = box
+            if required:
+                # A REQUIRED number is always sent: the analyzer has no
+                # default for it, so leaving the field out would fail the
+                # call.  The "use it" toggle is for the optional ones.
+                return box
             return self._optional_number(spec, box, default)
         if spec.kind == "float":
             low, high, step = _FLOAT_BOUNDS.get(spec.name, (-1e12, 1e12, 0.1))
+            required = spec.default is inspect.Parameter.empty
             default = spec.default if _is_number(spec.default) else None
             low, high = _widen_to_default(low, high, default)
             box = QDoubleSpinBox()
-            box.setDecimals(6)
+            # The spin box rounds to its number of decimals, so a default
+            # smaller than that resolution arrived as ZERO: a tolerance of
+            # 1e-8 became 0.0, and the analysis rejected it as not
+            # positive.  The decimals now follow the default.
+            decimals = 6
+            if default is not None and 0.0 < abs(default) < 1.0:
+                decimals = min(15, max(decimals, int(np.ceil(-np.log10(abs(default)))) + 2))
+            box.setDecimals(decimals)
             box.setRange(low, high)
             box.setSingleStep(step)
             box.setValue(float(default) if default is not None else low)
             spec.widget = box
+            if required:
+                return box
             return self._optional_number(spec, box, default)
         if spec.kind == "bool":
             box = QCheckBox()
@@ -713,17 +778,31 @@ class AnalysisRunnerDialog(QDialog):
             # and the analysis then failed with a TypeError about a
             # missing argument. Eighteen of the catalogued analyses have
             # an array parameter, and none of them could be run.
+            #
+            # The spin box starts on the column the slot implies, and
+            # that column is NOT reset here: resetting it to 0 put every
+            # data slot of a multi-slot analysis on the first column, so
+            # an analysis that wants two records was handed the same
+            # record twice.  "-1" means "no column", which is how an
+            # optional array parameter is left to the analyzer's default.
             box = QSpinBox()
-            box.setRange(0, 100000)
+            box.setRange(-1, 100000)
             box.setSingleStep(1)
-            box.setValue(0)
+            # An OPTIONAL array parameter starts on "no column", so the
+            # analyzer's own default decides.  Handing it the first
+            # column instead put the time axis where a background
+            # spectrum was expected, and the analysis then failed on a
+            # length mismatch -- or, worse, analysed the time axis.
+            if spec.default is None:
+                box.setValue(-1)
+            else:
+                box.setValue(spec.column)
             spec.widget = box
-            spec.column = 0
             holder = QWidget()
             layout = QHBoxLayout(holder)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(box)
-            layout.addWidget(QLabel(_("column of the sheet (0 = the first column)")))
+            layout.addWidget(QLabel(_("column of the sheet (0 = the first column, -1 = none)")))
             layout.addStretch(1)
             return holder
         if spec.kind == "float_pair":
@@ -762,6 +841,20 @@ class AnalysisRunnerDialog(QDialog):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(line)
             layout.addWidget(QLabel(_("centre:half-width for each band")))
+            layout.addStretch(1)
+            return holder
+        if spec.kind == "point_list":
+            # A control-point path, written as "x,y; x,y; ...".
+            line = QLineEdit()
+            if isinstance(spec.default, (tuple, list)):
+                line.setPlaceholderText("; ".join(f"{x:g},{y:g}" for x, y in spec.default))
+            spec.point_widget = line
+            spec.widget = line
+            holder = QWidget()
+            layout = QHBoxLayout(holder)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(line)
+            layout.addWidget(QLabel(_("x,y for each point, separated by semicolons")))
             layout.addStretch(1)
             return holder
         line = QLineEdit()
@@ -884,6 +977,10 @@ class AnalysisRunnerDialog(QDialog):
                 self._output.setPlainText(_("Could not read {0}: {1}").format(spec.name, exc))
                 return
             if spec.kind == "array":
+                if value is None:
+                    # The user left the column unset: the analyzer's own
+                    # default decides.
+                    continue
                 column = self._column_of(sheet, value, spec.name)
                 if column is None:
                     return

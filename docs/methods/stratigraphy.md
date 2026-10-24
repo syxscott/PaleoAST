@@ -69,6 +69,54 @@
   尺度与分布，**变换后再做频谱分析，结论与原序列不可直接比较**。
 - **`remove_part` / `remove_range`（删段/留段）**改变了记录的长度与采样密度，
   **删掉的部分不能用插值补回来**。
+- **`bispectrum` / `bicoherence_significance`（双谱与双相干）**看的是**三元耦合**：
+  频率 `f1`、`f2` 与它们的和 `f1+f2` 上的相位关系。它对**非线性**敏感，
+  是频谱看不到的耦合的探针；代价是**自由度少**，显著性必须用**替代序列**估计。
+- **`recurrence_plot`（递归图）**度量的是**状态是否重复**，不是相关：
+  它的 DET/MDL/LAM 描述的是轨迹在相空间里的重复程度，
+  **必须先说明用的距离度量与半径**，否则数字之间不可比。
+- **`evolutionary_rho1`（演化 ρ1）**给出的是**滑窗内去趋势后的滞后 1 阶自相关**；
+  一段完全线性的趋势去趋势后什么都不剩，模块此时返回 0 而不是噪声比值。
+- **`robust_lomb_scargle`（稳健 AR(1) 背景的 LS 周期图）**的背景是把
+  **被判为周期信号的谱峰剔除后**重新拟合的，因此它的显著性与普通 `spectral`
+  **不可直接比较**；两者的**频带覆盖也必须一致**才谈得上对照。
+- **`swa_background` / `swa_fdr`（SWA 背景与错误发现率）**的背景是为
+  **红噪声**设计的（SWA 是**非参数**方法），白噪声与幂律噪声上不适用；
+  而 p 值要求功率谱的**自由度与 `degrees_of_freedom` 一致**——
+  用普通 LS 周期图（自由度 2）配自由度 8 的判据，**假阳性率会翻倍**。
+  `weedon_periodogram` 给出的是符合该判据的谱。
+- **`weedon_periodogram`**把记录切成互不重叠的段再平均，代价是**分辨率被分段
+  粗化**；它换来的是**逐点可验证的自由度**。
+- **`bayesian_periodogram`（贝叶斯周期图）**给出的是**后验概率**，
+  它**依赖幅度先验**；先验一换，数字就换，**不能与 p 值混用**。
+- **`coco_adaptive` / `coco_crossfit` / `coco_interleaved`**是 COCO 的三种
+  变体：**自适应**在数据上重新估计目标谱，**交叉拟合**把估计与检验分开，
+  **交错**用于有间断的记录。三者的 p 值口径**彼此不同**，不可横向比较。
+- **`frequency_stabilization`（频率稳定）**是**坐标可变的带通**：
+  通带随时间移动，因此它能跟住一个**在漂移**的周期，
+  但**控制点必须落在记录域内且上下界不交叉**。
+- **`sliding_spectral_moments`（滑窗谱矩）**给出的是谱的**形状**
+  （质心、宽度、峰度），不是**有没有周期**；它与 `spectral` 的显著性
+  **互不替代**。
+- **`milankovitch_uncertainty`（米兰科维奇频率的不确定度）**给的是**理论频率
+  与它所在的区间**，不是从记录里测出来的周期；
+  **把实测周期匹配到轨道上时，容差必须显式给出**。
+- **`orbital_frequencies`（9 条主天文频率）**是由**轨道解本身**解算的，
+  不是查表；它的 5 条偏心率组合是**在解上就地拟合**出来的，
+  因此随年龄变化，而 4 条斜率-岁差组合几乎不变。
+  **这两组不要放在同一张图上比较**。
+- **`age_depth_uncertainty`（年龄-深度不确定度）**给出的是**蒙特卡洛模拟出来的
+  带**，不是一个年龄；**采样点越少、外推越远，带越宽**，
+  外推到锚点之外的结果**不应解读**。
+- **`radiocarbon_calibration`（¹⁴C 校准）**的结果**取决于所用的校准曲线**，
+  而**曲线不在本仓库里**；报告结果时**必须写明用的是哪一条曲线、哪一版**。
+- **`tobit_regression`（删失回归）**只在**响应被删失**时才有意义；
+  没有删失时它退化为普通最小二乘，**不要在没有删失时用它**。
+- **`wavelet_coherence`（小波相干）**的相干性**在信号强时会饱和**
+  （R² 在真实周期 ±10% 内只差 0.003），所以**周期要用交叉小波功率读**，
+  不要用相干性的极大值去定位周期。
+  它的相位符号与 `coherence` **相反**（第二条序列滞后时为正），
+  两者**不可混用**。
 
 ## 参考
 
@@ -162,6 +210,7 @@
 |---|---|---|---|
 | `acf` | `stratigraphy.cycles` | 单元 | Autocorrelation function with Bartlett bands |
 | `add_gaps` | `stratigraphy.series_tools` | 性质 | Insert gaps into a record |
+| `age_depth_uncertainty` | `stratigraphy.age_depth_uncertainty` | 真值 | An age-depth model with the band its dating points imply |
 | `age_model` | `stratigraphy.correlation` | 单元 | Depth to age model |
 | `age_scale` | `stratigraphy.tuning` | 真值 | Build an age scale from depth anchors |
 | `amplitude_modulation` | `stratigraphy.amplitude_modulation` | 性质 | Instantaneous amplitude envelope of a record (Tanner-Hilbert) |
@@ -171,69 +220,117 @@
 | `astronomical_target_curve` | `stratigraphy.astronomy` | 真值 | A synthetic astronomical target curve at one Milankovitch period |
 | `autoassociation` | `stratigraphy.cycles` | 单元 | Autoassociation function for cyclostratigraphy |
 | `bandpass_filter` | `stratigraphy.filtering` | 真值 | Band-pass filter between two periods |
+| `bayesian_periodogram` | `stratigraphy.spectral_significance` | 真值 | The probability that a period in a record is real |
+| `bicoherence_significance` | `stratigraphy.bispectrum` | 真值 | How strong the triple coupling has to be to be more than chance |
+| `bispectrum` | `stratigraphy.bispectrum` | 真值 | The bispectrum of a record, and the phase of its triples |
+| `box_cox_transform` | `stratigraphy.boxcox` | 真值 | Box-Cox transform, with the lambda solved for |
 | `change_points` | `stratigraphy.change_points` | 真值 | Bayesian change-point detection (Ruggieri 2013) |
+| `chi_square_confidence_interval` | `stratigraphy.small_tools` | 真值 | The confidence band of a red-noise spectrum |
 | `circular_spectrum` | `stratigraphy.circular_spectrum` | 真值 | The spectrum of an angular variable: its harmonics and mean direction |
 | `clip_values` | `stratigraphy.series_tools` | 性质 | Clip a record to a range |
 | `coco` | `stratigraphy.coco` | 真值 | Correlation coefficient: the most likely sedimentation rate (Li et al. 2018) |
+| `coco_adaptive` | `stratigraphy.coco_advanced` | 真值 | COCO with a target spectrum that adapts to the record |
+| `coco_crossfit` | `stratigraphy.coco_advanced` | 真值 | COCO that estimates and tests on separate halves of the record |
+| `coco_interleaved` | `stratigraphy.coco_advanced` | 真值 | COCO over interleaved short segments, for records with gaps |
+| `coco_orbit_tracking` | `stratigraphy.coco_advanced` | 真值 | The orbital peaks of a COCO result, followed through the record |
+| `coco_spearman` | `stratigraphy.coco_variants` | 真值 | COCO with the rank correlation instead of the Pearson one |
 | `coherence` | `stratigraphy.coherence` | 真值 | Coherence and phase between two records |
 | `coniss` | `stratigraphy.coniss` | 单元 | CONISS constrained cluster analysis |
+| `correlation_confidence_interval` | `stratigraphy.coco_variants` | 真值 | The confidence interval of a correlation coefficient |
+| `cosine_taper` | `stratigraphy.small_tools` | 真值 | The cosine taper that takes the edge off a record |
 | `cross_correlation` | `stratigraphy.cycles` | 单元 | Cross-correlation with a signed lag axis |
+| `date_to_day_number` | `stratigraphy.small_tools` | 真值 | A calendar date as a day number |
+| `depth_to_time` | `stratigraphy.depth_time` | 真值 | Depth to age, through a set of age anchors |
 | `derivative` | `stratigraphy.series_tools` | 性质 | Numerical derivative of a record |
+| `detrend_polynomial_pp` | `stratigraphy.small_tools` | 真值 | A polynomial baseline fitted in a sliding window |
 | `detrend_series` | `stratigraphy.detrending` | 真值 | Detrend with a mean, a polynomial, a smoother or the EEMD residual |
 | `directional` | `stratigraphy.directional` | 单元 | Circular and axial directional statistics |
+| `dispersion_statistic` | `stratigraphy.dispersion` | 真值 | How far a set of counts departs from what was expected |
+| `domain_transform` | `stratigraphy.small_tools` | 真值 | The analytic signal of a record, or its cumulative integral |
 | `dynamic_filter` | `stratigraphy.dynamic_filter` | 真值 | Adaptive filter: the noise level decides how hard each point is smoothed |
 | `dynot` | `stratigraphy.dynot` | 真值 | The sedimentary noise in a record, against an AR(1) or white baseline |
 | `ecoco` | `stratigraphy.coco` | 真值 | Evolutionary correlation coefficient: a sedimentation rate that changes |
+| `ecoco_row_summary` | `stratigraphy.coco_variants` | 真值 | The eCOCO grid, summarised window by window |
 | `eemd` | `stratigraphy.emd` | 真值 | Ensemble empirical mode decomposition |
 | `emd` | `stratigraphy.emd` | 真值 | Empirical mode decomposition |
 | `estimate_ar1_rho` | `stratigraphy.spectral_moments` | 真值 | The AR(1) coefficient of a record |
 | `etime_opt` | `stratigraphy.tuning` | 真值 | eTimeOpt astrochronological tuning with a changing sedimentation rate (Meyers 2019) |
 | `evolutionary_lomb_scargle` | `stratigraphy.evolutionary` | 性质 | Sliding-window Lomb-Scargle spectrum for unevenly spaced records |
 | `evolutionary_multitaper` | `stratigraphy.evolutionary` | 性质 | Sliding-window multitaper spectrum |
+| `evolutionary_rho1` | `stratigraphy.evolutionary_rho` | 真值 | The AR(1) coefficient of a record, tracked through a sliding window |
 | `evolutionary_spectrum` | `stratigraphy.evolutionary` | 性质 | Sliding-window spectrum: how the periodic content moves through a record |
 | `extinction` | `stratigraphy.extinction` | 单元 | Extinction interval estimation |
+| `find_n_peaks` | `stratigraphy.small_tools` | 真值 | The positions of the local maxima of a record |
+| `fixed_bandwidth_moving_average` | `stratigraphy.small_tools` | 真值 | A moving average over a fixed span of time rather than of samples |
 | `fixed_bandwidth_summary` | `stratigraphy.moving_summary` | 真值 | Mean, spread and extremes over a window of fixed time width |
 | `fixed_count_summary` | `stratigraphy.moving_summary` | 真值 | Mean, spread and extremes over a window of fixed sample count |
+| `fixed_target_weights` | `stratigraphy.coco_advanced` | 真值 | The weights a fixed target spectrum gives its periods |
+| `frequency_stabilization` | `stratigraphy.frequency_stabilization` | 真值 | A band-pass filter whose passband follows a drifting cycle |
 | `gaussian_filter` | `stratigraphy.filtering` | 真值 | Gaussian low-pass filter |
+| `gaussian_matched_filter` | `stratigraphy.small_tools` | 真值 | Where a known shape best fits a record |
 | `generate_signal` | `stratigraphy.signal_generator` | 性质 | Synthesise a signal from components plus optional noise |
 | `insolation` | `stratigraphy.astronomy` | 真值 | Daily-mean insolation at a latitude, from the astronomical solution |
 | `insolation_series` | `stratigraphy.cycles` | 单元 | Insolation forcing sampled on a time axis |
 | `interpolate_series` | `stratigraphy.series_tools` | 性质 | Interpolate a record onto a new time axis |
+| `inverse_percentile` | `stratigraphy.inverse_percentile` | 真值 | The value below which a given fraction of a sample falls |
 | `isotope_paleotemperature` | `stratigraphy.isotope_analysis` | 单元 | Stable isotope paleothermometry |
+| `lead_lag_rmse` | `stratigraphy.lead_lag` | 真值 | The lag that makes two records agree best, by least squares |
 | `lod_dimension` | `stratigraphy.lod` | 真值 | Length of day through deep time (Laskar et al. 2004) |
 | `log_transform` | `stratigraphy.transforms` | 真值 | Log-transform a series |
 | `lr04_stack` | `stratigraphy.lr04` | 真值 | The LR04 benthic d18O stack (Lisiecki & Raymo 2005) |
 | `mann_kendall` | `stratigraphy.cycles` | 单元 | Mann-Kendall trend test with Sen's slope |
 | `markov` | `stratigraphy.markov` | 单元 | Markov chain state transitions |
 | `milankovitch_periods` | `stratigraphy.astronomy` | 真值 | The Milankovitch periods and their nominal amplitudes |
+| `milankovitch_uncertainty` | `stratigraphy.milankovitch_uncertainty` | 真值 | The orbital frequencies at an age, with the interval they lie in |
 | `mini_robot` | `stratigraphy.mini_robot` | 真值 | Replay a recorded sequence of analyses over a batch of data |
 | `minimum_rho` | `stratigraphy.spectral_moments` | 真值 | The smallest AR(1) coefficient that explains a record |
 | `moving_average_smooth` | `stratigraphy.smoothing` | 真值 | Smoothing with a moving average of a given span |
+| `moving_median` | `stratigraphy.moving_median` | 真值 | Moving median filter |
 | `multitaper` | `stratigraphy.cycles` | 单元 | Multitaper spectral estimation |
+| `multitaper_taper_count` | `stratigraphy.mtm_tuning` | 真值 | The number of tapers a multitaper estimate should use |
+| `num_orbits` | `stratigraphy.coco_advanced` | 真值 | How many orbital cycles a record can hold |
 | `optimal_span_smooth` | `stratigraphy.smoothing` | 真值 | Smoothing with the span chosen by cross-validation, plus a bootstrap band |
+| `orbit_groups` | `stratigraphy.coco_advanced` | 真值 | The orbital periods, grouped into the orbits they belong to |
 | `orbital_forcing` | `stratigraphy.cycles` | 单元 | Milankovitch periods and relative amplitudes |
+| `orbital_frequencies` | `stratigraphy.orbital_frequencies` | 真值 | The nine principal orbital frequencies at an age |
+| `pad_series` | `stratigraphy.small_tools` | 真值 | A record padded out to a given length |
 | `pda` | `stratigraphy.pda` | 真值 | Power decomposition analysis into orbital-period bands (Li et al. 2016) |
+| `phase_diagram` | `stratigraphy.small_tools` | 真值 | The trajectory of a record in the complex plane |
 | `plot_digitizer` | `stratigraphy.plot_digitizer` | 真值 | Read a curve off a published figure |
 | `prewhiten` | `stratigraphy.cycles` | 单元 | AR(1) prewhitening of a series |
+| `radiocarbon_calibration` | `stratigraphy.radiocarbon` | 真值 | A radiocarbon determination turned into a calendar age |
+| `random_phase_resample` | `stratigraphy.small_tools` | 真值 | A surrogate of a record, with its phases randomised |
 | `rasc` | `stratigraphy.biostratigraphy` | 单元 | Ranging ancilla time scaling |
+| `recurrence_plot` | `stratigraphy.recurrence` | 真值 | The recurrence plot of a record, and the numbers read off it |
 | `redfit` | `stratigraphy.cycles` | 单元 | REDFIT spectral analysis against an AR(1) null |
 | `remove_part` | `stratigraphy.series_edit` | 真值 | Remove one interval from a record |
 | `remove_peaks` | `stratigraphy.series_tools` | 性质 | Remove peaks above a threshold |
 | `remove_range` | `stratigraphy.series_edit` | 真值 | Keep one interval of a record and drop the rest |
 | `rho1_sedimentation_ratio` | `stratigraphy.dynot` | 真值 | The rho1 ratio: the record's noise power against the chosen baseline |
+| `robust_linear_fit` | `stratigraphy.small_tools` | 真值 | A straight line through points that include outliers |
+| `robust_lomb_scargle` | `stratigraphy.robust_lomb` | 真值 | A Lomb-Scargle spectrum that a red-noise background cannot explain away |
 | `runs_test` | `stratigraphy.cycles` | 单元 | Runs test for randomness of a series |
 | `sedimentation_rate` | `stratigraphy.correlation` | 单元 | Sedimentation rate from an age model |
 | `sedimentation_rate_age_model` | `stratigraphy.tuning` | 真值 | Turn a sedimentation rate into an age model |
 | `select_intervals` | `stratigraphy.series_tools` | 性质 | Take the parts of a record that fall inside given intervals |
+| `sliding_spectral_moments` | `stratigraphy.sliding_spectral_moments` | 真值 | The shape of the spectrum, measured in a sliding window |
 | `sort_unique` | `stratigraphy.series_tools` | 性质 | Sort a column and drop its duplicates |
 | `spectral` | `stratigraphy.spectral_analysis` | 单元 | Periodogram with an AR(1) red-noise test |
 | `spectral_moments` | `stratigraphy.spectral_moments` | 真值 | Spectral moments: the shape of a power spectrum |
 | `spectral_peaks` | `stratigraphy.spectral_analysis` | 单元 | Significant spectral periods |
 | `standardize` | `stratigraphy.transforms` | 真值 | Standardise a series (z-score or min-max) |
 | `stratigraphic_correlation` | `stratigraphy.correlation` | 性质 | Composite standard section correlation |
+| `swa_background` | `stratigraphy.spectral_significance` | 真值 | The smoothed-window-average background of a spectrum |
+| `swa_fdr` | `stratigraphy.spectral_significance` | 真值 | Which peaks of a spectrum survive the false-discovery rate |
 | `taner_filter` | `stratigraphy.filtering` | 真值 | Taner weighted band-pass filter (Kodama & Hinnov 2015) |
 | `tanner_hilbert` | `stratigraphy.amplitude_modulation` | 性质 | Tanner-Hilbert transform: envelope and instantaneous phase |
+| `test_uniform_sampling` | `stratigraphy.sampling` | 真值 | Whether a record was sampled at even intervals |
 | `time_opt` | `stratigraphy.tuning` | 真值 | TimeOpt astrochronological tuning (Meyers 2015) |
+| `tobit_regression` | `stratigraphy.small_tools` | 真值 | A regression with a censored response |
+| `tuned_multitaper_spectrum` | `stratigraphy.mtm_tuning` | 真值 | Multitaper spectrum with the tapers and the degrees of freedom chosen |
 | `ua` | `stratigraphy.biostratigraphy` | 单元 | Unitary associations |
 | `wavelet` | `stratigraphy.spectral_analysis` | 单元 | Continuous wavelet transform |
+| `wavelet_coherence` | `stratigraphy.wavelet_coherence` | 真值 | The wavelet coherence between two records, and its phase |
+| `wavelet_smoothing` | `stratigraphy.small_tools` | 真值 | A record denoised in the wavelet domain |
+| `weedon_periodogram` | `stratigraphy.spectral_significance` | 真值 | A periodogram with the degrees of freedom the false-discovery rate needs |
 <!-- matrix:end -->

@@ -52,7 +52,8 @@ def data_slot_name(signature: inspect.Signature) -> str | None:
             return name
         annotation = param.annotation
         text = annotation if isinstance(annotation, str) else str(annotation)
-        if "ndarray" in text.lower():
+        lowered = text.lower()
+        if "ndarray" in lowered or "arraylike" in lowered:
             return name
     return None
 

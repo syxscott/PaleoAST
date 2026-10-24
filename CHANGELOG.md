@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fifty more analyses from the Acycle family** (`stratigraphy/`, `stats/`),
+  taking the catalogue from 165 analyses to 215.  They came out of a
+  line-by-line audit of all 335 of Acycle's `.m` files, which found that
+  the first pass had missed a whole directory (`code/package/`, 94 files --
+  the modern methods) and had left four real algorithm gaps and three
+  partial ones open.  All seven are now closed:
+  - **The bispectrum and its surrogate threshold**
+    (`stratigraphy/bispectrum.py`): the triple coupling `f1`, `f2`,
+    `f1+f2`, which a spectrum cannot see, with the significance from
+    IAAFT surrogates.
+  - **The spectral background and the false-discovery rate**
+    (`stratigraphy/spectral_significance.py`): the smoothed-window-average
+    background of Weedon et al., the Benjamini-Hochberg procedure over it,
+    and a Bayesian periodogram -- with `weedon_periodogram`, a periodogram
+    whose degrees of freedom the test can actually use.
+  - **The recurrence plot** (`stratigraphy/recurrence.py`): DET, MDL and
+    LAM, read off a recurrence matrix, with the Theiler window and the
+    choice of metric stated rather than assumed.
+  - **The AR(1) coefficient of a record and the spectrum that survives
+    it** (`stratigraphy/evolutionary_rho.py`,
+    `stratigraphy/robust_lomb.py`): rho1 tracked through a sliding window,
+    and a Lomb-Scargle spectrum whose red-noise background has the
+    periodic peaks taken out of it before it is fitted.
+  - **The wavelet coherence between two records**
+    (`stratigraphy/wavelet_coherence.py`): the cross wavelet transform,
+    the coherence and its Monte-Carlo significance, and the wavelet
+    significance of a single record.
+  - **The sliding spectrum and the rate it gives back**
+    (`stratigraphy/sliding_spectral_moments.py`): the shape of the
+    spectrum measured in a window, the sedimentation rate inferred from it
+    (Harker et al. 2013), and the age model that rate implies.
+  - **The advanced modes of COCO** (`stratigraphy/coco_advanced.py`,
+    `stratigraphy/coco_variants.py`): the adaptive, cross-fit and
+    interleaved variants, the orbit tracking and counting, and the
+    rank-correlation variant with a confidence interval.
+  - **The frequency band that follows a drifting cycle**
+    (`stratigraphy/frequency_stabilization.py`): the coordinate-varying
+    Gaussian band-pass of Acycle's "frequency stabilization", which is a
+    different algorithm from the segment-SNR dynamic filter that was
+    already here.
+  - **The Milankovitch frequencies and their uncertainty**
+    (`stratigraphy/milankovitch_uncertainty.py`,
+    `stratigraphy/orbital_frequencies.py`): Waltham's orbital solution,
+    the intervals the frequencies lie in, and the nine principal orbital
+    frequencies at an age.
+  - **The age-depth model with its band**
+    (`stratigraphy/age_depth_uncertainty.py`): the Monte-Carlo age-depth
+    uncertainty model of Lougheed & Obrochta's *Undatable*.
+  - **The radiocarbon calibration** (`stratigraphy/radiocarbon.py`):
+    MatCal's Bayesian calibration of a 14C determination, with the
+    reservoir age and Delta R applied.  The calibration curve is the
+    caller's to supply -- IntCal is not bundled.
+  - **The k-sample Anderson-Darling test**
+    (`stats/anderson_darling.py`): the omnibus test of whether several
+    samples come from one population, checked against the worked example
+    published with the method (Scholz & Stephens 1987): all eight
+    published numbers are reproduced, the mean of the statistic under the
+    null, its standard deviation, both statistics and both probabilities.
+  - **Fourteen small tools** (`stratigraphy/small_tools.py`): the domain
+    transform, the Gaussian matched filter, peak finding, the date
+    conversion, six kinds of padding, the robust straight line, the
+    wavelet smoother, the cosine taper, the phase diagram, the random
+    phase resampler, the fixed-bandwidth moving average, the sliding
+    polynomial baseline, the chi-square band of a red-noise spectrum and
+    the Tobit regression.
+
+  As before, every one of them was written from the published method
+  rather than from Acycle's source: Acycle is GPL, and a translation
+  would make this package GPL.  Where a method's own paper and Acycle's
+  implementation disagree, the docstring says which was followed and why.
+
 - **Thirty-six analyses from the cyclostratigraphy and astrochronology
   family** (`stratigraphy/`) -- the gap between a *measured record* and an
   *age scale*.  The catalogue goes from 113 analyses to 149.  They were
@@ -323,6 +394,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moment it is changed.
 
 ### Fixed
+- **The analysis runner gave every data slot the first column of the
+  sheet.**  A multi-slot analysis -- one that wants a time axis and two
+  records, say -- was handed the same column once per slot, so the
+  "coherence" analysis compared a record with itself and the
+  "lead-lag" analysis compared a series with itself.  The column picker
+  existed but its value was never read, and building the widget for a
+  slot reset the column it had been given.  Both are fixed, and the
+  column of a slot can now be changed from the form.
+- **An optional array parameter was handed the time axis.**  A parameter
+  such as the background spectrum of a multitaper estimate defaults to
+  "none", but the form filled it with the sheet's first column -- the
+  time axis -- and the analysis then failed on a length mismatch, or
+  analysed the time axis.  An optional array now starts on "no column".
+- **The robust Lomb-Scargle covered only a fifth of the band it should
+  have.**  Its frequency grid was five times finer than the record's own
+  resolution, which sounds like a virtue and was not: the grid stopped
+  at a fifth of the way to Nyquist, so on a three-million-year record
+  sampled every 5 kyr the 21 kyr cycle -- the one the whole method
+  exists to find -- was never evaluated.  The plain Lomb-Scargle of the
+  same record found it at 21.008 kyr; the robust one reported 34.169.
+  The grid now spans the band the plain one spans, and the over-sampling
+  is an option rather than a default.
+- **The false-discovery-rate test assumed eight degrees of freedom
+  without saying so.**  The power spectrum a caller is most likely to
+  have is the plain Lomb-Scargle one, whose ordinates have two, not
+  eight: the p-values came out too small and the realised false
+  discovery rate on red noise was a quarter rather than the nominal
+  five per cent.  The degrees of freedom are now an explicit parameter,
+  the contract is written down, and `weedon_periodogram` produces a
+  spectrum the test can be used on.
+- **The evolutionary rho1 detrended on the wrong basis.**  The basis was
+  half a sample off, which changed the energy term of the least-squares
+  fit and made it remove about three per cent less of the trend than it
+  should.  A perfectly linear record therefore kept a slope, and a
+  slope's lag-1 autocorrelation is nearly one: a straight line was
+  reported as very strong red noise.  The basis is now centred, the
+  computation matches Acycle's own to machine precision, and a window
+  with nothing left in it reports zero rather than a ratio of two
+  round-off quantities.
+- **The form never sent a required number.**  A parameter the signature
+  calls required was rendered with the same "use it" checkbox as an
+  optional one, and the checkbox was off, so the value was never sent and
+  the call failed on a missing argument.  A required number is now always
+  sent; the checkbox stays for the optional ones, where it means "leave the
+  analyzer's own default alone".
+- **A small default was rounded to zero.**  The numeric field had six
+  decimal places, so a tolerance of 1e-8 arrived as 0.0 and the analysis
+  rejected it as not positive.  The number of places now follows the
+  default.
+- **The domain transform was implemented twice.**  `inverse_percentile`
+  carried a copy of Acycle's cumulative transform and `small_tools`
+  carries the same one together with the analytic-signal branch; the
+  package could export only one of them.  The duplicate is gone.
 - **The generic analysis runner no longer hands a whole spreadsheet to an
   analysis that wants a series** (`plugins/base.py`, `plugins/catalog.py`,
   `views/analysis_runner.py`) -- the runner's contract was "the sheet goes

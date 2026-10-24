@@ -483,6 +483,11 @@ KNOWN_UNDRIVABLE: frozenset[str] = frozenset(
         "markov",
         "dtw",
         "eigenshape",
+        # This one takes an eCOCO GRID -- the output of another analysis --
+        # rather than a table: it picks the strongest peaks out of a grid
+        # that the correlation-coefficient method already computed.  A
+        # spreadsheet column cannot be a grid.
+        "significant_peaks",
     }
 )
 

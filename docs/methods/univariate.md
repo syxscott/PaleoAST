@@ -52,6 +52,13 @@
 - **`two_way_anova` 用的是 Type I（顺序）分解**，与 R 的 `aov(y ~ a*b)` 一致。
   平衡设计下 Type I / II / III 的平方和相同，对照看不出到底算了哪一种，
   所以交叉验证特意**同时用了不平衡设计**（格内 5/4/3/6）——那里三种分解才分得开。
+- **`anderson_darling_ksample`（k 样本 Anderson-Darling）**是**综合检验**：
+  它检验的是"这几组是否来自**同一个**总体"，因此对**均值相同但离散度不同**
+  也有功效——这是 Kruskal-Wallis 做不到的。
+  它是**秩检验**（只用秩，不假设分布形状），但**零假设下的统计量右尾很重**，
+  所以**不能**用"标准化统计量超过 3 就显著"这种正态式的判据；
+  报告结论请用模块给出的 p 值。
+  校正并列值与不校正并列值给出**两个**统计量，**必须说明用的是哪一个**。
 - **`brunner_munzel` 的方差与 `lawstat::brunner.munzel.test` 相差恰好一个有限样本
   修正项** `S1·S2/(m·n·(m−1)·(n−1))`，别的什么都不差，所以交叉验证写的是一条
   **精确关系**而不是"误差在百分之几以内"。两边**符号约定相反**：R 报
@@ -124,6 +131,7 @@
 <!-- matrix:start -->
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
+| `anderson_darling_ksample` | `stats.anderson_darling` | 真值 | Anderson-Darling test of whether several samples share one population |
 | `brunner_munzel` | `stats.univariate_menu` | R + 性质 | Brunner-Munzel test for stochastic equality of two samples |
 | `cochran_mantel_haenszel` | `stats.univariate_menu` | R + 性质 | Cochran-Mantel-Haenszel test on a 2x2 table of four counts |
 | `contingency_chi_square` | `stats.design_tests` | R + 性质 | Contingency table chi-square with Cramer's V |

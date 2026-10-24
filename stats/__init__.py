@@ -16,6 +16,7 @@ Author: PaleoAST Development Team
 version: 1.1.0
 """
 
+from .anderson_darling import AndersonDarlingKResult, anderson_darling_ksample
 from .anosim import ANOSIMAnalyzer, ANOSIMResult
 from .distance_metrics import DistanceMatrixResult, compute_distance_matrix
 from .geometry import DisparityResult, GeometryAnalyzer, MSTResult
@@ -36,6 +37,7 @@ __all__ = [
     "ANOSIMAnalyzer",
     "ANOSIMResult",
     "AncestralStateResult",
+    "AndersonDarlingKResult",
     "ContrastResult",
     "DisparityResult",
     "DistanceMatrixResult",
@@ -54,6 +56,7 @@ __all__ = [
     "PhylogeneticSignalResult",
     "ProcDLMResult",
     "ProcDLMTerm",
+    "anderson_darling_ksample",
     "compute_distance_matrix",
     "procD_lm",
 ]

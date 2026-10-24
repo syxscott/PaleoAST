@@ -11,14 +11,14 @@ What each column means:
 - **unit** -- returns the expected value on a chosen example.
 
 ```
-analyses:            165
-  compared with R:    29  (18%)   EXACT -- declared per file
-  golden reference:   44  (27%)   inferred
-  property test:      43  (26%)   inferred
-  unit test:         136  (82%)   inferred
+analyses:            215
+  compared with R:    29  (13%)   EXACT -- declared per file
+  golden reference:   94  (44%)   inferred
+  property test:      43  (20%)   inferred
+  unit test:         133  (62%)   inferred
   no test at all:      0  (0%)   inferred
-  R + (gold|prop):    19  (12%)
-  UNIT TEST ONLY:     71  (43%)   <- the gap (lower bound)
+  R + (gold|prop):    19  (9%)
+  UNIT TEST ONLY:     71  (33%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -28,7 +28,7 @@ there would let the gap be declared closed on a false positive.
 category                 n    R    thin
 clustering               3    0       0
 directional              1    0       1
-distribution             2    0       2
+distribution             3    0       2
 diversity               14    1      13
 group-comparison         6    1       5
 growth                   2    0       2
@@ -37,8 +37,8 @@ morphometrics            8    1       5
 ordination               7    1       4
 plot                    20    9      11
 spatial                  9    0       4
-stratigraphy            21    0       6
-time-series             54    0      16
+stratigraphy            38    0       6
+time-series             86    0      16
 univariate              16   16       0
 ```
 
@@ -151,23 +151,24 @@ univariate              16   16       0
 | `proportion_test` | univariate | `stats.univariate_menu` | x |  | x | x |
 | `ks_2samp` | distribution | `stats.distribution_menu` |  |  |  | x |
 | `epps_singleton` | distribution | `stats.distribution_menu` |  |  |  | x |
+| `anderson_darling_ksample` | distribution | `stats.anderson_darling` |  | x |  | x |
 | `sqs_subsample` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `sample_coverage` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `sample_rarefaction_tao` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_profile` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_t_test` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_permutation_test` | diversity | `ecology.diversity_menu` |  |  |  | x |
-| `evolutionary_spectrum` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
-| `evolutionary_lomb_scargle` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
-| `evolutionary_multitaper` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
-| `amplitude_modulation` | time-series | `stratigraphy.amplitude_modulation` |  |  | x | x |
-| `tanner_hilbert` | time-series | `stratigraphy.amplitude_modulation` |  |  | x | x |
+| `evolutionary_spectrum` | time-series | `stratigraphy.evolutionary` |  |  | x |  |
+| `evolutionary_lomb_scargle` | time-series | `stratigraphy.evolutionary` |  |  | x |  |
+| `evolutionary_multitaper` | time-series | `stratigraphy.evolutionary` |  |  | x |  |
+| `amplitude_modulation` | time-series | `stratigraphy.amplitude_modulation` |  |  | x |  |
+| `tanner_hilbert` | time-series | `stratigraphy.amplitude_modulation` |  |  | x |  |
 | `gaussian_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
 | `taner_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
 | `bandpass_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
 | `change_points` | time-series | `stratigraphy.change_points` |  | x |  |  |
-| `emd` | time-series | `stratigraphy.emd` |  | x |  | x |
-| `eemd` | time-series | `stratigraphy.emd` |  | x |  | x |
+| `emd` | time-series | `stratigraphy.emd` |  | x |  |  |
+| `eemd` | time-series | `stratigraphy.emd` |  | x |  |  |
 | `pda` | time-series | `stratigraphy.pda` |  | x |  |  |
 | `interpolate_series` | time-series | `stratigraphy.series_tools` |  |  | x |  |
 | `select_intervals` | time-series | `stratigraphy.series_tools` |  |  | x |  |
@@ -184,9 +185,9 @@ univariate              16   16       0
 | `age_scale` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
 | `sedimentation_rate_age_model` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
 | `spectral_moments` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
-| `estimate_ar1_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
-| `minimum_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
-| `dynamic_filter` | time-series | `stratigraphy.dynamic_filter` |  | x |  | x |
+| `estimate_ar1_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  |  |
+| `minimum_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  |  |
+| `dynamic_filter` | time-series | `stratigraphy.dynamic_filter` |  | x |  |  |
 | `fixed_bandwidth_summary` | time-series | `stratigraphy.moving_summary` |  | x |  |  |
 | `fixed_count_summary` | time-series | `stratigraphy.moving_summary` |  | x |  |  |
 | `astronomical_solution` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
@@ -194,17 +195,66 @@ univariate              16   16       0
 | `astronomical_target_curve` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `milankovitch_periods` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `coherence` | time-series | `stratigraphy.coherence` |  | x |  | x |
-| `circular_spectrum` | time-series | `stratigraphy.circular_spectrum` |  | x |  | x |
+| `bispectrum` | time-series | `stratigraphy.bispectrum` |  | x |  | x |
+| `bicoherence_significance` | time-series | `stratigraphy.bispectrum` |  | x |  | x |
+| `evolutionary_rho1` | time-series | `stratigraphy.evolutionary_rho` |  | x |  | x |
+| `robust_lomb_scargle` | time-series | `stratigraphy.robust_lomb` |  | x |  | x |
+| `recurrence_plot` | time-series | `stratigraphy.recurrence` |  | x |  | x |
+| `age_depth_uncertainty` | stratigraphy | `stratigraphy.age_depth_uncertainty` |  | x |  |  |
+| `coco_spearman` | stratigraphy | `stratigraphy.coco_variants` |  | x |  |  |
+| `correlation_confidence_interval` | stratigraphy | `stratigraphy.coco_variants` |  | x |  |  |
+| `ecoco_row_summary` | stratigraphy | `stratigraphy.coco_variants` |  | x |  |  |
+| `orbital_frequencies` | stratigraphy | `stratigraphy.orbital_frequencies` |  | x |  | x |
+| `radiocarbon_calibration` | stratigraphy | `stratigraphy.radiocarbon` |  | x |  | x |
+| `wavelet_coherence` | time-series | `stratigraphy.wavelet_coherence` |  | x |  | x |
+| `chi_square_confidence_interval` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `cosine_taper` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `date_to_day_number` | stratigraphy | `stratigraphy.small_tools` |  | x |  |  |
+| `detrend_polynomial_pp` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `domain_transform` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `find_n_peaks` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `fixed_bandwidth_moving_average` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `gaussian_matched_filter` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `pad_series` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `phase_diagram` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `random_phase_resample` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `robust_linear_fit` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `tobit_regression` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `wavelet_smoothing` | time-series | `stratigraphy.small_tools` |  | x |  |  |
+| `weedon_periodogram` | time-series | `stratigraphy.spectral_significance` |  | x |  |  |
+| `swa_background` | time-series | `stratigraphy.spectral_significance` |  | x |  |  |
+| `swa_fdr` | time-series | `stratigraphy.spectral_significance` |  | x |  |  |
+| `bayesian_periodogram` | time-series | `stratigraphy.spectral_significance` |  | x |  |  |
+| `box_cox_transform` | time-series | `stratigraphy.boxcox` |  | x |  |  |
+| `depth_to_time` | stratigraphy | `stratigraphy.depth_time` |  | x |  |  |
+| `dispersion_statistic` | time-series | `stratigraphy.dispersion` |  | x |  | x |
+| `inverse_percentile` | time-series | `stratigraphy.inverse_percentile` |  | x |  | x |
+| `lead_lag_rmse` | time-series | `stratigraphy.lead_lag` |  | x |  | x |
+| `moving_median` | time-series | `stratigraphy.moving_median` |  | x |  | x |
+| `multitaper_taper_count` | time-series | `stratigraphy.mtm_tuning` |  | x |  |  |
+| `tuned_multitaper_spectrum` | time-series | `stratigraphy.mtm_tuning` |  | x |  |  |
+| `test_uniform_sampling` | time-series | `stratigraphy.sampling` |  | x |  | x |
+| `coco_adaptive` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `coco_crossfit` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `coco_interleaved` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `coco_orbit_tracking` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `fixed_target_weights` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `num_orbits` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `orbit_groups` | stratigraphy | `stratigraphy.coco_advanced` |  | x |  |  |
+| `sliding_spectral_moments` | time-series | `stratigraphy.sliding_spectral_moments` |  | x |  | x |
+| `frequency_stabilization` | stratigraphy | `stratigraphy.frequency_stabilization` |  | x |  |  |
+| `milankovitch_uncertainty` | stratigraphy | `stratigraphy.milankovitch_uncertainty` |  | x |  | x |
+| `circular_spectrum` | time-series | `stratigraphy.circular_spectrum` |  | x |  |  |
 | `dynot` | stratigraphy | `stratigraphy.dynot` |  | x |  |  |
-| `rho1_sedimentation_ratio` | stratigraphy | `stratigraphy.dynot` |  | x |  | x |
-| `lod_dimension` | stratigraphy | `stratigraphy.lod` |  | x |  | x |
+| `rho1_sedimentation_ratio` | stratigraphy | `stratigraphy.dynot` |  | x |  |  |
+| `lod_dimension` | stratigraphy | `stratigraphy.lod` |  | x |  |  |
 | `lr04_stack` | stratigraphy | `stratigraphy.lr04` |  | x |  |  |
-| `optimal_span_smooth` | time-series | `stratigraphy.smoothing` |  | x |  | x |
-| `moving_average_smooth` | time-series | `stratigraphy.smoothing` |  | x |  | x |
-| `standardize` | time-series | `stratigraphy.transforms` |  | x |  | x |
-| `log_transform` | time-series | `stratigraphy.transforms` |  | x |  | x |
-| `apply_function` | time-series | `stratigraphy.transforms` |  | x |  | x |
-| `detrend_series` | time-series | `stratigraphy.detrending` |  | x |  | x |
+| `optimal_span_smooth` | time-series | `stratigraphy.smoothing` |  | x |  |  |
+| `moving_average_smooth` | time-series | `stratigraphy.smoothing` |  | x |  |  |
+| `standardize` | time-series | `stratigraphy.transforms` |  | x |  |  |
+| `log_transform` | time-series | `stratigraphy.transforms` |  | x |  |  |
+| `apply_function` | time-series | `stratigraphy.transforms` |  | x |  |  |
+| `detrend_series` | time-series | `stratigraphy.detrending` |  | x |  |  |
 | `remove_part` | time-series | `stratigraphy.series_edit` |  | x |  |  |
 | `remove_range` | time-series | `stratigraphy.series_edit` |  | x |  |  |
 | `plot_digitizer` | time-series | `stratigraphy.plot_digitizer` |  | x |  |  |

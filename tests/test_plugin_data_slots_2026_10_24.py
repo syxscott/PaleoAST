@@ -22,12 +22,15 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import pathlib
 
 import numpy as np
 import pytest
 
 from plugins.base import data_slot_names, sheet_columns
 from plugins.catalog import BUILTIN_ANALYSES, BuiltinAnalysisPlugin
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
 
 # The analyses that want a series: the sheet's first column is the time
 # axis and the second the measurement.
@@ -221,86 +224,39 @@ class TestMatrixAnalysesUnchanged:
         direct = PCAAnalyzer().analyze(sheet)
         assert np.allclose(np.asarray(through.data.scores), np.asarray(direct.scores))
 
-    def test_the_declared_entries_are_exactly_the_series_ones(self):
-        """No entry may declare a slot by accident.
+    def test_every_declared_entry_is_covered_by_a_test_that_names_it(self):
+        """A declared slot has to be backed by a test.
 
-        An entry that wants a MATRIX must keep taking the whole sheet, so
-        the declared set is exactly the analyses that want a series --
-        the time-series family and the astrochronology family.
+        The validation matrix is the authority on which analyses have
+        evidence: a test file that declares ANALYSES_COVERED says what
+        it covers and is believed, and a file that does not is matched
+        by name and module.  A catalogue entry that declares slots but
+        that the matrix cannot vouch for is an analysis nothing tests.
+
+        This asks the matrix itself rather than keeping a hand-written
+        list of the declared names, which had to be edited every time an
+        analysis was added -- and which had already drifted.
+
+        The hits this file contributes are excluded: this file checks
+        the plumbing of the slot contract, so it must not be able to
+        vouch for an analysis on its own.
         """
-        declared = {e.name for e in BUILTIN_ANALYSES if e.data_slots is not None}
-        expected = (
-            set(TWO_COLUMN)
-            | set(ONE_COLUMN)
-            | {
-                "growth_model",
-                "growth_model_comparison",
-                "kaplan_meier",
-                "cox_ph",
-                "evolution_rate",
-                # The cyclostratigraphy batch.
-                "evolutionary_spectrum",
-                "evolutionary_lomb_scargle",
-                "evolutionary_multitaper",
-                "amplitude_modulation",
-                "tanner_hilbert",
-                "gaussian_filter",
-                "taner_filter",
-                "bandpass_filter",
-                "change_points",
-                "emd",
-                "eemd",
-                "pda",
-                "interpolate_series",
-                "select_intervals",
-                "add_gaps",
-                "remove_peaks",
-                "derivative",
-                "clip_values",
-                "sort_unique",
-                "generate_signal",
-                "coco",
-                "ecoco",
-                "time_opt",
-                "etime_opt",
-                "age_scale",
-                "sedimentation_rate_age_model",
-                "spectral_moments",
-                "estimate_ar1_rho",
-                "minimum_rho",
-                "dynamic_filter",
-                "fixed_bandwidth_summary",
-                "fixed_count_summary",
-                "insolation",
-                # The last batch: the noise model, the length of day, the
-                # smoothing and detrending tools, the transforms and edits.
-                "dynot",
-                "rho1_sedimentation_ratio",
-                "lod_dimension",
-                "optimal_span_smooth",
-                "moving_average_smooth",
-                "standardize",
-                "log_transform",
-                "apply_function",
-                "detrend_series",
-                "remove_part",
-                "remove_range",
-                # The series-shaped analyses that had been left taking the
-                # whole sheet: the angle vector, the extinction
-                # positions, the spatial values, the time axes.
-                "astronomical_target_curve",
-                "directional",
-                "extinction",
-                "grid_interpolate",
-                "insolation_series",
-                "morans_i",
-                # Coherence reads three columns -- a time axis and two
-                # series -- and the spectrum of an angle reads one.
-                "coherence",
-                "circular_spectrum",
-            }
+        from scripts.validation_matrix import build
+
+        self_path = pathlib.Path(__file__).resolve().relative_to(REPO).as_posix()
+        rows = {str(row["name"]): row for row in build()}
+        missing = []
+        for entry in BUILTIN_ANALYSES:
+            if entry.data_slots is None:
+                continue
+            row = rows.get(entry.name)
+            hits = [] if row is None else [h for h in row["hits"] if h != self_path]
+            if not hits:
+                missing.append(entry.name)
+        assert not missing, (
+            f"{len(missing)} catalogue entries declare data slots but no test file covers them: {missing}. "
+            "The validation matrix cannot vouch for them, so the ratchet on the gap would fail."
         )
-        assert declared == expected, f"the declared set changed: {sorted(declared ^ expected)}"
 
     def test_a_declared_slot_is_always_an_array_parameter(self):
         """A declared slot has to be a parameter the method really has.
@@ -317,7 +273,7 @@ class TestMatrixAnalysesUnchanged:
             for slot in entry.data_slots:
                 assert slot in parameters, f"{entry.name} declares a slot {slot!r} the method does not have"
                 annotation = str(parameters[slot].annotation).lower()
-                assert "ndarray" in annotation, (
+                assert "ndarray" in annotation or "arraylike" in annotation, (
                     f"{entry.name} declares {slot!r} as a data slot, but it is not an array parameter"
                 )
 
