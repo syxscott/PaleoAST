@@ -95,27 +95,63 @@
 | 分析 | 模块 | 验证证据 | 说明 |
 |---|---|---|---|
 | `acf` | `stratigraphy.cycles` | 单元 | Autocorrelation function with Bartlett bands |
+| `add_gaps` | `stratigraphy.series_tools` | 性质 | Insert gaps into a record |
 | `age_model` | `stratigraphy.correlation` | 单元 | Depth to age model |
+| `age_scale` | `stratigraphy.tuning` | 真值 | Build an age scale from depth anchors |
+| `amplitude_modulation` | `stratigraphy.amplitude_modulation` | 性质 | Instantaneous amplitude envelope of a record (Tanner-Hilbert) |
 | `arma` | `stratigraphy.arma` | 单元 | Autoregressive moving average model |
+| `astronomical_solution` | `stratigraphy.astronomy` | 真值 | The astronomical solution: orbital elements through deep time |
+| `astronomical_target_curve` | `stratigraphy.astronomy` | 真值 | A synthetic astronomical target curve at one Milankovitch period |
 | `autoassociation` | `stratigraphy.cycles` | 单元 | Autoassociation function for cyclostratigraphy |
+| `bandpass_filter` | `stratigraphy.filtering` | 真值 | Band-pass filter between two periods |
+| `change_points` | `stratigraphy.change_points` | 真值 | Bayesian change-point detection (Ruggieri 2013) |
+| `clip_values` | `stratigraphy.series_tools` | 性质 | Clip a record to a range |
+| `coco` | `stratigraphy.coco` | 真值 | Correlation coefficient: the most likely sedimentation rate (Li et al. 2018) |
 | `coniss` | `stratigraphy.coniss` | 单元 | CONISS constrained cluster analysis |
 | `cross_correlation` | `stratigraphy.cycles` | 单元 | Cross-correlation with a signed lag axis |
+| `derivative` | `stratigraphy.series_tools` | 性质 | Numerical derivative of a record |
 | `directional` | `stratigraphy.directional` | 单元 | Circular and axial directional statistics |
+| `dynamic_filter` | `stratigraphy.dynamic_filter` | 真值 | Adaptive filter: the noise level decides how hard each point is smoothed |
+| `ecoco` | `stratigraphy.coco` | 真值 | Evolutionary correlation coefficient: a sedimentation rate that changes |
+| `eemd` | `stratigraphy.emd` | 真值 | Ensemble empirical mode decomposition |
+| `emd` | `stratigraphy.emd` | 真值 | Empirical mode decomposition |
+| `estimate_ar1_rho` | `stratigraphy.spectral_moments` | 真值 | The AR(1) coefficient of a record |
+| `etime_opt` | `stratigraphy.tuning` | 真值 | eTimeOpt astrochronological tuning with a changing sedimentation rate (Meyers 2019) |
+| `evolutionary_lomb_scargle` | `stratigraphy.evolutionary` | 性质 | Sliding-window Lomb-Scargle spectrum for unevenly spaced records |
+| `evolutionary_multitaper` | `stratigraphy.evolutionary` | 性质 | Sliding-window multitaper spectrum |
+| `evolutionary_spectrum` | `stratigraphy.evolutionary` | 性质 | Sliding-window spectrum: how the periodic content moves through a record |
 | `extinction` | `stratigraphy.extinction` | 单元 | Extinction interval estimation |
+| `fixed_bandwidth_summary` | `stratigraphy.moving_summary` | 真值 | Mean, spread and extremes over a window of fixed time width |
+| `fixed_count_summary` | `stratigraphy.moving_summary` | 真值 | Mean, spread and extremes over a window of fixed sample count |
+| `gaussian_filter` | `stratigraphy.filtering` | 真值 | Gaussian low-pass filter |
+| `generate_signal` | `stratigraphy.signal_generator` | 性质 | Synthesise a signal from components plus optional noise |
+| `insolation` | `stratigraphy.astronomy` | 真值 | Daily-mean insolation at a latitude, from the astronomical solution |
 | `insolation_series` | `stratigraphy.cycles` | 单元 | Insolation forcing sampled on a time axis |
+| `interpolate_series` | `stratigraphy.series_tools` | 性质 | Interpolate a record onto a new time axis |
 | `isotope_paleotemperature` | `stratigraphy.isotope_analysis` | 单元 | Stable isotope paleothermometry |
 | `mann_kendall` | `stratigraphy.cycles` | 单元 | Mann-Kendall trend test with Sen's slope |
 | `markov` | `stratigraphy.markov` | 单元 | Markov chain state transitions |
+| `milankovitch_periods` | `stratigraphy.astronomy` | 真值 | The Milankovitch periods and their nominal amplitudes |
+| `minimum_rho` | `stratigraphy.spectral_moments` | 真值 | The smallest AR(1) coefficient that explains a record |
 | `multitaper` | `stratigraphy.cycles` | 单元 | Multitaper spectral estimation |
 | `orbital_forcing` | `stratigraphy.cycles` | 单元 | Milankovitch periods and relative amplitudes |
+| `pda` | `stratigraphy.pda` | 真值 | Power decomposition analysis into orbital-period bands (Li et al. 2016) |
 | `prewhiten` | `stratigraphy.cycles` | 单元 | AR(1) prewhitening of a series |
 | `rasc` | `stratigraphy.biostratigraphy` | 单元 | Ranging ancilla time scaling |
 | `redfit` | `stratigraphy.cycles` | 单元 | REDFIT spectral analysis against an AR(1) null |
+| `remove_peaks` | `stratigraphy.series_tools` | 性质 | Remove peaks above a threshold |
 | `runs_test` | `stratigraphy.cycles` | 单元 | Runs test for randomness of a series |
 | `sedimentation_rate` | `stratigraphy.correlation` | 单元 | Sedimentation rate from an age model |
+| `sedimentation_rate_age_model` | `stratigraphy.tuning` | 真值 | Turn a sedimentation rate into an age model |
+| `select_intervals` | `stratigraphy.series_tools` | 性质 | Take the parts of a record that fall inside given intervals |
+| `sort_unique` | `stratigraphy.series_tools` | 性质 | Sort a column and drop its duplicates |
 | `spectral` | `stratigraphy.spectral_analysis` | 单元 | Periodogram with an AR(1) red-noise test |
+| `spectral_moments` | `stratigraphy.spectral_moments` | 真值 | Spectral moments: the shape of a power spectrum |
 | `spectral_peaks` | `stratigraphy.spectral_analysis` | 单元 | Significant spectral periods |
 | `stratigraphic_correlation` | `stratigraphy.correlation` | 性质 | Composite standard section correlation |
+| `taner_filter` | `stratigraphy.filtering` | 真值 | Taner weighted band-pass filter (Kodama & Hinnov 2015) |
+| `tanner_hilbert` | `stratigraphy.amplitude_modulation` | 性质 | Tanner-Hilbert transform: envelope and instantaneous phase |
+| `time_opt` | `stratigraphy.tuning` | 真值 | TimeOpt astrochronological tuning (Meyers 2015) |
 | `ua` | `stratigraphy.biostratigraphy` | 单元 | Unitary associations |
 | `wavelet` | `stratigraphy.spectral_analysis` | 单元 | Continuous wavelet transform |
 <!-- matrix:end -->

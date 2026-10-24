@@ -198,6 +198,10 @@ class ParameterSpec:
     detail: str = ""
     toggle: QCheckBox | None = None
     column: int = 0
+    #: For the ``float_pair`` kind, the two spin boxes.
+    pair_widgets: tuple[Any, Any] | None = None
+    #: For the ``band_list`` kind, the text box holding "centre:halfwidth, ...".
+    band_widget: Any = None
 
     def value(self) -> Any:
         """Read the widget, or None when the field is blank.
@@ -235,6 +239,34 @@ class ParameterSpec:
             # The column number, not the data: the runner turns it into
             # the column itself.
             return self.column
+        if self.kind == "float_pair":
+            if self.pair_widgets is None:
+                return None
+            low, high = self.pair_widgets
+            pair = (float(low.value()), float(high.value()))
+            if self.default is None and pair == (0.0, 0.0):
+                # The analyzer's own default is None, and the boxes were
+                # left alone -- so the analyzer decides, not the form.
+                return None
+            return pair
+        if self.kind == "band_list":
+            if self.band_widget is None:
+                return None
+            text = self.band_widget.text().strip()
+            if not text:
+                return None
+            bands: list[tuple[float, float]] = []
+            for chunk in text.split(","):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                if ":" not in chunk:
+                    raise ValueError(f"{chunk!r} is not 'centre:half-width'")
+                centre, half = chunk.split(":", 1)
+                bands.append((float(centre), float(half)))
+            if not bands:
+                return None
+            return tuple(bands)
         return None
 
 
@@ -418,6 +450,20 @@ def _build_specs(entry: Any, plugin: Any) -> list[ParameterSpec]:
         # attached.
         if any(hint in lowered for hint in _UNSUPPORTED_HINTS):
             spec.detail = base
+            specs.append(spec)
+            continue
+        if base.startswith("tuple[float, float]"):
+            # A pair of numbers: a range, a pair of periods.  The float
+            # rule below would otherwise swallow it -- "float" is in
+            # "tuple[float, float]" -- and render it as ONE number box,
+            # which then failed to read "0.5, 2.0".
+            spec.kind = "float_pair"
+            specs.append(spec)
+            continue
+        if base.startswith("tuple[tuple[float, float]"):
+            # A list of (centre, half-width) pairs: the orbital bands
+            # the power decomposition runs over.
+            spec.kind = "band_list"
             specs.append(spec)
             continue
         if _is_array(base) or "Sequence" in base:
@@ -678,6 +724,44 @@ class AnalysisRunnerDialog(QDialog):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(box)
             layout.addWidget(QLabel(_("column of the sheet (0 = the first column)")))
+            layout.addStretch(1)
+            return holder
+        if spec.kind == "float_pair":
+            # Two numbers side by side: a range of rates, a pair of
+            # periods.  One box for "tuple[float, float]" would read
+            # "0.5, 2.0" as a single number and fail.
+            low = QDoubleSpinBox()
+            high = QDoubleSpinBox()
+            for box in (low, high):
+                box.setDecimals(6)
+                box.setRange(-1e12, 1e12)
+                box.setSingleStep(0.1)
+            if isinstance(spec.default, (tuple, list)) and len(spec.default) == 2:
+                low.setValue(float(spec.default[0]))
+                high.setValue(float(spec.default[1]))
+            spec.pair_widgets = (low, high)
+            spec.widget = low
+            holder = QWidget()
+            layout = QHBoxLayout(holder)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(low)
+            layout.addWidget(QLabel(_("to")))
+            layout.addWidget(high)
+            layout.addStretch(1)
+            return holder
+        if spec.kind == "band_list":
+            # A list of (centre, half-width) pairs, written as
+            # "100:5, 41:3, 23:2".
+            line = QLineEdit()
+            if isinstance(spec.default, (tuple, list)):
+                line.setPlaceholderText(", ".join(f"{centre:g}:{half:g}" for centre, half in spec.default))
+            spec.band_widget = line
+            spec.widget = line
+            holder = QWidget()
+            layout = QHBoxLayout(holder)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(line)
+            layout.addWidget(QLabel(_("centre:half-width for each band")))
             layout.addStretch(1)
             return holder
         line = QLineEdit()

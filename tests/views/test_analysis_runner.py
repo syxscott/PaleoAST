@@ -187,8 +187,7 @@ def test_the_data_slot_is_never_a_form_field(registry) -> None:
             # A declared slot is offered as a column picker. It must not
             # be a field that sends the data.
             assert specs[slot].kind == "array", (
-                f"{entry.name} offers a field for its data parameter {slot!r} "
-                f"that is not a column picker"
+                f"{entry.name} offers a field for its data parameter {slot!r} that is not a column picker"
             )
             continue
         assert slot not in specs, f"{entry.name} offers a field for its data parameter {slot!r}"

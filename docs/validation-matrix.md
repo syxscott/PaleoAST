@@ -11,14 +11,14 @@ What each column means:
 - **unit** -- returns the expected value on a chosen example.
 
 ```
-analyses:            113
-  compared with R:    29  (26%)   EXACT -- declared per file
-  golden reference:    5  (4%)   inferred
-  property test:      30  (27%)   inferred
-  unit test:         113  (100%)   inferred
+analyses:            149
+  compared with R:    29  (19%)   EXACT -- declared per file
+  golden reference:   28  (19%)   inferred
+  property test:      43  (29%)   inferred
+  unit test:         126  (85%)   inferred
   no test at all:      0  (0%)   inferred
-  R + (gold|prop):    19  (17%)
-  UNIT TEST ONLY:     71  (63%)   <- the gap (lower bound)
+  R + (gold|prop):    19  (13%)
+  UNIT TEST ONLY:     71  (48%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -37,8 +37,8 @@ morphometrics            8    1       5
 ordination               7    1       4
 plot                    20    9      11
 spatial                  9    0       4
-stratigraphy             7    0       6
-time-series             16    0      16
+stratigraphy            17    0       6
+time-series             42    0      16
 univariate              16   16       0
 ```
 
@@ -157,3 +157,39 @@ univariate              16   16       0
 | `diversity_profile` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_t_test` | diversity | `ecology.diversity_menu` |  |  |  | x |
 | `diversity_permutation_test` | diversity | `ecology.diversity_menu` |  |  |  | x |
+| `evolutionary_spectrum` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
+| `evolutionary_lomb_scargle` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
+| `evolutionary_multitaper` | time-series | `stratigraphy.evolutionary` |  |  | x | x |
+| `amplitude_modulation` | time-series | `stratigraphy.amplitude_modulation` |  |  | x | x |
+| `tanner_hilbert` | time-series | `stratigraphy.amplitude_modulation` |  |  | x | x |
+| `gaussian_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
+| `taner_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
+| `bandpass_filter` | time-series | `stratigraphy.filtering` |  | x |  |  |
+| `change_points` | time-series | `stratigraphy.change_points` |  | x |  |  |
+| `emd` | time-series | `stratigraphy.emd` |  | x |  | x |
+| `eemd` | time-series | `stratigraphy.emd` |  | x |  | x |
+| `pda` | time-series | `stratigraphy.pda` |  | x |  |  |
+| `interpolate_series` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `select_intervals` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `add_gaps` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `remove_peaks` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `derivative` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `clip_values` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `sort_unique` | time-series | `stratigraphy.series_tools` |  |  | x |  |
+| `generate_signal` | time-series | `stratigraphy.signal_generator` |  |  | x |  |
+| `coco` | stratigraphy | `stratigraphy.coco` |  | x |  | x |
+| `ecoco` | stratigraphy | `stratigraphy.coco` |  | x |  | x |
+| `time_opt` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
+| `etime_opt` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
+| `age_scale` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
+| `sedimentation_rate_age_model` | stratigraphy | `stratigraphy.tuning` |  | x |  |  |
+| `spectral_moments` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
+| `estimate_ar1_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
+| `minimum_rho` | time-series | `stratigraphy.spectral_moments` |  | x |  | x |
+| `dynamic_filter` | time-series | `stratigraphy.dynamic_filter` |  | x |  | x |
+| `fixed_bandwidth_summary` | time-series | `stratigraphy.moving_summary` |  | x |  |  |
+| `fixed_count_summary` | time-series | `stratigraphy.moving_summary` |  | x |  |  |
+| `astronomical_solution` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
+| `insolation` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
+| `astronomical_target_curve` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
+| `milankovitch_periods` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |

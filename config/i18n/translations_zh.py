@@ -1367,6 +1367,8 @@ TRANSLATIONS = {
     "Figure drawn.": "已绘制图形。",
     "use this value": "使用该值",
     "column of the sheet (0 = the first column)": "电子表格的列号（0 为第一列）",
+    "to": "至",
+    "centre:half-width for each band": "每个周期带的“中心周期:半宽”",
     "There is no data to take a column from.": "没有数据可供取列。",
     "{0} is column {1}, but the data has {2} columns.": "{0} 是第 {1} 列，但数据只有 {2} 列。",
     "{0} needs {1}, which this form cannot supply. Run it from the script console.": "{0} 需要 {1}，此表单无法提供。请改用脚本控制台运行。",

@@ -1404,6 +1404,8 @@ TRANSLATIONS = {
     "Figure drawn.": "Figure drawn.",
     "use this value": "use this value",
     "column of the sheet (0 = the first column)": "column of the sheet (0 = the first column)",
+    "to": "to",
+    "centre:half-width for each band": "centre:half-width for each band",
     "There is no data to take a column from.": "There is no data to take a column from.",
     "{0} is column {1}, but the data has {2} columns.": "{0} is column {1}, but the data has {2} columns.",
     "{0} needs {1}, which this form cannot supply. Run it from the script console.": "{0} needs {1}, which this form cannot supply. Run it from the script console.",

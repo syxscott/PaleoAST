@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Thirty-six analyses from the cyclostratigraphy and astrochronology
+  family** (`stratigraphy/`) -- the gap between a *measured record* and an
+  *age scale*.  The catalogue goes from 113 analyses to 149.  They were
+  written against the published methods rather than against another
+  implementation's source, and each one names the paper it follows:
+  - **The astronomical solution and insolation** (`stratigraphy/astronomy.py`,
+    `data/astronomy/la04.npz`).  The La04 orbital solution -- 249 001 points
+    from 0 to 249 Myr at a 1 kyr step -- with the daily insolation computed
+    from it (Berger 1978).  The file also carries the La04 matrix's own
+    encoding: its fourth column is `e*sin(w)`, the angle from perihelion
+    to the vernal equinox, and the longitude of perihelion is recovered
+    from it.  The modern values come out where they must: eccentricity
+    0.0167, obliquity 23.44 degrees, longitude of perihelion 102.9
+    degrees, with perihelion on 2 January.  The insolation agrees with
+    the classic Berger figures -- 417 W/m2 at the equator, 169 at the pole,
+    and a 498 W/m2 summer-to-winter swing at 65 degrees north against 6 at
+    the equator.  Before this the application had a six-row table of
+    hard-coded Milankovitch periods and nothing else.
+  - **COCO and eCOCO** (`stratigraphy/coco.py`) -- the correlation
+    coefficient method for the most likely sedimentation rate, and its
+    evolutionary form for a rate that changes (Li et al. 2018, *EPSL*).
+  - **TimeOpt and eTimeOpt** (`stratigraphy/tuning.py`) -- astrochronological
+    tuning, with and without a changing sedimentation rate (Meyers 2015,
+    2019), plus an age scale from depth anchors and a sedimentation rate
+    turned into an age model.
+  - **Power decomposition analysis** (`stratigraphy/pda.py`) -- the power
+    spectrum broken into orbital-period bands, each with its share of the
+    power and an interval on it (Li et al. 2016, *Geology*).
+  - **Evolutionary spectra** (`stratigraphy/evolutionary.py`) -- the
+    spectrum computed in a sliding window, by FFT, Lomb-Scargle or
+    multitaper, so a period can be *tracked* through a record instead of
+    only detected in it (Kodama & Hinnov 2015).
+  - **Amplitude modulation** (`stratigraphy/amplitude_modulation.py`) --
+    the Tanner-Hilbert transform: the instantaneous envelope and phase of
+    a record.
+  - **Empirical mode decomposition** (`stratigraphy/emd.py`) -- EMD and
+    EEMD (Huang et al. 1998; Wu & Huang 2009).
+  - **Spectral moments and the minimum-rho test**
+    (`stratigraphy/spectral_moments.py`) -- the shape of a spectrum, and
+    the smallest AR(1) coefficient that accounts for a record.
+  - **A dynamic filter** (`stratigraphy/dynamic_filter.py`) -- the noise
+    level decides how hard each part of a record is smoothed.
+  - **Gaussian, Taner and band-pass filters** (`stratigraphy/filtering.py`)
+    -- including the Taner weighted band-pass of Kodama & Hinnov (2015).
+  - **Bayesian change-point detection** (`stratigraphy/change_points.py`)
+    -- Ruggieri (2013).
+  - **Fixed-bandwidth and fixed-count moving summaries**
+    (`stratigraphy/moving_summary.py`).
+  - **The series engineering tools** (`stratigraphy/series_tools.py`) --
+    interpolation, interval selection, merging, gap insertion, peak
+    removal, clipping, sorting and differentiation.
+  - **A signal and noise generator** (`stratigraphy/signal_generator.py`)
+    -- sine, white, red and pink noise, and a signal built from
+    components.
+
+  These follow the methods of the Acycle package (Li, Hinnov & Kump 2019,
+  *Computers & Geosciences* 127: 12-22), which is a **GPL** program: every
+  one of them was written from the published method and the paper it
+  cites, not translated from Acycle's source, and PaleoAST stays MIT.
+
+- **A form that can ask for a pair of numbers and for a list of bands**
+  (`views/analysis_runner.py`) -- a parameter written ``tuple[float, float]``
+  was rendered as ONE number box, because the float rule matched the text
+  "tuple[float, float]" and stopped there; filling it in with "0.5, 2.0"
+  then failed to read.  A pair of numbers now gets two boxes, and a list
+  of (centre, half-width) pairs gets a box that takes
+  "100:5, 41:3, 23:2".  Without the first of these the correlation
+  coefficient method could not be run from the interface at all, because
+  its range of candidate sedimentation rates has nowhere to go.
+
 - **A measurement of how every analysis was validated**
   (`scripts/validation_matrix.py`, `docs/validation-matrix.md`) -- for each
   of the 113 first-party analyses: whether it is compared against a

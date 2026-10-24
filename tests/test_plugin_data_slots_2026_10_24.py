@@ -222,15 +222,59 @@ class TestMatrixAnalysesUnchanged:
         assert np.allclose(np.asarray(through.data.scores), np.asarray(direct.scores))
 
     def test_the_declared_entries_are_exactly_the_series_ones(self):
-        """No entry may declare a slot by accident."""
+        """No entry may declare a slot by accident.
+
+        An entry that wants a MATRIX must keep taking the whole sheet, so
+        the declared set is exactly the analyses that want a series --
+        the time-series family and the astrochronology family.
+        """
         declared = {e.name for e in BUILTIN_ANALYSES if e.data_slots is not None}
-        assert declared == set(TWO_COLUMN) | set(ONE_COLUMN) | {
-            "growth_model",
-            "growth_model_comparison",
-            "kaplan_meier",
-            "cox_ph",
-            "evolution_rate",
-        }
+        expected = (
+            set(TWO_COLUMN)
+            | set(ONE_COLUMN)
+            | {
+                "growth_model",
+                "growth_model_comparison",
+                "kaplan_meier",
+                "cox_ph",
+                "evolution_rate",
+                # The cyclostratigraphy batch.
+                "evolutionary_spectrum",
+                "evolutionary_lomb_scargle",
+                "evolutionary_multitaper",
+                "amplitude_modulation",
+                "tanner_hilbert",
+                "gaussian_filter",
+                "taner_filter",
+                "bandpass_filter",
+                "change_points",
+                "emd",
+                "eemd",
+                "pda",
+                "interpolate_series",
+                "select_intervals",
+                "add_gaps",
+                "remove_peaks",
+                "derivative",
+                "clip_values",
+                "sort_unique",
+                "generate_signal",
+                "coco",
+                "ecoco",
+                "time_opt",
+                "etime_opt",
+                "age_scale",
+                "sedimentation_rate_age_model",
+                "spectral_moments",
+                "estimate_ar1_rho",
+                "minimum_rho",
+                "dynamic_filter",
+                "fixed_bandwidth_summary",
+                "fixed_count_summary",
+                "insolation",
+            }
+        )
+        assert declared == expected, f"the declared set changed: {sorted(declared ^ expected)}"
 
 
 # ---------------------------------------------------------------------------

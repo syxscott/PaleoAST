@@ -109,7 +109,9 @@ py-modules = ["main", "plot_export"]
 [tool.setuptools.package-data]
 # ``data/loader.py`` resolves these through ``importlib.resources.files("data")``,
 # so a wheel without them makes every ``load_*()`` raise FileNotFoundError.
-"data" = ["examples/*", "golden/*"]
+# ``astronomy/*.npz`` is the La04 astronomical solution consumed by
+# ``stratigraphy/astronomy.py`` (``load_astronomical_solution``).
+"data" = ["examples/*", "golden/*", "astronomy/*.npz"]
 
 [tool.setuptools.packages.find]
 # NOTE: `_core`, `rthooks` and `app_infrastructure` are GONE from disk. They
