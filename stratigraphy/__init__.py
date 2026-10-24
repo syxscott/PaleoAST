@@ -29,7 +29,9 @@ from .astronomy import (
 )
 from .biostratigraphy import BioeventResult, RASCAnalyzer, UAAnalyzer, Zone
 from .change_points import ChangePointResult, detect_change_points
+from .circular_spectrum import CircularSpectrumResult, circular_spectrum
 from .coco import CocoResult, ECocoResult, berger1989_periods, coco, ecoco, milankovitch_target_spectrum
+from .coherence import CoherenceResult, coherence, coherence_significance
 from .correlation import (
     AgeModelAnalyzer,
     AgeModelResult,
@@ -134,7 +136,9 @@ __all__ = [
     "AxisCalibration",
     "BioeventResult",
     "ChangePointResult",
+    "CircularSpectrumResult",
     "CocoResult",
+    "CoherenceResult",
     "CycleAnalyzer",
     "DetrendResult",
     "DigitizedSeries",
@@ -188,8 +192,11 @@ __all__ = [
     "build_age_scale",
     "calibrate_axes",
     "change_points",
+    "circular_spectrum",
     "clip_values",
     "coco",
+    "coherence",
+    "coherence_significance",
     "cross_correlation",
     "daily_mean_insolation",
     "derivative",

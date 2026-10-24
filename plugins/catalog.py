@@ -1222,6 +1222,23 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "stratigraphy",
         "The Milankovitch periods and their nominal amplitudes",
     ),
+    # -- coherence between two records, and the spectrum of an angle ------
+    _f(
+        "coherence",
+        "stratigraphy.coherence",
+        "coherence",
+        "time-series",
+        "Coherence and phase between two records",
+        data_slots=("time", "first", "second"),
+    ),
+    _f(
+        "circular_spectrum",
+        "stratigraphy.circular_spectrum",
+        "circular_spectrum",
+        "time-series",
+        "The spectrum of an angular variable: its harmonics and mean direction",
+        data_slots=("angles_deg",),
+    ),
     # ---------------------------------------------------------------------------
     # The last of the Acycle family: the sedimentary noise model, the length of
     # day, the LR04 stack, the smoothing and detrending tools, the figure reader

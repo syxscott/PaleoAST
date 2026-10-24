@@ -172,8 +172,10 @@
 | `autoassociation` | `stratigraphy.cycles` | 单元 | Autoassociation function for cyclostratigraphy |
 | `bandpass_filter` | `stratigraphy.filtering` | 真值 | Band-pass filter between two periods |
 | `change_points` | `stratigraphy.change_points` | 真值 | Bayesian change-point detection (Ruggieri 2013) |
+| `circular_spectrum` | `stratigraphy.circular_spectrum` | 真值 | The spectrum of an angular variable: its harmonics and mean direction |
 | `clip_values` | `stratigraphy.series_tools` | 性质 | Clip a record to a range |
 | `coco` | `stratigraphy.coco` | 真值 | Correlation coefficient: the most likely sedimentation rate (Li et al. 2018) |
+| `coherence` | `stratigraphy.coherence` | 真值 | Coherence and phase between two records |
 | `coniss` | `stratigraphy.coniss` | 单元 | CONISS constrained cluster analysis |
 | `cross_correlation` | `stratigraphy.cycles` | 单元 | Cross-correlation with a signed lag axis |
 | `derivative` | `stratigraphy.series_tools` | 性质 | Numerical derivative of a record |

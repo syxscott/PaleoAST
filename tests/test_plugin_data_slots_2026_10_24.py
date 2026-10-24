@@ -294,6 +294,10 @@ class TestMatrixAnalysesUnchanged:
                 "grid_interpolate",
                 "insolation_series",
                 "morans_i",
+                # Coherence reads three columns -- a time axis and two
+                # series -- and the spectrum of an angle reads one.
+                "coherence",
+                "circular_spectrum",
             }
         )
         assert declared == expected, f"the declared set changed: {sorted(declared ^ expected)}"

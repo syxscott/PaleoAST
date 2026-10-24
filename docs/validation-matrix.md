@@ -11,14 +11,14 @@ What each column means:
 - **unit** -- returns the expected value on a chosen example.
 
 ```
-analyses:            163
+analyses:            165
   compared with R:    29  (18%)   EXACT -- declared per file
-  golden reference:   42  (26%)   inferred
+  golden reference:   44  (27%)   inferred
   property test:      43  (26%)   inferred
-  unit test:         134  (82%)   inferred
+  unit test:         136  (82%)   inferred
   no test at all:      0  (0%)   inferred
   R + (gold|prop):    19  (12%)
-  UNIT TEST ONLY:     71  (44%)   <- the gap (lower bound)
+  UNIT TEST ONLY:     71  (43%)   <- the gap (lower bound)
 
 The R row is exact: every cross-validation file declares the analyses
 it covers.  The other rows are inferred from the test tree, and they
@@ -38,7 +38,7 @@ ordination               7    1       4
 plot                    20    9      11
 spatial                  9    0       4
 stratigraphy            21    0       6
-time-series             52    0      16
+time-series             54    0      16
 univariate              16   16       0
 ```
 
@@ -193,6 +193,8 @@ univariate              16   16       0
 | `insolation` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `astronomical_target_curve` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
 | `milankovitch_periods` | stratigraphy | `stratigraphy.astronomy` |  | x |  |  |
+| `coherence` | time-series | `stratigraphy.coherence` |  | x |  | x |
+| `circular_spectrum` | time-series | `stratigraphy.circular_spectrum` |  | x |  | x |
 | `dynot` | stratigraphy | `stratigraphy.dynot` |  | x |  |  |
 | `rho1_sedimentation_ratio` | stratigraphy | `stratigraphy.dynot` |  | x |  | x |
 | `lod_dimension` | stratigraphy | `stratigraphy.lod` |  | x |  | x |

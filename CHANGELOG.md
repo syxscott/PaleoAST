@@ -114,6 +114,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Transforms and edits** (`stratigraphy/transforms.py`,
     `stratigraphy/series_edit.py`) -- standardise, log-transform, apply a
     simple function, remove one interval of a record or keep only one.
+  - **Coherence and phase between two records**
+    (`stratigraphy/coherence.py`) -- whether two series are driven by the
+    same thing.  The cross spectrum is estimated from SEGMENTED
+    LOMB-SCARGLE rather than a segmented FFT, so a record sampled
+    unevenly is handled: the coherence of a shared 20 kyr signal comes
+    out at 0.9998 against 0.17 for two independent ones, and a known lag
+    is recovered to 0.3 degrees.  The significance threshold comes from
+    the null distribution of the smoothed magnitude-squared coherence,
+    Beta(1, K-1), which was checked by Monte Carlo across white, AR(1)
+    and 1/f noise (KS p = 0.09-0.52) rather than assumed.
+  - **The spectrum of an angle** (`stratigraphy/circular_spectrum.py`) --
+    an angular variable is a CIRCLE, so 350 degrees and 10 degrees are
+    neighbours.  The harmonics go through the complex exponential, and
+    the mean direction of a bimodal 350/10 distribution comes out at
+    359.95 degrees where a linear mean would have said 179.95.
 
 - **A measurement of how every analysis was validated**
   (`scripts/validation_matrix.py`, `docs/validation-matrix.md`) -- for each
