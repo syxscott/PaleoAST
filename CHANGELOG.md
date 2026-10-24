@@ -200,6 +200,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moment it is changed.
 
 ### Fixed
+- **The generic analysis runner no longer hands a whole spreadsheet to an
+  analysis that wants a series** (`plugins/base.py`, `plugins/catalog.py`,
+  `views/analysis_runner.py`) -- the runner's contract was "the sheet goes
+  into the data parameter", which is right for an analysis that wants a
+  MATRIX and wrong for one that wants a SERIES.  The two cases came apart,
+  and the series case reported numbers that meant nothing:
+  - **The time axis was analysed as if it were the data.**  A sheet is
+    (rows = samples, columns = variables), so an analysis that wants a
+    series wants one COLUMN of it.  Handed the whole table, the
+    autocorrelation and the multitaper estimator read only the first
+    column -- which is the depth or the age axis -- and reported a
+    spectrum of it.
+  - **The two columns were mixed together.**  The Mann-Kendall tau came
+    back with the opposite sign (+0.226 against -0.099 on the same
+    record), the runs test's p-value moved by forty orders of magnitude
+    (2.3e-82 against 4.4e-38), and the pre-whitening's AR(1)
+    coefficient flipped sign (+0.988 against -0.603).  None of them said
+    anything was wrong.
+  - **Six analyses could not run at all.**  ``analyze(time, values)`` has
+    TWO array parameters, and the rule that finds the data parameter
+    could only ever find the first -- so the sheet went in as the TIME
+    axis, the values were never passed, and the call failed with a
+    TypeError about a missing argument.  This is where the second review
+    round's ``data_slot`` field stopped: it moved the crash from one
+    missing argument to the other without making the analysis work.
+
+  A catalog entry now declares ``data_slots``: the names of the
+  parameters the sheet supplies, in the order the columns come.  An entry
+  that declares nothing keeps the old behaviour -- the whole sheet, for
+  the matrix analyses -- and an entry that declares one or two gets one
+  column each.  The form offers a column picker for each declared slot
+  (the time axis first, the measurement second), so the user can see
+  which column is which, and the runner's answer is now the same as the
+  dedicated dialog's.
+
+  Sixteen analyses were affected: ``acf``, ``multitaper``, ``prewhiten``,
+  ``mann_kendall``, ``runs_test``, ``spectral``, ``wavelet``, ``redfit``,
+  ``autoassociation``, ``cross_correlation``, ``arma``, ``growth_model``,
+  ``growth_model_comparison``, ``kaplan_meier``, ``cox_ph`` and
+  ``evolution_rate``.
+
 - **The second review round: the parts of the tree the first round never
   reached** -- a follow-up review of `stratigraphy/`, `phylogenetics/`,
   `macroevolution/`, `visualization/`, `hpc/`, `reporting/`, `presets/`,

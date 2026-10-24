@@ -13,6 +13,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
+from utils.exceptions import ValidationError
+
 # The parameter an analyzer's data belongs in, found from its signature.
 #
 # The plugin contract is ``analyze(data, **kwargs)`` with ``data`` the whole
@@ -51,6 +55,72 @@ def data_slot_name(signature: inspect.Signature) -> str | None:
         if "ndarray" in text.lower():
             return name
     return None
+
+
+def data_slot_names(signature: inspect.Signature, declared: tuple[str, ...] | None = None) -> tuple[str, ...]:
+    """The parameters the sheet supplies, in order.
+
+    A *declared* list wins over the automatic rule, because the automatic
+    rule can only ever find ONE parameter.  An analysis whose signature is
+    ``analyze(time, values)`` wants two columns of the sheet, and the
+    automatic rule handed the whole sheet to ``time`` -- so ``values`` was
+    never passed and the analysis could not run at all.
+
+    Parameters
+    ----------
+    signature:
+        The signature of the target method.
+    declared:
+        The parameter names the catalog entry declares, in the order the
+        columns come.  ``None`` means "use the automatic rule", which is
+        the whole sheet in one slot.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The parameter names, empty for a target that takes no data.
+    """
+    if declared is not None:
+        return tuple(declared)
+    slot = data_slot_name(signature)
+    return (slot,) if slot is not None else ()
+
+
+def sheet_columns(sheet: Any, count: int) -> list[Any]:
+    """The first ``count`` columns of a sheet, as one-dimensional arrays.
+
+    A sheet is a spreadsheet: rows are samples, columns are variables.  An
+    analysis that wants a *series* wants one column of it, not the whole
+    table -- handing a two-column sheet to a series analysis made it read
+    the time axis as data, or mix the two columns together, and either way
+    reported a number that meant nothing.
+
+    Parameters
+    ----------
+    sheet:
+        The spreadsheet, as an array-like.
+    count:
+        How many columns are wanted.
+
+    Returns
+    -------
+    list[Any]
+        One array per column.
+
+    Raises
+    ------
+    ValueError
+        When the sheet has fewer columns than were asked for.
+    """
+    array = np.asarray(sheet)
+    if array.ndim == 1:
+        array = array.reshape(-1, 1)
+    if array.shape[1] < count:
+        raise ValidationError(
+            f"This analysis needs {count} column(s) of data -- a time axis and a "
+            f"measurement -- but the sheet has {array.shape[1]}."
+        )
+    return [array[:, index] for index in range(count)]
 
 
 @dataclass

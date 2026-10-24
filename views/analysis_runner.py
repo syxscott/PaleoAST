@@ -382,11 +382,27 @@ def _build_specs(entry: Any, plugin: Any) -> list[ParameterSpec]:
             )
         ]
     module = inspect.getmodule(getattr(type(target), "analyze", target))
-    data_slot = data_slot_name(signature)
+    auto_slot = data_slot_name(signature)
+    declared = getattr(entry, "data_slots", None)
+    slots = tuple(declared) if declared is not None else ()
     for name, param in signature.parameters.items():
         if name in _SKIPPED_PARAMETERS:
             continue
-        if name == data_slot:
+        if name in slots:
+            # This analysis wants a SERIES, so the sheet is cut into
+            # columns and each slot takes one of them.  The form offers a
+            # column selector for each, defaulting to the column the
+            # slot's position implies -- the first slot is the time
+            # axis, the second the measurement.
+            #
+            # The sheet used to go whole into the first slot, which made
+            # a two-column sheet arrive as "the time axis was the whole
+            # table and the values were never passed".
+            spec = ParameterSpec(name=name, kind="array", default=0)
+            spec.column = slots.index(name)
+            specs.append(spec)
+            continue
+        if name == auto_slot:
             # The sheet goes here. The form must not also send it, or
             # the call fails with "got multiple values for argument".
             continue
@@ -719,13 +735,15 @@ class AnalysisRunnerDialog(QDialog):
             signature = inspect.signature(getattr(target, self._entry.method))
         except Exception:
             return []
-        data_slot = data_slot_name(signature)
+        declared = getattr(self._entry, "data_slots", None)
+        slots = set(tuple(declared)) if declared is not None else set()
+        auto_slot = data_slot_name(signature)
         supplied = {spec.name for spec in self._specs if spec.kind != "unsupported"}
         missing: list[str] = []
         for name, param in signature.parameters.items():
             if name in ("self", "kwargs", "args"):
                 continue
-            if name == data_slot or name in supplied:
+            if name == auto_slot or name in slots or name in supplied:
                 continue
             if param.default is inspect.Parameter.empty:
                 missing.append(name)
@@ -770,6 +788,9 @@ class AnalysisRunnerDialog(QDialog):
 
         sheet = self._current_data()
         kwargs: dict[str, Any] = {}
+        slot_values: dict[str, Any] = {}
+        declared = getattr(self._entry, "data_slots", None)
+        slots = set(tuple(declared)) if declared is not None else set()
         for spec in self._specs:
             if spec.kind == "unsupported":
                 continue
@@ -782,14 +803,20 @@ class AnalysisRunnerDialog(QDialog):
                 column = self._column_of(sheet, value, spec.name)
                 if column is None:
                     return
-                kwargs[spec.name] = column
+                if spec.name in slots:
+                    # A data slot: the column goes to the slot, not to
+                    # the analyzer's keyword, because the plugin routes
+                    # the sheet to the slot itself.
+                    slot_values[spec.name] = column
+                else:
+                    kwargs[spec.name] = column
                 continue
             if value is not None:
                 kwargs[spec.name] = value
 
         self._output.setPlainText(_("Running {0} ...").format(self._entry.name))
         try:
-            outcome = plugin.analyze(sheet, **kwargs)
+            outcome = plugin.analyze(slot_values if slot_values else sheet, **kwargs)
         except PaleoASTError as exc:
             # The project's own errors say what went wrong, in the
             # project's voice. A Python traceback in the output pane was

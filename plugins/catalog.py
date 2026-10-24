@@ -52,7 +52,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from plugins.base import AnalysisPlugin, AnalysisResult, data_slot_name
+from plugins.base import AnalysisPlugin, AnalysisResult, data_slot_names, sheet_columns
+from utils.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +78,17 @@ class AnalysisEntry:
     method: str
     category: str
     description: str
-    #: The parameter the data belongs in, when the automatic choice is
-    #: wrong.  ``analyze(time, values)`` has TWO array parameters, and
-    #: the automatic rule picked the first one -- so the whole sheet went
-    #: in as the TIME axis, the values were never passed, and the
-    #: analysis could not run at all.
-    data_slot: str | None = None
+    #: The parameters the sheet supplies, and in which order.  ``None``
+    #: means the automatic rule applies: the sheet goes, whole, into one
+    #: parameter -- which is right for an analysis that wants a MATRIX.
+    #:
+    #: A list is for an analysis that wants SERIES: the first name takes
+    #: the sheet's first column, the second its second column, and so on.
+    #: ``analyze(time, values)`` has TWO array parameters, and the
+    #: automatic rule picked the first one -- so the whole sheet went in
+    #: as the TIME axis, the values were never passed, and the analysis
+    #: could not run at all.
+    data_slots: tuple[str, ...] | None = None
 
 
 def _e(
@@ -92,10 +98,10 @@ def _e(
     method: str,
     category: str,
     description: str,
-    data_slot: str | None = None,
+    data_slots: tuple[str, ...] | None = None,
 ) -> AnalysisEntry:
     """Terse constructor, so the table below stays readable."""
-    return AnalysisEntry(name, module, class_name, method, category, description, data_slot=data_slot)
+    return AnalysisEntry(name, module, class_name, method, category, description, data_slots=data_slots)
 
 
 def _f(
@@ -402,7 +408,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "analyze",
         "time-series",
         "Periodogram with an AR(1) red-noise test",
-        data_slot="values",
+        data_slots=("time", "values"),
     ),
     _e(
         "wavelet",
@@ -411,7 +417,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "wavelet_transform",
         "time-series",
         "Continuous wavelet transform",
-        data_slot="values",
+        data_slots=("time", "values"),
     ),
     _e(
         "spectral_peaks",
@@ -428,6 +434,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "autocorrelation",
         "time-series",
         "Autocorrelation function with Bartlett bands",
+        data_slots=("values",),
     ),
     _e(
         "redfit",
@@ -436,6 +443,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "redfit",
         "time-series",
         "REDFIT spectral analysis against an AR(1) null",
+        data_slots=("time", "values"),
     ),
     _e(
         "multitaper",
@@ -444,6 +452,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "multitaper",
         "time-series",
         "Multitaper spectral estimation",
+        data_slots=("values",),
     ),
     _e(
         "prewhiten",
@@ -452,6 +461,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "prewhiten",
         "time-series",
         "AR(1) prewhitening of a series",
+        data_slots=("values",),
     ),
     _e(
         "cross_correlation",
@@ -460,6 +470,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "cross_correlation",
         "time-series",
         "Cross-correlation with a signed lag axis",
+        data_slots=("x", "y"),
     ),
     _e(
         "autoassociation",
@@ -468,6 +479,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "autoassociation",
         "time-series",
         "Autoassociation function for cyclostratigraphy",
+        data_slots=("time", "values"),
     ),
     _e(
         "mann_kendall",
@@ -476,6 +488,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "mann_kendall",
         "time-series",
         "Mann-Kendall trend test with Sen's slope",
+        data_slots=("values",),
     ),
     _e(
         "runs_test",
@@ -484,6 +497,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "runs",
         "time-series",
         "Runs test for randomness of a series",
+        data_slots=("values",),
     ),
     _e(
         "orbital_forcing",
@@ -501,7 +515,15 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "time-series",
         "Insolation forcing sampled on a time axis",
     ),
-    _e("arma", "stratigraphy.arma", "ARMAAnalyzer", "fit", "time-series", "Autoregressive moving average model"),
+    _e(
+        "arma",
+        "stratigraphy.arma",
+        "ARMAAnalyzer",
+        "fit",
+        "time-series",
+        "Autoregressive moving average model",
+        data_slots=("times", "values"),
+    ),
     _e("markov", "stratigraphy.markov", "MarkovAnalyzer", "analyze", "time-series", "Markov chain state transitions"),
     _e(
         "extinction",
@@ -563,6 +585,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "analyze",
         "morphometrics",
         "Evolutionary rate estimation",
+        data_slots=("trait_series", "time_intervals"),
     ),
     # -- macroevolution ------------------------------------------------------
     _e(
@@ -572,11 +595,26 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "fit",
         "macroevolution",
         "Kaplan-Meier survivorship",
+        data_slots=("times", "events"),
     ),
-    _e("cox_ph", "macroevolution.survival", "CoxPHAnalyzer", "fit", "macroevolution", "Cox proportional hazards model"),
+    _e(
+        "cox_ph",
+        "macroevolution.survival",
+        "CoxPHAnalyzer",
+        "fit",
+        "macroevolution",
+        "Cox proportional hazards model",
+        data_slots=("durations", "events"),
+    ),
     # -- growth ---------------------------------------------------------------
     _e(
-        "growth_model", "models.growth_models", "GrowthModelAnalyzer", "fit", "growth", "Nonlinear growth curve fitting"
+        "growth_model",
+        "models.growth_models",
+        "GrowthModelAnalyzer",
+        "fit",
+        "growth",
+        "Nonlinear growth curve fitting",
+        data_slots=("times", "values"),
     ),
     _e(
         "growth_model_comparison",
@@ -585,6 +623,7 @@ BUILTIN_ANALYSES: tuple[AnalysisEntry, ...] = (
         "fit_all",
         "growth",
         "Fit several growth curves and rank them by AICc",
+        data_slots=("times", "values"),
     ),
     # ---------------------------------------------------------------------------
     # The plot menu.
@@ -966,13 +1005,37 @@ class BuiltinAnalysisPlugin(AnalysisPlugin):
         :func:``plugins.base.data_slot_name`` -- and the data is passed
         there by keyword. A target with no such parameter gets the form's
         arguments alone.
+
+        ``data`` may also be a mapping of slot name to value, which is
+        what the runner sends for an analysis that wants a SERIES: the
+        sheet is cut into columns there, and each column is handed to
+        the parameter that asked for it.
         """
-        slot = self._entry.data_slot or data_slot_name(inspect.signature(method))
-        if slot is None:
+        if isinstance(data, dict):
+            # The caller already cut the sheet into slots.
+            for name in data:
+                if name in kwargs:
+                    raise ValidationError(
+                        f"{name} is the data parameter and was also given explicitly; it cannot be set twice."
+                    )
+            return method(**data, **kwargs)
+
+        slots = data_slot_names(inspect.signature(method), self._entry.data_slots)
+        if not slots:
             return method(**kwargs)
-        if slot in kwargs:
-            raise ValueError(f"{slot} is the data parameter and was also given explicitly; it cannot be set twice.")
-        return method(**{slot: data}, **kwargs)
+        for name in slots:
+            if name in kwargs:
+                raise ValidationError(
+                    f"{name} is the data parameter and was also given explicitly; it cannot be set twice."
+                )
+        if self._entry.data_slots is None:
+            # No declaration: the sheet goes, whole, into the one slot.
+            return method(**{slots[0]: data}, **kwargs)
+        # Declared: the sheet is a set of columns, and each slot takes one
+        # of them.  The first is the time axis, the second the
+        # measurement -- which is the order the sheet's columns are in.
+        columns = sheet_columns(data, len(slots))
+        return method(**dict(zip(slots, columns, strict=True)), **kwargs)
 
     def analyze(self, data: Any, **kwargs: Any) -> AnalysisResult:
         """Run the wrapped analysis.

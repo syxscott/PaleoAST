@@ -160,6 +160,11 @@ def test_the_data_slot_is_never_a_form_field(registry) -> None:
     Sending it twice is a TypeError -- "got multiple values for
     argument" -- which is what happened to orbital_forcing, whose first
     parameter is a period and not the data at all.
+
+    An analysis that declares ``data_slots`` is the exception, and the
+    exception is a column picker rather than the sheet: the sheet is cut
+    into columns and each slot takes one of them, so the form asks
+    WHICH column, never for the data itself.
     """
     import inspect
 
@@ -175,8 +180,18 @@ def test_the_data_slot_is_never_a_form_field(registry) -> None:
         slot = data_slot_name(signature)
         if slot is None:
             continue
-        names = {s.name for s in build_specs(entry, plugin)}
-        assert slot not in names, f"{entry.name} offers a field for its data parameter {slot!r}"
+        specs = {s.name: s for s in build_specs(entry, plugin)}
+        if slot not in specs:
+            continue
+        if entry.data_slots is not None and slot in entry.data_slots:
+            # A declared slot is offered as a column picker. It must not
+            # be a field that sends the data.
+            assert specs[slot].kind == "array", (
+                f"{entry.name} offers a field for its data parameter {slot!r} "
+                f"that is not a column picker"
+            )
+            continue
+        assert slot not in specs, f"{entry.name} offers a field for its data parameter {slot!r}"
 
 
 # ---------------------------------------------------------------------------
