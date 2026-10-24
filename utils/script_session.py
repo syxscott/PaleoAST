@@ -578,7 +578,56 @@ def _format_result(value: Any) -> str:
     metadata = getattr(value, "metadata", None)
     if isinstance(metadata, dict) and "summary" in metadata:
         return str(metadata["summary"])
+    rendered = _render_dataclass_fields(value)
+    if rendered is not None:
+        return rendered
     return repr(value)
+
+
+def _render_dataclass_fields(value: Any) -> str | None:
+    """A readable rendering of a result that has no summary of its own.
+
+    A dataclass's ``repr`` prints every array in full: the red-noise
+    confidence band came out as nine thousand characters of numbers, which
+    is not something a person reads.  This renders the fields one per
+    line, and an array as its shape and its range rather than its contents.
+
+    Returns ``None`` for anything that is not a dataclass, so the caller
+    falls back to ``repr``.
+    """
+    fields = getattr(type(value), "__dataclass_fields__", None)
+    if not fields:
+        return None
+    lines: list[str] = []
+    for name in fields:
+        try:
+            item = getattr(value, name)
+        except Exception:  # pragma: no cover - a property that raises
+            continue
+        if isinstance(item, np.ndarray):
+            if item.size == 0:
+                rendered = "array(empty)"
+            else:
+                flat = item.ravel()
+                numeric = flat[np.isfinite(flat)] if flat.dtype.kind in "fc" else flat
+                if numeric.size == 0:
+                    rendered = f"array(shape={item.shape})"
+                else:
+                    rendered = (
+                        f"array(shape={item.shape}, min={float(np.min(numeric)):.6g}, max={float(np.max(numeric)):.6g})"
+                    )
+        elif isinstance(item, (list, tuple)):
+            rendered = f"{type(item).__name__}({len(item)} items)"
+        elif isinstance(item, (int, float, np.integer, np.floating, bool, np.bool_)):
+            rendered = f"{item}"
+        elif item is None:
+            rendered = "None"
+        else:
+            rendered = f"<{type(item).__name__}>"
+        lines.append(f"{name}: {rendered}")
+    if not lines:
+        return None
+    return "\n".join(lines)
 
 
 __all__ = ["DataProxy", "ExecutionResult", "ScriptSession"]

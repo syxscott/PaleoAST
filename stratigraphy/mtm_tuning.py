@@ -194,6 +194,33 @@ class MTMTuningResult:
         return result
 
 
+@dataclass(frozen=True)
+class TaperSelection:
+    """taper 数与时间-带宽积的选参结果。
+
+    Attributes:
+        n_tapers: 实际生效的 taper 数 ``K``（奇数）。
+        time_bandwidth: 实际生效的时间-带宽积 ``NW``，满足 ``NW = (K + 1) / 2``。
+        n_samples: 选参时依据的记录长度（样本数）。
+    """
+
+    n_tapers: int
+    time_bandwidth: float
+    n_samples: int
+
+    def summary(self) -> str:
+        """生成摘要文本。"""
+        return "\n".join(
+            [
+                _("Multitaper taper selection"),
+                "=" * 48,
+                _("Record length: {0}").format(int(self.n_samples)),
+                _("Tapers: {0}").format(int(self.n_tapers)),
+                _("Time-bandwidth product: {0}").format(f"{self.time_bandwidth:.3f}"),
+            ]
+        )
+
+
 # =============================================================================
 # 2. 输入清洗
 # =============================================================================
@@ -251,7 +278,7 @@ def select_taper_count(
     n_samples: int,
     time_bandwidth: float | None = None,
     n_tapers: int | None = None,
-) -> tuple[int, float]:
+) -> TaperSelection:
     """按 Thomson 的规则选 taper 数与时间-带宽积。
 
     规则（详见模块 docstring）：
@@ -274,7 +301,7 @@ def select_taper_count(
 
     Returns
     -------
-    (n_tapers, time_bandwidth):
+    TaperSelection:
         实际生效的 taper 数 ``K`` 与时间-带宽积 ``NW``，两者满足
         ``NW = (K + 1) / 2``。
 
@@ -323,7 +350,11 @@ def select_taper_count(
                 ),
                 details={"n_tapers": requested, "n_samples": count, "maximum": cap},
             )
-        return requested, (requested + 1) / 2.0
+        return TaperSelection(
+            n_tapers=requested,
+            time_bandwidth=(requested + 1) / 2.0,
+            n_samples=count,
+        )
 
     bandwidth = DEFAULT_TIME_BANDWIDTH if time_bandwidth is None else float(time_bandwidth)
     if not np.isfinite(bandwidth) or bandwidth < 1.0:
@@ -338,7 +369,11 @@ def select_taper_count(
     if chosen % 2 == 0:
         chosen -= 1
     chosen = max(1, chosen)
-    return chosen, (chosen + 1) / 2.0
+    return TaperSelection(
+        n_tapers=chosen,
+        time_bandwidth=(chosen + 1) / 2.0,
+        n_samples=count,
+    )
 
 
 # =============================================================================
@@ -448,7 +483,9 @@ def adaptive_degrees_of_freedom(
         :func:`tuned_multitaper_spectrum` 的 ``spectrum`` 一致）。
     """
     series = _clean_series(values, "MTM input")
-    count, bandwidth = select_taper_count(series.size, time_bandwidth, n_tapers)
+    selection = select_taper_count(series.size, time_bandwidth, n_tapers)
+    count = selection.n_tapers
+    bandwidth = selection.time_bandwidth
     eigenvalues, tapers = dpss_tapers(series.size, bandwidth, count)
     _power, single = _multitaper_power(tapers, eigenvalues, series)
     if count < MIN_TAPERS:
@@ -690,7 +727,9 @@ def tuned_multitaper_spectrum(
             details={"dt": dt},
         )
 
-    count, bandwidth = select_taper_count(series.size, time_bandwidth, n_tapers)
+    selection = select_taper_count(series.size, time_bandwidth, n_tapers)
+    count = selection.n_tapers
+    bandwidth = selection.time_bandwidth
     working = _linear_detrend(series) if detrend else series
     eigenvalues, tapers = dpss_tapers(series.size, bandwidth, count)
     power, _single = _multitaper_power(tapers, eigenvalues, working)

@@ -64,6 +64,8 @@ version: 1.0.0
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import numpy.typing as npt
 
@@ -72,6 +74,7 @@ from utils.exceptions import ValidationError
 
 __all__ = [
     "PLOTTING_POSITIONS",
+    "InversePercentileResult",
     "inverse_percentile",
     "non_exceedance_probability",
 ]
@@ -86,6 +89,37 @@ PLOTTING_POSITIONS: dict[str, tuple[float, float]] = {
     "gringorten": (0.44, 0.12),
     "hazen": (0.5, 0.0),
 }
+
+
+@dataclass(frozen=True)
+class InversePercentileResult:
+    """逆百分位的结果。
+
+    Attributes:
+        value: 反解出的分位数值。
+        probability: 给定的非超越概率。
+        plotting_position: 实际使用的绘图位置名（自定义 ``(p₁, p₂)`` 记为
+            ``"custom"``）。
+        n_samples: 样本的点数。
+    """
+
+    value: float
+    probability: float
+    plotting_position: str
+    n_samples: int
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Inverse percentile"),
+                "=" * 48,
+                _("Quantile value: {0}").format(f"{self.value:.6g}"),
+                _("Probability: {0}").format(f"{self.probability:.1%}"),
+                _("Plotting position: {0}").format(self.plotting_position),
+                _("Sample size: {0}").format(self.n_samples),
+            ]
+        )
 
 
 def _as_sample(values: npt.NDArray) -> npt.NDArray:
@@ -208,7 +242,7 @@ def inverse_percentile(
     values: npt.NDArray,
     probability: float,
     plotting_position: str | tuple[float, float] = "hazen",
-) -> float:
+) -> InversePercentileResult:
     """给定样本与一个非超越概率，返回对应的分位数值。
 
     这是 :func:`non_exceedance_probability`（Acycle ``invprctile.m`` 的方向）
@@ -222,7 +256,8 @@ def inverse_percentile(
             ``(p₁, p₂)``。
 
     Returns:
-        float: 分位数值。
+        InversePercentileResult: 反解出的分位数值（``value``）与所用的概率、
+            绘图位置。
 
     Raises:
         ValidationError: 输入维度、有限性、概率取值或绘图位置不合法时。
@@ -241,16 +276,25 @@ def inverse_percentile(
 
     unique_values, positions = _plotting_positions(array, plotting_position)
     if unique_values.size == 1:
-        return float(unique_values[0])
+        value = float(unique_values[0])
+    else:
+        index = int(np.searchsorted(positions, float(probability), side="right")) - 1
+        if index < 0:
+            value = float(unique_values[0])
+        elif index >= positions.size - 1:
+            value = float(unique_values[-1])
+        else:
+            lower_value = float(unique_values[index])
+            upper_value = float(unique_values[index + 1])
+            lower_position = float(positions[index])
+            upper_position = float(positions[index + 1])
+            fraction = (float(probability) - lower_position) / (upper_position - lower_position)
+            value = lower_value + fraction * (upper_value - lower_value)
 
-    index = int(np.searchsorted(positions, float(probability), side="right")) - 1
-    if index < 0:
-        return float(unique_values[0])
-    if index >= positions.size - 1:
-        return float(unique_values[-1])
-    lower_value = float(unique_values[index])
-    upper_value = float(unique_values[index + 1])
-    lower_position = float(positions[index])
-    upper_position = float(positions[index + 1])
-    fraction = (float(probability) - lower_position) / (upper_position - lower_position)
-    return lower_value + fraction * (upper_value - lower_value)
+    name = plotting_position if isinstance(plotting_position, str) else "custom"
+    return InversePercentileResult(
+        value=value,
+        probability=float(probability),
+        plotting_position=name,
+        n_samples=int(array.size),
+    )

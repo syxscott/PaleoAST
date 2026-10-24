@@ -472,6 +472,35 @@ def test_format_falls_back_to_repr() -> None:
     assert _format_result([1, 2, 3]) == "[1, 2, 3]"
 
 
+def test_a_dataclass_without_a_summary_is_rendered_field_by_field() -> None:
+    """A result with no summary of its own still reads like a result.
+
+    A dataclass's repr prints every array in full.  The red-noise confidence
+    band came out as nine thousand characters of numbers, which is not
+    something a person reads.  The fallback names the fields and gives an
+    array its shape and its range instead.
+    """
+    from dataclasses import dataclass
+
+    @dataclass
+    class Band:
+        frequencies: np.ndarray
+        lower: np.ndarray
+        rho: float
+
+    band = Band(
+        frequencies=np.linspace(0.0, 0.5, 129),
+        lower=np.linspace(0.2, 0.3, 129),
+        rho=0.25,
+    )
+    text = _format_result(band)
+    assert "frequencies:" in text
+    assert "shape=(129,)" in text
+    assert "rho: 0.25" in text
+    # and it is SHORT: the point is that the numbers are not dumped
+    assert len(text) < 400
+
+
 def test_execution_result_text_combines_channels() -> None:
     """text() is what a console would display."""
     result = ExecutionResult(ok=False, output="printed\n", value="42", error="Traceback...\n")

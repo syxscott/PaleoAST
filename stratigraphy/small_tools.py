@@ -534,6 +534,31 @@ class DomainTransformResult:
     method: str
     dt: float
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        lines = [
+            _("Domain transform"),
+            "=" * 48,
+            _("Method: {0}").format(self.method),
+            _("Points: {0}").format(self.values.size),
+            _("Sample interval: {0}").format(f"{self.dt:.6g}"),
+        ]
+        if self.envelope is not None and self.envelope.size:
+            lines.append(
+                _("Envelope range: {0} to {1}").format(
+                    f"{float(np.min(self.envelope)):.6g}",
+                    f"{float(np.max(self.envelope)):.6g}",
+                )
+            )
+        if self.phase is not None and self.phase.size:
+            lines.append(
+                _("Phase range: {0} to {1} degrees").format(
+                    f"{float(np.degrees(np.min(self.phase))):.2f}",
+                    f"{float(np.degrees(np.max(self.phase))):.2f}",
+                )
+            )
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class GaussianMatchedFilterResult:
@@ -557,6 +582,19 @@ class GaussianMatchedFilterResult:
     template: npt.NDArray
     normalized: bool
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Gaussian matched filter"),
+                "=" * 48,
+                _("Response points: {0}").format(self.response.size),
+                _("Best lag: {0}").format(self.best_lag),
+                _("Best score: {0}").format(f"{self.best_score:.6f}"),
+                _("Normalized: {0}").format(self.normalized),
+            ]
+        )
+
 
 @dataclass(frozen=True)
 class PeakFindingResult:
@@ -573,6 +611,24 @@ class PeakFindingResult:
     values: npt.NDArray
     n_requested: int
     n_available: int
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        lines = [
+            _("Peak finding"),
+            "=" * 48,
+            _("Peaks found: {0}").format(self.positions.size),
+            _("Peaks requested: {0}").format(self.n_requested),
+            _("Local maxima available: {0}").format(self.n_available),
+        ]
+        if self.values.size:
+            highest = int(np.argmax(self.values))
+            lines.append(
+                _("Highest peak: {0} at index {1}").format(
+                    f"{float(self.values[highest]):.6f}", int(self.positions[highest])
+                )
+            )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -597,6 +653,20 @@ class DateDayNumberResult:
     month: int
     day: int
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Calendar date"),
+                "=" * 48,
+                _("Date: {0}-{1}-{2}").format(self.year, self.month, self.day),
+                _("Day number: {0}").format(self.day_number),
+                _("Day of year: {0}").format(self.day_of_year),
+                _("Julian day: {0}").format(self.julian_day),
+                _("Leap year: {0}").format(self.is_leap_year),
+            ]
+        )
+
 
 @dataclass(frozen=True)
 class PaddingResult:
@@ -615,6 +685,19 @@ class PaddingResult:
     original_length: int
     padded_length: int
     padding_length: int
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Series padding"),
+                "=" * 48,
+                _("Mode: {0}").format(self.mode),
+                _("Original length: {0}").format(self.original_length),
+                _("Padded length: {0}").format(self.padded_length),
+                _("Points added: {0}").format(self.padding_length),
+            ]
+        )
 
 
 @dataclass(frozen=True)
@@ -645,6 +728,22 @@ class RobustLinearFitResult:
     ols_intercept: float
     r_squared: float
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Robust linear fit"),
+                "=" * 48,
+                _("Slope: {0}").format(f"{self.slope:.6f}"),
+                _("Intercept: {0}").format(f"{self.intercept:.6f}"),
+                _("R-squared: {0}").format(f"{self.r_squared:.6f}"),
+                _("Inliers: {0}").format(self.n_inliers),
+                _("Iterations: {0}").format(self.n_iterations),
+                _("Robust scale: {0}").format(f"{self.scale:.6f}"),
+                _("OLS slope: {0}").format(f"{self.ols_slope:.6f}"),
+            ]
+        )
+
 
 @dataclass(frozen=True)
 class WaveletSmoothingResult:
@@ -670,6 +769,26 @@ class WaveletSmoothingResult:
     threshold: float
     mode: str
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        smoothed = np.asarray(self.smoothed, dtype=float)
+        lines = [
+            _("Wavelet smoothing"),
+            "=" * 48,
+            _("Mode: {0}").format(self.mode),
+            _("Points: {0}").format(smoothed.size),
+            _("Levels: {0}").format(self.scales.size),
+            _("Noise sigma: {0}").format(f"{self.noise_sigma:.6g}"),
+        ]
+        if smoothed.size:
+            lines.append(
+                _("Smoothed range: {0} to {1}").format(
+                    f"{float(np.min(smoothed)):.6g}",
+                    f"{float(np.max(smoothed)):.6g}",
+                )
+            )
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class CosineTaperResult:
@@ -684,6 +803,24 @@ class CosineTaperResult:
     weights: npt.NDArray
     length: int
     taper_fraction: float
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        weights = np.asarray(self.weights, dtype=float)
+        lines = [
+            _("Cosine taper"),
+            "=" * 48,
+            _("Length: {0}").format(self.length),
+            _("Taper fraction: {0}").format(f"{self.taper_fraction:.4f}"),
+        ]
+        if weights.size:
+            lines.append(
+                _("Weight range: {0} to {1}").format(
+                    f"{float(np.min(weights)):.4f}",
+                    f"{float(np.max(weights)):.4f}",
+                )
+            )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -701,6 +838,31 @@ class PhaseDiagramResult:
     radius: npt.NDArray
     phase: npt.NDArray
     envelope: npt.NDArray
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        radius = np.asarray(self.radius, dtype=float)
+        phase = np.asarray(self.phase, dtype=float)
+        lines = [
+            _("Phase diagram"),
+            "=" * 48,
+            _("Points: {0}").format(self.points.shape[0]),
+        ]
+        if radius.size:
+            lines.append(
+                _("Radius range: {0} to {1}").format(
+                    f"{float(np.min(radius)):.6g}",
+                    f"{float(np.max(radius)):.6g}",
+                )
+            )
+        if phase.size:
+            lines.append(
+                _("Phase range: {0} to {1} degrees").format(
+                    f"{float(np.degrees(np.min(phase))):.2f}",
+                    f"{float(np.degrees(np.max(phase))):.2f}",
+                )
+            )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -729,6 +891,21 @@ class RandomPhaseResampleResult:
     amplitude_relative_error: float
     value_distribution_error: float
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("Random phase resample"),
+                "=" * 48,
+                _("Method: {0}").format(self.method),
+                _("Points: {0}").format(self.values.size),
+                _("Seed: {0}").format(self.seed),
+                _("Iterations: {0}").format(self.n_iterations),
+                _("Amplitude relative error: {0}").format(f"{self.amplitude_relative_error:.3e}"),
+                _("Value distribution error: {0}").format(f"{self.value_distribution_error:.3e}"),
+            ]
+        )
+
 
 @dataclass(frozen=True)
 class FixedBandwidthMovingAverageResult:
@@ -745,6 +922,25 @@ class FixedBandwidthMovingAverageResult:
     window_counts: npt.NDArray
     bandwidth: float
     dt: float
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        values = np.asarray(self.values, dtype=float)
+        lines = [
+            _("Fixed bandwidth moving average"),
+            "=" * 48,
+            _("Points: {0}").format(values.size),
+            _("Bandwidth: {0}").format(f"{self.bandwidth:.6g}"),
+            _("Sample interval: {0}").format(f"{self.dt:.6g}"),
+        ]
+        if values.size:
+            lines.append(
+                _("Smoothed range: {0} to {1}").format(
+                    f"{float(np.min(values)):.6g}",
+                    f"{float(np.max(values)):.6g}",
+                )
+            )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -766,6 +962,26 @@ class PolynomialDetrendResult:
     window: int
     coefficients: npt.NDArray
     residual_std: float
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        trend = np.asarray(self.trend, dtype=float)
+        lines = [
+            _("Polynomial detrend"),
+            "=" * 48,
+            _("Points: {0}").format(self.detrended.size),
+            _("Order: {0}").format(self.order),
+            _("Window: {0}").format(self.window),
+            _("Residual std: {0}").format(f"{self.residual_std:.6g}"),
+        ]
+        if trend.size:
+            lines.append(
+                _("Trend range: {0} to {1}").format(
+                    f"{float(np.min(trend)):.6g}",
+                    f"{float(np.max(trend)):.6g}",
+                )
+            )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -792,6 +1008,26 @@ class ChiSquareIntervalResult:
     dof: int
     level: float
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        frequencies = np.asarray(self.frequencies, dtype=float)
+        lines = [
+            _("Chi-square confidence band"),
+            "=" * 48,
+            _("Frequencies: {0}").format(frequencies.size),
+            _("AR(1) rho: {0}").format(f"{self.rho:.6g}"),
+            _("Degrees of freedom: {0}").format(self.dof),
+            _("Confidence level: {0}").format(f"{self.level:.1%}"),
+        ]
+        if frequencies.size:
+            lines.append(
+                _("Frequency range: {0} to {1}").format(
+                    f"{float(np.min(frequencies)):.6g}",
+                    f"{float(np.max(frequencies)):.6g}",
+                )
+            )
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class TobitRegressionResult:
@@ -816,6 +1052,24 @@ class TobitRegressionResult:
     converged: bool
     limit: float
     ols_coefficients: npt.NDArray
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        coefficients = np.asarray(self.coefficients, dtype=float)
+        lines = [
+            _("Tobit regression"),
+            "=" * 48,
+            _("Observations: {0}").format(self.n_observations),
+            _("Censored observations: {0}").format(self.n_censored),
+            _("Censoring limit: {0}").format(f"{self.limit:.6g}"),
+            _("Coefficients: {0}").format(coefficients.size),
+            _("Sigma: {0}").format(f"{self.sigma:.6f}"),
+            _("Log-likelihood: {0}").format(f"{self.log_likelihood:.6f}"),
+            _("Converged: {0}").format(self.converged),
+        ]
+        if coefficients.size:
+            lines.append(_("Intercept: {0}").format(f"{float(coefficients[0]):.6f}"))
+        return "\n".join(lines)
 
 
 # =============================================================================
@@ -2016,7 +2270,7 @@ def chi_square_confidence_interval(
                 details={"rho": rho_value},
             )
 
-    power, frequencies = periodogram(
+    frequencies, power = periodogram(
         series,
         fs=1.0 / step,
         window="boxcar",

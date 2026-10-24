@@ -804,3 +804,34 @@ class TestAnalyzerFacade:
                 np.array([LAB_ERROR]),
                 str(tmp_path / "TestCurve.14c"),
             )
+
+
+# =============================================================================
+# 摘要
+# =============================================================================
+
+
+class TestSummary:
+    """校准结果必须有一份给人看的摘要。
+
+    摘要不是装饰：脚本控制台把结果的 ``summary()`` 印给用户；没有它就只剩
+    dataclass 的 ``repr``，整条后验密度曲线被摊在屏幕上。
+    """
+
+    def test_the_calibration_summarises_itself(self):
+        """校准结果本身有摘要。"""
+        result = calibrate_radiocarbon(LAB_AGE, LAB_ERROR, _linear_curve())
+
+        summary = result.summary()
+
+        assert summary.strip()
+
+    def test_every_hpd_interval_summarises_itself(self):
+        """每一个 HPD 区间也有自己的摘要（区间是单独返回的结果类）。"""
+        result = calibrate_radiocarbon(LAB_AGE, LAB_ERROR, _linear_curve())
+
+        intervals = result.hpd(LEVEL_68)
+
+        assert intervals
+        for interval in intervals:
+            assert interval.summary().strip()

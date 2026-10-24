@@ -237,6 +237,19 @@ class HpdInterval:
         """区间宽度（年）。"""
         return float(self.upper - self.lower)
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        return "\n".join(
+            [
+                _("HPD interval"),
+                "=" * 48,
+                _("Lower: {0}").format(f"{self.lower:.0f}"),
+                _("Upper: {0}").format(f"{self.upper:.0f}"),
+                _("Width: {0}").format(f"{self.width:.0f}"),
+                _("Probability: {0}").format(f"{self.probability:.1%}"),
+            ]
+        )
+
 
 @dataclass(frozen=True)
 class RadiocarbonCalibration:

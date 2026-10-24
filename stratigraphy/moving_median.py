@@ -44,6 +44,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
@@ -62,7 +63,38 @@ logger = logging.getLogger(__name__)
 MIN_WINDOW = 3
 
 
-def moving_median(values: npt.NDArray, window: int) -> npt.NDArray:
+@dataclass(frozen=True)
+class MovingMedianResult:
+    """移动中值滤波的结果。
+
+    Attributes:
+        values: 与输入等长的中值滤波结果。
+        window: 实际使用的窗口长度（样本数）。
+    """
+
+    values: npt.NDArray
+    window: int
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        values = np.asarray(self.values, dtype=float)
+        lines = [
+            _("Moving median"),
+            "=" * 48,
+            _("Points: {0}").format(values.size),
+            _("Window: {0}").format(self.window),
+        ]
+        if values.size:
+            lines.append(
+                _("Value range: {0} to {1}").format(
+                    f"{float(np.min(values)):.6g}",
+                    f"{float(np.max(values)):.6g}",
+                )
+            )
+        return "\n".join(lines)
+
+
+def moving_median(values: npt.NDArray, window: int) -> MovingMedianResult:
     """滑动窗口中值滤波。
 
     对每个位置 ``i``，取窗口覆盖到的样本的中值作为输出。窗口长度见模块
@@ -77,8 +109,8 @@ def moving_median(values: npt.NDArray, window: int) -> npt.NDArray:
 
     Returns
     -------
-    ndarray
-        与输入等长的中值滤波结果。
+    MovingMedianResult
+        中值滤波后的序列（``values``）与实际使用的窗口长度。
 
     Raises
     ------
@@ -87,7 +119,7 @@ def moving_median(values: npt.NDArray, window: int) -> npt.NDArray:
 
     Examples
     --------
-    >>> moving_median(np.array([0.0, 0.0, 10.0, 0.0, 0.0]), 3)
+    >>> moving_median(np.array([0.0, 0.0, 10.0, 0.0, 0.0]), 3).values
     array([0., 0., 0., 0., 0.])
     """
     array = np.asarray(values, dtype=float)
@@ -131,7 +163,7 @@ def moving_median(values: npt.NDArray, window: int) -> npt.NDArray:
             start = max(0, index - back)
             stop = min(count, index + forward + 1)
             output[index] = float(np.median(array[start:stop]))
-        return output
+        return MovingMedianResult(values=output, window=size)
 
     # 内部位置：窗口长度恰好是 size，用滑窗视图一次算完。
     windows = sliding_window_view(array, size)
@@ -142,4 +174,4 @@ def moving_median(values: npt.NDArray, window: int) -> npt.NDArray:
         output[index] = float(np.median(array[0 : index + forward + 1]))
     for index in range(interior_stop, count):
         output[index] = float(np.median(array[index - back : count]))
-    return output
+    return MovingMedianResult(values=output, window=size)

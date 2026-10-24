@@ -102,7 +102,7 @@ def _signal_with_cycle(
 
 def test_taper_count_is_odd_and_grows_with_the_record_length():
     """taper 数必须是奇数，且随记录变长而单调不减（方向性判据）。"""
-    counts = [select_taper_count(n, time_bandwidth=6.0)[0] for n in (12, 16, 20, 24, 40)]
+    counts = [select_taper_count(n, time_bandwidth=6.0).n_tapers for n in (12, 16, 20, 24, 40)]
     assert all(count % 2 == 1 for count in counts), f"taper counts must be odd: {counts}"
     assert counts == sorted(counts), f"taper counts must not shrink with the record: {counts}"
     assert counts[0] < counts[-1], f"a longer record must allow more tapers: {counts}"
@@ -110,7 +110,7 @@ def test_taper_count_is_odd_and_grows_with_the_record_length():
 
 def test_taper_count_grows_with_the_requested_bandwidth():
     """带宽越大，taper 数越多；且始终是奇数。"""
-    counts = [select_taper_count(256, time_bandwidth=nw)[0] for nw in (2.0, 3.0, 4.0, 5.0)]
+    counts = [select_taper_count(256, time_bandwidth=nw).n_tapers for nw in (2.0, 3.0, 4.0, 5.0)]
     assert counts == sorted(counts), f"taper counts must grow with the bandwidth: {counts}"
     assert counts[0] < counts[-1]
     assert all(count % 2 == 1 for count in counts)
@@ -119,21 +119,27 @@ def test_taper_count_grows_with_the_requested_bandwidth():
 def test_the_reported_bandwidth_matches_the_taper_count():
     """返回的带宽必须与 taper 数自洽：NW = (K + 1) / 2。"""
     for n_samples in (32, 64, 128, 256):
-        count, bandwidth = select_taper_count(n_samples, time_bandwidth=4.0)
+        selection = select_taper_count(n_samples, time_bandwidth=4.0)
+        count = selection.n_tapers
+        bandwidth = selection.time_bandwidth
         assert bandwidth == pytest.approx((count + 1) / 2.0)
         assert count % 2 == 1
 
 
 def test_an_explicit_taper_count_is_used_as_given():
     """调用方给了 taper 数就用它（并据此反推带宽）。"""
-    count, bandwidth = select_taper_count(256, n_tapers=7)
+    selection = select_taper_count(256, n_tapers=7)
+    count = selection.n_tapers
+    bandwidth = selection.time_bandwidth
     assert count == 7
     assert bandwidth == pytest.approx(4.0)
 
 
 def test_a_short_record_adapts_the_bandwidth_down():
     """记录太短时带宽被自适应地收窄，而不是硬报一个用不了的 taper 数。"""
-    count, bandwidth = select_taper_count(12, time_bandwidth=6.0)
+    selection = select_taper_count(12, time_bandwidth=6.0)
+    count = selection.n_tapers
+    bandwidth = selection.time_bandwidth
     assert count <= 12 // 2
     assert count % 2 == 1
     assert bandwidth == pytest.approx((count + 1) / 2.0)
@@ -153,6 +159,20 @@ def test_bad_taper_selections_are_rejected(kwargs, reason):
     """非法参数 -> ValidationError。"""
     with pytest.raises(ValidationError):
         select_taper_count(**kwargs)
+
+
+def test_the_taper_selection_summarises_itself():
+    """结果必须有一份给人看的摘要。
+
+    脚本控制台把结果的 ``summary()`` 印给用户；没有它就只剩 dataclass 的
+    ``repr``，两个裸数字，看不出这是选参的结果。
+    """
+    result = select_taper_count(256, time_bandwidth=4.0)
+
+    summary = result.summary()
+
+    assert summary.strip()
+    assert str(result.n_tapers) in summary
 
 
 # =============================================================================

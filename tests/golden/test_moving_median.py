@@ -112,7 +112,7 @@ def _spiked_series() -> npt.NDArray:
 def test_an_isolated_spike_is_removed_while_the_mean_is_dragged():
     """中值把孤立尖峰压掉；同一窗口的移动平均却被尖峰带偏。"""
     values = _spiked_series()
-    smoothed = moving_median(values, WINDOW)
+    smoothed = moving_median(values, WINDOW).values
 
     assert abs(float(smoothed[SPIKE_INDEX]) - BASELINE) < 0.01 * SPIKE, (
         "the moving median must reject an isolated spike"
@@ -136,7 +136,7 @@ def test_the_result_matches_a_direct_implementation():
         for window in (3, 4, 5, 8, 9):
             values = rng.standard_normal(size) * 10.0 + 3.0
             expected = _reference_moving_median(values, window)
-            actual = moving_median(values, window)
+            actual = moving_median(values, window).values
             assert actual.shape == values.shape
             assert np.allclose(actual, expected), f"size={size}, window={window}"
 
@@ -144,7 +144,7 @@ def test_the_result_matches_a_direct_implementation():
 def test_the_window_is_centred_for_odd_windows():
     """奇数窗口中心对称：中点上的输出是中心邻域的中值。"""
     values = np.array([0.0, 1.0, 2.0, 30.0, 4.0, 5.0, 6.0])
-    smoothed = moving_median(values, 3)
+    smoothed = moving_median(values, 3).values
     assert float(smoothed[3]) == pytest.approx(4.0), "the centre sample must not be pulled by its neighbour"
     assert float(smoothed[2]) == pytest.approx(2.0)
 
@@ -152,19 +152,19 @@ def test_the_window_is_centred_for_odd_windows():
 def test_an_even_window_takes_one_extra_forward_point():
     """偶数窗口：向前多取一个点（``[i-(h-1), i+h]``）。"""
     values = np.array([0.0, 1.0, 2.0, 30.0, 5.0, 6.0, 7.0])
-    smoothed = moving_median(values, 4)
+    smoothed = moving_median(values, 4).values
     # 窗口 4 -> back = 1, forward = 2：位置 2 的窗口是 [1, 2, 30, 5]。
     assert float(smoothed[2]) == pytest.approx(3.5)
     # 位置 3 的窗口是 [2, 30, 5, 6]。
     assert float(smoothed[3]) == pytest.approx(5.5)
     # 对照：中心对称的奇数窗口 3 在位置 2 只看 [1, 2, 30]，看不到前面的 5。
-    assert float(moving_median(values, 3)[2]) == pytest.approx(2.0)
+    assert float(moving_median(values, 3).values[2]) == pytest.approx(2.0)
 
 
 def test_a_step_edge_is_preserved_better_than_by_a_mean():
     """阶跃边缘：中值保留台阶，平均把它抹平。"""
     values = np.concatenate([np.full(15, 0.0), np.full(15, 10.0)])
-    smoothed = moving_median(values, 5)
+    smoothed = moving_median(values, 5).values
     averaged = np.convolve(values, np.ones(5) / 5.0, mode="valid")
 
     median_edge = float(smoothed[14])
@@ -176,7 +176,21 @@ def test_a_step_edge_is_preserved_better_than_by_a_mean():
 def test_a_constant_series_is_unchanged():
     """常数序列的中值滤波仍然是常数。"""
     values = np.full(30, 2.5)
-    assert np.allclose(moving_median(values, 5), values)
+    assert np.allclose(moving_median(values, 5).values, values)
+
+
+def test_the_result_summarises_itself():
+    """结果必须有一份给人看的摘要。
+
+    摘要不是装饰：脚本控制台把结果的 ``summary()`` 印给用户，没有它就只剩
+    dataclass 的 ``repr``，整条数组被摊在屏幕上。
+    """
+    result = moving_median(_spiked_series(), WINDOW)
+
+    summary = result.summary()
+
+    assert summary.strip()
+    assert str(WINDOW) in summary
 
 
 # =============================================================================
@@ -208,7 +222,7 @@ def test_empty_and_non_finite_inputs_are_rejected():
 def test_a_window_larger_than_the_series_is_handled():
     """窗口比序列还长时，两端截断后仍能算出结果。"""
     values = np.array([1.0, 2.0, 3.0])
-    smoothed = moving_median(values, 9)
+    smoothed = moving_median(values, 9).values
     assert smoothed.shape == values.shape
     assert np.all(np.isfinite(smoothed))
     assert np.allclose(smoothed, _reference_moving_median(values, 9))

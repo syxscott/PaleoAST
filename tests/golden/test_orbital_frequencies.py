@@ -409,3 +409,27 @@ class TestReproducibility:
             assert float(getattr(first, name).frequency_arcsec_per_yr) == float(
                 getattr(second, name).frequency_arcsec_per_yr
             )
+
+
+# =============================================================================
+# 摘要
+# =============================================================================
+
+
+class TestSummary:
+    """结果必须有一份给人看的摘要。
+
+    摘要不是装饰：脚本控制台把结果的 ``summary()`` 印给用户；没有它就只剩
+    dataclass 的 ``repr``，一整组频率的字典被摊在屏幕上。
+    """
+
+    def test_the_frequency_set_summarises_itself(self, present):
+        """9 条频率的集合有自己的摘要。"""
+        assert present.summary().strip()
+
+    def test_every_frequency_summarises_itself(self, present):
+        """每一条频率也有自己的一行摘要。"""
+        for name, entry in present.as_mapping().items():
+            summary = entry.summary()
+            assert summary.strip(), f"{name} produced an empty summary"
+            assert name in summary

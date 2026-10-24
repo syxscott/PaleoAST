@@ -651,3 +651,50 @@ class TestReproducibility:
         two = wavelet_transform(first, FINE_SCALES, time=time)
 
         assert np.array_equal(one.coefficients, two.coefficients)
+
+
+# =============================================================================
+# Summary
+# =============================================================================
+
+
+class TestSummary:
+    """Every result must carry a summary a person can read.
+
+    The summary is not decoration: the script console prints the result's
+    ``summary()`` for the user.  Without it only the dataclass ``repr``
+    survives, and the whole coefficient matrix is dumped on the screen.
+    """
+
+    def test_the_wavelet_transform_summarises_itself(self):
+        time, first, _second = _shared_signal_record()
+        result = wavelet_transform(first, FINE_SCALES, time=time)
+
+        assert result.summary().strip()
+
+    def test_the_cross_wavelet_transform_summarises_itself(self):
+        time, first, second = _shared_signal_record()
+        result = cross_wavelet_transform(first, second, FINE_SCALES, time=time)
+
+        assert result.summary().strip()
+
+    def test_the_wavelet_coherence_summarises_itself(self):
+        time, first, second = _shared_signal_record()
+        result = wavelet_coherence(first, second, COARSE_SCALES, time=time)
+
+        assert result.summary().strip()
+
+    def test_the_wavelet_significance_summarises_itself(self):
+        rng = np.random.default_rng(17)
+        time = _time_axis()
+        result = wavelet_significance(
+            rng.standard_normal(N_POINTS), COARSE_SCALES, time=time, n_monte_carlo=20, seed=13
+        )
+
+        assert result.summary().strip()
+
+    def test_the_wavelet_coherence_significance_summarises_itself(self):
+        time, first, second = _shared_signal_record()
+        result = wavelet_coherence_significance(first, second, COARSE_SCALES, time=time, n_monte_carlo=20, seed=31)
+
+        assert result.summary().strip()

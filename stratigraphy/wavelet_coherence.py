@@ -300,10 +300,14 @@ class WaveletCoherenceResult:
             _("Scales: {0}").format(self.scales.size),
         ]
         if self.coherence.size:
-            peak = int(np.argmax(self.coherence))
+            # 相干性是 ``(尺度数, 时间点数)`` 的矩阵：``argmax`` 给出的是**展平
+            # 后**的下标，直接拿它去索引周期轴（长度是尺度数）会越界。展平下标
+            # 除以时间点数才回到尺度下标。
+            flat = int(np.argmax(self.coherence))
+            scale_index = flat // self.coherence.shape[1]
             lines.append(
                 _("Peak coherence: {0} at period {1}").format(
-                    f"{self.coherence[peak]:.4f}", f"{self.periods[peak]:.6g}"
+                    f"{self.coherence.ravel()[flat]:.4f}", f"{self.periods[scale_index]:.6g}"
                 )
             )
         return "\n".join(lines)
@@ -336,6 +340,24 @@ class WaveletSignificanceResult:
     periods: npt.NDArray
     frequencies: npt.NDArray
 
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        lines = [
+            _("Wavelet significance"),
+            "=" * 48,
+            _("Scales: {0}").format(self.scales.size),
+            _("Monte Carlo repetitions: {0}").format(self.n_monte_carlo),
+            _("Seed: {0}").format(self.seed),
+            _("AR(1) coefficient: {0}").format(f"{self.ar1_coefficient:.6g}"),
+        ]
+        if self.critical_values.size:
+            lines.append(
+                _("Critical values: {0}").format(
+                    f"{float(np.min(self.critical_values)):.6g} to {float(np.max(self.critical_values)):.6g}"
+                )
+            )
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class WaveletCoherenceSignificanceResult:
@@ -360,6 +382,26 @@ class WaveletCoherenceSignificanceResult:
     scales: npt.NDArray
     periods: npt.NDArray
     frequencies: npt.NDArray
+
+    def summary(self) -> str:
+        """生成结果摘要文本。"""
+        lines = [
+            _("Wavelet coherence significance"),
+            "=" * 48,
+            _("Scales: {0}").format(self.scales.size),
+            _("Monte Carlo repetitions: {0}").format(self.n_monte_carlo),
+            _("Seed: {0}").format(self.seed),
+            _("AR(1) coefficients: {0}").format(
+                f"{float(self.ar1_coefficients[0]):.6g}, {float(self.ar1_coefficients[1]):.6g}"
+            ),
+        ]
+        if self.critical_values.size:
+            lines.append(
+                _("Critical values: {0}").format(
+                    f"{float(np.min(self.critical_values)):.6g} to {float(np.max(self.critical_values)):.6g}"
+                )
+            )
+        return "\n".join(lines)
 
 
 # =============================================================================

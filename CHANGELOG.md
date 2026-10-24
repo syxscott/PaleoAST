@@ -443,6 +443,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decimal places, so a tolerance of 1e-8 arrived as 0.0 and the analysis
   rejected it as not positive.  The number of places now follows the
   default.
+- **The chi-square confidence band had its axis and its spectrum swapped.**
+  `scipy.signal.periodogram` returns `(frequencies, spectrum)`; the
+  implementation unpacked it the other way round, so the result carried the
+  **spectrum** in the field named `frequencies` and the **frequency axis**
+  in the field named `observed_power`.  The AR(1) theoretical spectrum was
+  then evaluated on the spectrum's own values as if they were frequencies,
+  and the band was drawn on an axis that was not an axis -- a user
+  plotting `observed_power` against `frequencies` would have plotted a
+  ramp against a spectrum.  The golden test missed it because it compared
+  `result.upper` with `result.theoretical`, two fields of the same
+  result: the ratio between them survives a swap, and the scale of a band
+  is free.  The test now compares against `scipy.signal.periodogram`
+  directly -- the axis must increase from zero to Nyquist, the observed
+  power must equal scipy's spectrum point for point, and scaling the data
+  must scale the spectrum by the square and the band with it.
+- **A result with no summary of its own was printed as a wall of numbers.**
+  The house style is that every analysis writes a `summary()` for display;
+  twenty of the analyses this batch added did not, so the form fell back to
+  the dataclass's `repr` and printed every array in full -- the red-noise
+  confidence band came out as nine thousand characters.  The renderer now
+  names the fields and gives an array its shape and its range, so the
+  digest is readable whether or not the analysis wrote a summary, and
+  twenty results grew a summary of their own that names the numbers worth
+  reading (the peak, the counts, the ratios).
+- **Three analyses returned a bare value where the rest return a result.**
+  `moving_median` returned an array, `inverse_percentile` a float and
+  the taper count a tuple, where every neighbouring analysis returns a
+  result object with a summary.  All three return a result object now;
+  the function names, the parameters and the catalogue entries are
+  unchanged.
+- **The wavelet coherence summary raised every time it was called.**  It
+  took the `argmax` of the coherence matrix -- a flat index into a
+  two-dimensional array -- and used it to index the period axis, so the
+  summary of the most-used coherence result could never be read.
 - **The domain transform was implemented twice.**  `inverse_percentile`
   carried a copy of Acycle's cumulative transform and `small_tools`
   carries the same one together with the analytic-signal branch; the

@@ -777,6 +777,50 @@ def test_chi_square_interval_rejects_invalid_input():
         chi_square_confidence_interval(np.ones(64))
 
 
+def test_chi_square_interval_returns_the_axis_and_the_spectrum_they_are():
+    """频率轴必须是频率轴，观测谱必须是观测谱。
+
+    这条断言是被一个真缺陷逼出来的：实现把 ``scipy.signal.periodogram`` 的
+    两个返回值接反了（它返回 ``(frequencies, spectrum)``），于是结果里的
+    ``frequencies`` 装的是功率谱、``observed_power`` 装的是频率轴——带被算在
+    了一条无意义的轴上，而所有"上下界与理论谱成比例"的断言照样通过，
+    因为那种断言只比较实现自己的两个字段。
+
+    真值来自 scipy 自己：频率轴必须是 0 到 Nyquist 的等距序列，观测谱必须
+    逐点等于 ``scipy.signal.periodogram`` 的输出。
+    """
+    from scipy.signal import periodogram as scipy_periodogram
+
+    series = np.sin(np.arange(256) / 8.0) + 0.2 * np.cos(np.arange(256) / 5.0)
+    step = 0.25
+    result = chi_square_confidence_interval(series, dt=step, dof=4, level=0.95)
+
+    frequencies = np.asarray(result.frequencies, dtype=float)
+    observed = np.asarray(result.observed_power, dtype=float)
+
+    # the axis: strictly increasing, from zero to the Nyquist frequency
+    assert frequencies[0] == pytest.approx(0.0)
+    assert frequencies[-1] == pytest.approx(0.5 / step)
+    assert np.all(np.diff(frequencies) > 0.0)
+
+    # the spectrum: the same numbers scipy produces for the same series
+    expected_frequencies, expected_spectrum = scipy_periodogram(
+        series,
+        fs=1.0 / step,
+        window="boxcar",
+        detrend="constant",
+        scaling="density",
+    )
+    assert np.allclose(frequencies, expected_frequencies)
+    assert np.allclose(observed, expected_spectrum)
+
+    # and the band is anchored on the observed level: scaling the data
+    # scales the spectrum by the square, and the band with it
+    scaled = chi_square_confidence_interval(series * 2.0, dt=step, dof=4, level=0.95)
+    assert np.allclose(np.asarray(scaled.observed_power, dtype=float), observed * 4.0)
+    assert np.allclose(np.asarray(scaled.lower, dtype=float), np.asarray(result.lower) * 4.0)
+
+
 # =============================================================================
 # tobit_regression
 # =============================================================================
@@ -902,3 +946,50 @@ def test_random_tools_are_reproducible_with_the_same_seed():
     padded_first = pad_series(series, 80, "random", seed=99)
     padded_second = pad_series(series, 80, "random", seed=99)
     assert np.allclose(padded_first.values, padded_second.values)
+
+
+# =============================================================================
+# 摘要
+# =============================================================================
+
+
+@pytest.mark.parametrize(
+    ("tool", "call"),
+    [
+        ("domain_transform", lambda: domain_transform(np.sin(np.arange(64) / 8.0))),
+        (
+            "gaussian_matched_filter",
+            lambda: gaussian_matched_filter(
+                np.sin(np.arange(64) / 8.0),
+                np.exp(-0.5 * ((np.arange(9) - 4) / 1.5) ** 2),
+            ),
+        ),
+        ("find_n_peaks", lambda: find_n_peaks(np.sin(np.arange(64) / 2.0), 3)),
+        ("date_to_day_number", lambda: date_to_day_number(2024, 6, 15)),
+        ("pad_series", lambda: pad_series(np.arange(20.0), 30, "zero")),
+        ("robust_linear_fit", lambda: robust_linear_fit(np.arange(20.0), np.arange(20.0) * 2.0 + 1.0)),
+        ("wavelet_smoothing", lambda: wavelet_smoothing(np.sin(np.arange(64) / 4.0))),
+        ("cosine_taper", lambda: cosine_taper(100)),
+        ("phase_diagram", lambda: phase_diagram(np.sin(np.arange(64) / 4.0))),
+        ("random_phase_resample", lambda: random_phase_resample(np.sin(np.arange(64) / 4.0), seed=3)),
+        ("fixed_bandwidth_moving_average", lambda: fixed_bandwidth_moving_average(np.arange(64.0), 10.0)),
+        ("detrend_polynomial_pp", lambda: detrend_polynomial_pp(np.arange(64.0) ** 2, 2)),
+        (
+            "chi_square_confidence_interval",
+            lambda: chi_square_confidence_interval(np.sin(np.arange(256) / 8.0), dt=0.25),
+        ),
+        ("tobit_regression", lambda: tobit_regression(np.arange(20.0), np.arange(20.0) * 2.0 + 1.0)),
+    ],
+)
+def test_every_tool_summarises_itself(tool, call):
+    """每个工具的结果都必须有一份给人看的摘要。
+
+    摘要不是装饰：脚本控制台把结果的 ``summary()`` 印给用户。没有它就只剩
+    dataclass 的 ``repr``，整条数组被摊在屏幕上——红噪声置信带那样的结果会
+    渲染出成千上万个字符的数字。
+    """
+    result = call()
+
+    summary = result.summary()
+
+    assert summary.strip(), f"{tool} produced an empty summary"

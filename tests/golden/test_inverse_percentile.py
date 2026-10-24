@@ -84,7 +84,7 @@ class TestAgainstNumpyQuantiles:
     def test_normal_sample_quantiles_match_numpy(self, probability: float):
         sample = _normal_sample()
 
-        value = inverse_percentile(sample, probability)
+        value = inverse_percentile(sample, probability).value
         expected = float(np.quantile(sample, probability))
 
         assert abs(value - expected) < NPY_QUANTILE_TOLERANCE, (
@@ -94,14 +94,14 @@ class TestAgainstNumpyQuantiles:
     def test_the_recovered_quantile_is_monotonic_in_the_probability(self):
         sample = _normal_sample()
 
-        values = [inverse_percentile(sample, probability) for probability in (0.1, 0.25, 0.5, 0.75, 0.9)]
+        values = [inverse_percentile(sample, probability).value for probability in (0.1, 0.25, 0.5, 0.75, 0.9)]
 
         assert all(earlier < later for earlier, later in pairwise(values))
 
     def test_the_median_of_a_symmetric_sample_is_close_to_zero(self):
         sample = _normal_sample()
 
-        assert abs(inverse_percentile(sample, 0.5)) < 0.05
+        assert abs(inverse_percentile(sample, 0.5).value) < 0.05
 
 
 # =============================================================================
@@ -116,7 +116,7 @@ class TestRoundTrip:
     def test_probability_of_the_recovered_quantile_is_the_probability(self, probability: float):
         sample = _normal_sample()
 
-        value = inverse_percentile(sample, probability)
+        value = inverse_percentile(sample, probability).value
         recovered = non_exceedance_probability(sample, value)
 
         assert recovered == pytest.approx(probability, abs=1e-9)
@@ -124,10 +124,10 @@ class TestRoundTrip:
     def test_recovered_quantile_of_the_recovered_probability_is_stable(self):
         sample = _normal_sample()
 
-        value = inverse_percentile(sample, 0.9)
+        value = inverse_percentile(sample, 0.9).value
         recovered = non_exceedance_probability(sample, value)
 
-        assert inverse_percentile(sample, recovered) == pytest.approx(value, abs=1e-9)
+        assert inverse_percentile(sample, recovered).value == pytest.approx(value, abs=1e-9)
 
 
 # =============================================================================
@@ -140,21 +140,21 @@ class TestAnalyticTruth:
 
     def test_median_of_one_to_one_hundred(self):
         """Hazen 位置：``p = 0.5`` 落在第 50 与第 51 个次序统计量之间 ⇒ 50.5。"""
-        value = inverse_percentile(_integer_sample(), 0.5)
+        value = inverse_percentile(_integer_sample(), 0.5).value
 
         assert value == pytest.approx(50.5, abs=1e-12)
 
     def test_quarter_of_one_to_one_hundred(self):
         """``p = 0.25`` 落在第 25 与第 26 个次序统计量之间 ⇒ 25.5。"""
-        value = inverse_percentile(_integer_sample(), 0.25)
+        value = inverse_percentile(_integer_sample(), 0.25).value
 
         assert value == pytest.approx(25.5, abs=1e-12)
 
     def test_probability_zero_and_one_give_the_extremes(self):
         sample = _integer_sample()
 
-        assert inverse_percentile(sample, 0.0) == pytest.approx(1.0, abs=1e-12)
-        assert inverse_percentile(sample, 1.0) == pytest.approx(100.0, abs=1e-12)
+        assert inverse_percentile(sample, 0.0).value == pytest.approx(1.0, abs=1e-12)
+        assert inverse_percentile(sample, 1.0).value == pytest.approx(100.0, abs=1e-12)
 
     def test_non_exceedance_probability_of_the_extremes(self):
         sample = _integer_sample()
@@ -202,3 +202,22 @@ class TestBoundaries:
     def test_non_finite_quantile_is_rejected(self):
         with pytest.raises(ValidationError):
             non_exceedance_probability(_integer_sample(), float("inf"))
+
+
+# =============================================================================
+# 摘要
+# =============================================================================
+
+
+def test_the_result_summarises_itself():
+    """结果必须有一份给人看的摘要。
+
+    脚本控制台把结果的 ``summary()`` 印给用户；没有它就只剩 dataclass 的
+    ``repr``，一次逆百分位只剩一串裸数字，看不出它是什么。
+    """
+    result = inverse_percentile(_integer_sample(), 0.5)
+
+    summary = result.summary()
+
+    assert summary.strip()
+    assert "50.5" in summary

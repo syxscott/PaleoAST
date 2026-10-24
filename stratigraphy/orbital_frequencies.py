@@ -219,12 +219,27 @@ class OrbitalFrequency:
     period_kyr: float | npt.NDArray
 
     def summary(self) -> str:
-        """生成该频率的一行可读摘要。"""
-        return _("{0}: {1} -> {2:.4f} kyr ({3:.6f} arcsec/yr)").format(
+        """生成该频率的一行可读摘要。
+
+        标量年龄给出一个周期；一列年龄给出这列里的周期范围——表单喂进来的
+        正是一列年龄，所以两种都得能写。
+        """
+        period = np.asarray(self.period_kyr, dtype=float)
+        frequency = np.asarray(self.frequency_arcsec_per_yr, dtype=float)
+        if period.ndim == 0:
+            return _("{0}: {1} -> {2:.4f} kyr ({3:.6f} arcsec/yr)").format(
+                self.name,
+                self.combination,
+                float(period),
+                float(frequency),
+            )
+        return _("{0}: {1} -> {2:.4f} to {3:.4f} kyr ({4:.6f} to {5:.6f} arcsec/yr)").format(
             self.name,
             self.combination,
-            float(self.period_kyr),
-            float(self.frequency_arcsec_per_yr),
+            float(np.min(period)),
+            float(np.max(period)),
+            float(np.min(frequency)),
+            float(np.max(frequency)),
         )
 
 
@@ -314,13 +329,35 @@ class OrbitalFrequencies:
         return {name: entry.frequency_per_kyr for name, entry in self.as_mapping().items()}
 
     def summary(self) -> str:
-        """生成该年龄上 9 条频率的可读摘要。"""
-        lines = [
-            _("Orbital frequencies at {0:.3f} Ma").format(float(self.age_ma)),
-            "=" * 48,
-            _("Eccentricity: {0:.6f}").format(float(self.eccentricity)),
-            _("Precession constant: {0:.5f} arcsec/yr").format(float(self.precession_rate_arcsec_per_yr)),
-        ]
+        """生成该年龄上 9 条频率的可读摘要。
+
+        标量年龄与一列年龄都要能写：表单喂进来的是一列年龄。
+        """
+        age = np.asarray(self.age_ma, dtype=float)
+        if age.ndim == 0:
+            lines = [
+                _("Orbital frequencies at {0:.3f} Ma").format(float(age)),
+                "=" * 48,
+                _("Eccentricity: {0:.6f}").format(float(self.eccentricity)),
+                _("Precession constant: {0:.5f} arcsec/yr").format(float(self.precession_rate_arcsec_per_yr)),
+            ]
+        else:
+            precession = np.asarray(self.precession_rate_arcsec_per_yr, dtype=float)
+            if float(np.min(precession)) == float(np.max(precession)):
+                precession_line = _("Precession constant: {0:.5f} arcsec/yr").format(float(precession[0]))
+            else:
+                precession_line = _("Precession constant: {0:.5f} to {1:.5f} arcsec/yr").format(
+                    float(np.min(precession)),
+                    float(np.max(precession)),
+                )
+            lines = [
+                _("Orbital frequencies at {0} ages").format(int(age.size)),
+                "=" * 48,
+                _("Eccentricity: {0:.6f} to {1:.6f}").format(
+                    float(np.min(self.eccentricity)), float(np.max(self.eccentricity))
+                ),
+                precession_line,
+            ]
         lines.extend(entry.summary() for entry in self.as_mapping().values())
         return "\n".join(lines)
 
@@ -661,15 +698,13 @@ class OrbitalFrequenciesAnalyzer:
             age_ma: 年龄 (Ma)，标量或一维数组。
 
         Returns:
-            dict[str, object]: 与 :meth:`orbital_frequencies.as_mapping`
-            相同的内容。
-
-        Raises:
-            ValidationError: 年龄非法或超出 La04 解的覆盖范围。
+            :class:`OrbitalFrequencies`: 9 条主天文频率与该年龄的轨道要素。
+            返回这个结果类而不是它的字典形式，是为了让结果带着自己的摘要
+            一起回到界面上（``as_mapping()`` 仍然给出 JSON 友好的字典）。
         """
         result = orbital_frequencies(age_ma)
         self._logger.info("orbital frequencies computed for %d age(s)", np.size(age_ma))
-        return result.as_mapping()
+        return result
 
 
 def orbital_frequency_table(
