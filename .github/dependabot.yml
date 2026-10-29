@@ -61,6 +61,15 @@ updates:
       # the stubs.
       - dependency-name: "PyQt6"
         versions: [">=6.12.0"]
+      # rpy2 3.6.x installs but cannot load against the R that ubuntu-latest
+      # ships: "symbol 'R_getVar' not found in library
+      # '/usr/lib/R/lib/libR.so'" -- R_getVar does not exist in R 4.3.3, which
+      # is what the runner provides.  That is why the ceiling in
+      # pyproject.toml is 3.6, and the note there says it moves only together
+      # with the R version in the workflow.  The bot must not propose it on
+      # its own.
+      - dependency-name: "rpy2"
+        versions: [">=3.6.0"]
     groups:
       # Minor and patch bumps are mechanical; they travel together.
       python-minor-patch:

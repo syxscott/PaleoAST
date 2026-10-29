@@ -1009,7 +1009,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   critical advisory.
   The `rpy2` ceiling stays where it is: `pyproject.toml` records it as one
   constraint with the R version in the workflow, not two independent ones, so
-  it is not raised until the pair is checked together.
+  it is not raised until the pair is checked together.  Dependabot's proposal
+  to raise it was closed rather than left open, because the reason for the
+  ceiling is already known -- rpy2 3.6.x installs but cannot load against the
+  R that `ubuntu-latest` ships (`symbol 'R_getVar' not found`; `R_getVar`
+  does not exist in R 4.3.3) -- so it is on the ignore list with that reason
+  attached, rather than a question waiting for an answer.
 - **`DESIGN_SYSTEM_SPECIFICATION.md` is now a pointer, not a palette**
   -- the file was 350 lines of the superseded flat-UI scheme, every value
   in it now forbidden by the conformance test. It says where the tokens
