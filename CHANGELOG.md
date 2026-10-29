@@ -993,28 +993,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **The dependency floors now say what is actually tested.**  Dependabot's
-  first sweep found the declared minimums below the versions the runners have
-  been installing for months: `numpy>=1.24.0` against 2.2.6, `psutil>=5.9.0`
-  against 7.2.2, `networkx>=3.1` against 3.4.2, `PyQt6>=6.5.0` against 6.11.0,
-  `pytest-cov>=4.1.0` against 7.1.0, `statsmodels>=0.14.0` against 0.15.x,
-  `hypothesis>=6.0.0` against 6.168.x, `sphinx-rtd-theme>=1.3.0` against 3.1.0.
-  The floors are raised to those.  Nothing that installs today receives a
-  different package than before -- a floor is a lower bound, and pip resolves
-  to the newest release that satisfies it -- so this changes what is
-  *claimed*, not what is *installed*.
+  sweeps found the declared minimums below the versions the runners have been
+  installing for months.  Every floor is now stated as the newest release
+  that installs on the oldest supported Python (3.10), which is what a floor
+  is for: `numpy>=1.26.4`, `scipy>=1.15.3`, `pandas>=2.3.3`,
+  `matplotlib>=3.10.9`, `PyQt6>=6.11.0`, `networkx>=3.4.2`, `psutil>=5.9.8`,
+  `scikit-learn>=1.7.2`, `statsmodels>=0.15.0`, `mplcursors>=0.7.1`,
+  `openpyxl>=3.1.5`, `xlrd>=2.0.2`, `pytest>=7.4.4`, `pytest-cov>=7.1.0`,
+  `mypy>=1.20.2`, `hypothesis>=6.168.5`, `sphinx>=7.4.7`,
+  `sphinx-rtd-theme>=3.1.0`, `rpy2>=3.5.17,<3.6`.
+  Nothing that installs today receives a different package than before -- a
+  floor is a lower bound, and pip resolves to the newest release that
+  satisfies it -- so this changes what is *claimed*, not what is *installed*.
+  Two floors are deliberately not moved, and both are on Dependabot's ignore
+  list with the reason attached, so the bot stops proposing them every cycle:
+  - `ruff` stays at 0.16.10.  The formatter gate must not move when ruff
+    publishes a release; bumping it means reformatting the tree in the same
+    commit, which is a job for a human.
+  - `rpy2` stays below 3.6.  rpy2 3.6.x installs but cannot load against the
+    R that `ubuntu-latest` ships -- `ffi.error: symbol 'R_getVar' not found
+    in library '/usr/lib/R/lib/libR.so'`, because `R_getVar` does not exist
+    in R 4.3.3.  The reason was found from the CI log, not guessed, and the
+    note in `pyproject.toml` records the ceiling as one constraint with the R
+    version in the workflow rather than two independent ones.  Dependabot's
+    proposal to raise it was closed rather than left open: it is not a
+    question waiting for an answer.
   `uv.lock` was stale in the same way and further out of date: it carried
   `ruff` 0.15.20 against the pinned 0.16.10, and it did not contain `rpy2`
   at all although the `crossval` extra requires it.  It is now in sync with
   `pyproject.toml`, and it carries the `certifi` 2026.10.18 fix for a
   critical advisory.
-  The `rpy2` ceiling stays where it is: `pyproject.toml` records it as one
-  constraint with the R version in the workflow, not two independent ones, so
-  it is not raised until the pair is checked together.  Dependabot's proposal
-  to raise it was closed rather than left open, because the reason for the
-  ceiling is already known -- rpy2 3.6.x installs but cannot load against the
-  R that `ubuntu-latest` ships (`symbol 'R_getVar' not found`; `R_getVar`
-  does not exist in R 4.3.3) -- so it is on the ignore list with that reason
-  attached, rather than a question waiting for an answer.
 - **`DESIGN_SYSTEM_SPECIFICATION.md` is now a pointer, not a palette**
   -- the file was 350 lines of the superseded flat-UI scheme, every value
   in it now forbidden by the conformance test. It says where the tokens
