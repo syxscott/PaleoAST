@@ -29,7 +29,7 @@ dependencies = [
     "numpy>=1.26.4",
     "scipy>=1.10.0",
     "pandas>=2.0.0",
-    "matplotlib>=3.7.0",
+    "matplotlib>=3.10.9",
     "PyQt6>=6.11.0",
 ]
 
