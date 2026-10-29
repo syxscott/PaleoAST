@@ -1,0 +1,77 @@
+# Dependabot version updates.
+#
+# Checking this file in makes Dependabot start checking the manifests below on
+# its own schedule and open pull requests when something is outdated. It is
+# independent of the repository-level "Dependabot security updates" switch
+# (Settings -> Code security and analysis -> Dependabot security updates),
+# which only handles known vulnerabilities.
+#
+# The two ``updates`` blocks cover every manifest this repository ships:
+#   * ``pip``           -> requirements.txt, pyproject.toml, uv.lock (root)
+#   * ``github-actions`` -> .github/workflows/*.yml
+#
+# Both blocks deliberately leave merging to a human. No auto-merge is wired up
+# anywhere in this repository, so every pull request Dependabot opens has to
+# be read and merged on purpose.
+version: 2
+
+updates:
+  # Python dependencies.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps(pip): "
+    # The requirements are written as lower bounds (``numpy>=1.24.0``). With
+    # the default strategy Dependabot would widen the range instead of
+    # raising the floor, and because the floor already admits the newest
+    # release it would conclude that nothing needs to change. "increase"
+    # raises the floor to the newest release, which is what makes the
+    # manifest state the version it is actually tested against.
+    versioning-strategy: increase
+    groups:
+      # Minor and patch bumps are mechanical; they travel together.
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Major bumps stay on their own: numpy 2.x, pandas 3.x and PyQt6 6.x
+      # each carry breaking changes that need the upstream changelog read
+      # before they land.
+      python-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+
+  # GitHub Actions used by .github/workflows/ci.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "deps(actions): "
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

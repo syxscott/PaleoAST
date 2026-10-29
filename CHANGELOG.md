@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dependabot now watches this repository** (`.github/dependabot.yml`) --
+  the repository-level "Dependabot alerts" and "Dependabot security updates"
+  switches are on, and the manifest covers `pip` (`requirements.txt`,
+  `pyproject.toml`, `uv.lock`) and `github-actions`
+  (`.github/workflows/ci.yml`).  The floors are written as lower bounds
+  (`numpy>=1.24.0`), so `versioning-strategy: increase` is what makes
+  Dependabot raise them instead of widening a range that already admits the
+  newest release.  Nothing is auto-merged: every pull request has to be read
+  and merged on purpose.  Turning the alerts on immediately surfaced ten
+  live advisories -- `certifi` (critical, fixed in 2026.10.18) and `Pillow`
+  (critical and high, fixed in 13.0.0), both of which live in the dependency
+  graph rather than in the declared requirements.
 - **Fifty more analyses from the Acycle family** (`stratigraphy/`, `stats/`),
   taking the catalogue from 165 analyses to 215.  They came out of a
   line-by-line audit of all 335 of Acycle's `.m` files, which found that
