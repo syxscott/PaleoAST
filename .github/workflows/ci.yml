@@ -41,7 +41,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install mypy numpy scipy pandas matplotlib PyQt6
+      # Pinned, not floating, for the same reason the lint job pins ruff:
+      # a gate whose result depends on which version was published that
+      # morning is not a gate.  Two pins, two different reasons:
+      #   * PyQt6 6.12.0 ships stubs that are not valid Python.  In
+      #     ``PyQt6/QtGui.pyi`` it writes
+      #     ``def drawConvexPolygon(self, point: ..., *args: ..., /)`` -- the
+      #     positional-only marker after ``*args``, which CPython itself
+      #     rejects.  mypy reports all 16 occurrences as ``[syntax]`` errors
+      #     in the stub and then stops: "errors prevented further checking",
+      #     so the type gate stops gating anything at all.  6.11.0 is the
+      #     last release whose stubs parse.
+      #   * mypy 2.4.1 is the newest release that passes the check as it
+      #     stands; bump it deliberately, together with whatever it then
+      #     complains about.
+      - run: pip install mypy==2.4.1 numpy scipy pandas matplotlib PyQt6==6.11.0
       - run: mypy --config-file pyproject.toml config/ models/ controllers/ stats/ ecology/ utils/ views/
 
   # =========================================================================

@@ -414,6 +414,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moment it is changed.
 
 ### Fixed
+- **The type check stopped gating anything.**  The job installed `mypy numpy
+  scipy pandas matplotlib PyQt6` without a version on any of them, so it
+  picked up PyQt6 6.12.0 -- whose `PyQt6/QtGui.pyi` is not valid Python: it
+  writes `def drawConvexPolygon(self, point: ..., *args: ..., /)`, with the
+  positional-only marker after `*args`, which CPython itself rejects.  mypy
+  reported the sixteen occurrences as `[syntax]` errors in the stub and
+  stopped there ("errors prevented further checking"), so the whole type
+  gate was green-on-paper and silent in practice.  The job now pins
+  `PyQt6==6.11.0`, the last release whose stubs parse, and `mypy==2.4.1`,
+  for the same reason the lint job pins ruff: a gate whose result depends on
+  which version was published that morning is not a gate.  Verified locally
+  with mypy 2.4.1 against PyQt6 6.11.0 -- "Success: no issues found in 87
+  source files".
 - **The analysis runner gave every data slot the first column of the
   sheet.**  A multi-slot analysis -- one that wants a time axis and two
   records, say -- was handed the same column once per slot, so the
