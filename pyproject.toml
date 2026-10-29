@@ -55,7 +55,7 @@ dev = [
     # ``addopts`` below passes ``--hypothesis-show-statistics``. Without this
     # entry a fresh ``pip install -e .[dev]`` makes ``pytest`` fail at
     # collection with "unrecognized arguments: --hypothesis-show-statistics".
-    "hypothesis>=6.0.0",
+    "hypothesis>=6.168.5",
 ]
 # The R bridge is its own extra, NOT part of `dev`, on purpose.
 #
