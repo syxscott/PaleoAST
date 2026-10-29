@@ -20,4 +20,4 @@ pytest>=7.4.0
 pytest-cov>=7.1.0
 
 # Type Checking
-mypy>=1.4.0
+mypy>=1.20.2
