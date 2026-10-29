@@ -37,6 +37,24 @@ updates:
     # raises the floor to the newest release, which is what makes the
     # manifest state the version it is actually tested against.
     versioning-strategy: increase
+    # What may arrive on its own:
+    #   * patches and minors -- mechanical, and CI is the gate.
+    #   * majors never. numpy 2.x, pandas 3.x and pytest 9 move the APIs the
+    #     test suite is written against, so a major bump is a deliberate act
+    #     with its own migration commit, not something a bot does on its own.
+    #     Dependabot closes the pull requests of ignored dependencies on its
+    #     next run.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+      # ruff is pinned on purpose in pyproject.toml and in
+      # .github/workflows/ci.yml, with the reason written next to the pin:
+      # ``ruff format --check`` is a gate, and a gate whose result depends on
+      # which ruff was published that morning is not a gate.  Bumping it
+      # means reformatting the tree in the same commit -- a job for a human.
+      - dependency-name: "ruff"
+        versions: [">=0.16.11"]
     groups:
       # Minor and patch bumps are mechanical; they travel together.
       python-minor-patch:
@@ -45,14 +63,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-      # Major bumps stay on their own: numpy 2.x, pandas 3.x and PyQt6 6.x
-      # each carry breaking changes that need the upstream changelog read
-      # before they land.
-      python-major:
-        patterns:
-          - "*"
-        update-types:
-          - "major"
 
   # GitHub Actions used by .github/workflows/ci.yml.
   - package-ecosystem: "github-actions"

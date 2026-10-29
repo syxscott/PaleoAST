@@ -15,10 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`numpy>=1.24.0`), so `versioning-strategy: increase` is what makes
   Dependabot raise them instead of widening a range that already admits the
   newest release.  Nothing is auto-merged: every pull request has to be read
-  and merged on purpose.  Turning the alerts on immediately surfaced ten
-  live advisories -- `certifi` (critical, fixed in 2026.10.18) and `Pillow`
-  (critical and high, fixed in 13.0.0), both of which live in the dependency
-  graph rather than in the declared requirements.
+  and merged on purpose.  What arrives on its own is patches and minors;
+  majors are ignored, and so is `ruff`, whose pin in `pyproject.toml` and in
+  `.github/workflows/ci.yml` is deliberate -- the formatter gate must not
+  move when ruff publishes a release.
+  Turning the alerts on surfaced ten live advisories -- `certifi` (critical,
+  fixed in 2026.10.18) and `Pillow` (critical and high, fixed in 13.0.0),
+  both of which live in the dependency graph rather than in the declared
+  requirements.  The `Pillow` one cannot be fixed by the bot while
+  `requires-python` is `>=3.10`: the fix (13.0.0) asks for Python 3.11, so
+  the newest release resolvable on 3.10 is 12.3.0 and Dependabot reports
+  `security_update_not_possible`.  The same ceiling is what caps the
+  automatic numpy bump at 2.2.6, because numpy 2.3.0 already requires 3.11.
 - **Fifty more analyses from the Acycle family** (`stratigraphy/`, `stats/`),
   taking the catalogue from 165 analyses to 215.  They came out of a
   line-by-line audit of all 335 of Acycle's `.m` files, which found that
