@@ -87,7 +87,7 @@ crossval = [
     "rpy2>=3.5.17,<3.6; platform_system != 'Windows'",
 ]
 docs = [
-    "sphinx>=7.0.0",
+    "sphinx>=7.4.7",
     "sphinx-rtd-theme>=3.1.0",
 ]
 
