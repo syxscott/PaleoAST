@@ -44,7 +44,7 @@ full = [
     "xlrd>=2.0.2",
 ]
 dev = [
-    "pytest>=7.4.0",
+    "pytest>=7.4.4",
     "pytest-cov>=7.1.0",
     "mypy>=1.20.2",
     # Pinned for the same reason CI pins it: the formatter gate must not
