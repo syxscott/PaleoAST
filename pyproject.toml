@@ -45,7 +45,7 @@ full = [
 ]
 dev = [
     "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
+    "pytest-cov>=7.1.0",
     "mypy>=1.4.0",
     # Pinned for the same reason CI pins it: the formatter gate must not
       # move when ruff publishes a release. 0.16.x formats Python inside
