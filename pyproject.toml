@@ -84,7 +84,7 @@ crossval = [
     # Raise this ceiling only together with the R version in
     # .github/workflows/ci.yml, and only after confirming the pair loads -- they
     # are one constraint, not two independent ones.
-    "rpy2>=3.5.16,<3.6; platform_system != 'Windows'",
+    "rpy2>=3.6.9,<3.7; platform_system != 'Windows'",
 ]
 docs = [
     "sphinx>=7.0.0",
